@@ -18,5 +18,12 @@ export function golden(file, value, { digits = 6, bless = process.env.LH_BLESS =
   const stored = JSON.parse(readFileSync(path, 'utf8'));
   if (stored.checksum === sum) return { written: false };
   const lines = diff(stored.value, current).slice(0, 10).map(d => `  ${d.path}: ${JSON.stringify(d.a)} → ${JSON.stringify(d.b)}`);
-  throw new Error(`golden ${path} changed (${stored.checksum} → ${sum}):\n${lines.join('\n')}\nRe-run with LH_BLESS=1 to accept.`);
+  let first = '';
+  if (Array.isArray(stored.value?.trail) && Array.isArray(current?.trail)) {
+    const b = current.trail;
+    let k = 0;
+    while (k < stored.value.trail.length && k < b.length && JSON.stringify(stored.value.trail[k]) === JSON.stringify(b[k])) k++;
+    first = `first divergence: trail[${k}]\n`;
+  }
+  throw new Error(`golden ${path} changed (${stored.checksum} → ${sum}):\n${first}${lines.join('\n')}\nRe-run with LH_BLESS=1 to accept.`);
 }

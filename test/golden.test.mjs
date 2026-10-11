@@ -32,3 +32,22 @@ test('missing file in CI throws; bless writes', () => {
   assert.deepEqual(golden(f, { x: 1 }, { bless: true, ci: true }), { written: true });
   assert.ok(existsSync(f), 'file created with bless');
 });
+test('a trail mismatch names the first diverging trail entry before the diff lines', () => {
+  const f = join(dir, 'e.json');
+  const mk = trail => ({ state: { a: 1, b: 2, c: 3 }, trail });
+  golden(f, mk(['a', 'b', 'c']), { bless: false, ci: false });
+  const cur = { state: { a: 9, b: 8, c: 7 }, trail: ['a', 'x', 'y'] };
+  assert.throws(() => golden(f, cur, { bless: false, ci: false }), e => {
+    const lines = e.message.split('\n');
+    const i = lines.indexOf('first divergence: trail[1]');
+    return i === 1 && /^ {2}/.test(lines[2]);
+  });
+  const g = join(dir, 'f.json');
+  golden(g, { x: 1 }, { bless: false, ci: false });
+  assert.throws(() => golden(g, { x: 2 }, { bless: false, ci: false }), e => !/first divergence/.test(e.message));
+});
+test('a shorter trail diverges at its length', () => {
+  const f = join(dir, 'h.json');
+  golden(f, { trail: ['a', 'b'] }, { bless: false, ci: false });
+  assert.throws(() => golden(f, { trail: ['a', 'b', 'c'] }, { bless: false, ci: false }), /first divergence: trail\[2\]/);
+});
