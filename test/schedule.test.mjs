@@ -6,6 +6,21 @@ test('STEP_STAGES is the R-6 order', () => {
   assert.deepEqual(STEP_STAGES, ['input.apply', 'pre', 'physics.world', 'post', 'events.flush']);
   assert.ok(Object.isFrozen(STEP_STAGES));
 });
+test('after keeps unrelated systems in insertion order', () => {
+  const s = createSchedule(['pre']);
+  s.add('a', () => {}, { stage: 'pre' });
+  s.add('b', () => {}, { stage: 'pre' });
+  s.add('c', () => {}, { stage: 'pre', after: ['a'] });
+  assert.deepEqual(s.order('pre'), ['a', 'b', 'c']);
+});
+test('transitive before-chain: a, b, c(before a), d(before c)', () => {
+  const s = createSchedule(['pre']);
+  s.add('a', () => {}, { stage: 'pre' });
+  s.add('b', () => {}, { stage: 'pre' });
+  s.add('c', () => {}, { stage: 'pre', before: ['a'] });
+  s.add('d', () => {}, { stage: 'pre', before: ['c'] });
+  assert.deepEqual(s.order('pre'), ['d', 'c', 'a', 'b']);
+});
 test('insertion order by default, before/after reorder within a stage', () => {
   const s = createSchedule(['pre', 'post']);
   s.add('a', () => {}, { stage: 'pre' });

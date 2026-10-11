@@ -6,23 +6,37 @@ export function createSchedule(stages) {
   const byStage = new Map(stages.map(s => [s, []])), byName = new Map(), sorted = new Map();
   let n = 0;
   function sort(stage) {
-    const list = byStage.get(stage), names = new Set(list.map(e => e.name)), deps = new Map(list.map(e => [e.name, new Set()]));
+    const list = byStage.get(stage), names = new Set(list.map(e => e.name)), nameToEntry = new Map(list.map(e => [e.name, e]));
+    // Build dependencies (X → Y means X depends on Y)
+    const deps = new Map(list.map(e => [e.name, new Set()]));
     for (const e of list) {
       for (const a of e.after) if (names.has(a)) deps.get(e.name).add(a);
       for (const b of e.before) if (names.has(b)) deps.get(b).add(e.name);
     }
-    // Build reverse dependency map: who depends on each item
-    const dependents = new Map(list.map(e => [e.name, []]));
-    for (const [name, depSet] of deps) for (const d of depSet) dependents.get(d).push(name);
+    // Build must_precede: systems that each system must precede (X must precede Y if X.before has Y or Y.after has X)
+    const mustPrecede = new Map(list.map(e => [e.name, new Set()]));
+    for (const e of list) {
+      for (const b of e.before) if (names.has(b)) mustPrecede.get(e.name).add(b);
+      for (const a of e.after) if (names.has(a)) mustPrecede.get(a).add(e.name);
+    }
+    // Compute rank[i] = min(insertion index i, min rank of systems i must precede), to fixpoint
+    const rank = new Map(list.map(e => [e.name, e.i]));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const e of list) {
+        const newRank = Math.min(e.i, ...[...mustPrecede.get(e.name)].map(n => rank.get(n)));
+        if (newRank < rank.get(e.name)) { rank.set(e.name, newRank); changed = true; }
+      }
+    }
+    // Kahn's algorithm with (rank, insertion index) tiebreaker
     const out = [], done = new Set();
     while (out.length < list.length) {
-      let next = null, minDepI = Infinity;
+      let next = null, minRank = Infinity, minI = Infinity;
       for (const e of list) {
         if (!done.has(e.name) && [...deps.get(e.name)].every(d => done.has(d))) {
-          // Tiebreaker: pick item that is depended on by earliest remaining item
-          const depIs = dependents.get(e.name).filter(d => !done.has(d)).map(d => list.find(x => x.name === d).i);
-          const minI = depIs.length > 0 ? Math.min(...depIs) : e.i;
-          if (minI < minDepI) { next = e; minDepI = minI; }
+          const r = rank.get(e.name);
+          if (r < minRank || (r === minRank && e.i < minI)) { next = e; minRank = r; minI = e.i; }
         }
       }
       if (!next) throw new Error(`schedule: cycle in '${stage}': ${list.filter(e => !done.has(e.name)).map(e => e.name).join(', ')}`);
