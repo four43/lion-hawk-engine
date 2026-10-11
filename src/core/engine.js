@@ -40,17 +40,20 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     return ctx;
   };
   const isOpen = name => stack.some(o => o.ctx.name === name);
-  const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); s.exit?.(engine, ctx); for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); };
+  const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
   const paused = () => { for (let i = 1; i < stack.length; i++) if (stack[i].s.pauses) return true; return false; };
   const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
   let inStep = false; const queue = [];
   const request = fn => { if (inStep) queue.push(fn); else fn(); }; // transitions inside a step apply at its end
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
-    inStep = true; queue.length = 0; // a step that threw left both stale
-    schedule.run('input.apply', engine, dt);
-    if (paused()) stepScenes(dt, 1);
-    else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
-    inStep = false; for (let i = 0; i < queue.length; i++) queue[i](); queue.length = 0;
+    inStep = true; queue.length = 0;
+    try {
+      schedule.run('input.apply', engine, dt);
+      if (paused()) stepScenes(dt, 1);
+      else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
+    } catch (err) { queue.length = 0; throw err; } // a throwing step discards its queued transitions
+    finally { inStep = false; } // never leave the engine thinking it is mid-step
+    for (let i = 0; i < queue.length; i++) queue[i](); queue.length = 0;
     schedule.run('events.flush', engine, dt);
     step++; sync();
   } });

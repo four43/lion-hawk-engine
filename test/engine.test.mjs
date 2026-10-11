@@ -132,3 +132,14 @@ test('jump passes args to enter', () => {
   const e = createEngine(mini({ b: { enter(en, ctx) { got = ctx.args; }, presets: { p() {} } } }));
   e.jump('b', 'p', {}, { lvl: 2 }); assert.deepEqual(got, { lvl: 2 });
 });
+test('a throwing step cannot wedge later transitions', () => {
+  const e = createEngine(mini({ boom: { step() { throw new Error('step boom'); } }, other: {} }), { scene: 'boom' });
+  assert.throws(() => e.stepN(1), /step boom/);
+  e.go('other'); assert.equal(e.scene.name, 'other');
+});
+test('a throwing exit still removes scoped systems and ui', () => {
+  const e = createEngine(mini({ x: { enter(en, ctx) { ctx.system('xs', () => {}); }, exit() { throw new Error('exit boom'); }, ui(u) { u.button({ id: 'b', label: 'b', action: () => {} }); } } }), { scene: 'x' });
+  assert.ok(e.schedule().pre.includes('xs')); assert.equal(e.ui.tree().length, 1);
+  assert.throws(() => e.go('a'), /exit boom/);
+  assert.ok(!e.schedule().pre.includes('xs')); assert.deepEqual(e.ui.tree(), []);
+});
