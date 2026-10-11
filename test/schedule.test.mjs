@@ -64,3 +64,10 @@ test('run passes exactly two args to each system (R-8)', () => {
   s.add('x', function () { n = arguments.length; }, { stage: 'a' });
   s.run('a', 1, 2, 3); assert.equal(n, 2);
 });
+
+test('a stale remover cannot delete a re-added system with the same name', () => {
+  const s = createSchedule(['pre']);
+  const r1 = s.add('a', () => {}, { stage: 'pre' });
+  s.remove('a'); s.add('a', () => {}, { stage: 'pre' });
+  r1(); assert.deepEqual(s.order('pre'), ['a']);
+});

@@ -6,7 +6,7 @@ export function createSchedule(stages) {
   const byStage = new Map(stages.map(s => [s, []])), byName = new Map(), sorted = new Map();
   let n = 0;
   function sort(stage) {
-    const list = byStage.get(stage), names = new Set(list.map(e => e.name)), nameToEntry = new Map(list.map(e => [e.name, e]));
+    const list = byStage.get(stage), names = new Set(list.map(e => e.name));
     // Build dependencies (X → Y means X depends on Y)
     const deps = new Map(list.map(e => [e.name, new Set()]));
     for (const e of list) {
@@ -51,7 +51,7 @@ export function createSchedule(stages) {
       if (byName.has(name)) throw new Error(`schedule: duplicate system '${name}'`);
       const e = { name, fn, stage, before: [...before], after: [...after], i: n++ };
       byName.set(name, e); byStage.get(stage).push(e); sorted.delete(stage);
-      return () => api.remove(name);
+      return () => { if (byName.get(name) === e) api.remove(name); }; // identity: a stale remover must not delete a re-added system
     },
     remove(name) {
       const e = byName.get(name); if (!e) return;

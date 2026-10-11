@@ -9,7 +9,7 @@ test('defineGame validates and fills defaults', () => {
   assert.throws(() => defineGame({ id: 'g', scenes: { a: {} }, start: 'b' }), /defineGame: start 'b' is not a scene/);
   assert.throws(() => defineGame({ id: 'g', scenes: { a: { step: 1 } }, start: 'a' }), /defineGame: scene 'a'.step must be a function/);
   const g = defineGame({ id: 'g', scenes: { a: {} }, start: 'a' });
-  assert.deepEqual(g.sim, { hz: 60, maxCatchUp: 3 }); assert.deepEqual(g.policies, {}); assert.ok(Object.isFrozen(g));
+  assert.deepEqual(g.sim, { hz: 60, maxCatchUp: 3, maxFrame: 0.25 }); assert.deepEqual(g.policies, {}); assert.ok(Object.isFrozen(g));
 });
 test('starts in the start scene with its ui registered', () => {
   const e = createEngine(game, { seed: 5 });
@@ -45,7 +45,7 @@ test('systems run in pre/post around physics.world and stop while paused', () =>
   e.system('a', () => seen.push('a'));
   e.system('w', () => seen.push('w'), { stage: 'physics.world' });
   e.stepN(1); assert.deepEqual(seen, ['a', 'w', 'b']);
-  assert.deepEqual(e.schedule().pre, ['scene', 'a']);
+  assert.deepEqual(e.schedule().pre, ['lh.scene', 'a']);
   e.overlay('pause'); seen.length = 0; e.stepN(3); assert.deepEqual(seen, []);
 });
 test('jump errors, unknown scenes, rng streams, state()', () => {
@@ -225,4 +225,36 @@ test('F6: defineGame setup(engine) runs once, before the start scene; its system
   e.stepN(1); assert.equal(runs, 1);
   e.go('b'); e.go('a'); e.stepN(1);
   assert.equal(runs, 2); assert.equal(setups, 1);
+});
+
+test('built-in systems are named lh.input, lh.scene, lh.events', () => {
+  const e = createEngine(mini({}));
+  assert.deepEqual(e.schedule(), { 'input.apply': ['lh.input'], pre: ['lh.scene'], 'physics.world': [], post: [], 'events.flush': ['lh.events'] });
+});
+test('state(): the game state comes first, engine keys win', () => {
+  const g = defineGame({ id: 'g', start: 'a', scenes: { a: {} }, state: () => ({ step: 'mine', scene: 'mine', hp: 3 }) });
+  const e = createEngine(g); e.stepN(2);
+  assert.deepEqual(e.state(), { step: 2, scene: 'a', overlays: [], hp: 3 });
+});
+test('defineGame: sim validation and maxFrame', () => {
+  assert.throws(() => defineGame({ id: 'g', scenes: { a: {} }, start: 'a', sim: { hz: 0 } }), /defineGame: sim.hz must be a positive number/);
+  assert.throws(() => defineGame({ id: 'g', scenes: { a: {} }, start: 'a', sim: { hz: '60' } }), /defineGame: sim.hz must be a positive number/);
+  assert.throws(() => defineGame({ id: 'g', scenes: { a: {} }, start: 'a', sim: { maxCatchUp: -1 } }), /defineGame: sim.maxCatchUp must be a positive number/);
+  assert.equal(defineGame({ id: 'g', scenes: { a: {} }, start: 'a' }).sim.maxFrame, 0.25);
+  const e = createEngine(defineGame({ id: 'g', scenes: { a: {} }, start: 'a', sim: { maxFrame: 0.05, maxCatchUp: 100 } }));
+  assert.equal(e.frame(10), 3); // 0.05 s of a 10 s frame at 60 Hz
+});
+test('a pausing overlay freezes every stage; only overlays at or above the topmost pausing one step', () => {
+  const seen = [];
+  const g = mini({ hud: { step() { seen.push('hud'); } }, pause: { pauses: true, step() { seen.push('pause'); } }, top: { step() { seen.push('top'); } } });
+  g.scenes.a.step = () => seen.push('a');
+  const e = createEngine(g);
+  e.overlay('hud'); e.stepN(1); assert.deepEqual(seen, ['a', 'hud']);
+  seen.length = 0; e.overlay('pause'); e.overlay('top'); e.stepN(1); assert.deepEqual(seen, ['pause', 'top']);
+});
+test('ui: a control below the topmost pausing overlay is covered', () => {
+  const e = createEngine(game, { scene: 'race' });
+  e.jump('race', 'running'); e.stepN(1); e.overlay('results');
+  assert.throws(() => e.ui.tap('race.pause'), /ui: control 'race.pause' is covered by 'results'/);
+  e.ui.tap('results.retry'); assert.equal(e.scene.name, 'race');
 });

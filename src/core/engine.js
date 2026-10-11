@@ -16,7 +16,9 @@ export function defineGame(spec) {
   if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
   for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
-  return Object.freeze({ ...spec, sim: { hz: 60, maxCatchUp: 3, ...spec.sim }, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {} });
+  const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
+  for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
+  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {} });
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
@@ -33,7 +35,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
-  const ui = createUi({ onAction: a => input.set({ [a]: true }) });
+  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
   const enter = (name, a) => {
     const s = def(name), scoped = [], ctx = { name, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
     const entry = { s, ctx, scoped };
@@ -44,7 +46,10 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   };
   const isOpen = name => stack.some(o => o.ctx.name === name);
   const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
-  const paused = () => { for (let i = 1; i < stack.length; i++) if (stack[i].s.pauses) return true; return false; };
+  // Pausing: while any open overlay has `pauses`, every stage stays frozen and only the overlays at or above the TOPMOST
+  // pausing overlay run their step hooks (the main scene and anything beneath that overlay wait).
+  const pausedFrom = () => { for (let i = stack.length - 1; i >= 1; i--) if (stack[i].s.pauses) return i; return -1; };
+  const coveredBy = scene => { const p = pausedFrom(); if (p < 0) return undefined; const i = stack.findIndex(o => o.ctx.name === scene); return i >= 0 && i < p ? stack[p].ctx.name : undefined; };
   const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
   // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
   // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
@@ -61,11 +66,12 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     } catch (err) { queue.length = 0; throw err; } finally { draining = false; }
   };
   const request = item => { queue.push(item); if (!inStep && !draining) drain(); };
-  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
+  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
     inStep = true; let failure = null;
     try {
       schedule.run('input.apply', engine, dt);
-      if (paused()) stepScenes(dt, 1);
+      const p = pausedFrom();
+      if (p > 0) stepScenes(dt, p);
       else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
     } catch (err) { failure = err; }
     finally { inStep = false; } // never leave the engine thinking it is mid-step
@@ -103,11 +109,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
     ui: { tree: () => ui.tree(engine), tap: id => ui.tap(id, engine) },
-    state: () => ({ scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step, ...(game.state?.(engine) ?? {}) }),
+    state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };
-  schedule.add('input', () => input.apply(), { stage: 'input.apply' });
-  schedule.add('scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
-  schedule.add('events', () => events.flush(), { stage: 'events.flush' });
+  schedule.add('lh.input', () => input.apply(), { stage: 'input.apply' });
+  schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
+  schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   sync(); syncTime();
   game.setup?.(engine); // once, before the start scene: global systems and rng streams a game wants for its whole life
   enter(scene, args);

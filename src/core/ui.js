@@ -1,6 +1,6 @@
 // U-1: scenes declare their controls; the browser renders them as real buttons with data-testid="<scene>.<id>",
 // and headless tests tap them through this registry (T-5).
-export function createUi({ onAction }) {
+export function createUi({ onAction, coveredBy = () => undefined }) {
   const controls = new Map();
   const add = (scene, role, spec) => {
     const id = `${scene}.${spec.id}`;
@@ -18,6 +18,7 @@ export function createUi({ onAction }) {
     tap(id, ctx) {
       const c = controls.get(id);
       if (!c) throw new Error(`ui: no control '${id}'`);
+      const by = coveredBy(c.scene); if (by) throw new Error(`ui: control '${id}' is covered by '${by}'`);
       if (c.when && !c.when(ctx)) throw new Error(`ui: control '${id}' is disabled`);
       if (c.role === 'switch') c.set(!c.get(ctx), ctx);
       else if (typeof c.action === 'function') c.action(ctx);
