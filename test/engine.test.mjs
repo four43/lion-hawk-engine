@@ -290,3 +290,10 @@ test('render(alpha) calls onRender without stepping', () => {
   const e = createEngine(game, { scene: 'race' }); const got = []; e.onRender(a => got.push(a));
   const s = e.time.step; e.render(0.25); assert.deepEqual(got, [0.25]); assert.equal(e.time.step, s);
 });
+
+test('scene instance ids: new id per enter, overlays in overlayIds', () => {
+  const e = createEngine(game, { scene: 'race' }); const a = e.scene.id; assert.equal(typeof a, 'number');
+  e.go('race'); assert.ok(e.scene.id > a);
+  e.overlay('pause'); const o = e.scene.overlayIds[0]; assert.equal(e.scene.overlayIds.length, 1);
+  e.close('pause'); e.overlay('pause'); assert.ok(e.scene.overlayIds[0] > o);
+});

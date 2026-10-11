@@ -37,7 +37,8 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     },
     ui: { tree: () => engine.ui.tree(), tap: id => { engine.ui.tap(id); after(); } },
     rng: n => engine.rng(n),
-    debug: engine.game.debug?.(engine) ?? {},
+    get debug() { return engine.game.debug?.(engine) ?? {}; },
+    dispose() { target.removeEventListener?.('error', onError); target.removeEventListener?.('unhandledrejection', onReject); },
   };
   return installEngineHook(api, { game: engine.game.id, target });
 }

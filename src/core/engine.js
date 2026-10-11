@@ -24,20 +24,22 @@ export function defineGame(spec) {
 export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   let step = 0, render = () => {};
-  const streams = new Map(), time = { step: 0, sim: 0 }, sceneView = { name: undefined, args: undefined, state: {}, overlays: [] };
+  const streams = new Map(), time = { step: 0, sim: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
+  let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
   // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
   // so `engine.scene.overlays` stays the same array across steps.
   const syncTime = () => { time.step = step; time.sim = step / game.sim.hz; } // divide, don't multiply by dt: 180 * (1/60) is not exactly 3
   const sync = () => {
-    const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
-    sceneView.overlays.length = 0; for (let i = 1; i < stack.length; i++) sceneView.overlays.push(stack[i].ctx.name);
+    const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.id = m?.id; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
+    sceneView.overlays.length = 0; sceneView.overlayIds.length = 0;
+    for (let i = 1; i < stack.length; i++) { sceneView.overlays.push(stack[i].ctx.name); sceneView.overlayIds.push(stack[i].ctx.id); }
   };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
   const enter = (name, a) => {
-    const s = def(name), scoped = [], ctx = { name, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
+    const s = def(name), scoped = [], ctx = { name, id: nextId++, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
     const entry = { s, ctx, scoped };
     stack.push(entry); sync();
     try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }

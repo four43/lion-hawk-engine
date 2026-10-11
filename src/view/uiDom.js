@@ -1,8 +1,9 @@
 // U-1/U-3: renders the engine's UI registry as real <button>s. Reconciles by test id; a sync() with nothing changed
 // performs no DOM writes (every written value is cached and compared first).
-export function createUiDom(engine, { root, doc } = {}) {
+export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
   const document = doc ?? root?.ownerDocument ?? globalThis.document;
-  root ??= document.body;
+  const host = root ?? document.body;
+  const root_ = document.createElement('div'); root_.setAttribute('data-lh-ui-root', ''); host.appendChild(root_);
   const html = document.documentElement;
   const boxes = new Map(), buttons = new Map(); // scene -> {el, overlay}, id -> {el, label, enabled, pressed}
   const attrs = new Map(); // html attribute cache
@@ -10,11 +11,12 @@ export function createUiDom(engine, { root, doc } = {}) {
   const place = (parent, el, i) => { if (parent.children[i] !== el) parent.insertBefore(el, parent.children[i] ?? null); };
 
   const onClick = e => {
-    const b = e.target?.closest?.('button[data-testid]'); if (!b || !root.contains(b)) return;
-    try { engine.ui.tap(b.getAttribute('data-testid')); } catch { /* disabled or covered: the DOM state already says so */ }
-    sync();
+    const b = e.target?.closest?.('button[data-testid]'); if (!b || !root_.contains(b)) return;
+    try { engine.ui.tap(b.getAttribute('data-testid')); }
+    catch (err) { if (!/is disabled|is covered/.test(String(err?.message))) errors?.push({ type: 'error', message: String(err?.message ?? err), stack: err?.stack }); } // disabled/covered: the DOM already says so
+    sync(); onTap?.();
   };
-  root.addEventListener('click', onClick);
+  root_.addEventListener('click', onClick);
 
   function sync() {
     const stack = [engine.scene.name, ...engine.scene.overlays].filter(n => n !== undefined);
@@ -29,7 +31,7 @@ export function createUiDom(engine, { root, doc } = {}) {
         if (overlay) el.setAttribute('data-lh-overlay', name);
         boxes.set(name, box = { el, overlay });
       } else if (box.overlay !== overlay) { overlay ? box.el.setAttribute('data-lh-overlay', name) : box.el.removeAttribute('data-lh-overlay'); box.overlay = overlay; }
-      place(root, box.el, si);
+      place(root_, box.el, si);
       const list = byScene.get(name);
       for (let i = 0; i < list.length; i++) {
         const c = list[i]; let b = buttons.get(c.id);
@@ -49,5 +51,5 @@ export function createUiDom(engine, { root, doc } = {}) {
     setHtml('data-lh-scene', stack[0] ?? '');
     setHtml('data-lh-overlays', stack.slice(1).join(','));
   }
-  return { sync, dispose() { root.removeEventListener('click', onClick); for (const { el } of boxes.values()) el.remove(); boxes.clear(); buttons.clear(); } };
+  return { sync, dispose() { root_.removeEventListener('click', onClick); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
 }
