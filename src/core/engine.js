@@ -31,17 +31,36 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }) });
-  const enter = (name, a) => { const s = def(name), ctx = { name, args: a, state: {} }; stack.push({ s, ctx }); sync(); s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); return ctx; };
-  const exit = i => { const [{ s, ctx }] = stack.splice(i, 1); s.exit?.(engine, ctx); ui.clear(ctx.name); sync(); };
+  const enter = (name, a) => {
+    const s = def(name), scoped = [], ctx = { name, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
+    const entry = { s, ctx, scoped };
+    stack.push(entry); sync();
+    try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }
+    catch (err) { stack.splice(stack.indexOf(entry), 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
+    return ctx;
+  };
+  const isOpen = name => stack.some(o => o.ctx.name === name);
+  const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); s.exit?.(engine, ctx); for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); };
   const paused = () => { for (let i = 1; i < stack.length; i++) if (stack[i].s.pauses) return true; return false; };
   const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
+  let inStep = false; const queue = [];
+  const request = fn => { if (inStep) queue.push(fn); else fn(); }; // transitions inside a step apply at its end
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
+    inStep = true; queue.length = 0; // a step that threw left both stale
     schedule.run('input.apply', engine, dt);
     if (paused()) stepScenes(dt, 1);
     else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
+    inStep = false; for (let i = 0; i < queue.length; i++) queue[i](); queue.length = 0;
     schedule.run('events.flush', engine, dt);
     step++; sync();
   } });
+  const open = name => { throw new Error(`engine: scene '${name}' is already open`); };
+  const doGo = (name, a) => {
+    def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) open(name);
+    const from = stack[0]?.ctx.name; while (stack.length) exit(stack.length - 1); enter(name, a); events.emit('scene', { name, from });
+  };
+  const doOverlay = (name, a) => { def(name); if (isOpen(name)) open(name); enter(name, a); events.emit('overlay', { name, open: true }); };
+  const doClose = name => { const i = stack.findIndex((o, k) => k > 0 && o.ctx.name === name); if (i > 0) { exit(i); events.emit('overlay', { name, open: false }); } };
   const engine = {
     game, seed: base.seed, events, input, loop,
     time, scene: sceneView, // live views: persistent objects, updated in place
@@ -49,13 +68,13 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
-    go(name, a) { def(name); const from = stack[0]?.ctx.name; while (stack.length) exit(stack.length - 1); enter(name, a); events.emit('scene', { name, from }); return engine; },
-    overlay(name, a) { enter(name, a); events.emit('overlay', { name, open: true }); return engine; },
-    close(name) { const i = stack.findIndex((o, k) => k > 0 && o.ctx.name === name); if (i > 0) { exit(i); events.emit('overlay', { name, open: false }); } return engine; },
-    jump(name, preset, opts) {
+    go(name, a) { def(name); request(() => doGo(name, a)); return engine; },
+    overlay(name, a) { def(name); request(() => doOverlay(name, a)); return engine; },
+    close(name) { request(() => doClose(name)); return engine; },
+    jump(name, preset, opts, a) {
       const p = def(name).presets?.[preset];
       if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
-      engine.go(name); p(engine, opts, stack[0].ctx); return engine;
+      request(() => { doGo(name, a); p(engine, opts, stack[0].ctx); }); return engine;
     },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },

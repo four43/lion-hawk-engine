@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { headless, policy } from '../testing/index.js';
+import { defineGame } from '../src/index.sim.js';
 import game from './fixtures/countdown.js';
 
 test('a whole flow headless: title → race → countdown → drive → results → retry (T-1…T-5)', () => {
@@ -41,4 +42,11 @@ test('hold/release and same-seed checksums', () => {
   for (const h of [a, b]) { h.jump('race', 'running'); h.hold({ throttle: 1 }); h.seconds(2); h.release(); h.seconds(1); }
   assert.equal(a.checksum(), b.checksum());
   assert.ok(Math.abs(a.scene.state.x - 20) < 1e-9);
+});
+test('named policies ignore the prototype chain; jump passes args', () => {
+  let got;
+  const g = defineGame({ id: 'p', start: 'a', scenes: { a: {}, b: { enter(e, c) { got = c.args; }, presets: { p() {} } } } });
+  const h = headless(g);
+  assert.throws(() => h.step(1, 'constructor'), /no policy 'constructor'/);
+  h.jump('b', 'p', undefined, { z: 1 }); assert.deepEqual(got, { z: 1 });
 });

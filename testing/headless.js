@@ -24,7 +24,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
   const resolve = input => {
     if (input == null) return null;
     if (typeof input === 'function') return input;
-    if (typeof input === 'string') { const p = game.policies[input]; if (!p) throw new Error(`headless: no policy '${input}'`); return p; }
+    if (typeof input === 'string') { const p = Object.hasOwn(game.policies, input) ? game.policies[input] : undefined; if (!p) throw new Error(`headless: no policy '${input}'`); return p; }
     return () => input;
   };
   const one = (f, k) => { if (f) engine.input.set(f(h, k)); engine.stepN(1); for (const inv of invariants) inv(h); };
@@ -58,7 +58,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
     go(n, a) { engine.go(n, a); return h; },
     overlay(n, a) { engine.overlay(n, a); return h; },
     close(n) { engine.close(n); return h; },
-    jump(s, p, o) { engine.jump(s, p, o); return h; },
+    jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),
     checksum: () => checksum(engine.state()),
   };

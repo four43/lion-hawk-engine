@@ -77,3 +77,58 @@ test('scene and time are persistent live views', () => {
   e.stepN(60); assert.deepEqual(tm, { step: 60, sim: 1 });
   e.close('pause'); assert.deepEqual(sc.overlays, []);
 });
+
+const mini = scenes => defineGame({ id: 'mini', start: 'a', scenes: { a: {}, ...scenes } });
+test('failed enter/ui rolls back the half-entered scene and rethrows', () => {
+  const g = mini({
+    bad: { enter(e, ctx) { ctx.system('s', () => {}); throw new Error('boom'); }, ui(u) { u.button({ id: 'x', label: 'x', action: () => {} }); } },
+    badui: { ui(u) { u.button({ id: 'y', label: 'y', action: () => {} }); throw new Error('boomui'); } },
+    ov: {},
+  });
+  const e = createEngine(g);
+  e.overlay('ov');
+  assert.throws(() => e.overlay('bad'), /boom/);
+  assert.deepEqual(e.scene.overlays, ['ov']); assert.deepEqual(e.ui.tree(), []); assert.ok(!e.schedule().pre.includes('s'));
+  assert.throws(() => e.overlay('badui'), /boomui/);
+  assert.deepEqual(e.scene.overlays, ['ov']); assert.deepEqual(e.ui.tree(), []);
+  assert.throws(() => e.go('bad'), /boom/);
+  assert.equal(e.scene.name, undefined); assert.deepEqual(e.scene.overlays, []);
+});
+test('opening an already-open scene throws before any hook', () => {
+  let n = 0;
+  const e = createEngine(mini({ ov: { enter() { n++; } } }));
+  e.overlay('ov'); assert.equal(n, 1);
+  assert.throws(() => e.overlay('ov'), /engine: scene 'ov' is already open/);
+  assert.throws(() => e.overlay('a'), /engine: scene 'a' is already open/);
+  assert.throws(() => e.go('ov'), /engine: scene 'ov' is already open/);
+  assert.equal(n, 1); e.go('a'); assert.equal(e.scene.name, 'a');
+});
+test('transitions during a step are queued to the end of the step', () => {
+  const seen = [];
+  const g = mini({
+    b: { enter() { seen.push('enter b'); } },
+    ov1: { step(e) { e.close('ov1'); } }, ov2: { step() { seen.push('ov2 step'); } },
+  });
+  g.scenes.a.step = (e, dt, ctx) => { if (e.time.step !== 2) return; e.go('b'); seen.push(`after go: ${e.scene.name} ${ctx.state === e.scene.state}`); };
+  const e = createEngine(g);
+  e.system('late', en => seen.push(`late sees ${en.scene.name}`));
+  e.stepN(2); seen.length = 0; e.stepN(1);
+  assert.deepEqual(seen, ['after go: a true', 'late sees a', 'enter b']);
+  assert.equal(e.scene.name, 'b');
+  assert.deepEqual(e.events.since(0).filter(x => x.type === 'scene').map(x => [x.name, x.from, x.step]), [['b', 'a', 2]]);
+  // an overlay closing itself mid-step does not make another overlay skip its step
+  e.overlay('ov1'); e.overlay('ov2'); seen.length = 0; e.stepN(1);
+  assert.deepEqual(seen, ['ov2 step', 'late sees b']); assert.deepEqual(e.scene.overlays, ['ov2']);
+});
+test('scene-scoped systems die with their scene instance', () => {
+  let runs = 0;
+  const e = createEngine(mini({ b: { enter(en, ctx) { ctx.system('bsys', () => runs++); } } }));
+  e.go('b'); assert.ok(e.schedule().pre.includes('bsys'));
+  e.stepN(2); assert.equal(runs, 2);
+  e.go('a'); assert.ok(!e.schedule().pre.includes('bsys')); e.stepN(1); assert.equal(runs, 2);
+});
+test('jump passes args to enter', () => {
+  let got;
+  const e = createEngine(mini({ b: { enter(en, ctx) { got = ctx.args; }, presets: { p() {} } } }));
+  e.jump('b', 'p', {}, { lvl: 2 }); assert.deepEqual(got, { lvl: 2 });
+});
