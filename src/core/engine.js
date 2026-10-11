@@ -114,6 +114,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
+    render(alpha) { render(alpha); },
     ui: { tree: () => ui.tree(engine), tap: id => ui.tap(id, engine) },
     state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };

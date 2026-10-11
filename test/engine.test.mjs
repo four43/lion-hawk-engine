@@ -285,3 +285,8 @@ test('duplicate check projects the queue: close then reopen, overlay after a go'
   const e2 = createEngine(g2); e2.stepN(1);
   assert.equal(e2.scene.name, 'a'); assert.deepEqual(e2.scene.overlays, ['p']);
 });
+
+test('render(alpha) calls onRender without stepping', () => {
+  const e = createEngine(game, { scene: 'race' }); const got = []; e.onRender(a => got.push(a));
+  const s = e.time.step; e.render(0.25); assert.deepEqual(got, [0.25]); assert.equal(e.time.step, s);
+});
