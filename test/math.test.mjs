@@ -33,3 +33,16 @@ test('mat4: TRS then transform matches rotate + scale + translate', () => {
   const n = xfN(m, [1, 0, 0]); near(Math.hypot(...n), 1);
   assert.deepEqual(mMul(mIdent(), m), m);
 });
+const qAxis = (ax, ay, az, ang) => { const h = Math.sin(ang / 2); return { x: ax * h, y: ay * h, z: az * h, w: Math.cos(ang / 2) }; };
+test('qmul does not commute and matches rotate composition', () => {
+  const a = qAxis(1, 0, 0, Math.PI / 2), b = qAxis(0, 1, 0, Math.PI / 2), v = v3(1, 2, 3);
+  const ab = qmul(a, b, q4()), ba = qmul(b, a, q4());
+  nearV(rotate(ab, v, v3()), rotate(a, rotate(b, v, v3()), v3()));
+  nearV(rotate(ba, v, v3()), rotate(b, rotate(a, v, v3()), v3()));
+  const x = rotate(ab, v, v3()), y = rotate(ba, v, v3());
+  assert.ok(Math.hypot(x.x - y.x, x.y - y.y, x.z - y.z) > 1, 'orders differ');
+});
+test('rotate about X turns +Y toward +Z', () => {
+  nearV(rotate(qAxis(1, 0, 0, Math.PI / 2), v3(0, 1, 0), v3()), { x: 0, y: 0, z: 1 });
+  nearV(rotate(qAxis(0, 0, 1, Math.PI / 2), v3(1, 0, 0), v3()), { x: 0, y: 1, z: 0 });
+});
