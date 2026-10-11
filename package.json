@@ -1,0 +1,15 @@
+{
+  "name": "lion-hawk",
+  "version": "0.1.0",
+  "description": "Opinionated 3D web physics engine: three.js, Rapier, glTF, physical materials and netcode.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./sim": "./src/index.sim.js",
+    "./view": "./src/index.view.js",
+    "./test": "./testing/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": { "test": "node --test test/" },
+  "license": "UNLICENSED"
+}
