@@ -23,3 +23,9 @@ test('assertFinite names the first bad path', () => {
   assertFinite({ a: [1, 2], b: { c: 3 } });
   assert.throws(() => assertFinite({ a: [1, NaN] }, 'state'), /state\.a\[1\] is not finite: NaN/);
 });
+test('typed arrays canonicalise and diff as plain arrays', () => {
+  assert.equal(canonical({ a: new Float32Array([1, 2.5]) }), canonical({ a: [1, 2.5] }));
+  assert.equal(canonical(new Uint8Array([1, 2])), '[1,2]');
+  assert.deepEqual(diff({ a: new Float64Array([1, 2, 3]) }, { a: [1, 5, 3] }), [{ path: 'a[1]', a: 2, b: 5 }]);
+  assert.deepEqual(diff(new Int16Array([1]), new Int16Array([1])), []);
+});
