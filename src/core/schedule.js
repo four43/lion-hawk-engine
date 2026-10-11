@@ -58,7 +58,7 @@ export function createSchedule(stages) {
       byName.delete(name); const list = byStage.get(e.stage); list.splice(list.indexOf(e), 1); sorted.delete(e.stage);
     },
     order: stage => entries(stage).map(e => e.name),
-    run(stage, ...args) { const list = entries(stage); for (let i = 0; i < list.length; i++) list[i].fn(...args); },
+    run(stage, a, b) { const list = entries(stage); for (let i = 0; i < list.length; i++) list[i].fn(a, b); },
     describe: () => Object.fromEntries([...byStage.keys()].map(s => [s, api.order(s)])),
   };
   return api;

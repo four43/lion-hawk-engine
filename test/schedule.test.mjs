@@ -58,3 +58,9 @@ test('errors: unknown stage, duplicate, cycle', () => {
   s.add('b', () => {}, { stage: 'pre', after: ['a'] });
   assert.throws(() => s.order('pre'), /cycle in 'pre': a, b/);
 });
+
+test('run passes exactly two args to each system (R-8)', () => {
+  const s = createSchedule(['a']); let n;
+  s.add('x', function () { n = arguments.length; }, { stage: 'a' });
+  s.run('a', 1, 2, 3); assert.equal(n, 2);
+});

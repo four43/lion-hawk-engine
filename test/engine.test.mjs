@@ -69,3 +69,11 @@ test('results overlay opens once at the finish', () => {
   assert.equal(e.events.since(0).filter(x => x.type === 'finish').length, 1);
   e.ui.tap('results.retry'); assert.equal(e.scene.name, 'race'); assert.deepEqual(e.scene.overlays, []);
 });
+test('scene and time are persistent live views', () => {
+  const e = createEngine(game), sc = e.scene, tm = e.time;
+  assert.equal(e.scene, sc); assert.equal(e.time, tm);
+  e.go('race'); assert.equal(sc.name, 'race'); assert.equal(sc.state, e.scene.state);
+  e.overlay('pause'); assert.deepEqual(sc.overlays, ['pause']);
+  e.stepN(60); assert.deepEqual(tm, { step: 60, sim: 1 });
+  e.close('pause'); assert.deepEqual(sc.overlays, []);
+});

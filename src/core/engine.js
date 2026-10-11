@@ -21,12 +21,18 @@ export function defineGame(spec) {
 export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   let step = 0, render = () => {};
+  const time = { step: 0, sim: 0 }, sceneView = { name: undefined, args: undefined, state: {}, overlays: [] };
+  const sync = () => { // divide, don't multiply by dt: 180 * (1/60) is not exactly 3
+    time.step = step; time.sim = step / game.sim.hz;
+    const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
+    sceneView.overlays.length = 0; for (let i = 1; i < stack.length; i++) sceneView.overlays.push(stack[i].ctx.name);
+  };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }) });
-  const enter = (name, a) => { const s = def(name), ctx = { name, args: a, state: {} }; stack.push({ s, ctx }); s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); return ctx; };
-  const exit = i => { const [{ s, ctx }] = stack.splice(i, 1); s.exit?.(engine, ctx); ui.clear(ctx.name); };
+  const enter = (name, a) => { const s = def(name), ctx = { name, args: a, state: {} }; stack.push({ s, ctx }); sync(); s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); return ctx; };
+  const exit = i => { const [{ s, ctx }] = stack.splice(i, 1); s.exit?.(engine, ctx); ui.clear(ctx.name); sync(); };
   const paused = () => { for (let i = 1; i < stack.length; i++) if (stack[i].s.pauses) return true; return false; };
   const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
@@ -34,12 +40,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     if (paused()) stepScenes(dt, 1);
     else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
     schedule.run('events.flush', engine, dt);
-    step++;
+    step++; sync();
   } });
   const engine = {
     game, seed: base.seed, events, input, loop,
-    get time() { return { step, sim: step / game.sim.hz }; }, // divide, don't multiply by dt: 180 * (1/60) is not exactly 3
-    get scene() { const m = stack[0]?.ctx; return { name: m?.name, args: m?.args, state: m?.state ?? {}, overlays: stack.slice(1).map(o => o.ctx.name) }; },
+    time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => base.fork(name),
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
@@ -60,6 +65,6 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   schedule.add('input', () => input.apply(), { stage: 'input.apply' });
   schedule.add('scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('events', () => events.flush(), { stage: 'events.flush' });
-  enter(scene, args);
+  sync(); enter(scene, args);
   return engine;
 }
