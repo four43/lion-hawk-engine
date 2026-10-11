@@ -1,9 +1,10 @@
 // Touch devices: a floating thumb stick and hold buttons on pointer events -> named actions in per-source device layers (I-3: released on cancel/blur/hide).
 // Moves/ups route by pointerId on the window (iOS does not reliably retarget captured moves); cancel and lostpointercapture are releases.
-export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *' }) {
+export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
   doc = doc ?? root.ownerDocument; const win = doc.defaultView ?? globalThis.window;
   const base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true;
   const knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); root.appendChild(base);
+  const prevTA = root.style.touchAction; root.style.touchAction = 'none';
   const out = { [x[0]]: 0, [y[0]]: 0 }; // reused every move
   let id = null, ox = 0, oy = 0;
 
@@ -14,7 +15,7 @@ export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone
   const onDown = e => {
     if (id !== null) return;
     if (e.target?.closest?.(ignore)) return;
-    const r = root.getBoundingClientRect?.(); if (e.clientX - (r ? r.left : 0) < edge) return;
+    if (e.clientX < edge) return; // viewport edge (Safari back swipe), not root's
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
     base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.hidden = false; knob.style.transform = 'translate(0px, 0px)';
   };
@@ -22,6 +23,7 @@ export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone
     if (e.pointerId !== id) return;
     let dx = e.clientX - ox, dy = e.clientY - oy; const len = Math.hypot(dx, dy);
     if (len > radius) { dx = dx / len * radius; dy = dy / len * radius; }
+    // the one per-move allocation: DOM style writes allocate anyway, so the transform string stays
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
     // radial dead zone, then length rescaled to 0..1; screen up is +y
     const nx = dx / radius, ny = -dy / radius, m = Math.hypot(nx, ny);
@@ -39,7 +41,7 @@ export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone
       root.removeEventListener('pointerdown', onDown); root.removeEventListener('lostpointercapture', onEnd);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onEnd); win.removeEventListener('pointercancel', onEnd);
       win.removeEventListener('blur', release); win.removeEventListener('pagehide', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; base.remove(); engine.input.clearDevice(source);
+      id = null; base.remove(); root.style.touchAction = prevTA; engine.input.clearDevice(source);
     },
   };
 }
@@ -48,7 +50,8 @@ export function bindHold(engine, el, action, { source = 'hold:' + action } = {})
   const doc = el.ownerDocument, win = doc.defaultView ?? globalThis.window;
   const on = { [action]: true }, off = { [action]: false };
   let id = null;
-  const onDown = e => { id = e.pointerId; el.setPointerCapture?.(e.pointerId); engine.input.device(on, source); };
+  el.setAttribute('data-lh-hold', '');
+  const onDown = e => { if (id !== null) return; id = e.pointerId; el.setPointerCapture?.(e.pointerId); engine.input.device(on, source); };
   const release = () => { if (id === null) return; id = null; engine.input.device(off, source); };
   const onEnd = e => { if (e.pointerId === id) release(); };
   const onCtx = e => e.preventDefault();
@@ -61,7 +64,7 @@ export function bindHold(engine, el, action, { source = 'hold:' + action } = {})
       el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointerup', onEnd); el.removeEventListener('pointercancel', onEnd);
       el.removeEventListener('lostpointercapture', onEnd); el.removeEventListener('contextmenu', onCtx);
       win.removeEventListener('pagehide', release); win.removeEventListener('blur', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; engine.input.clearDevice(source);
+      id = null; el.removeAttribute('data-lh-hold'); engine.input.clearDevice(source);
     },
   };
 }

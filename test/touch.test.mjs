@@ -66,3 +66,26 @@ test('hidden visibility and pagehide release both', () => {
   assert.equal(s.v().steer, 0); assert.equal(s.v().horn.down, false);
   vis = 'visible'; go(); s.window.dispatchEvent(new s.window.Event('pagehide')); assert.equal(s.v().steer, 0); assert.equal(s.v().horn.down, false);
 });
+
+test('edge guard uses the viewport, not root rect', () => {
+  const s = setup(); stick(s); s.root.getBoundingClientRect = () => ({ left: 100, top: 0 });
+  s.ev(s.root, 'pointerdown', 1, 110, 300); s.ev(s.window, 'pointermove', 1, 180, 300); assert.equal(s.v().steer, 1);
+  s.ev(s.window, 'pointerup', 1);
+  s.root.getBoundingClientRect = () => ({ left: -50, top: 0 });
+  s.ev(s.root, 'pointerdown', 2, 10, 300); s.ev(s.window, 'pointermove', 2, 80, 300); assert.equal(s.v().steer, 0);
+});
+test('touch-action none is set and restored', () => {
+  const s = setup(); s.root.style.touchAction = 'pan-y'; const st = stick(s);
+  assert.equal(s.root.style.touchAction, 'none'); st.dispose(); assert.equal(s.root.style.touchAction, 'pan-y');
+});
+test('a div hold inside root presses and does not start the stick', () => {
+  const s = setup(); stick(s); const d = s.document.createElement('div'); s.root.appendChild(d); const h = bindHold(s.engine, d, 'horn');
+  assert.equal(d.hasAttribute('data-lh-hold'), true);
+  s.ev(d, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 270, 300);
+  assert.equal(s.v().horn.down, true); assert.equal(s.v().steer, 0);
+  h.dispose(); assert.equal(d.hasAttribute('data-lh-hold'), false);
+});
+test('hold ignores a second pointer', () => {
+  const s = setup(); const el = s.document.createElement('div'); s.document.body.appendChild(el); bindHold(s.engine, el, 'horn');
+  s.ev(el, 'pointerdown', 4); s.ev(el, 'pointerdown', 5); s.ev(el, 'pointerup', 4); assert.equal(s.v().horn.down, false);
+});
