@@ -21,9 +21,11 @@ export function defineGame(spec) {
 export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   let step = 0, render = () => {};
-  const time = { step: 0, sim: 0 }, sceneView = { name: undefined, args: undefined, state: {}, overlays: [] };
-  const sync = () => { // divide, don't multiply by dt: 180 * (1/60) is not exactly 3
-    time.step = step; time.sim = step / game.sim.hz;
+  const streams = new Map(), time = { step: 0, sim: 0 }, sceneView = { name: undefined, args: undefined, state: {}, overlays: [] };
+  // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
+  // so `engine.scene.overlays` stays the same array across steps.
+  const syncTime = () => { time.step = step; time.sim = step / game.sim.hz; } // divide, don't multiply by dt: 180 * (1/60) is not exactly 3
+  const sync = () => {
     const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
     sceneView.overlays.length = 0; for (let i = 1; i < stack.length; i++) sceneView.overlays.push(stack[i].ctx.name);
   };
@@ -59,33 +61,38 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   };
   const request = item => { queue.push(item); if (!inStep && !draining) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
-    inStep = true; queue.length = 0;
+    inStep = true; let failure = null;
     try {
       schedule.run('input.apply', engine, dt);
       if (paused()) stepScenes(dt, 1);
       else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
-    } catch (err) { queue.length = 0; throw err; } // a throwing step discards its queued transitions
+    } catch (err) { failure = err; }
     finally { inStep = false; } // never leave the engine thinking it is mid-step
-    drain();
-    schedule.run('events.flush', engine, dt);
-    step++; sync();
+    // the step always finishes (queued transitions apply, events flush, step++) even when a system threw, then rethrows
+    try { drain(); } catch (err) { failure ??= err; }
+    try { schedule.run('events.flush', engine, dt); } catch (err) { failure ??= err; }
+    step++; syncTime();
+    if (failure) throw failure;
   } });
-  const open = name => { throw new Error(`engine: scene '${name}' is already open`); };
+  const alreadyOpen = name => { throw new Error(`engine: scene '${name}' is already open`); };
   const doGo = (name, a) => {
-    def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) open(name);
+    def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) alreadyOpen(name);
     const from = stack[0]?.ctx.name; while (stack.length) exit(stack.length - 1); enter(name, a); events.emit('scene', { name, from });
   };
-  const doOverlay = (name, a) => { def(name); if (isOpen(name)) open(name); enter(name, a); events.emit('overlay', { name, open: true }); };
+  const doOverlay = (name, a) => { def(name); if (isOpen(name)) alreadyOpen(name); enter(name, a); events.emit('overlay', { name, open: true }); };
   const doClose = name => { const i = stack.findIndex((o, k) => k > 0 && o.ctx.name === name); if (i > 0) { exit(i); events.emit('overlay', { name, open: false }); } };
   const engine = {
     game, seed: base.seed, events, input, loop,
     time, scene: sceneView, // live views: persistent objects, updated in place
-    rng: name => base.fork(name),
+    rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
     go(name, a) { def(name); request({ go: true, run: () => doGo(name, a) }); return engine; },
-    overlay(name, a) { def(name); request({ run: () => doOverlay(name, a) }); return engine; },
+    overlay(name, a) {
+      def(name); if (isOpen(name) || queue.some(q => q.overlay === name)) alreadyOpen(name); // at request time, so the caller's stack shows it
+      request({ overlay: name, run: () => doOverlay(name, a) }); return engine;
+    },
     close(name) { request({ run: () => doClose(name) }); return engine; },
     jump(name, preset, opts, a) {
       const p = def(name).presets?.[preset];
@@ -100,6 +107,6 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   schedule.add('input', () => input.apply(), { stage: 'input.apply' });
   schedule.add('scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('events', () => events.flush(), { stage: 'events.flush' });
-  sync(); enter(scene, args);
+  sync(); syncTime(); enter(scene, args);
   return engine;
 }

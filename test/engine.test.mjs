@@ -185,3 +185,30 @@ test('only the last queued go (and what follows it) applies', () => {
   const e = createEngine(g); e.stepN(1);
   assert.deepEqual(seen, ['c']); assert.equal(e.scene.name, 'c');
 });
+
+test('F2: overlaying an open or already-pending scene throws at the call site; the step still completes', () => {
+  const g = mini({ results: {} });
+  const e = createEngine(g);
+  e.system('s1', en => en.overlay('results'));
+  e.system('s2', en => en.overlay('results'));
+  assert.throws(() => e.stepN(1), /engine: scene 'results' is already open/);
+  assert.equal(e.time.step, 1);
+  assert.deepEqual(e.scene.overlays, ['results']);
+  assert.equal(e.events.since(0).filter(x => x.type === 'overlay').length, 1);
+});
+test('F3: rng(name) is one cached stream per name', () => {
+  const e = createEngine(mini({}), { seed: 4 });
+  assert.equal(e.rng('fx'), e.rng('fx'));
+  const v = [e.rng('fx').next(), e.rng('fx').next(), e.rng('fx').next()];
+  assert.equal(new Set(v).size, 3);
+  assert.equal(v[0], createEngine(mini({}), { seed: 4 }).rng('fx').next());
+});
+test('F4 (R-8): time updates every step; the scene view (and overlays array) only change on transitions', () => {
+  const e = createEngine(mini({ ov: {}, ov2: {} }));
+  e.overlay('ov');
+  const view = e.scene, overlays = e.scene.overlays;
+  e.stepN(5);
+  assert.equal(e.scene, view); assert.equal(e.scene.overlays, overlays); assert.deepEqual(overlays, ['ov']);
+  assert.equal(e.time.step, 5);
+  e.overlay('ov2'); assert.equal(e.scene.overlays, overlays); assert.deepEqual(overlays, ['ov', 'ov2']);
+});
