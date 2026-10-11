@@ -6,7 +6,7 @@ import { ENGINE_VERSION } from '../src/version.js';
 test('installs engine + game ids and the game api on the target', () => {
   const target = {}; let n = 0;
   const hook = installEngineHook({ stepN(k) { n += k; } }, { game: 'pig-pens', target });
-  assert.equal(target.engine, hook); assert.equal(hook.engine, ENGINE_VERSION); assert.equal(hook.game, 'pig-pens');
+  assert.equal(target.engine, hook); assert.equal(hook.version, ENGINE_VERSION); assert.equal('engine' in hook, false); assert.equal(hook.game, 'pig-pens');
   hook.stepN(3); assert.equal(n, 3);
 });
 test('getters stay live', () => {
@@ -24,4 +24,12 @@ test('requires a game id and leaves old hooks alone', () => {
   const target = { piggies: { old: true } };
   assert.throws(() => installEngineHook({}, { target }), /game id required/);
   installEngineHook({}, { game: 'pig-pens', target }); assert.deepEqual(target.piggies, { old: true });
+});
+test('version and game are reserved: the api cannot override them', () => {
+  const target = {};
+  const hook = installEngineHook({ version: 'x', get game() { return 'evil'; }, ok: 1 }, { game: 'g', target });
+  assert.equal(hook.version, ENGINE_VERSION); assert.equal(hook.game, 'g'); assert.equal(hook.ok, 1);
+});
+test('game must be a non-empty string', () => {
+  for (const game of [5, {}, '', null]) assert.throws(() => installEngineHook({}, { game, target: {} }), { name: 'TypeError', message: 'installEngineHook: game id required' });
 });
