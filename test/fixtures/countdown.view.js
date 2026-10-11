@@ -12,10 +12,9 @@ const view = defineView({
   },
 });
 
-// the stick's x axis is unused by this game: it maps onto 'throttle' with sign 0, and the y axis (written last) wins
 boot(countdown, view, {
   devices: [
     e => bindKeyboard(e, { w: ['throttle', 1] }),
-    e => bindStick(e, { root: document.body, x: ['throttle', 0], y: ['throttle', 1] }),
+    e => bindStick(e, { root: document.body, y: ['throttle', 1] }),
   ],
 });

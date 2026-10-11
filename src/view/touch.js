@@ -1,14 +1,15 @@
 // Touch devices: a floating thumb stick and hold buttons on pointer events -> named actions in per-source device layers (I-3: released on cancel/blur/hide).
 // Moves/ups route by pointerId on the window (iOS does not reliably retarget captured moves); cancel and lostpointercapture are releases.
-export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
-  doc = doc ?? root.ownerDocument; const win = doc.defaultView ?? globalThis.window;
-  const base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true;
-  const knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); root.appendChild(base);
-  const prevTA = root.style.touchAction; root.style.touchAction = 'none';
-  const out = { [x[0]]: 0, [y[0]]: 0 }; // reused every move
+export function bindStick(engine, { root, x, y, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
+  if (!x && !y) throw new Error('bindStick: x or y required');
+  surface ??= root; doc = doc ?? surface.ownerDocument; parent ??= doc.body; const win = doc.defaultView ?? globalThis.window;
+  const base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true; base.style.position = 'fixed';
+  const knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); parent.appendChild(base);
+  const prevTA = surface.style.touchAction; surface.style.touchAction = 'none';
+  const out = {}; if (x) out[x[0]] = 0; if (y) out[y[0]] = 0; // reused every move
   let id = null, ox = 0, oy = 0;
 
-  const write = (vx, vy) => { out[x[0]] = vx * x[1] + 0; out[y[0]] = vy * y[1] + 0; engine.input.device(out, source); }; // +0 normalises -0
+  const write = (vx, vy) => { if (x) out[x[0]] = vx * x[1] + 0; if (y) out[y[0]] = vy * y[1] + 0; engine.input.device(out, source); }; // +0 normalises -0
   const release = () => {
     if (id === null) return; id = null; base.hidden = true; knob.style.transform = ''; write(0, 0);
   };
@@ -33,22 +34,23 @@ export function bindStick(engine, { root, x, y, radius = 70, edge = 24, deadZone
   };
   const onEnd = e => { if (e.pointerId === id) release(); };
   const onVis = () => { if (doc.visibilityState === 'hidden') release(); };
-  root.addEventListener('pointerdown', onDown); root.addEventListener('lostpointercapture', onEnd);
+  surface.addEventListener('pointerdown', onDown); surface.addEventListener('lostpointercapture', onEnd);
   win.addEventListener('pointermove', onMove); win.addEventListener('pointerup', onEnd); win.addEventListener('pointercancel', onEnd);
   win.addEventListener('blur', release); win.addEventListener('pagehide', release); doc.addEventListener('visibilitychange', onVis);
   return {
     dispose() {
-      root.removeEventListener('pointerdown', onDown); root.removeEventListener('lostpointercapture', onEnd);
+      surface.removeEventListener('pointerdown', onDown); surface.removeEventListener('lostpointercapture', onEnd);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onEnd); win.removeEventListener('pointercancel', onEnd);
       win.removeEventListener('blur', release); win.removeEventListener('pagehide', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; base.remove(); root.style.touchAction = prevTA; engine.input.clearDevice(source);
+      id = null; base.remove(); surface.style.touchAction = prevTA; engine.input.clearDevice(source);
     },
   };
 }
 
-export function bindHold(engine, el, action, { source = 'hold:' + action } = {}) {
+export function bindHold(engine, el, action, { source = 'hold:' + action, value } = {}) {
   const doc = el.ownerDocument, win = doc.defaultView ?? globalThis.window;
-  const on = { [action]: true }, off = { [action]: false };
+  const isAxis = engine.input.kinds?.[action] === 'axis';
+  const on = { [action]: value ?? (isAxis ? 1 : true) }, off = { [action]: isAxis ? 0 : false };
   let id = null;
   el.setAttribute('data-lh-hold', '');
   const onDown = e => { if (id !== null) return; id = e.pointerId; el.setPointerCapture?.(e.pointerId); engine.input.device(on, source); };

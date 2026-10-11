@@ -3,7 +3,8 @@ const GUARD = 'input, textarea, select, [contenteditable]';
 
 export function bindKeyboard(engine, bindings, { target, doc, source = 'keyboard', ramps = {} } = {}) {
   target = target ?? globalThis.window; doc = doc ?? target.document ?? globalThis.document;
-  const keys = Object.keys(bindings);
+  const keys = Object.keys(bindings).map(k => k.toLowerCase());
+  const src = bindings; bindings = {}; Object.keys(src).forEach((k, i) => { bindings[keys[i]] = src[k]; });
   const held = {}; for (let i = 0; i < keys.length; i++) held[keys[i]] = false;
   const axes = [], buttons = [], out = {};
   for (let i = 0; i < keys.length; i++) {
@@ -14,11 +15,16 @@ export function bindKeyboard(engine, bindings, { target, doc, source = 'keyboard
 
   const release = () => { for (let i = 0; i < keys.length; i++) held[keys[i]] = false; for (let i = 0; i < axes.length; i++) val[axes[i]] = 0; };
   const onDown = e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = String(e.key).toLowerCase(); if (!(k in held)) return;
     if (e.target?.closest?.(GUARD)) return;
-    e.preventDefault?.(); if (!e.repeat) held[k] = true;
+    if (!((k === 'enter' || k === ' ') && e.target?.closest?.('button'))) e.preventDefault?.();
+    if (!e.repeat) held[k] = true;
   };
-  const onUp = e => { const k = String(e.key).toLowerCase(); if (k in held) { held[k] = false; e.preventDefault?.(); } };
+  const onUp = e => {
+    const k = String(e.key).toLowerCase();
+    if (k in held) { held[k] = false; if (!((k === 'enter' || k === ' ') && e.target?.closest?.('button'))) e.preventDefault?.(); }
+  };
   const onVis = () => { if (doc.visibilityState === 'hidden') release(); };
   target.addEventListener('keydown', onDown); target.addEventListener('keyup', onUp);
   target.addEventListener('blur', release); target.addEventListener('pagehide', release);

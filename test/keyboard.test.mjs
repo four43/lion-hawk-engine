@@ -43,3 +43,27 @@ test('dispose clears the source and stops listening', () => {
   const { kb, key, last, cleared } = setup();
   kb.dispose(); assert.equal(cleared(), 'keyboard'); key('keydown', 'w'); kb.update(0.016); assert.equal(last()?.throttle ?? 0, 0);
 });
+
+test('F4: binding keys are lowercased at bind time', () => {
+  const { window, document } = dom(); const calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const kb = bindKeyboard(engine, { ArrowUp: ['throttle', 1] }, { target: window, doc: document });
+  document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+  kb.update(0.016); assert.equal(calls.at(-1).throttle, 1);
+});
+test('F4: ctrl/meta/alt chords are ignored and not prevented', () => {
+  const { window, document, kb, last } = setup();
+  for (const m of ['ctrlKey', 'metaKey', 'altKey']) {
+    const ev = new window.KeyboardEvent('keydown', { key: 'w', bubbles: true, cancelable: true, [m]: true });
+    document.body.dispatchEvent(ev); kb.update(0.016);
+    assert.equal(ev.defaultPrevented, false); assert.equal(last().throttle, 0);
+  }
+});
+test('F4: Enter and Space on a button are not prevented', () => {
+  const { window, document } = dom(); const engine = { input: { device() {}, clearDevice() {} } };
+  bindKeyboard(engine, { enter: 'ok', ' ': 'jump', w: ['t', 1] }, { target: window, doc: document });
+  const b = document.createElement('button'); document.body.appendChild(b);
+  const fire = (el, key) => { const ev = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; };
+  assert.equal(fire(b, 'Enter'), false); assert.equal(fire(b, ' '), false);
+  assert.equal(fire(document.body, 'Enter'), true); assert.equal(fire(document.body, ' '), true); assert.equal(fire(b, 'w'), true);
+});

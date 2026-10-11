@@ -23,8 +23,9 @@ export function createInput(schema) {
     }
     return isAxis[n] ? (any ? best : undefined) : false;
   };
+  const kinds = Object.freeze(Object.fromEntries(names.map(n => [n, schema[n].kind])));
   return {
-    snapshot,
+    snapshot, kinds,
     // per-source device layers, in first-registration order; merged in apply() as one layer under set/hold
     device: (p, source = 'default') => {
       let src = null; for (let i = 0; i < sources.length; i++) if (sources[i].name === source) { src = sources[i]; break; }

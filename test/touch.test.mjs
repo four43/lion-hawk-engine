@@ -39,12 +39,12 @@ test('y sign inverts and cancel / lostpointercapture release', () => {
   s.ev(s.root, 'lostpointercapture', 1); assert.equal(s.v().steer, 0);
 });
 test('stick renders, shows at pointer and hides on release; dispose cleans up', () => {
-  const s = setup(); const st = stick(s); const el = s.root.querySelector('.lh-stick');
+  const s = setup(); const st = stick(s); const el = s.document.body.querySelector('.lh-stick');
   assert.ok(el.querySelector('.lh-knob')); assert.equal(el.hidden, true);
   s.ev(s.root, 'pointerdown', 1, 200, 300); assert.equal(el.hidden, false);
   s.ev(s.window, 'pointerup', 1); assert.equal(el.hidden, true);
   s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 270, 300);
-  st.dispose(); assert.equal(s.v().steer, 0); assert.equal(s.root.querySelector('.lh-stick'), null);
+  st.dispose(); assert.equal(s.v().steer, 0); assert.equal(s.document.body.querySelector('.lh-stick'), null);
   s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 270, 300); assert.equal(s.v().steer, 0);
 });
 test('hold button is true while pressed, false after lostpointercapture', () => {
@@ -88,4 +88,29 @@ test('a div hold inside root presses and does not start the stick', () => {
 test('hold ignores a second pointer', () => {
   const s = setup(); const el = s.document.createElement('div'); s.document.body.appendChild(el); bindHold(s.engine, el, 'horn');
   s.ev(el, 'pointerdown', 4); s.ev(el, 'pointerdown', 5); s.ev(el, 'pointerup', 4); assert.equal(s.v().horn.down, false);
+});
+
+test('F2: bindHold on an axis action writes 1 while held, 0 after; value overrides', () => {
+  const s = setup(); const el = s.document.createElement('div'); s.document.body.appendChild(el);
+  bindHold(s.engine, el, 'throttle');
+  s.ev(el, 'pointerdown', 5); assert.equal(s.v().throttle, 1);
+  s.ev(el, 'pointerup', 5); assert.equal(s.v().throttle, 0);
+  const el2 = s.document.createElement('div'); s.document.body.appendChild(el2);
+  bindHold(s.engine, el2, 'steer', { value: -1 });
+  s.ev(el2, 'pointerdown', 6); assert.equal(s.v().steer, -1); s.ev(el2, 'pointerup', 6); assert.equal(s.v().steer, 0);
+  assert.deepEqual({ ...s.engine.input.kinds }, { steer: 'axis', throttle: 'axis', horn: 'button' });
+});
+test('F3: y-only stick works; neither axis throws', () => {
+  const s = setup(); const st = bindStick(s.engine, { root: s.root, y: ['throttle', 1], doc: s.document });
+  s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230);
+  assert.equal(s.v().throttle, 1); assert.equal(s.v().steer, 0); st.dispose();
+  assert.throws(() => bindStick(s.engine, { root: s.root, doc: s.document }), /bindStick: x or y required/);
+});
+test('F3: a canvas surface mounts the base under body, with fixed position', () => {
+  const s = setup(); const canvas = s.document.createElement('canvas'); s.document.body.appendChild(canvas);
+  const st = bindStick(s.engine, { surface: canvas, y: ['throttle', 1], doc: s.document });
+  const base = s.document.querySelector('.lh-stick');
+  assert.equal(base.parentNode, s.document.body); assert.equal(base.style.position, 'fixed'); assert.equal(canvas.style.touchAction, 'none');
+  s.ev(canvas, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230); assert.equal(s.v().throttle, 1);
+  st.dispose(); assert.equal(s.document.querySelector('.lh-stick'), null);
 });
