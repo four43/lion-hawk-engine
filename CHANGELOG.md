@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-11
+
+Phase 2a, the sim half of the engine: the step schedule (named stages, before/after ordering), the fixed-step loop, input actions (axes and buttons), the UI registry, `defineGame`/`createEngine` with scenes and overlays, headless test helpers and input policies (`headless`, `policy`, `until`/`untilEvent`/`untilScene`, event lists), and the countdown example game fixture.
+
 ## 0.1.2 — 2026-10-11
 
 Golden failure messages name the first diverging trail entry; devDependencies mirror the peers so the engine tests standalone.
