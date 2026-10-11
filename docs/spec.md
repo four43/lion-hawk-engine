@@ -1,0 +1,552 @@
+# Lion Hawk Engine: specification
+
+Version 0.1 (2026-10-11). Status: draft for review.
+
+Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
+
+Background:
+- `design.md`: the original layered design and material system, plus code survey findings.
+- `research.md`: engine architecture research.
+- `research-testing.md`: test helper research.
+
+This spec decides; those files explain.
+
+Requirement IDs (`[L-1]`, `[E-3]`, …) are referenced by the per-phase plans in `docs/plans/`.
+
+---
+
+## 1. What Lion Hawk is
+
+### 1.1 Fixed stack
+
+| Concern | Choice | Not swappable |
+|---|---|---|
+| Rendering | three.js (^0.186) | yes |
+| Physics solver | Rapier (`@dimforge/rapier3d-compat` ^0.21) | yes |
+| Models | glTF 2.0 (GLB, meshopt, KTX2) | yes |
+| Materials | the Lion Hawk material registry (§3) | yes |
+| Netcode | host-authoritative replication over WebRTC (§4) | yes |
+| Language | plain JavaScript ES modules, no framework, no TypeScript | yes |
+
+Because the stack is fixed, the engine can join the five parts automatically.
+
+### 1.2 Rules
+
+- **[L-1] Do not hide three.js or Rapier.** Games get the real `THREE.Scene`, `THREE.Camera` and `RAPIER.World`. The engine owns the wiring between them, not their APIs.
+- **[L-2] Entities are where the parts meet** (§2). An entity's `model`, `body`, `material`, `net` and `input` parts are handled by the engine.
+- **[L-3] The sim never touches the browser.** Every module is either *sim* (Node-safe, no `three`, no DOM, no wall clock) or *view* (browser only). Sim code never imports view code. This is enforced by a test (§7.4, [T-12]).
+- **[L-4] The engine owns the loop** (§5). Games add systems to named stages. They do not write a frame loop.
+- **[L-5] Kits are optional.** Vehicle, terrain, herd, coverage and fx are imported per game (§8.1).
+- **[L-6] 3D only.** No 2D renderer, no `rapier2d`, no sprites or tilemaps. A body may still be locked to a plane with Rapier's locked axes.
+
+### 1.3 Out of scope
+
+- An engine-built UI toolkit (games use HTML overlays plus the helpers in §5.4).
+- Swappable renderers or physics.
+- Cross-device lockstep or rollback.
+- Dedicated servers.
+- More than 8 peers.
+- A visual editor.
+
+### 1.4 Layers
+
+```
+                 SIM (headless, Node-safe)            │  VIEW (browser)
+──────────────────────────────────────────────────────┼──────────────────────────────────
+ 5  Game        scenes (sim half), rules, AI          │  scenes (view half), HUD, camera
+ 4b Kits        vehicle · terrain · herd · coverage · fx, each with a sim and a view half
+ 4  Entities    World, parts, systems, events,        │  entity views, interpolation,
+                replication                           │  remote smoothing
+ 3  Services    Rapier wrapper, fields, net transport │  renderer, material compiler,
+                                                      │  audio, input devices, PWA client
+ 2b Definitions materials · kinds · field types · vehicle specs   (shared plain data)
+ 2  Resources   physics sidecars (colliders, panels)  │  glTF scenes, textures, programs
+ 1  Core        loop clock, rng, math, events, flags  │  rAF driver, debug hook
+════════════════════════════════════════════════════════════════════════════════════════
+    Tooling     lion-hawk CLI (dev, bake, build, test, release) · test helpers
+```
+
+---
+
+## 2. Entities
+
+### 2.1 Shape
+
+- **[E-1]** An entity is a plain object with a numeric `id`, an optional `tags` set, and optional parts. It is not a class instance.
+- **[E-2]** A `World` holds the entities of one scene, plus that scene's `RAPIER.World`.
+- **[E-3]** Systems query entities by the parts they have, for example `world.with('body', 'net')`. A query is a live, cached list that updates on spawn, despawn and part changes. This is miniplex-style; no ECS library is used.
+- **[E-4]** Game data lives on the entity as plain fields, for example `e.pig = { mood, mud }`. Only fields declared in a `net` kind are replicated.
+
+### 2.2 Built-in parts
+
+| Part | Declared as | Sim side | View side |
+|---|---|---|---|
+| `model` | asset key, e.g. `'tractor'` | reads the physics sidecar (§6.2) | `Object3D` cloned from the cached glTF |
+| `body` | `'dynamic' \| 'kinematic' \| 'fixed'` or `{ type, lock, ccd, linearDamping, angularDamping, sleep }` | one Rapier rigid body; one collider per sidecar collider | none |
+| `material` | taken per collider from the sidecar; `material: { '*': 'rubber', wheel: 'rubber' }` overrides by part name | collider friction, restitution and density (§3.3) | compiled material (§3.6) |
+| `net` | kind name, e.g. `'vehicle'` | record build and apply (§4.3) | remote smoothing (§4.4) |
+| `xf` | `{ p: {x,y,z}, q: {x,y,z,w} }` | written from Rapier after each step, or by game code for bodiless entities | interpolated into the `Object3D` (§2.4) |
+| `input` | an action snapshot (§5.3) | read by systems; written by the input stage, the network or a test policy | none |
+| `sockets` | from the sidecar | named attachment points in body space | same, for attaching meshes |
+| `owner` | peer number | who has authority for `owner` kinds | none |
+
+### 2.3 Lifecycle
+
+- **[E-5]** `world.spawn(desc)` creates the entity and its Rapier body and colliders in the same call. It returns the entity.
+- **[E-6]** The view creates the matching `Object3D` on its next sync and removes it after despawn.
+- **[E-7]** `world.despawn(e)` removes the Rapier objects, the view object, query membership and the net record. On a guest, only the replication layer may spawn or despawn entities of host-authority kinds.
+- **[E-8]** `world.place(e, { at | rel, local, yaw })` moves an entity and its body together. Tests and game code use it rather than writing to Rapier directly.
+- **[E-9]** Entity IDs are stable and allocated in spawn order from the scene seed. Replicated entities use the kind's ID range (§4.3).
+
+### 2.4 Transforms and interpolation
+
+- **[E-10]** Each entity with `xf` has two transform slots, `prev` and `curr`, in a shared `Float64Array` pool. They are swapped after every sim step. No objects are allocated per step or per frame.
+- **[E-11]** The view writes `lerp(prev, curr, alpha)` (slerp for rotations) into each `Object3D`. For remote entities, interpolation and smoothing come from §4.4 instead.
+
+### 2.5 Systems
+
+- **[E-12]** A system is a function `(engine, dt) => void` registered with `engine.system(name, fn, { stage, before, after })` (§5.1).
+- **[E-13]** Systems emit events with `engine.emit(type, data)`. Events are queued, delivered in order at the end of each step (the `events.flush` stage), and kept in the event log (§7.4).
+
+---
+
+## 3. Materials
+
+### 3.1 Registry
+
+- **[M-1]** Materials are plain data created with `defineMaterials({...})`. The definitions layer is used by both sim and view and has no runtime dependencies.
+- **[M-2]** The engine ships a base library: `steel`, `aluminium`, `wood`, `rubber`, `glass`, `plastic`, `fabric`, `flesh`, `fur`, `gravel`, `grass`, `dirt`, `mud`, `asphalt`, `snow`, `ice`, `water`, `air`. Games add entries or extend base ones (`extends: 'steel'`, with overrides).
+- **[M-3]** Validation runs when the registry is loaded. An unknown block, a value out of range, an unknown `extends` or an `extends` cycle throws an error that names the material and the field.
+
+### 3.2 Schema
+
+Every block is optional.
+
+| Property | Units / meaning | Read by |
+|---|---|---|
+| `look.*` | `MeshPhysicalMaterial` params plus `subsurface`, `fur`, `wear` | material compiler (§3.6) |
+| `phys.friction` | Coulomb coefficient, 0–2 | collider |
+| `phys.restitution` | 0–1 | collider |
+| `phys.sg` | specific gravity; density = `sg × 1000 × fill` kg/m³ | collider density → mass and inertia; buoyancy |
+| `phys.fill` | solid fraction, 0–1, default 1 (a car shell ≈ 0.02) | collider density |
+| `tire.{mu, C, kp, ap, crr, drag}` | Magic Formula surface params | `kit-vehicle` tire backend |
+| `dirtRate` | coverage gained per metre driven | `kit-coverage` |
+| `coverage` | `{ dirt, rust, snow, mud }`: which layers this material accepts, 0–1 | `kit-coverage`, material compiler |
+| `aero.skin` | skin-friction coefficient | aero field |
+| `aero.airfoil` | `{ cl: [[aoa, cl]...], cd: [[aoa, cd]...], stall }` | aero field |
+| `magnet.strength` | dipole moment, A·m² | magnet field |
+| `magnet.ferrous` | 0–1 | magnet field |
+| `fluid.{density, viscosity}` | kg/m³, Pa·s | buoyancy, fluid drag |
+| `sound`, `fx` | cue IDs | audio and fx, from contact events |
+
+### 3.3 Materials on colliders
+
+- **[M-4]** Each collider gets its material from the glTF material name of the part it was made from (§6.2). Its density, friction and restitution are set from that material.
+- **[M-5]** The engine keeps a collider-handle → material-ID map. Contact events carry `{ a, b, materials: [ma, mb], impulse, point }`.
+- **[M-6]** Mass and centre of mass come from the colliders' geometry and density. A game never sets a body's mass directly, except through `phys.fill`.
+
+### 3.4 Pairs
+
+- **[M-7]** A pair table, keyed by an unordered material pair, may override `friction`, `restitution`, `tire`, `sound` and `fx`.
+- **[M-8]** When a pair has no entry:
+  - friction is the geometric mean of the two materials;
+  - restitution is the maximum;
+  - `sound` and `fx` come from the material with the lower `sg` (the softer one).
+- **[M-9]** Rapier's per-collider combine rules are set so that contacts match [M-8] without the engine having to intervene per contact.
+
+### 3.5 Ground lookup
+
+- **[M-10]** Terrain provides `materialAt(x, z) → materialId`. Wheel contacts, feet and particles use it. It replaces Rally `SURFACES` and Tractor Pickup `DIRT`.
+
+### 3.6 View: material compiler
+
+- **[M-11]** `look` compiles to one base `MeshPhysicalMaterial`. Optional features are compile-time defines: `COVERAGE`, `FUR`, `SUBSURFACE`. This keeps the number of shader programs small.
+- **[M-12]** All materials in use are compiled while loading (`warm`).
+- **[M-13]** Instanced users and plain users get separate material clones (`matSplit`). Both are always on.
+
+### 3.7 Fields (phase 8)
+
+- **[M-14]** Fields run in the `systems.pre` stage, before `world.step()`. They are deterministic and allocate nothing.
+- **[M-15] Wind** is `wind.at(pos, t) → {x,y,z}`: one global field plus optional zones, with noise-based gusts. The aero field only calls `wind.at`, so the wind model can be replaced without touching aero.
+- **[M-16] Aero**, per panel facing the relative wind:
+  - flat-plate normal force `½ρv²A·f(n·v̂)` plus skin friction `½ρv²A·aero.skin`, applied at the panel centroid;
+  - parts with `aero.airfoil` use its lift and drag curves instead.
+- **[M-17] Buoyancy:**
+  - submerged volume × fluid density, with the centre of buoyancy from submerged panels;
+  - heave is damped relative to the fluid surface's velocity, not the world frame.
+- **[M-18] Magnetism:**
+  - Bodies with `magnet.strength` query a sphere around them.
+  - Magnet → ferrous force falls off as `1/r⁴`; magnet ↔ magnet uses the dipole–dipole force.
+  - `r` is clamped to a minimum and the force is capped.
+
+---
+
+## 4. Netcode
+
+### 4.1 Transport
+
+- **[N-1]** Every transport implements `{ isHost, id, hostId, send(to, data, reliable), on, off, leave }`. Events: `peer`, `message`, `peerAway`, `peerBack`, `peerLeft`, `hostAway`, `hostBack`, `closed`.
+- **[N-2]** Implementations:
+  - `rtc`: WebRTC, signalled by the Handshake server, using a vendored `handshake.js` with a reliable and an unreliable channel;
+  - `hub`: an in-memory hub for many peers in one Node process, with latency, jitter, loss and a `drop(from, to, data, reliable)` hook;
+  - `bridge`: browser pages connected through a Node test process's hub (§7.5).
+- **[N-3]** Rate limits, size limits and message validation are part of the transport layer. They are applied to every message, and games cannot skip them.
+- **[N-4]** All net timing reads an injected clock. The default is wall time; tests use sim time.
+
+### 4.2 Sessions and versions
+
+- **[N-5]** The engine provides host and join (room codes), the player list (`players`), and recovery when the host or a guest goes away and comes back.
+- **[N-6]** A join is refused, with a readable reason, unless `{ engine, game: netVersion, schema }` matches. `schema` is a hash of the game's kind definitions, so field changes are detected without a manual version bump.
+- **[N-7]** A service-worker update never reloads a page during a session (§7.2).
+
+### 4.3 Replication
+
+- **[N-8]** Kinds are declared with `kind({ name, code, authority, remote, max, idMin, idMax, fields, record?, apply?, newer? })`. They use the field types `F.fixed`, `F.uint`, `F.bool`, `F.angle`, `F.quat`, `F.oneOf`, `F.obj`, `F.list` and `F.id`, plus:
+  - `F.body()`: position, rotation, linear velocity and spin, at Tractor Pickup's current precision;
+  - `F.actions(map)`: an action snapshot (§5.3).
+- **[N-9]** An entity with a `net` part is replicated automatically:
+  - The default record is the kind's fields read from the entity, with `body` taken from Rapier.
+  - `record(e)` and `apply(e, rec)` override the default mapping.
+  - `newer(old, rec)` resolves ownership epochs.
+- **[N-10]** Authority modes:
+  - `host`: the host simulates the entity.
+  - `owner`: the entity's `owner` peer simulates it and sends its state. The host relays it to the other guests.
+- **[N-11]** Sending runs on its own clock (default 20 Hz), separate from the sim rate:
+  - a keyframe goes over the reliable channel every 2 s;
+  - changes since the last keyframe go over the unreliable channel;
+  - only changed fields are encoded (the binary format from `replica.js`).
+
+### 4.4 Remote entities
+
+- **[N-12]** A kind's `remote` setting controls how non-authority peers run it:
+
+| `remote` | Non-authority peers run | Default for |
+|---|---|---|
+| `driven` | a full dynamic body, stepped by the local sim with the owner's replicated `input` | `owner` kinds with an `input` field |
+| `proxy` | a kinematic body following snapshots interpolated about 100 ms in the past | `host` kinds |
+| `view` | no body, drawing only | none (opt-in) |
+
+- **[N-13] Driven actors, part 1 (inputs).**
+  - The owner sends its actor's `input` every sim step, batched per send tick, over the unreliable channel.
+  - Receivers apply each input at its step. If inputs are missing, the last one is held.
+- **[N-14] Driven actors, part 2 (correction).**
+  - When a body snapshot arrives, the receiver projects it forward by the measured one-way latency (`p + v·lat`, and `q` advanced by `w·lat`).
+  - If the position error is below `snapAt` (default 1.5 m) and the rotation error is below 30°, the body's velocities are steered toward the target over `nudge` steps (default 6).
+  - Otherwise the body is set to the projected state.
+- **[N-15] Driven actors, part 3 (view smoothing).** On every correction the view keeps an offset (old drawn pose − new physics pose) and fades it out over `smoothMs` (default 150 ms). A correction never makes the drawn mesh jump.
+- **[N-16] Collisions.** Each peer simulates collisions between all bodies it has. Each actor converges on its authority's version.
+- **[N-17]** `snapAt`, `nudge` and `smoothMs` are set per kind and can be changed live with `?tune`.
+
+### 4.5 Out of scope
+
+Lockstep, rollback, re-simulating the whole world, guest-side prediction of host entities, dedicated servers, and more than 8 peers.
+
+---
+
+## 5. Loop, scenes, input and UI
+
+### 5.1 Loop
+
+- **[R-1]** The engine drives `requestAnimationFrame` and uses its timestamp. Frame time is clamped to 0.25 s.
+- **[R-2] Fixed steps.** The sim runs fixed steps of `1/hz` from an accumulator, at most `maxCatchUp` per frame. Leftover time beyond the cap is dropped and counted as a clamped frame.
+- **[R-3]** The view draws with `alpha = acc / dt`.
+- **[R-4]** Each game sets its own rate: `sim: { hz, maxCatchUp }`. Defaults are `{ hz: 60, maxCatchUp: 3 }`; Rally uses `{ hz: 240, maxCatchUp: 12 }`. Substeps belong to kits.
+- **[R-5] Hidden tab.** While the tab is hidden the loop pauses and resets its clock on return. A host keeps sending net state from a timer while hidden.
+- **[R-6]** Stages run in this order:
+  ```
+  frame: input.poll → net.recv → [step × n] → net.send → view.sync → render → debug
+  step:  input.apply → systems.pre → physics.world → systems.post → events.flush
+  ```
+  Systems order themselves within a stage with `before` / `after`. `engine.schedule()` returns the resolved order.
+- **[R-7] Manual mode.** `engine.manual(true)` stops automatic stepping. `stepN(n)`, `advance(sec)` and `render(alpha)` then drive the engine by hand. Headless runs are always manual.
+- **[R-8] No allocation.** Nothing is allocated per step or per frame in engine code. Enforced by [T-13].
+
+### 5.2 Scenes
+
+- **[S-1]** A scene has a sim half and a view half, keyed by the same name:
+  - **Sim half** (headless-safe): `{ enter(engine, args), exit(engine), step(engine, dt), ui(ui), presets }`.
+  - **View half** (browser): `{ enter(engine, view), exit(), frame(engine, alpha) }`. It builds the HUD and other DOM, and sets up camera rigs.
+- **[S-2]** `engine.go(name, args)` replaces the main scene. `engine.overlay(name, args)` stacks a scene on top, and `engine.close(name)` removes it. An overlay may set `pauses: true` to freeze the sim below it while it is still drawn.
+- **[S-3]** Each main scene owns a `World` and a Rapier world. Leaving the scene disposes both, plus the scene's GPU resources.
+- **[S-4]** **Flow state lives in scenes or the sim, never in the view.** A view animation that gates flow (a show, a reward card) either becomes a scene timer or ends by emitting an ack event that the sim scene waits for.
+- **[S-5]** Scenes export `presets`: named functions that put the scene in a known state (`race.nearFinish`, `farm.reward`). `engine.jump(scene, preset, opts)` enters the scene and applies the preset.
+- **[S-6]** The engine provides a `loading` scene that shows asset progress and warms materials.
+
+### 5.3 Input
+
+- **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`.
+- **[I-2]** Devices bind to actions. They are view-only modules.
+  - **Keyboard:** configurable ease ramps; keys are ignored while a text field has focus.
+  - **Gamepad:** `getGamepads()` is polled every frame, using the standard mapping.
+  - **Touch:**
+    - A floating stick with a 24 px left-edge guard and a radial dead zone, plus hold buttons.
+    - Fingers are tracked by `pointerId`, with listeners on the root element.
+    - `pointercancel` and `lostpointercapture` count as a release.
+    - The root has `touch-action: none`.
+- **[I-3]** On `blur` and `visibilitychange`, every held action is released.
+- **[I-4]** Once per step (`input.apply`), the local snapshot is copied into the local player's actor as `e.input`. Systems read only `e.input`.
+- **[I-5]** Game-specific interpretation (for example Tractor Pickup's point-to-go stick) is a system in `input.apply` that the game registers.
+- **[I-6]** `engine.input.set(snapshot)`, `hold(snapshot)` and `release()` override device input for tests and bots.
+
+### 5.4 UI helpers
+
+- **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })` and `ui.toggle(...)`:
+  - In the browser they render as real `<button>` elements with an accessible name and `data-testid="<scene>.<id>"`. Toggles use `aria-pressed`.
+  - Headless, they are registered without DOM so tests can tap them (§7.4).
+- **[U-2]** HUD readouts use `<output data-testid="hud.<id>" data-value="<raw>">`.
+- **[U-3]** The `<html>` element carries `data-lh-scene`, `data-lh-overlays` and `data-lh-settled`. Overlay roots carry `data-lh-overlay="<name>"`.
+- **[U-4]** Safe areas are read through `--lh-sa-*` CSS variables, which default to `env(safe-area-inset-*)`.
+- **[U-5]** View timers (toasts, cards) run on engine time, not `setTimeout`.
+- **[U-6]** Cosmetic randomness uses `engine.rng('fx')`, never `Math.random`.
+
+---
+
+## 6. Models and the bake
+
+### 6.1 Bake: `lion-hawk bake`
+
+- **[A-1]** Input is `assets/models/*.glb`. Output is optimised GLBs plus one `<model>.phys.json` sidecar per model, written to the game's `build/assets/`.
+- **[A-2] Checks.** The bake fails, naming the model and node, if:
+  - a material name is neither in the registry nor `paint-*`;
+  - a `col-*` node has an unsupported shape;
+  - a socket required by the game config is missing.
+- **[A-3]** Optimisation uses gltf-transform: meshopt geometry, KTX2 or WebP textures, prune and dedupe. Settings are per game, with engine defaults.
+- **[A-4] Paint materials.** `paint-*` materials map to a base material, `steel` by default, overridable per game. At runtime their colour comes from per-instance colours.
+
+### 6.2 Physics sidecar
+
+- **[A-5]** A sidecar holds:
+  - colliders: shape, transform in body space, part name, material ID;
+  - mass properties from volume × density;
+  - sockets;
+  - aero panels and the closed volume (from phase 8).
+- **[A-6] Collider rules:**
+  - Nodes named `col-box`, `col-sphere`, `col-capsule`, `col-hull` or `col-mesh` are colliders. They are hidden at runtime and take the material of their parent part.
+  - A model with no `col-*` nodes gets one convex hull per material part.
+  - Models marked `static` in the game config default to `col-mesh`.
+- **[A-7]** Empty nodes named `sock-*` become named sockets.
+- **[A-8]** The sim reads only sidecars. It never parses glTF.
+
+### 6.3 Runtime loading (view)
+
+- **[A-9]** There is one shared `GLTFLoader` with the meshopt and KTX2 decoders, and Draco optional. Each URL is loaded once and cached as `Map<url, Promise>`. Instances are clones; skinned meshes use `SkeletonUtils.clone`.
+- **[A-10]** `engine.assets.preload(keys)` drives the loading scene and ends by warming materials ([M-12]).
+- **[A-11]** Animation uses `AnimationMixer`. A model may opt into baked animation tables (`bake: { animTable: true }`) for large instanced crowds.
+
+---
+
+## 7. Tooling and testing
+
+### 7.1 CLI: `lion-hawk`
+
+| Command | Does |
+|---|---|
+| `lion-hawk dev` | esbuild watch + live reload server; rebakes changed models |
+| `lion-hawk bake` | §6 |
+| `lion-hawk build [--mode single\|shared]` | bundles the game, writes `site/exp/<game>/`, stamps the PWA |
+| `lion-hawk test [--visual]` | `node --test` for the game + engine checks; `--visual` adds `@visual` Playwright tests |
+| `lion-hawk release` | bump version → bake → build → test → commit; push stays manual |
+
+- **[B-1]** The CLI is Node only; it replaces `build.py`, `bake.mjs` and `dev.mjs`.
+- **[B-2]** Game-specific build steps (for example Tractor Pickup's voice and animal audio embedding) are hooks declared in `game.config.js`.
+- **[B-3] Single mode** (the default) produces one HTML file with everything inlined, GLBs and sidecars included as base64.
+- **[B-4] Shared mode** (phase 9) serves the engine, three.js, Rapier and shared models from `/exp/lion-hawk/<version>/`.
+- **[B-5]** Every build stamps the game version, the engine version and a content hash into the page and the service worker.
+
+### 7.2 PWA
+
+- **[P-1]** One service-worker template:
+  - caches are versioned;
+  - old caches are deleted on `activate`;
+  - game files are served cache-first.
+- **[P-2]** No `skipWaiting` while a session is running. When an update is waiting, the engine shows a "new version ready" message.
+- **[P-3]** The manifest is generated from `game.config.js`: name, colours, icon.
+
+### 7.3 Debug
+
+- **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug`, `?tune`, `?fps`, `?seed=`, `?replay=`, `?slow=`, `?nosw`, `?mute`, `?lh-test`.
+- **[D-2]** `?tune` lazy-loads lil-gui. Kits and games register tunables with `engine.tune(group, obj, spec)`.
+- **[D-3]** `?fps` shows:
+  - frame ms;
+  - sim steps per frame;
+  - clamped frames;
+  - draw calls;
+  - shader programs.
+- **[D-4] `window.engine`** is always present and exposes:
+  - **lifecycle:** `ready`, `version`, `seed`, `errors`;
+  - **loop:** `manual`, `stepN`, `advance`, `render`, `time`;
+  - **scenes:** `scene`, `go`, `overlay`, `close`, `jump`, `on(...)`;
+  - **events:** `events.since(seq)`;
+  - **state:** `state`, `query`, `snapshot`, `restore`, `checksum`;
+  - **input:** `input.set/hold/release/read`;
+  - **settling:** `settled()`;
+  - **view:** `view.project`, `ui.tree()`;
+  - **other:** `net`, `rng(name)`, `policies`, and the game's `debug()` extras.
+- **[D-5]** `window.piggies`, `window.rally` and `window.tp` remain as aliases until their game finishes phase 2.
+- **[D-6]** `settled()` is true when:
+  - no asset, font or shader loads are pending;
+  - no element has `data-lh-state="opening|closing"`;
+  - no scene transition is running.
+
+  `?lh-test` turns off CSS transitions and starts in manual mode.
+
+### 7.4 Headless helpers: `lion-hawk/test`
+
+These run under `node:test`.
+
+- **[T-1] Setup.** `headless(game, { seed, scene, args, clock: 'virtual', invariants, record: 'on-fail' })` returns a handle `h`. The `finite()` invariant (no NaN or Infinity in any `xf` or body) is always on.
+- **[T-2] Stepping and policies.**
+  - Stepping: `h.step(n, input)`, `h.seconds(s, input)`, `h.hold(input)`, `h.release()`.
+  - Policies: `policy.still`, `policy.const({...})`, `policy.seq([[steps, input]...])`, `policy.fn((h) => input)`.
+  - Games register named policies (for example `autopilot`) in `game.policies`.
+- **[T-3] Waiting.**
+  - `h.until(pred, { maxSteps | maxSeconds, input, message })`, `h.untilEvent(typeOrPred, opts)`, `h.untilScene(name, opts)`. All are counted in steps.
+  - On timeout they throw with the seed, the step number, the scene and the last 20 events.
+- **[T-4] Events.** `h.events` is the event log. `h.mark()`, `h.events.since(mark).of(type)`, `.first(...)`, `.count(...)`, and `expectEvents(h, since).toInclude(type, match)` / `.toBeSequence([...])`.
+- **[T-5] World access.**
+  - `h.find(kind | tag, where)`, `h.one(...)` (throws unless exactly one match), `h.get(id)`.
+  - `h.place(e, opts)`, `h.spawn(desc)`, `h.despawn(e)`.
+  - `h.go`, `h.overlay`, `h.jump`.
+  - `h.tap(testid)` taps a registered UI control. It fails if the control is not present, or its `when` is false.
+- **[T-6] Fixtures.** `fixtures.define(name, (h, ...args) => ...)` and `h.use('quietYard', 'warm:60', ['ahead', e])`. The built-in `warm:N` steps N times with `policy.still`.
+- **[T-7] State.** `h.snapshot()`, `h.restore(snap)`, `h.fork()`, `h.checksum({ parts: 'sim' })`, `diff(a, b, { tol })`, and golden files with `--bless`.
+- **[T-8] Spies and logs.** `h.spy(obj, method)` returns `{ calls, count }`. Warnings and errors are captured, and fail the test unless it calls `h.expectWarning(re)`.
+- **[T-9] Replay.** `replay.run(file, { game })` replays seed plus per-step inputs and checks a checksum every 60 steps. `record: 'on-fail'` writes a replay file when a test fails.
+- **[T-10] Determinism.** `checks.determinism(game, { seed, steps })` runs twice and reports the first step whose checksums differ.
+- **[T-11] Multiplayer.** `mp(game, { peers, link: { latency, jitter, loss } })` returns `w` with:
+  - `w.host`, `w.guests` and `w.step` / `w.seconds` (inputs as an array or `(peer, i) => input`);
+  - `w.addPeer()`, `w.drop(peer)`, `w.blackout(s, { kinds })`;
+  - `w.diverged({ agree })`, which compares every `net` entity's fields within the kind's tolerance, plus a per-game `agree` hook;
+  - `w.settle({ maxSeconds })`.
+- **[T-12] Sim purity.** `checks.simPurity(game)` imports the sim entry under a guard. Using `three`, `document`, `window`, `Date.now`, `performance.now` or `Math.random` throws.
+- **[T-13] Zero allocation.** `checks.zeroAlloc(game, { steps: 10000 })` compares heap use before and after (Node `--expose-gc`).
+- **[T-14] Material references.** `checks.materials(game)` verifies that every material referenced by the game's models and sidecars exists.
+- **[T-15]** `lion-hawk test` runs T-10, T-12, T-13 and T-14 for every game automatically.
+
+### 7.5 Browser helpers: `lion-hawk/playwright`
+
+- **[T-16] Presets.** iPhone SE, iPhone 15 Pro and 15 Pro Max (portrait and landscape), iPad Mini, iPad Pro 11 and desktop. Each preset has:
+  - real iOS safe areas applied through `--lh-sa-*`;
+  - a fixed DPR;
+  - SwiftShader and `channel: 'chromium'`;
+  - `serviceWorkers: 'block'`.
+
+  The browser is located automatically.
+- **[T-17] The `game` fixture.**
+  - Opening: `open({ scene, args, seed, query, settings })` loads with `?lh-test` and waits for `ready` and `settled()`.
+  - Stepping: `step`, `seconds`, `until`, `untilEvent`, each running in one `evaluate`.
+  - State and scenes: `render`, `state`, `query`, `go`, `jump`.
+  - Input: `input.hold` / `release`.
+  - Touch: `touch.start/move/end/drag` through CDP, so taps are hit-tested and multi-touch works. Targets are a locator, `{x, y}` or `{ world: [x, y, z] }`.
+  - UI: `tap(label)` and `control(testid)`.
+  - Screenshots: `shot(name, { mask })`.
+  - Errors: `errors` must be empty at teardown.
+- **[T-18] Matchers.** `toBeInScene`, `toHaveEmitted`, `toBeSettled`, `toHaveState`, `toBeTappable({ min })`, `toFitSafeArea`, `toNotOverlap`, `toBeThumbReachable(side)`.
+- **[T-19] Screenshots.** `@visual` tests run only with `--visual`, in a pinned container.
+- **[T-20] Peers.** `test.peers(n, { link })` opens n browser contexts joined through the `bridge` transport ([N-2]).
+- **[T-21]** Real-iPad audio and touch checks remain a manual checklist in each game's docs.
+
+### 7.6 Deferred
+
+- A flow DSL that runs the same script headless or in a browser.
+- fast-check fuzzing over the action map.
+
+Both build on §7.4–7.5 and are added once enough flows exist to shape them.
+
+---
+
+## 8. Repo layout, packaging and migration
+
+### 8.1 Layout
+
+```
+games/
+├── package.json              # npm workspaces: lion-hawk-engine, pig-pens, rally, tractor-pickup
+├── lion-hawk-engine/         # package "lion-hawk"
+│   ├── package.json          # peerDependencies: three ^0.186, @dimforge/rapier3d-compat ^0.21
+│   ├── src/
+│   │   ├── core/             # loop clock, rng, math, events, flags, scenes, engine object   (sim)
+│   │   ├── defs/             # materials, kinds, field types                               (sim)
+│   │   ├── sim/              # world/entities, physics wrapper, fields, replication        (sim)
+│   │   ├── view/             # rAF driver, renderer, material compiler, assets, audio,
+│   │   │                     # input devices, ui helpers, debug overlays, pwa client       (view)
+│   │   ├── net/transport/    # rtc (vendored handshake.js), hub, bridge
+│   │   └── kits/<kit>/       # vehicle, terrain, herd, coverage, fx — each sim/ + view/
+│   ├── testing/              # lion-hawk/test, lion-hawk/playwright
+│   ├── tools/                # lion-hawk CLI
+│   ├── test/                 # engine tests
+│   └── docs/                 # design.md, research*.md, spec.md, plans/
+└── <game>/
+    ├── game.config.js        # id, version, netVersion, sim, build hooks, PWA, model settings
+    ├── src/game.sim.js       # defineGame sim half: defs, actions, kits, scenes (sim), policies
+    ├── src/game.view.js      # view half: scene views, camera rigs, HUD
+    ├── assets/  test/
+```
+
+### 8.2 Game contract
+
+```js
+// src/game.sim.js — headless-safe
+export default defineGame({
+  id: 'tractor-pickup',
+  sim: { hz: 60, maxCatchUp: 3 },
+  defs: { materials: MATERIALS, kinds: KINDS },
+  actions: actions({ steer: axis(), throttle: axis(), horn: button(), pause: button() }),
+  kits: [vehicleKit, terrainKit, herdKit, coverageKit, fxKit],
+  scenes: { title, farm, show, reward },          // sim halves (§5.2)
+  start: 'title',
+  policies: { autopilot },
+  debug: (engine) => ({ herd: engine.world.with('animal') }),
+});
+
+// src/game.view.js — browser only
+export default defineView({ scenes: { title, farm, show, reward } }); // view halves
+```
+
+- **[G-1]** `headless()` imports only `game.sim.js`. The browser entry imports both.
+
+### 8.3 Packaging
+
+- **[G-2]** Packaging rules:
+  - The engine package exposes `lion-hawk/sim`, `lion-hawk/view`, `lion-hawk/kits/*`, `lion-hawk/test` and `lion-hawk/playwright` through `exports`.
+  - three.js and Rapier are peer dependencies, and the esbuild config forces one copy of each.
+  - Each game build bundles a snapshot of the engine.
+- **[G-3]** The engine has its own semver version (0.x until migration ends) and a `CHANGELOG.md`.
+- **[G-4]** `npm test` in `games/` runs every workspace's tests. An engine change ships only when all of them pass.
+
+### 8.4 Migration phases
+
+| # | Phase | Done when |
+|---|---|---|
+| 0 | Workspace; engine skeleton (`rng`, `math`, `events`, `flags`, `window.engine` with aliases); first headless helpers; **one golden/replay test per game written against today's code** | every game builds from the workspace; goldens pass |
+| 1 | Version alignment: Pig Pens and Rally → three 0.186; Rally → Rapier 0.21 | goldens pass or are re-blessed with a written reason |
+| 2 | Loop, scenes, input actions and UI helpers in all three games. Rally `Game` → scenes; Tractor Pickup trip flow → scenes ([S-4]); Pig Pens `main()` split. Playwright helpers land | each game runs on the engine loop; a headless end-to-end flow test per game |
+| 3 | Tooling: CLI, glTF bake + sidecars, runtime glTF loading; `assets.json`, `build.py`, `bake.mjs` retired | builds are equal in behaviour; size measured against today |
+| 4 | Entities and materials: `World`, parts, registry, pairs, ground lookup; hard-coded friction, `SURFACES` and `DIRT` replaced | no literal friction/density in game code |
+| 5 | Netcode in the engine, driven by `net` parts, including driven remote actors ([N-12]–[N-17]); Tractor Pickup first; `test.peers` | the bump test (§4.4) passes under 80 ms latency and 2% loss |
+| 6 | `kit-vehicle` (both tractors merged; Rally tire model as a second backend) and `kit-terrain` | three games on the kits |
+| 7 | `kit-coverage`, `kit-herd`, `kit-fx` | mud, dirt and snow on one system |
+| 8 | Fields: wind, aero, buoyancy, magnet; panel bake | field tests with analytic expectations |
+| 9 | Shared build mode and one service worker across `/exp/` | second game loads only its own files |
+
+- **[G-5]** Each phase gets its own plan in `docs/plans/`.
+- **[G-6]** A phase is done when every game's tests, the goldens and the Playwright smoke tests pass, and each changed game is version-bumped and deployed.
+- **[G-7]** Work happens on a `feat/lion-hawk` worktree. Rally's uncommitted game-loop work is committed before phase 0.
+
+---
+
+## 9. Decisions on the design's open questions
+
+| Question (design.md §10) | Decision |
+|---|---|
+| Object model | Plain-object entities with live queries (§2); typed arrays allowed inside kits; no ECS library |
+| Determinism | Same JS engine only, for tests and replays; snapshot replication for net; no lockstep |
+| Pair-table scope | friction, restitution, tire, sound, fx ([M-7]) |
+| Wind | Global field plus zones, behind `wind.at` ([M-15]) |
+| Single file or shared bundle | Single file by default; shared mode in phase 9, opt-in per build |
+
+## 10. Still open
+
+- **Skerry Island and other sources.** The plane sims, jet ski and Surface booth (referenced in `design.md`) have no code in this repo. Before phase 8, locate them or treat their lessons as requirements only.
+- **CI.** Nothing runs the game tests automatically today; GitHub Actions only deploys the site. Decide whether `npm test` (and `--visual` in a pinned container) runs on push.
+- **Handshake vendoring.** How `handshake.js` updates flow from the Handshake repo into `lion-hawk-engine/src/net/transport/rtc/` (copy script plus version stamp is the default).
