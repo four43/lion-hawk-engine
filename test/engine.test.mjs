@@ -258,3 +258,30 @@ test('ui: a control below the topmost pausing overlay is covered', () => {
   assert.throws(() => e.ui.tap('race.pause'), /ui: control 'race.pause' is covered by 'results'/);
   e.ui.tap('results.retry'); assert.equal(e.scene.name, 'race');
 });
+
+test('a start scene whose enter calls go() leaves no systems or ui behind (2a carry-over)', () => {
+  const g = defineGame({ id: 'g', start: 'loading', scenes: {
+    loading: { enter(e, c) { e.go('farm'); c.system('loading.sys', () => {}); }, ui(u) { u.button({ id: 'b', label: 'B', action: () => {} }); } },
+    farm: {},
+  } });
+  const e = createEngine(g);
+  assert.equal(e.scene.name, 'farm');
+  assert.deepEqual(e.schedule().pre, ['lh.scene']);
+  assert.deepEqual(e.ui.tree(), []);
+});
+test('setup may request transitions; they apply after the start scene enters', () => {
+  const g = defineGame({ id: 'g', start: 's', setup(e) { e.overlay('p'); }, scenes: { s: {}, p: {} } });
+  const e = createEngine(g);
+  assert.equal(e.scene.name, 's'); assert.deepEqual(e.scene.overlays, ['p']);
+});
+test('duplicate check projects the queue: close then reopen, overlay after a go', () => {
+  const g = defineGame({ id: 'g', start: 's', scenes: {
+    s: { step(e, dt, c) { c.state.n = (c.state.n ?? 0) + 1; if (c.state.n === 1) { e.close('p'); e.overlay('p'); } } },
+    p: {}, a: {},
+  } });
+  const e = createEngine(g); e.overlay('p');
+  e.stepN(1); assert.deepEqual(e.scene.overlays, ['p']);
+  const g2 = defineGame({ id: 'g2', start: 's', scenes: { s: { step(e) { e.overlay('p'); e.go('a'); e.overlay('p'); } }, p: {}, a: {} } });
+  const e2 = createEngine(g2); e2.stepN(1);
+  assert.equal(e2.scene.name, 'a'); assert.deepEqual(e2.scene.overlays, ['p']);
+});

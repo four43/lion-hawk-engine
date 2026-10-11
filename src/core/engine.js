@@ -54,7 +54,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
   // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
   // queued go (and the requests after it) apply: requests before it are dropped, they would be torn down at once.
-  let inStep = false, draining = false; const queue = [];
+  let inStep = false, draining = false, booting = false; const queue = [];
   const drain = () => {
     draining = true;
     try {
@@ -65,7 +65,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
       }
     } catch (err) { queue.length = 0; throw err; } finally { draining = false; }
   };
-  const request = item => { queue.push(item); if (!inStep && !draining) drain(); };
+  const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
     inStep = true; let failure = null;
     try {
@@ -81,6 +81,12 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     step++; syncTime();
     if (failure) throw failure;
   } });
+  // would `name` still be open once everything queued so far has applied? (replays the pending requests over the stack)
+  const projectedOpen = name => {
+    let open = isOpen(name);
+    for (const q of queue) { if (q.go) open = q.name === name; else if (q.overlay === name) open = true; else if (q.close === name) open = false; }
+    return open;
+  };
   const alreadyOpen = name => { throw new Error(`engine: scene '${name}' is already open`); };
   const doGo = (name, a) => {
     def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) alreadyOpen(name);
@@ -95,16 +101,16 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
-    go(name, a) { def(name); request({ go: true, run: () => doGo(name, a) }); return engine; },
+    go(name, a) { def(name); request({ go: true, name, run: () => doGo(name, a) }); return engine; },
     overlay(name, a) {
-      def(name); if (isOpen(name) || queue.some(q => q.overlay === name)) alreadyOpen(name); // at request time, so the caller's stack shows it
+      def(name); if (projectedOpen(name)) alreadyOpen(name); // at request time, so the caller's stack shows it
       request({ overlay: name, run: () => doOverlay(name, a) }); return engine;
     },
-    close(name) { request({ run: () => doClose(name) }); return engine; },
+    close(name) { request({ close: name, run: () => doClose(name) }); return engine; },
     jump(name, preset, opts, a) {
       const p = def(name).presets?.[preset];
       if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
-      request({ go: true, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
+      request({ go: true, name, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
     },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
@@ -115,7 +121,12 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   sync(); syncTime();
-  game.setup?.(engine); // once, before the start scene: global systems and rng streams a game wants for its whole life
-  enter(scene, args);
+  // setup and the start enter run busy like any transition: what they request queues, then applies in order
+  booting = true;
+  try {
+    game.setup?.(engine); // once, before the start scene: global systems and rng streams a game wants for its whole life
+    enter(scene, args);
+  } catch (err) { queue.length = 0; throw err; } finally { booting = false; }
+  drain();
   return engine;
 }
