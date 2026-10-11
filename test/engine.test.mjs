@@ -143,3 +143,45 @@ test('a throwing exit still removes scoped systems and ui', () => {
   assert.throws(() => e.go('a'), /exit boom/);
   assert.ok(!e.schedule().pre.includes('xs')); assert.deepEqual(e.ui.tree(), []);
 });
+
+test('F1: a scene whose enter requests a go completes its own entry first, then the go applies', () => {
+  const log = [];
+  const g = mini({
+    loading: { enter(e) { log.push('enter loading'); e.go('farm'); log.push('enter returns'); }, exit() { log.push('exit loading'); }, ui(u) { u.button({ id: 'x', label: 'x', action: () => {} }); } },
+    farm: { enter() { log.push('enter farm'); } },
+  });
+  const e = createEngine(g);
+  e.go('loading');
+  assert.equal(e.scene.name, 'farm');
+  assert.deepEqual(log, ['enter loading', 'enter returns', 'exit loading', 'enter farm']);
+  assert.deepEqual(e.ui.tree(), []);
+  e.stepN(1);
+  assert.deepEqual(e.events.since(0).filter(x => x.type === 'scene').map(x => `${x.from}→${x.name}`), ['a→loading', 'loading→farm']);
+});
+test('F1: a go from inside an exit hook applies after the outer go completes', () => {
+  const log = [];
+  const g = mini({
+    b: { enter() { log.push('enter b'); }, exit(e) { log.push('exit b'); e.go('c'); } },
+    c: { enter() { log.push('enter c'); } },
+    d: { enter() { log.push('enter d'); } },
+  });
+  const e = createEngine(g, { scene: 'b' }); log.length = 0;
+  e.go('d');
+  assert.deepEqual(log, ['exit b', 'enter d', 'enter c']); assert.equal(e.scene.name, 'c');
+});
+test('F1: an enter that throws after a nested go leaves a consistent stack', () => {
+  const g = mini({ bad: { enter(e) { e.go('a'); throw new Error('nested boom'); } }, ov: {} });
+  const e = createEngine(g);
+  e.overlay('ov');
+  assert.throws(() => e.overlay('bad'), /nested boom/);
+  assert.equal(e.scene.name, 'a'); assert.deepEqual(e.scene.overlays, ['ov']);
+  assert.deepEqual(e.state().overlays, ['ov']);
+  e.close('ov'); assert.deepEqual(e.scene.overlays, []); assert.equal(e.scene.name, 'a');
+});
+test('only the last queued go (and what follows it) applies', () => {
+  const seen = [];
+  const g = mini({ b: { enter() { seen.push('b'); } }, c: { enter() { seen.push('c'); } }, ov: { enter() { seen.push('ov'); } } });
+  g.scenes.a.step = e => { e.overlay('ov'); e.go('b'); e.go('c'); };
+  const e = createEngine(g); e.stepN(1);
+  assert.deepEqual(seen, ['c']); assert.equal(e.scene.name, 'c');
+});

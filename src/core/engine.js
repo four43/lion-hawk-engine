@@ -36,15 +36,28 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     const entry = { s, ctx, scoped };
     stack.push(entry); sync();
     try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }
-    catch (err) { stack.splice(stack.indexOf(entry), 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
+    catch (err) { const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
     return ctx;
   };
   const isOpen = name => stack.some(o => o.ctx.name === name);
   const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
   const paused = () => { for (let i = 1; i < stack.length; i++) if (stack[i].s.pauses) return true; return false; };
   const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
-  let inStep = false; const queue = [];
-  const request = fn => { if (inStep) queue.push(fn); else fn(); }; // transitions inside a step apply at its end
+  // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
+  // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
+  // queued go (and the requests after it) apply: requests before it are dropped, they would be torn down at once.
+  let inStep = false, draining = false; const queue = [];
+  const drain = () => {
+    draining = true;
+    try {
+      while (queue.length) {
+        let last = -1; for (let i = 0; i < queue.length; i++) if (queue[i].go) last = i;
+        if (last > 0) queue.splice(0, last);
+        queue.shift().run();
+      }
+    } catch (err) { queue.length = 0; throw err; } finally { draining = false; }
+  };
+  const request = item => { queue.push(item); if (!inStep && !draining) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, render: a => render(a), step(dt) {
     inStep = true; queue.length = 0;
     try {
@@ -53,7 +66,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
       else { schedule.run('pre', engine, dt); schedule.run('physics.world', engine, dt); schedule.run('post', engine, dt); }
     } catch (err) { queue.length = 0; throw err; } // a throwing step discards its queued transitions
     finally { inStep = false; } // never leave the engine thinking it is mid-step
-    for (let i = 0; i < queue.length; i++) queue[i](); queue.length = 0;
+    drain();
     schedule.run('events.flush', engine, dt);
     step++; sync();
   } });
@@ -71,13 +84,13 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
-    go(name, a) { def(name); request(() => doGo(name, a)); return engine; },
-    overlay(name, a) { def(name); request(() => doOverlay(name, a)); return engine; },
-    close(name) { request(() => doClose(name)); return engine; },
+    go(name, a) { def(name); request({ go: true, run: () => doGo(name, a) }); return engine; },
+    overlay(name, a) { def(name); request({ run: () => doOverlay(name, a) }); return engine; },
+    close(name) { request({ run: () => doClose(name) }); return engine; },
     jump(name, preset, opts, a) {
       const p = def(name).presets?.[preset];
       if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
-      request(() => { doGo(name, a); p(engine, opts, stack[0].ctx); }); return engine;
+      request({ go: true, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
     },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
