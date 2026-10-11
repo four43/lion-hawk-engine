@@ -53,3 +53,16 @@ test('stop() prevents rescheduling', () => {
   const { q, tick, driver } = setup();
   driver.start(); tick(0); driver.stop(); assert.equal(driver.running, false); tick(16); assert.equal(q.length, 0);
 });
+
+test('F1: a throwing device keeps the loop alive and reports through onError', () => {
+  const errs = []; let n = 0;
+  const device = { update() { if (n++ === 0) throw new Error('boom'); } };
+  const { q, tick, driver } = setup({ devices: [device], onError: e => errs.push(e.message) });
+  driver.start(); tick(0);
+  assert.equal(driver.running, true); assert.equal(q.length, 1); assert.deepEqual(errs, ['boom']);
+  tick(16); assert.equal(q.length, 1); assert.deepEqual(errs, ['boom']);
+});
+test('F1: start() resets the engine loop', () => {
+  const { engine, driver } = setup(); let reset = 0; const r = engine.loop.reset; engine.loop.reset = () => { reset++; return r.call(engine.loop); };
+  driver.start(); assert.equal(reset, 1);
+});
