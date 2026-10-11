@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
+    "esbuild": "^0.28.2",
     "happy-dom": "^20.14.6",
     "playwright-core": "^1.64.0",
     "three": "^0.186.0"
