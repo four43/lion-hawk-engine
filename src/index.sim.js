@@ -3,3 +3,4 @@ export { ENGINE_VERSION } from './version.js';
 export { rng, fnv } from './core/rng.js';
 export * from './core/math.js';
 export { createEvents } from './core/events.js';
+export { parseFlags, FLAGS } from './core/flags.js';
