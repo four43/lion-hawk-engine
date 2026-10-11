@@ -43,3 +43,14 @@ test('unknown names throw; values() is a plain copy', () => {
 test('apply keeps returning the same snapshot object (no per-step allocation)', () => {
   const inp = createInput(schema); assert.equal(inp.apply(), inp.apply()); assert.equal(inp.apply(), inp.snapshot);
 });
+
+test('device sources merge: largest |axis| wins, buttons OR, clearDevice drops a source', () => {
+  const inp = createInput(schema);
+  inp.device({ steer: 0, horn: false }, 'keyboard');
+  inp.device({ steer: -0.6, horn: true }, 'touch');
+  inp.device({ steer: 0.4 }, 'pad');
+  let s = inp.apply(); assert.equal(s.steer, -0.6); assert.equal(s.horn.down, true);
+  inp.device({ steer: 1 }, 'keyboard'); s = inp.apply(); assert.equal(s.steer, 1);
+  inp.clearDevice('keyboard'); inp.clearDevice('touch'); s = inp.apply(); assert.equal(s.steer, 0.4); assert.equal(s.horn.down, false);
+  inp.set({ steer: 0 }); assert.equal(inp.apply().steer, 0);
+});
