@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-10-11
+
+Peer dependencies three ^0.186 and Rapier ^0.21 (G-2).
+
 ## 0.1.0 — 2026-10-11
 
 Phase 0: the headless core, the debug hook and the test helpers.
