@@ -49,7 +49,7 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     for (const [id, b] of buttons) if (!liveIds.has(id)) { b.el.remove(); buttons.delete(id); }
     for (const [name, box] of boxes) if (!live.has(name)) { box.el.remove(); boxes.delete(name); }
     setHtml('data-lh-scene', stack[0] ?? '');
-    setHtml('data-lh-overlays', stack.slice(1).join(','));
+    setHtml('data-lh-overlays', stack.slice(1).join(' '));
   }
   return { sync, dispose() { root_.removeEventListener('click', onClick); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
 }

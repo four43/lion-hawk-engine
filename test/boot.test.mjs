@@ -17,7 +17,7 @@ test('lh-test starts in manual mode with the flag seed and the no-animation styl
   assert.equal(app.driver.manual(), true); assert.equal(app.driver.running, true); assert.equal(app.engine.seed, 5);
   assert.ok([...document.querySelectorAll('style')].some(s => s.textContent.includes('transition:none')));
   assert.equal(target.engine.game, 'countdown'); assert.equal(document.documentElement.getAttribute('data-lh-scene'), 'title');
-  assert.equal(document.documentElement.getAttribute('data-lh-settled'), 'true'); app.dispose();
+  assert.equal(document.documentElement.getAttribute('data-lh-settled'), '1'); app.dispose();
 });
 test('view halves enter/exit/frame follow the real stack, not event flush', () => {
   const { app, log } = run('?lh-test');
@@ -65,4 +65,20 @@ test('dispose stops the driver, detaches listeners, clears html attributes', () 
   app.dispose(); assert.equal(app.driver.running, false); assert.deepEqual(ls, {});
   for (const a of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) assert.equal(document.documentElement.hasAttribute(a), false);
   assert.equal(document.querySelector('[data-lh-ui-root]'), null);
+});
+
+test('F5: safe-area style is injected once and removed on dispose', () => {
+  const { app, document } = run('?lh-test');
+  const find = () => [...document.querySelectorAll('style')].filter(s => s.textContent.includes('--lh-sa-top:env(safe-area-inset-top'));
+  assert.equal(find().length, 1); app.dispose(); assert.equal(find().length, 0);
+});
+test('F6: under lh-test ?scene and ?args pick the start; ignored otherwise; bad args ignored', () => {
+  const a = run('?lh-test&scene=race'); assert.equal(a.app.engine.scene.name, 'race'); a.app.dispose();
+  const b = run('?scene=race'); assert.equal(b.app.engine.scene.name, 'title'); b.app.dispose();
+  const c = run('?lh-test&scene=race&args=' + encodeURIComponent('{"a":1}')); assert.deepEqual(c.app.engine.scene.args, { a: 1 }); c.app.dispose();
+  const d = run('?lh-test&scene=race&args=%7Bnope'); assert.equal(d.app.engine.scene.name, 'race'); d.app.dispose();
+});
+test('F7: data-lh-settled is 1/0', () => {
+  const { app, document } = run('?lh-test');
+  assert.equal(document.documentElement.getAttribute('data-lh-settled'), '1'); app.dispose();
 });

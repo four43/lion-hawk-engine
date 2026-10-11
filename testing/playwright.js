@@ -133,7 +133,7 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
   return game;
 }
 
-export async function openGame(browser, url, { preset = 'desktop', seed, scene, query = {}, settings } = {}) {
+export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings } = {}) {
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
   const { safeArea, ...ctxOpts } = p;
@@ -146,11 +146,13 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   u.searchParams.set('lh-test', '');
   if (seed !== undefined) u.searchParams.set('seed', String(seed));
   if (scene !== undefined) u.searchParams.set('scene', String(scene));
+  if (args !== undefined) u.searchParams.set('args', JSON.stringify(args));
   for (const [k, v] of Object.entries(query)) u.searchParams.set(k, String(v));
   await page.goto(u.href.replace('lh-test=', 'lh-test'));
   await page.evaluate(sa => { for (const [k, v] of Object.entries(sa)) document.documentElement.style.setProperty(`--lh-sa-${k}`, `${v}px`); }, safeArea);
   await page.waitForFunction(() => window.engine, null, { timeout: 30000 });
   await page.evaluate(() => window.engine.ready);
+  await page.waitForFunction(() => window.engine.settled(), null, { timeout: 30000 });
   return gameDriver({ page, context, preset: p, presetName: name, errors });
 }
 

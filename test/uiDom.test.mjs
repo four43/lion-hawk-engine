@@ -25,6 +25,9 @@ test('race Pause is disabled until running; overlay gets its own container', () 
   assert.ok(document.querySelector('div[data-lh-overlay="pause"] [data-testid="pause.resume"]'));
   assert.equal(document.querySelector('[data-lh-ui="race"]').hasAttribute('data-lh-overlay'), false);
   assert.equal(document.documentElement.getAttribute('data-lh-overlays'), 'pause');
+  engine.overlay('results'); ui.sync();
+  assert.equal(document.documentElement.getAttribute('data-lh-overlays'), 'pause results');
+  engine.close('results'); ui.sync();
   q(document, 'pause.resume').click(); assert.equal(document.querySelector('[data-lh-overlay="pause"]'), null);
 });
 test('clicking a covered/disabled control is swallowed', () => {

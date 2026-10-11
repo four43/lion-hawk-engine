@@ -15,11 +15,19 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   doc ??= target.document ?? globalThis.document;
   flags ??= parseFlags(target.location?.search ?? '');
   const errors = [], views = halves.scenes ?? {};
+  const report = err => errors.push({ type: 'error', message: String(err?.message ?? err), stack: err?.stack });
+  if (flags.lhTest) { // test-only start overrides: ?scene=<name> and ?args=<json>
+    const s = flags.extra?.scene; if (s) scene = s;
+    const a = flags.extra?.args; if (a) { try { args = JSON.parse(a); } catch { /* ignore a malformed ?args */ } }
+  }
   const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args });
-  const driver = createDriver(engine, { raf, caf, doc, devices: devices.map(f => f(engine)) });
+  const driver = createDriver(engine, { raf, caf, doc, devices: devices.map(f => f(engine)), onError: report });
+  const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
+  sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
+  (doc.head ?? doc.documentElement).appendChild(sa);
   const ui = createUiDom(engine, { root: root ?? doc.body, doc, errors, onTap: () => refresh() });
   const view = { root: root ?? doc.body, doc, ui, driver };
-  const caught = fn => { try { fn(); } catch (err) { errors.push({ type: 'error', message: String(err?.message ?? err), stack: err?.stack }); } };
+  const caught = fn => { try { fn(); } catch (err) { report(err); } };
 
   // View halves follow the ACTUAL stack: each refresh diffs the previous and current entries (main scene keyed by name
   // plus its state object, which is new on every enter) and calls exit/enter for the differences, so nothing depends
@@ -47,7 +55,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const refresh = () => {
     if (disposed) return;
     reconcile(); ui.sync();
-    const s = String(hook.settled()); if (s !== settledAttr) { settledAttr = s; doc.documentElement.setAttribute('data-lh-settled', s); }
+    const s = hook.settled() ? '1' : '0'; if (s !== settledAttr) { settledAttr = s; doc.documentElement.setAttribute('data-lh-settled', s); }
   };
   const off = engine.events.on(e => { if (e.type === 'scene' || e.type === 'overlay') refresh(); });
   engine.onRender(alpha => {
@@ -61,7 +69,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const dispose = () => {
     if (disposed) return; disposed = true;
     driver.stop(); for (const d of driver.devices) d.dispose?.();
-    ui.dispose(); hook.dispose(); off(); engine.onRender(() => {});
+    ui.dispose(); hook.dispose(); sa.remove(); off(); engine.onRender(() => {});
   };
 
   if (flags.lhTest) {
