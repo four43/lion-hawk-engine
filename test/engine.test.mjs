@@ -212,3 +212,17 @@ test('F4 (R-8): time updates every step; the scene view (and overlays array) onl
   assert.equal(e.time.step, 5);
   e.overlay('ov2'); assert.equal(e.scene.overlays, overlays); assert.deepEqual(overlays, ['ov', 'ov2']);
 });
+
+test('F6: defineGame setup(engine) runs once, before the start scene; its systems survive scene changes', () => {
+  assert.throws(() => defineGame({ id: 'g', scenes: { a: {} }, start: 'a', setup: 1 }), /defineGame: setup must be a function/);
+  const order = []; let setups = 0, runs = 0;
+  const g = defineGame({
+    id: 'g', start: 'a', scenes: { a: { enter() { order.push('enter a'); } }, b: {} },
+    setup(e) { setups++; order.push('setup'); e.system('global', () => runs++); },
+  });
+  const e = createEngine(g);
+  assert.deepEqual(order, ['setup', 'enter a']);
+  e.stepN(1); assert.equal(runs, 1);
+  e.go('b'); e.go('a'); e.stepN(1);
+  assert.equal(runs, 2); assert.equal(setups, 1);
+});

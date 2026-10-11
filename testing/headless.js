@@ -16,11 +16,14 @@ export function eventList(arr) {
     first: m => arr.find(matcher(m)),
     count: m => arr.filter(matcher(m)).length,
     types: () => arr.map(e => e.type),
+    since: m => eventList(arr.filter(e => e.seq > m)),
   });
 }
 
 export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) {
   const engine = createEngine(game, { seed, scene, args }), hz = game.sim.hz;
+  // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
+  const log = eventList([]); engine.events.on(e => { log.push(e); });
   const resolve = input => {
     if (input == null) return null;
     if (typeof input === 'function') return input;
@@ -40,20 +43,20 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
     until(pred, { maxSteps, maxSeconds = 10, input, message } = {}) {
       const cap = maxSteps ?? Math.round(maxSeconds * hz), mark = engine.events.seq, f = resolve(input);
       for (let k = 0; k <= cap; k++) {
-        if (pred(h)) return { steps: k, events: eventList(engine.events.since(mark)) };
+        if (pred(h)) return { steps: k, events: log.since(mark) };
         if (k < cap) one(f, k);
       }
-      const last = engine.events.since(0).slice(-20).map(fmt).join('\n');
+      const last = log.slice(-20).map(fmt).join('\n');
       throw new Error(`${message ?? 'until: condition not met'} after ${cap} steps (seed ${engine.seed}, step ${engine.time.step}, scene ${engine.scene.name})\nlast events:\n${last}`);
     },
     untilEvent(m, opts = {}) {
       const mark = engine.events.seq, f = matcher(m); let found;
-      h.until(() => (found = engine.events.since(mark).find(f)) !== undefined, { message: `untilEvent(${typeof m === 'string' ? m : 'fn'})`, ...opts });
+      h.until(() => (found = log.find(e => e.seq > mark && f(e))) !== undefined, { message: `untilEvent(${typeof m === 'string' ? m : 'fn'})`, ...opts });
       return found;
     },
     untilScene(name, opts = {}) { return h.until(x => x.scene.name === name || x.scene.overlays.includes(name), { message: `untilScene(${name})`, ...opts }); },
     mark: () => engine.events.seq,
-    since: m => eventList(engine.events.since(m)),
+    events: log, since: m => log.since(m),
     tap(id) { engine.ui.tap(id); return h; },
     go(n, a) { engine.go(n, a); return h; },
     overlay(n, a) { engine.overlay(n, a); return h; },

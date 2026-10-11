@@ -13,6 +13,7 @@ export function defineGame(spec) {
   const fail = m => { throw new Error(`defineGame: ${m}`); };
   if (typeof spec.id !== 'string' || !spec.id) fail('id must be a non-empty string');
   if (!spec.scenes || !Object.keys(spec.scenes).length) fail('scenes must not be empty');
+  if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
   for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
   return Object.freeze({ ...spec, sim: { hz: 60, maxCatchUp: 3, ...spec.sim }, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {} });
@@ -107,6 +108,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   schedule.add('input', () => input.apply(), { stage: 'input.apply' });
   schedule.add('scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('events', () => events.flush(), { stage: 'events.flush' });
-  sync(); syncTime(); enter(scene, args);
+  sync(); syncTime();
+  game.setup?.(engine); // once, before the start scene: global systems and rng streams a game wants for its whole life
+  enter(scene, args);
   return engine;
 }

@@ -50,3 +50,18 @@ test('named policies ignore the prototype chain; jump passes args', () => {
   assert.throws(() => h.step(1, 'constructor'), /no policy 'constructor'/);
   h.jump('b', 'p', undefined, { z: 1 }); assert.deepEqual(got, { z: 1 });
 });
+
+test('F5: the handle keeps an unbounded event log (h.events, since, until, untilEvent)', () => {
+  const g = defineGame({ id: 'chatty', start: 'a', scenes: { a: { enter(e) { e.emit('first'); } } } });
+  const h = headless(g);
+  h.engine.system('chat', e => e.emit('tick'));
+  h.step(400);
+  const all = h.since(0);
+  assert.equal(all.length, 401); assert.equal(all.count('tick'), 400); assert.equal(all.of('first').length, 1);
+  assert.equal(h.events.length, 401); assert.equal(h.events.first('first').type, 'first'); assert.deepEqual(h.events.types().slice(0, 2), ['first', 'tick']);
+  assert.equal(h.events.since(h.events[399].seq).length, 1);
+  assert.equal(h.untilEvent('tick', { maxSteps: 3 }).type, 'tick'); assert.throws(() => h.untilEvent('nope', { maxSteps: 2 }), /last events:\n(.*\n)*.*@\d+ tick/);
+  const m = h.mark(), t0 = h.time.step; const { events } = h.until(() => h.time.step >= t0 + 10); assert.equal(events.count('tick'), 10);
+  const r = h.until(() => h.time.step >= t0 + 15); assert.equal(r.events.count('tick'), 5);
+  assert.ok(m >= 401); assert.equal(h.since(0).first('first').type, 'first');
+});
