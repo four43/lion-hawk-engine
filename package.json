@@ -1,6 +1,6 @@
 {
   "name": "lion-hawk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Opinionated 3D web physics engine: three.js, Rapier, glTF, physical materials and netcode.",
   "type": "module",
   "private": true,
@@ -11,6 +11,10 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
+    "three": "^0.186.0",
+    "@dimforge/rapier3d-compat": "^0.21.0"
+  },
+  "devDependencies": {
     "three": "^0.186.0",
     "@dimforge/rapier3d-compat": "^0.21.0"
   },

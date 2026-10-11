@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-10-11
+
+Golden failure messages name the first diverging trail entry; devDependencies mirror the peers so the engine tests standalone.
+
 ## 0.1.1 — 2026-10-11
 
 Peer dependencies three ^0.186 and Rapier ^0.21 (G-2).
