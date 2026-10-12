@@ -139,6 +139,7 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
 
   const game = {
     page, preset, presetName,
+    point, // #65: selector | { x, y } | { world } -> client { x, y }, for page.mouse gestures on world points
     step: (n, input) => stepN(n, input),
     seconds: (s, input) => ev(({ s, input }) => { const e = window.engine; if (input) e.input.hold(input); try { e.advance(s); e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); } return e.state().step; }, { s, input }),
     until: (fn, opts) => run('until', { pred: fnSource(fn) }, opts),

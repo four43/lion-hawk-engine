@@ -77,7 +77,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
 | 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
 | 64 | No finite invariant before the World | engine, Pig Pens | done (2e P-E3) |
-| 65 | No helper for mouse gestures on world points | engine, Pig Pens | planned (2e P-E4) |
+| 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
 
@@ -435,7 +435,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 65. No helper for mouse gestures on world points: engine, Pig Pens (phase 2e plan)
 - **What happened:** `game.touch.*` resolves `{ world }` targets through `view.project`, but desktop presets have no touch, and Pig Pens' tools need left clicks and drags on world points (and right-drags for the camera).
-- **Engine change:** `game.point(target)` exposes the resolver for `page.mouse`. Status: planned (2e P-E4).
+- **Engine change:** `game.point(target)` exposes the resolver for `page.mouse`. Status: done (2e P-E4).
 
 ### 66. The old loop zeroed its remainder after a capped frame: Pig Pens (phase 2e plan)
 - **What happened:** `main.js` set `acc = 0` whenever it ran 4 catch-up steps, even with less than one step left over; the engine loop keeps a sub-step remainder after the cap (`acc %= dt`).

@@ -86,3 +86,14 @@ test('2d: layout assertions accept a test id, { testid }, { css } or a locator (
   await expectTappable(g, loc); await expectFitsSafeArea(g, loc);
   await assert.rejects(expectNoOverlap(g, loc, { css: '#b' }), /'locator\(#chip\)' .* overlaps '#b'/);
 });
+
+test('2e: game.point resolves a selector, {x, y} or { world } to client coordinates (#65)', async () => {
+  const page = {
+    locator: () => ({ first: () => ({ boundingBox: async () => ({ x: 10, y: 20, width: 40, height: 60 }) }) }),
+    evaluate: async (fn, w) => ({ x: w[0] * 2, y: w[2] * 2 }),
+  };
+  const g = gameDriver({ page, context: {}, preset: presets.desktop, presetName: 'desktop' });
+  assert.deepEqual(await g.point('#stick'), { x: 30, y: 50 });
+  assert.deepEqual(await g.point({ x: 3, y: 4 }), { x: 3, y: 4 });
+  assert.deepEqual(await g.point({ world: [1, 0, 5] }), { x: 2, y: 10 });
+});
