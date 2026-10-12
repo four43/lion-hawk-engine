@@ -104,6 +104,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
 | 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | planned (2f T3: pipeline in `step`) |
 | 91 | Schema-derived binary commands would change the wire | Tractor Pickup | planned (2f T-E5: built, not adopted; NET_VERSION stays 3) |
+| 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
 
 ## Entries
 
@@ -588,3 +589,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Decision:** the engine builds both codecs (`json`, `binary`) from the same schema; Tractor uses `json`, so its wire is unchanged, NET_VERSION stays 3, and an old-path device plays with an engine-path one (2f T7's interop test). Adopting `binary` is a NET_VERSION 4 decision for a later release.
 - **Status:** planned (2f T-E5: built, not adopted).
 
+### 92. A summed wall clock drifts; recorded wall stamps are not replayed: engine (phase 2f T-E3)
+- **What happened:** the first `time.wall` added `1000 / hz` each virtual step, so 60 steps at 60 Hz read 999.9999999999991. This is the same class of bug as phase 2a's `time.sim`. Two tests were relaxed to hide it.
+- **Decision:**
+  - The virtual wall is computed, not summed: `wallBase + (step - wallBaseStep) * 1000 / hz`, re-anchored on every real stamp. The strict tests were restored.
+  - Tapes carry only `wall0`, so a browser-recorded tape replays with a virtual wall. Wall-dependent state must not feed tape-checked sim results.
+- **Status:** fixed (fix round 1).
