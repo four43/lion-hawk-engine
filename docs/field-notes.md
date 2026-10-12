@@ -76,7 +76,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | planned (2e P3) |
 | 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
 | 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
-| 64 | No finite invariant before the World | engine, Pig Pens | planned (2e P-E3) |
+| 64 | No finite invariant before the World | engine, Pig Pens | done (2e P-E3) |
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | planned (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
@@ -431,7 +431,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 64. No finite invariant before the World: engine, Pig Pens (phase 2e plan)
 - **What happened:** [T-1] says a `finite()` invariant over every `xf` and body is always on, but there is no `World` yet (phase 4), so nothing checks. `nan.mjs` checks the birds' positions by hand.
-- **Engine change:** `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step. Status: planned (2e P-E3).
+- **Engine change:** `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step. Status: done (2e P-E3).
 
 ### 65. No helper for mouse gestures on world points: engine, Pig Pens (phase 2e plan)
 - **What happened:** `game.touch.*` resolves `{ world }` targets through `view.project`, but desktop presets have no touch, and Pig Pens' tools need left clicks and drags on world points (and right-drags for the camera).

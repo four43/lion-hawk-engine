@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { headless, policy, stripComments } from '../testing/index.js';
+import { headless, policy, stripComments, invariants } from '../testing/index.js';
 import { defineGame } from '../src/index.sim.js';
 import game from './fixtures/countdown.js';
 
@@ -111,4 +111,15 @@ test('final review: policy.every recomputes at once when key(h) changes, then ke
   assert.deepEqual(at, [0, 4, 6]);
   h.step(5, p); assert.deepEqual(at, [0, 4, 6, 10]);
   assert.throws(() => policy.every(4, () => ({}), { key: 3 }), /policy.every: key must be a function/);
+});
+
+test('2e: invariants.finite names the path, seed and step of the first non-finite value (#64)', () => {
+  const g = defineGame({ id: 'nanny', start: 's', scenes: { s: {
+    enter(e, c) { c.state.b = { x: 1, list: [1, 2] }; },
+    step(e, dt, c) { if (e.time.step === 4) c.state.b.x = NaN; },
+  } } });
+  const h = headless(g, { seed: 7, invariants: [invariants.finite(x => x.engine.scene.state.b, 'bird')] });
+  h.step(4);
+  assert.throws(() => h.step(1), /finite: bird\.x is not finite: NaN \(seed 7, step 5\)/);
+  assert.throws(() => invariants.finite('nope'), /select must be a function/);
 });
