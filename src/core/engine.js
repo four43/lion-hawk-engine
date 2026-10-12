@@ -160,7 +160,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
   // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
   // queued go (and the requests after it) apply: requests before it are dropped, they would be torn down at once.
-  let inStep = false, stepping = false, draining = false, booting = false; const queue = [];
+  let inStep = false, stepping = false, draining = false, booting = false, outFlush = false; const queue = [];
   const drain = () => {
     draining = true;
     try {
@@ -253,14 +253,21 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   // engine.net (N-3): the sim-side outbox. A port drains it in an onStep listener; whatever is left after the listeners is
   // discarded, so with no port (headless, replays) it never grows. A send between steps goes out after the next step.
-  const outbox = [];
+  const outbox = []; let netDraining = false;
   const net = {
+    // `data` is queued by reference, not copied: do not mutate it before the next step's drain
     send(to, data, reliable = false) {
       if (!(data instanceof ArrayBuffer) && (data === null || typeof data !== 'object' || typeof data.t !== 'string')) throw new Error('engine: net.send data must be { t, ... } or an ArrayBuffer');
       outbox.push({ to, data, reliable: reliable === true }); // one item per message
     },
     leave() { outbox.push({ leave: true }); },
-    drain(fn) { let k = 0; try { while (k < outbox.length) fn(outbox[k++]); } finally { if (k === outbox.length) outbox.length = 0; else outbox.splice(0, k); } }, // in order; a throwing fn keeps the rest
+    // in order; a throwing fn keeps the rest. Not re-entrant: a nested drain from fn would re-deliver and empty the
+    // queue under the outer loop, so it throws instead
+    drain(fn) {
+      if (netDraining) throw new Error('engine: net.drain is not re-entrant');
+      netDraining = true; let k = 0;
+      try { while (k < outbox.length) fn(outbox[k++]); } finally { netDraining = false; if (k === outbox.length) outbox.length = 0; else outbox.splice(0, k); }
+    },
     get pending() { return outbox.length; },
   };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
@@ -332,7 +339,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
     // #71: deliver events emitted outside a step (a tap, a command) now; during a step or transition the step's own flush does it
-    flushEvents() { if (!stepping && !draining && !booting) events.flush(); },
+    // re-entrancy safe: a listener that flushes again (or reads h.events) is a no-op, not a re-delivery of queue[0]
+    flushEvents() {
+      if (stepping || draining || booting || outFlush) return;
+      outFlush = true; try { events.flush(); } finally { outFlush = false; }
+    },
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
     // recording, an external op's payload is validated and the scene/handler receives a copy of what was logged

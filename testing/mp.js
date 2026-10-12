@@ -11,7 +11,7 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
   if (!Number.isInteger(peers) || peers < 1) throw new Error('mp: peers must be a positive integer');
   const hz = game.sim.hz, hub = createMemoryHub({ rng: rng(seed).fork('mp.link').next, ...link }); // seeded jitter and loss
   const at = clock ?? (() => hub.now), list = [];
-  let k = 0; // hub.now is k * 1000 / hz, the engines' own virtual-wall formula: exact for the first peers; a late peer's wall0 + m * 1000 / hz may differ by an ulp
+  let k = 0; // hub.now is k * 1000 / hz, the engines' own virtual-wall formula: peers created at the start are exact; a late peer's wall0 + m * 1000 / hz can be an ulp off (field note #93)
   const addPeer = () => {
     const index = list.length, name = index ? `guest${index}` : 'host';
     const h = headless(game, { seed, args: argsOf(index, name), record, wall0: hub.now });

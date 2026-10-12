@@ -127,3 +127,13 @@ test('2f: engine.net sends in order, defaults to unreliable, refuses non-message
   const seen = []; e.net.drain(x => seen.push(x)); assert.deepEqual(seen, [{ to: 'b', data: { t: 'y' }, reliable: false }]);
   e.net.send(null, buf, true); const got = []; e.net.drain(x => got.push(x)); assert.equal(got[0].data, buf); assert.equal(got[0].reliable, true);
 });
+test('2f: a nested engine.net.drain from inside fn throws and leaves the outer drain\'s bookkeeping intact', () => {
+  const e = createEngine(defineGame({ id: 'out3', start: 's', scenes: { s: {} } }));
+  e.net.send('a', { t: 'a' }); e.net.send('b', { t: 'b' }); e.net.send('c', { t: 'c' });
+  const outer = [], inner = [];
+  assert.throws(() => e.net.drain(x => { outer.push(x.to); if (x.to === 'b') e.net.drain(y => inner.push(y.to)); }), /net.drain is not re-entrant/);
+  assert.deepEqual(outer, ['a', 'b']); assert.deepEqual(inner, [], 'nothing re-delivered to the nested drain');
+  assert.equal(e.net.pending, 1, 'a and b handed out; c kept');
+  const rest = []; e.net.drain(x => { rest.push(x.to); if (x.to === 'c') e.net.send('d', { t: 'd' }); }); assert.deepEqual(rest, ['c', 'd'], 'a send from fn still goes out in this drain');
+  assert.equal(e.net.pending, 0);
+});

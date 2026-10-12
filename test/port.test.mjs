@@ -60,3 +60,13 @@ test('2f: createPort checks its arguments', () => {
   assert.throws(() => createPort(e, { transport: hub.join(), role: 'peer' }), /role must be/);
   assert.throws(() => createPort(createEngine({ ...relay, net: undefined }), { transport: hub.join(), role: 'guest' }), /no net config/);
 });
+test('2f: peerLeft frees a peer\'s rate set, so a rejoin with the same id gets a fresh budget (C-3)', () => {
+  const t = Object.assign(emitter(), { isHost: true, id: 'h1', hostId: 'h1', send() {}, leave() {} }), e = createEngine(relay);
+  const p = createPort(e, { transport: t, role: 'host', clock: () => 0, onWarn() {} });
+  for (let i = 0; i < 61; i++) t.emit('message', 'g1', { t: 'echo', n: i }, true);
+  e.stepN(1); assert.equal(log(e, 'host.echo').length, 60); assert.equal(p.stats.dropped, 1, 'the 61st is over budget');
+  t.emit('message', 'g1', { t: 'echo', n: 99 }, true); e.stepN(1); assert.equal(p.stats.dropped, 2, 'still over budget at the same time');
+  t.emit('peerLeft', 'g1', 'left'); t.emit('peer', 'g1');
+  for (let i = 0; i < 60; i++) t.emit('message', 'g1', { t: 'echo', n: i }, true);
+  e.stepN(1); assert.equal(log(e, 'host.echo').length, 120, 'a fresh budget at the same clock time'); assert.equal(p.stats.dropped, 2);
+});

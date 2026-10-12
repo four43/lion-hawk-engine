@@ -5,7 +5,7 @@ export const PING = kind({ name: 'ping', code: 1, authority: 'host', max: 4, idM
 const N = { n: F.uint(2) }, log = type => (e, d, ctx) => { ctx.state.log.push({ type, data: d }); };
 export default defineGame({
   id: 'relay', start: 's',
-  net: { kinds: [PING], maxSender: 4, rates: { host: { reliable: 60, fast: 60, reliableFrames: 4 }, guest: { reliable: 60, fast: 120 } },
+  net: { kinds: [PING], maxSender: 4, rates: { host: { reliable: 60, fast: 60, reliableFrames: 4 }, guest: { reliable: 120, fast: 120 } },
     wire: { toHost: { echo: 'host.echo' }, toGuest: { say: 'guest.say' } }, codec: 'json' },
   commands: {
     'net.open': (e, d, ctx) => { log('net.open')(e, d, ctx); ctx.state.role = d.role; ctx.state.hostId = d.hostId; },

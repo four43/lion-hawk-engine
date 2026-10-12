@@ -136,3 +136,14 @@ test('2f: an event emitted outside a step is visible to h.events and h.since at 
   assert.deepEqual(h.events.of('poke').map(e => e.n), [1]); assert.equal(h.since(m).count('poke'), 1);
   h.step(1); assert.equal(h.events.of('poke').length, 1, 'flushed once, not again');
 });
+test('2f: a listener that flushes (flushEvents, h.events) outside a step sees each event once; the log holds one copy', () => {
+  for (const reenter of [h => h.engine.flushEvents(), h => h.events, h => h.since(0)]) {
+    const h = headless(defineGame({ id: 'reflush', start: 's', scenes: { s: {} } }));
+    const seen = []; h.engine.events.on(e => { if (e.type === 'poke') { seen.push(e.n); reenter(h); } });
+    h.engine.emit('poke', { n: 1 }); h.engine.emit('poke', { n: 2 }); h.engine.flushEvents();
+    assert.deepEqual(seen, [1, 2]);
+    assert.deepEqual(h.events.of('poke').map(e => e.n), [1, 2]);
+    assert.deepEqual(h.engine.events.since(0).filter(e => e.type === 'poke').map(e => e.n), [1, 2]);
+    h.step(1); assert.deepEqual(seen, [1, 2], 'not delivered again by the step');
+  }
+});

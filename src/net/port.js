@@ -30,7 +30,8 @@ export function createPort(engine, { transport, role, clock = () => performance.
     const at = clock(); reliable = !!reliable;
     if (!host && from !== transport.hostId) return drop('not the host', from); // a star: a guest hears only its host
     const frame = isFrame(data), r = ratesOf(from);
-    if (!(reliable ? frame && r.reliableFrames ? r.reliableFrames : r.reliable : r.fast).allow(at)) return drop('rate', from); // N-3, M-50: first, in clock time
+    // N-3, M-50: the rate is counted first, in clock time, before the size check, so an oversized message still uses budget
+    if (!(reliable ? frame && r.reliableFrames ? r.reliableFrames : r.reliable : r.fast).allow(at)) return drop('rate', from);
     if (data instanceof ArrayBuffer ? data.byteLength > cfg.maxFrame : !(size(data) <= cfg.maxJson)) return drop('size', from);
     if (frame) { const f = decodeFrame(data, reg); return f ? issue('net.frame', { frame: frameToJson(f), from, at, reliable }) : drop('frame', from); } // #78: plain JSON for the tape
     const m = inW.codec.decode(data); if (!m) return drop('message', from); // an unknown tag, or not its schema

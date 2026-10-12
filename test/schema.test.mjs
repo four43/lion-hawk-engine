@@ -67,3 +67,14 @@ test('2f: defineGame fills the net defaults and refuses bad limits', () => {
     assert.throws(() => defineGame({ id: 'r', start: 's', scenes: { s: {} }, commands: { x: c } }), re);
   for (const k of ['at', 'reliable']) assert.throws(() => defineGame({ id: 'r', start: 's', scenes: { s: {} }, commands: { x: { schema: { [k]: F.bool() }, handler() {} } } }), new RegExp(`may not declare reserved key '${k}'`));
 });
+test('2f: binary round-trips id: null and a fixed/bool mix (fixed quantised); undefined in a required field is refused', () => {
+  const T = { help: { id: F.id() }, mix: { on: F.bool(), x: F.fixed(-1, 1, 0.01), off: F.bool(), y: F.fixed(0, 10, 0.5) } };
+  const w = wireCodec(T, { codec: 'binary' });
+  assert.deepEqual(w.decode(w.encode('help', { id: null })), { tag: 'help', data: { id: null } });
+  const got = w.decode(w.encode('mix', { on: true, x: -0.333, off: false, y: 7.4 })).data;
+  assert.deepEqual([got.on, got.off], [true, false]);
+  assert.ok(Math.abs(got.x - -0.333) <= 0.005 + 1e-9 && Math.abs(got.y - 7.4) <= 0.25 + 1e-9, JSON.stringify(got));
+  assert.deepEqual(w.decode(w.encode('mix', got)).data, got, 'a quantised value round-trips exactly');
+  assert.equal(checkSchema(TABLE.claim, { ids: undefined }), null);
+  assert.equal(checkSchema(T.mix, { on: undefined, x: 0, off: false, y: 0 }), null);
+});

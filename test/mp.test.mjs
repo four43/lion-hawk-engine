@@ -27,9 +27,11 @@ test('2f: mp({ record: true }) gives each peer a tape that replays alone (T-9)',
   assert.equal(replay(relay, tape).checksum(), g.h.checksum());
 });
 test('2f: mp() passes args per peer, calls beforeStep before each peer\'s step and seeds the link from its seed', () => {
-  const calls = [], run = seed => { const w = mp(relay, { peers: 2, seed, link: { delay: 20, jitter: 100 }, argsOf: (i, name) => ({ who: name }) }); w.seconds(1); return w.guests[0].engine.scene.state.log.map(c => c.data.at ?? null); };
+  const calls = [];
+  const run = seed => { const w = mp(relay, { peers: 2, seed, link: { delay: 20, jitter: 100 }, argsOf: (i, name) => ({ who: name }) }); w.seconds(1); return w.guests[0].engine.scene.state.log.map(c => c.data.at ?? null); };
   const w = mp(relay, { peers: 2, argsOf: (i, name) => ({ who: name }), beforeStep: (p, i) => calls.push([p.name, i, p.engine.time.step]) });
   assert.deepEqual(w.peers.map(p => p.engine.scene.args), [{ who: 'host' }, { who: 'guest1' }]);
   w.step(2); assert.deepEqual(calls, [['host', 0, 0], ['guest1', 1, 0], ['host', 0, 1], ['guest1', 1, 1]]);
   assert.deepEqual(run(3), run(3), 'the same seed, the same jitter');
+  assert.notDeepEqual(run(3), run(4), 'another seed, other jitter');
 });

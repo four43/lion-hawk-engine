@@ -28,7 +28,7 @@ export function diff(a, b, { tol = 0 } = {}, path = '', out = []) {
 }
 
 export function assertFinite(value, label = 'value') {
-  const seen = new WeakSet(); // #: each object once, so cycles and shared refs are fine
+  const seen = new WeakSet(); // #64: each object once, so cycles and shared refs are fine
   const walk = (v, p) => {
     if (typeof v === 'number') { if (!Number.isFinite(v)) throw new Error(`${p} is not finite: ${v}`); return; }
     if (!v || typeof v !== 'object' || seen.has(v)) return;

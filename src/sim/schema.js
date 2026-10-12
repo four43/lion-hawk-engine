@@ -1,6 +1,7 @@
 // src/sim/schema.js: declared command schemas and their wire codecs (N-3, #49, #91). A schema is { [field]: F.* } (../defs/fields.js).
 // checkSchema validates plain JSON against it and returns a copy (unknown keys dropped) or null; wireCodec builds a json and a binary
 // codec from one table of schemas. The binary one packs fields with the replica field encoders (put/get, N-8), so both wires share types.
+// Binary `fixed`/`angle`/`quat` quantise exactly like the replica, so their binary round trip is lossy (json is exact).
 import { F } from '../defs/fields.js';
 import { put, get, MAX_FRAME } from './replica.js';
 
