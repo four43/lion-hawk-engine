@@ -230,7 +230,7 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: String(e) }));
-  if (initScript) await page.addInitScript(initScript);
+  if (initScript) await context.addInitScript(initScript); // #74: on the context, so popups and new tabs (a join link) get it too
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);
   const goto = testUrl(url, { seed, scene, args, query, render });
   await page.goto(goto);

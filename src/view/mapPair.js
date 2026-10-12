@@ -1,6 +1,6 @@
 // The device map hook (I-2, #8, #81): a device's bindings may target two virtual names (map.from); the device feeds that pair,
 // after a radial dead zone (map.radial), to map.to(x, y, out) with a reused out, and writes out's keys (actions) in place of
-// the virtual names. Lets a game turn a stick into world-frame actions in the view, re-applied as the camera turns.
+// the virtual names. to() writes into the passed out; its return value is ignored by the devices. Lets a game turn a stick into world-frame actions in the view, re-applied as the camera turns.
 export function applyMap(map, x, y, out) {
   const dz = map.radial ?? 0, m = Math.hypot(x, y);
   if (m <= dz) x = y = 0;
@@ -19,7 +19,7 @@ export function mapper(map, who) {
   const num = v => typeof v === 'number' && v === v ? v : 0;
   return src => {
     for (const k in src) if (k !== fx && k !== fy) layer[k] = src[k];
-    applyMap(map, num(src[fx]), num(src[fy]), out);
+    applyMap(map, num(src[fx]), num(src[fy]), out); // return ignored: to() fills out
     for (const k in out) layer[k] = out[k];
     return layer;
   };

@@ -1,14 +1,15 @@
 // #59: view-only gestures (I-2): tap, hold, one-finger drag and two-finger pinch on one element, for camera and cutscene
 // controls that never reach the sim (no commands). Routing as bindPointer: moves/ups by pointerId on the window, pointercancel and
-// lostpointercapture cancel, blur/pagehide/hidden cancel everything. A second finger ends a one-finger gesture (no tap, no hold).
+// lostpointercapture cancel, blur/pagehide/hidden cancel everything. filter: { pointerType, button } (default { button: [0] }); touch-action: none on el. A second finger ends a one-finger gesture (no tap, no hold).
 // Time counts only update(dt, raw): raw (uncapped, #56) by default, so a hold takes its seconds at any frame rate.
 // drag({ dx, dy, phase }) and pinch({ scale, rotate, panX, panY, phase }) are cumulative from the gesture's start; phases
 // start | move | end; start comes on the move that passes tapMove (a drag) or the second finger's down (a pinch), then at most
 // one move per update. The payload objects are reused: read them in the callback, do not keep them.
-export function bindGesture(engine, el, { tap, hold, drag, pinch, uncapped = true, tapMove = 12, tapSeconds = 0.45, doc, ignore = 'button, input, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' } = {}) {
+export function bindGesture(engine, el, { tap, hold, drag, pinch, uncapped = true, tapMove = 12, tapSeconds = 0.45, filter = { button: [0] }, doc, ignore = 'button, input, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' } = {}) {
   if (!el) throw new Error('bindGesture: element required');
   if (hold && !(hold.seconds > 0 && typeof hold.fire === 'function')) throw new Error('bindGesture: hold needs seconds > 0 and fire');
   doc = doc ?? el.ownerDocument; const win = doc.defaultView ?? globalThis.window;
+  const prevTA = el.style.touchAction; el.style.touchAction = 'none'; // as bindStick: the browser must not pan or zoom under a gesture
   const fingers = new Map(); // pointerId -> { x, y }, every accepted finger still down
   let mode = null; // null | 'one' | 'pinch' | 'dead' (ended until every finger lifts)
   const one = { id: 0, kind: '', sx: 0, sy: 0, lx: 0, ly: 0, held: 0, far: false, fired: false, dragging: false };
@@ -46,6 +47,8 @@ export function bindGesture(engine, el, { tap, hold, drag, pinch, uncapped = tru
   const cancelAll = () => { for (const id of [...fingers.keys()]) lift(id, false); };
   const onDown = e => {
     if (fingers.has(e.pointerId) || e.target?.closest?.(ignore)) return;
+    if (filter.pointerType && !filter.pointerType.includes(e.pointerType)) return;
+    if (filter.button && !filter.button.includes(e.button)) return; // default: primary only, so a right-click never taps
     fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     el.setPointerCapture?.(e.pointerId);
     if (fingers.size === 1) {
@@ -82,7 +85,7 @@ export function bindGesture(engine, el, { tap, hold, drag, pinch, uncapped = tru
       el.removeEventListener('pointerdown', onDown); el.removeEventListener('lostpointercapture', onCancel);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onUp); win.removeEventListener('pointercancel', onCancel);
       win.removeEventListener('blur', cancelAll); win.removeEventListener('pagehide', cancelAll); doc.removeEventListener('visibilitychange', onVis);
-      fingers.clear(); mode = null;
+      fingers.clear(); mode = null; el.style.touchAction = prevTA;
     },
   };
 }

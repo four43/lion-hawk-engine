@@ -1,14 +1,14 @@
 // Gamepad device: polled axes (per-axis dead zone) and buttons -> named actions in a per-source layer.
-// map.map (#8): axes may target map.map.from's virtual names; update() writes map.map.to's actions in their place (radial zone in map.map.radial).
+// map (#8): axes may target map.from's virtual names; update() writes map.to's actions in their place (after deadZone, then map.radial).
 import { mapper } from './mapPair.js';
-export function bindGamepad(engine, map, { getGamepads, source = 'pad' } = {}) {
-  const lay = map.map ? mapper(map.map, 'bindGamepad') : null;
+export function bindGamepad(engine, bindings, { getGamepads, source = 'pad', map } = {}) {
+  const lay = map ? mapper(map, 'bindGamepad') : null;
   const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? []);
-  const dz = map.deadZone ?? 0.15;
-  const axisMap = Object.keys(map.axes ?? {}).map(i => ({ i: +i, name: map.axes[i][0], sign: map.axes[i][1], curve: map.axes[i][2] }));
+  const dz = bindings.deadZone ?? 0.15;
+  const axisMap = Object.keys(bindings.axes ?? {}).map(i => ({ i: +i, name: bindings.axes[i][0], sign: bindings.axes[i][1], curve: bindings.axes[i][2] }));
   // one entry per binding; a list of bindings (first element not a string) is flattened here (#16)
   const btnMap = [], bind = (i, b) => btnMap.push(Array.isArray(b) ? { i, name: b[0], sign: b[1], axis: true } : { i, name: b, axis: false });
-  for (const k of Object.keys(map.buttons ?? {})) { const b = map.buttons[k]; if (Array.isArray(b) && !b.length) throw new Error(`bindGamepad: button ${k} has an empty binding list`); if (Array.isArray(b) && typeof b[0] !== 'string') for (const x of b) bind(+k, x); else bind(+k, b); }
+  for (const k of Object.keys(bindings.buttons ?? {})) { const b = bindings.buttons[k]; if (Array.isArray(b) && !b.length) throw new Error(`bindGamepad: button ${k} has an empty binding list`); if (Array.isArray(b) && typeof b[0] !== 'string') for (const x of b) bind(+k, x); else bind(+k, b); }
   const out = {};
   for (const a of axisMap) out[a.name] = 0;
   for (const b of btnMap) out[b.name] = b.axis ? 0 : false;

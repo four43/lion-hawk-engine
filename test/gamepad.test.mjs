@@ -54,7 +54,7 @@ test('2f: bindGamepad map: a radial dead zone over the pair, then world-frame ac
     out.goX = m * Math.sin(w); out.goZ = m * Math.cos(w); out.goBack = m > 0 && Math.abs(a) > Math.PI * 0.8; return out; } });
   const pads = [{ index: 0, axes: [0.1, -0.1], buttons: btns() }], calls = [];
   const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
-  const pad = bindGamepad(engine, { axes: { 0: ['sx', 1], 1: ['sy', -1] }, buttons: { 0: 'horn' }, deadZone: 0, map: { ...camMap({ yaw: 0 }), radial: 0.15 } }, { getGamepads: () => pads });
+  const pad = bindGamepad(engine, { axes: { 0: ['sx', 1], 1: ['sy', -1] }, buttons: { 0: 'horn' }, deadZone: 0 }, { getGamepads: () => pads, map: { ...camMap({ yaw: 0 }), radial: 0.15 } });
   pad.update(); assert.deepEqual(calls[0], { horn: false, goX: 0, goZ: 0, goBack: false }); // inside the radial zone, outside a per-axis one
   pads[0].axes = [0, -1]; pad.update(); assert.equal(calls[1].goZ, 1); assert.ok(Math.abs(calls[1].goX) < 1e-12);
 });

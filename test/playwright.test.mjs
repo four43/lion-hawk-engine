@@ -106,11 +106,11 @@ test('2f: game.point refuses a { world } point behind the camera or off-screen (
   const old = gameDriver({ page: { evaluate: async () => ({ x: -9, y: 6 }) }, context: {}, preset: presets.desktop, presetName: 'desktop' });
   assert.deepEqual(await old.point({ world: [-1, 0, 0] }), { x: -9, y: 6 }); // a project without onScreen keeps today's behaviour
 });
-test('2f: openGame adds initScript before the page loads (#74)', async () => {
+test('2f: openGame adds initScript to the context before the page loads (#74)', async () => {
   const calls = [];
-  const page = { on() {}, addInitScript: async (f, a) => calls.push(['init', typeof f === 'function' ? 'fn' : f.content]), goto: async u => calls.push(['goto', u]),
+  const page = { on() {}, addInitScript: async () => calls.push(['page-init']), goto: async u => calls.push(['goto', u]),
     evaluate: async () => {}, waitForFunction: async () => {} };
-  const browser = { newContext: async () => ({ newPage: async () => page }) };
+  const browser = { newContext: async () => ({ newPage: async () => page, addInitScript: async (f, a) => calls.push(['init', typeof f === 'function' ? 'fn' : f.content]) }) }; // on the context: popups get it too
   await openGame(browser, 'http://x/', { initScript: () => { window.WebGLRenderingContext = undefined; } });
   assert.deepEqual(calls.map(c => c[0]), ['init', 'goto']);
   calls.length = 0; await openGame(browser, 'http://x/', { initScript: { content: 'window.x = 1' } });
