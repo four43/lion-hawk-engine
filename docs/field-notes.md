@@ -16,11 +16,11 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup open |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup planned (2f T4–T5, 2g G3) |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
-| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge and gamepad.mapping open |
+| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge planned (2f T-E8); gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
 | 10 | `onRender` is a single slot | all | done (2d D9) |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI) |
@@ -61,17 +61,17 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | done (2d D11) |
 | 48 | `expectTappable` only accepts test IDs | Rally | done (2d D11) |
-| 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7; watch in the Tractor migration) |
+| 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7); enforcement for schema'd commands planned (2f T-E5) |
 | 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 | 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
 | 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | done (2e P-E2) |
 | 54 | Screen-space aim offsets under a finger | Pig Pens | done (2e P3, P6) |
 | 55 | A tap acts on what was picked at pointer down | Pig Pens | done (2e P3 2dff968) |
-| 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
+| 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | planned (2f T-E9: `uncapped`, `ui.hold({ wall })`); Pig Pens adoption open |
 | 57 | A game-owned event queue next to engine events | Pig Pens | done for Pig Pens (2e P2 932f19a: farm.events re-emits sim.events each step, no allocation); kit-herd open |
 | 58 | The game's RNG and seed live outside the engine streams | Pig Pens | open (phase 4/7) |
-| 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | open |
+| 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | planned (2f T-E9: `bindGesture`); Pig Pens adoption open |
 | 60 | Sim inputs computed per frame in the view | Pig Pens | done (2e P2–P4) |
 | 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | done (2e P3 2dff968) |
 | 62 | Stale browser scripts and print-only tests | Pig Pens | done (2e P5, P9 c7af1cc) |
@@ -80,13 +80,30 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
-| 68 | Goldens compare to 6 digits | Pig Pens | open |
-| 69 | Control when/get receive the engine, not ctx | Pig Pens | open |
-| 70 | Headless has no h.debug | Pig Pens | open |
-| 71 | Events emitted outside a step appear after the next step | Pig Pens | open |
-| 72 | Command data passed by reference when not recording | Pig Pens | open |
-| 73 | view.project returns no depth / on-screen flag | Pig Pens | open |
-| 74 | openGame has no init-script hook | Pig Pens | open |
+| 68 | Goldens compare to 6 digits | Pig Pens | planned (2f T-E2) |
+| 69 | Control when/get receive the engine, not ctx | Pig Pens | planned (2f T-E1) |
+| 70 | Headless has no h.debug | Pig Pens | planned (2f T-E2) |
+| 71 | Events emitted outside a step appear after the next step | Pig Pens | planned (2f T-E2) |
+| 72 | Command data passed by reference when not recording | Pig Pens | planned (2f T-E1) |
+| 73 | view.project returns no depth / on-screen flag | Pig Pens | planned (2f T-E10) |
+| 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
+| 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
+| 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | planned (2f T-E3) |
+| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | planned (2f T-E5, T6) |
+| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | planned (2f T-E4, T-E6, T8) |
+| 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
+| 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
+| 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | planned (2f T3, T-E8) |
+| 82 | Keys override the stick and a pad overrides both, vs a length merge | Tractor Pickup | planned (accepted; playtest) |
+| 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | planned (2f T-E9) |
+| 84 | Player records in browser storage are read by the flow | Tractor Pickup | planned (2f T4) |
+| 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | planned (2f T5, 2g G4) |
+| 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | planned (2f T1: allowlisted) |
+| 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | planned (2f T3) |
+| 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | planned (2f T6, T7) |
+| 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
+| 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | planned (2f T3: pipeline in `step`) |
+| 91 | Schema-derived binary commands would change the wire | Tractor Pickup | planned (2f T-E5: built, not adopted; NET_VERSION stays 3) |
 
 ## Entries
 
@@ -117,7 +134,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Tractor Pickup: `main.js` sets `g.mode = 'reward'`, and the sim waits on `showDone`/`rewardDone`, which come from view animations.
   - Pig Pens: `driving`, `tool` and `selected` live in `main()`'s closures.
 - **Engine change:** scenes own flow (S-4). View animations end with an ack event, which needs scene-scoped listeners (`ctx.on`).
-- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens done (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup remains.
+- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens done (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup planned (2f T4–T5: trip, show ack, reward, bedtime and menus in the farm scene and non-pausing overlays; 2g G3: the show cutscene acks with `show.done`).
 
 ### 5. Positional input can't be expressed as actions: Pig Pens, Tractor Pickup
 - **What happened:**
@@ -151,7 +168,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - scene-scoped devices;
   - a per-source vector merge for stick pairs.
 - **2d:** pointer filters done (2d D3: `bindPointer` `filter`).
-- **Status:** done for Rally's needs; Pig Pens' pad done (2e P-E2, `bindStick({ origin: 'centre' })`, #53). Pig Pens doesn't need a scene-scoped stick: `#drive` is `display: none` outside drive mode, so the pad gets no pointers, and the sim reads `throttle`/`steer` only while driving. Its mouse-vs-tool filter is `bindPointer`'s `filter.button`. Tractor Pickup's radial pair merge and gamepad.mapping open.
+- **Status:** done for Rally's needs; Pig Pens' pad done (2e P-E2, `bindStick({ origin: 'centre' })`, #53). Pig Pens doesn't need a scene-scoped stick: `#drive` is `display: none` outside drive mode, so the pad gets no pointers, and the sim reads `throttle`/`steer` only while driving. Its mouse-vs-tool filter is `bindPointer`'s `filter.button`. Tractor Pickup's radial pair merge planned (2f T-E8: `axis({ pair })` plus a device `map` hook to world-frame axes, #81, #82). gamepad.mapping open.
 
 ### 9. UI controls need more than a text label: Tractor Pickup, Rally
 - **What happened:**
@@ -363,7 +380,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 49. Commands to a scene under a pausing overlay are dropped: engine (phase 2d D1 review)
 - **What happened:** scene-scoped command handlers skip covered scenes, and the command is dropped, not held. That suits positional taps.
-- **Rule for Tractor Pickup:** network messages and view acks must be game-wide handlers, or they are lost behind the pause menu. Status: done (2d D12: documented in spec [I-7]; watch in the Tractor migration).
+- **Rule for Tractor Pickup:** network messages and view acks must be game-wide handlers, or they are lost behind the pause menu. Status: done (2d D12: documented in spec [I-7]). 2f plan: Tractor's overlays never pause (a paused host would freeze its guests), and T-E5 makes the rule enforced for commands declared with a schema (`ctx.command` throws for them).
 
 ### 50. Playwright `until` can't wait out a load held by `view.wait`: Rally (phase 2d R1)
 - **What happened:** `until`/`step` run in one in-page `evaluate` loop. A load whose settle waits on a view promise (a dynamic import) never settles inside that synchronous loop under `?lh-test`.
@@ -395,7 +412,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 56. A long press on capped device time runs slow at low frame rates: Pig Pens (phase 2e plan)
 - **What happened:** the v2 spec's defect 8 ("press and hold did not start the drive at a low frame rate") was fixed with a 750 ms `setTimeout`. `bindPointer` counts the press on device time, which the driver caps at `maxFrame` (0.1 s for Pig Pens, #44). Below 10 fps the hold still fires, but later in wall time (at 5 fps, about 1.5 s).
 - **Decision:** accepted for 2e (ruling: engine time, no timers); flagged for a real-device check.
-- **Engine change (maybe):** a `press` option that counts uncapped frame time. Status: open.
+- **Engine change (maybe):** a `press` option that counts uncapped frame time. Status: planned (2f T-E9: devices get `update(dt, raw)`, `bindPointer({ uncapped })`, and `ui.hold({ wall })` for sim-side holds, #83). Pig Pens' adoption is open.
 
 ### 57. A game-owned event queue next to engine events: Pig Pens (phase 2e plan)
 - **What happened:** `createSim` pushes events into its own `sim.events` (at most 64 queued) and `main.js` drains them once per frame for sound and hints. The phase-0 golden drains them per step.
@@ -410,7 +427,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 59. Camera gestures need a second pointer tracker on the same canvas: Pig Pens (phase 2e plan)
 - **What happened:** the canvas carries the tools (positional commands) and view-only camera gestures: one-finger Hand orbit after 10 px, two-finger orbit/pan/pinch, mouse right/middle drag, wheel, and the drive chase drag. `bindPointer` owns the tool gesture and cancels it on a second finger, but has no way to hand the multi-touch gesture to the view.
 - **Workaround:** a view-only listener on the same canvas keeps its own pointer map; it and `bindPointer` agree on the Hand's orbit through `at()` (#52). Two trackers could disagree about which finger came first.
-- **Engine change (maybe):** a view camera-gesture helper, or a `bindPointer` callback for the multi-touch gesture. Status: open.
+- **Engine change (maybe):** a view camera-gesture helper, or a `bindPointer` callback for the multi-touch gesture. Status: planned (2f T-E9: `bindGesture` with tap, hold, drag and pinch; Tractor uses tap and hold for the show in 2g G3). Pig Pens' adoption is open.
 
 ### 60. Sim inputs computed per frame in the view: Pig Pens (phase 2e plan; part of #4)
 - **What happened:** besides the flow state (#4), `main.js` feeds the sim from frame-time code:
@@ -455,31 +472,119 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 68. Goldens compare to 6 digits; bit-exact comparison needs its own test: Pig Pens (phase 2e P2)
 - **What happened:** to prove the engine path reproduces `farm-seed3.json` exactly, P2 needed an extra `deepStrictEqual` against a direct `createSim` run, because `golden()` rounds to 6 digits.
-- **Engine change:** `golden(file, value, { exact: true })`, which skips rounding (canonical at 17 digits). Status: open.
+- **Engine change:** `golden(file, value, { exact: true })`, which skips rounding. Status: planned (2f T-E2; the file records `exact`, and a mode mix throws).
 
 ### 69. Control `when`/`get` receive the engine, not the scene context: Pig Pens (phase 2e P2 review)
 - **What happened:** farm controls read `e.scene.state`, which is always the main scene's state. That breaks for overlay controls and after re-entry.
 - **Workaround:** close over `ctx.state` from `ui(u, e, ctx)`.
-- **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: open.
+- **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: planned (2f T-E1: the control's own scene ctx, and game-wide command handlers get the main scene's ctx).
 
 ### 70. Headless has no `h.debug`: Pig Pens (phase 2e P3)
 - **What happened:** tests call `h.engine.game.debug(h.engine)` by hand.
-- **Engine change:** a memoised `h.debug` getter, mirroring `window.engine.debug`. Status: open.
+- **Engine change:** a memoised `h.debug` getter, mirroring `window.engine.debug`. Status: planned (2f T-E2).
 
 ### 71. Events emitted outside a step appear only after the next step: Pig Pens (phase 2e P3)
 - **What happened:** a debug or preset call that emits an event, outside any step, isn't visible in `h.events` until a step flushes it. Tests have to call `h.step(1)` first.
-- **Engine change:** flush on read in `since()`/`h.events`, or document the behaviour clearly in T-4. Status: open.
+- **Engine change:** flush on read in `since()`/`h.events`, or document the behaviour clearly in T-4. Status: planned (2f T-E2: `engine.flushEvents()` outside a step, called by `h.events`, `h.since` and the hook's `events.since`).
 
 ### 72. Command data is passed by reference when not recording: Pig Pens (phase 2e P3 review)
 - **What happened:** the farm scene stores `d.ray` and `d.aim` from a command in the held grab state. If the view reuses ray arrays to avoid allocation, that state changes underneath it. Recording copies the data, so tests don't see this.
 - **Rule for games:** the view sends fresh arrays per command, or the handler copies the arrays it keeps.
-- **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: open.
+- **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: planned (2f T-E1: command data is always checked as plain JSON and delivered as a copy, recording or not; a behaviour change for callers that passed non-JSON data).
 
 ### 73. `view.project` returns no depth or on-screen flag: Pig Pens (phase 2e P6–P7)
 - **What happened:** the HUD has to project with the camera itself to hide labels behind the camera. Playwright's `game.point` can't reject points that are off-screen or behind the camera.
-- **Engine change:** the `view.project` contract returns `{ x, y, z, onScreen }`, and `game.point` throws when a point is behind the camera or off-screen. Status: open.
+- **Engine change:** the `view.project` contract returns `{ x, y, z, onScreen }`, and `game.point` throws when a point is behind the camera or off-screen. Status: planned (2f T-E10; a `project` without `onScreen` keeps today's behaviour).
 
 ### 74. `openGame` has no init-script hook: Pig Pens (phase 2e P8)
 - **What happened:** a test can't stub WebGL or other globals before the page boots, so the "no WebGL" frame guard has no browser test.
-- **Engine change:** `openGame(browser, url, { initScript })`, passed to `context.addInitScript`. Status: open.
+- **Engine change:** `openGame(browser, url, { initScript })`, passed to `context.addInitScript`. Status: planned (2f T-E10).
+
+### 75. Network messages are handled on arrival, between frames: Tractor Pickup (phase 2f plan)
+- **What happened:** `host.js` and `guest.js` subscribe to the transport's `message` events and change the game inside the callback, whenever the data channel delivers (WebRTC) or when the in-memory hub ticks (tests). Nothing records those changes, so no tape can replay a room, and a test can count handled messages with no step run (`mp.test.mjs`: "the rate limits count in wall time: with the game frozen").
+- **Change:** a port (`lion-hawk/net`) turns every transport event and message into a game-wide command (`net.open`, `net.peer`, `net.frame`, `host.*`, `guest.*`) with `from`, `at` and `reliable`; the syncs handle them at the next step's `input.apply`. In the browser that is the same frame (the step after the message); in the frozen-frame test it is never, until a step runs: that test is the engine-path sweep's one named exception (2f T7).
+- **Status:** planned (2f T-E6, T6, T7).
+
+### 76. Two clocks in the net code: wall time and the frame's step stamp: Tractor Pickup (phase 2f plan)
+- **What happened:** the syncs read `clock()` (`performance.now`) for rate limits, the silence watchdog, horn and regrow limits, trust following and the barn hold, and take `now` (the frame time less the time still owed, M-69) for sending and interpolation. The engine had neither: its `time.sim` stops while the tab is hidden, which would make a returning host's stamps lag its guests' by the hidden time and freeze their interpolation for tens of seconds.
+- **Change:** `engine.time.wall`, the stamp of each step on an injected clock (N-4): the browser driver passes the rAF timestamp and each step is stamped as M-69 does; headless steps are `1000/hz` apart from `wall0`. Messages carry their arrival time as `at`; the syncs' clock is `at` while a message is handled and `time.wall` otherwise.
+- **Status:** planned (2f T-E3).
+
+### 77. The player number is game state; the transport knows only peer ids: Tractor Pickup (phase 2f plan)
+- **What happened:** the reserved source key on a network command can only be the transport's peer id: the host assigns player numbers (`byPeer`), and a guest's frame names its own sender, which the host overwrites before decoding (`setUint8(1, n)`, M-50).
+- **Change:** commands carry `from` (the peer id); the host maps it to a player. The port decodes frames with their claimed sender, and the host drops a frame whose sender is not that peer's number. The one difference from today: an empty frame with a wrong sender no longer counts as "heard" for the silence watchdog (it was decoded under the overwritten sender before).
+- **Status:** planned (2f T-E5, T6).
+
+### 78. Binary replica frames vs plain-JSON tapes: Tractor Pickup (phase 2f plan)
+- **What happened:** replica frames are `ArrayBuffer`s; tapes must be plain JSON ([T-9]).
+- **Change:** the port decodes frames (`decodeFrame`, the N-3 check) and issues `net.frame` with `frameToJson`'s plain form; the sync gets `frameFromJson`'s decoded form, the same values `decodeFrame` gave. Binary stays in the outbox and on the wire only. A guest's tape then replays without its host (2f T8).
+- **Status:** planned (2f T-E4, T-E6, T8).
+
+### 79. The show writes sim animals from the view, paced by the voice: Tractor Pickup (phase 2f plan)
+- **What happened:** `ui/show.js` sets each rider's `state = 'show'` and tweens its `x/y/z/yaw` (a sim object) from the view, with waits on `setTimeout` and on the voice's promises; the layout depends on the screen (portrait vs landscape). After the show the herd walks the animals into the barn from wherever the view left them, so the sim's next state depends on the view.
+- **Decision:** the show stays a view cutscene (word timing is the voice's, which the sim cannot know). At the `show` cue the sim freezes the riders (`state = 'show'`); the view animates copies and ends with a game-wide `show.done { spots }` carrying where each animal stands, which the sim applies before `finishShow`. Replays reproduce it (the spots are in the tape).
+- **Cost (playtest):** other players see your riders stay in the trailer during your show; today they see them hop out to the line-up.
+- **Status:** planned (2f T4, 2g G3).
+
+### 80. A guest's welcome needs its new farm synchronously: Tractor Pickup (phase 2f plan)
+- **What happened:** `guest.js`'s `applyWelcome` calls `onFarm(seed, you)` and uses the returned game at once. A farm rebuilt through `ctx.load` arrives later.
+- **Change:** `onFarm` may return `null`; the welcome then waits exactly as a welcome deferred by a show does (M-19: frames go to the store, the host's keyframe is kept), and `sync.farmReady(game)` applies it. The farm pipeline is suspended while the load runs, so `before`/`after` never mix the old game with the new farm's data.
+- **Cost (playtest):** a guest's farm appears one step and one presented frame after the welcome.
+- **Status:** planned (2f T6).
+
+### 81. The reverse cone is screen-relative; a world vector can't say "down": Tractor Pickup (phase 2f plan)
+- **What happened:** point to go (C-2, C-8) wants the stick in the world frame (camera heading plus stick angle), but reversing depends on the stick's screen angle (within 35° of straight down), which a world-frame vector loses once the camera lags the tractor.
+- **Change:** the device `map` hook writes `goX`/`goZ` (world frame, length = stick distance) and a `goBack` button decided on the screen angle (`stickToWorld`); `pilot.drive` reproduces `pilot.update` within 1e-9 (2f T3's property test).
+- **Status:** planned (2f T3, T-E8).
+
+### 82. Keys override the stick and a pad overrides both, vs a length merge: Tractor Pickup (phase 2f plan)
+- **What happened:** `ui/input.js` `read()` lets any held direction key replace the stick and any moved pad stick replace both. The engine merges sources per action (largest |value|), and a pair by vector length.
+- **Decision:** accept the length merge (a held key is length 1 and wins over a partial stick anyway); flagged for the playtest.
+- **Status:** planned (accepted; playtest).
+
+### 83. Holds measured on `performance.now` vs capped engine time: Tractor Pickup (phase 2f plan)
+- **What happened:** the parent gear (2 s), the wake button (5 s) and the show's skip (1 s) are `holdToFire` on `performance.now`. `ui.hold` counts engine time, which `maxCatchUp` caps: below 20 fps a 5 s hold would take longer in wall time (as #56).
+- **Change:** `ui.hold({ wall: true })` counts `engine.time.wall` from the press; headless that is virtual and deterministic.
+- **Status:** planned (2f T-E9).
+
+### 84. Player records in browser storage are read by the flow: Tractor Pickup (phase 2f plan)
+- **What happened:** `main.js` loads progress, settings and bedtime from `localStorage` and the flow reads them (the start screen needs a paint choice, hats ride on boops, the reward unlocks paints and hats, power sets the tractor).
+- **Change:** the sim owns them: the entry passes the stored records as scene args (clamped as today), menus change them through commands, and the sim emits `progress`, `settings` and `bed` events that the entry saves. Tapes carry them in the args.
+- **Status:** planned (2f T4).
+
+### 85. Bedtime counts in epoch time across reloads and hidden tabs: Tractor Pickup (phase 2f plan)
+- **What happened:** bedtime is stored as a `Date.now()` time so it counts while the page is closed or hidden; `stepBedtime` reads `Date.now()` every step.
+- **Change:** the entry sends `clock { date }` once a second and on becoming visible; `bed.set` carries the date it was set. The check runs in the farm step against the last date.
+- **Cost (playtest):** the last drive starts up to a second late.
+- **Status:** planned (2f T5, 2g G4).
+
+### 86. `randomSeed()` with `Math.random` inside a sim module: Tractor Pickup (phase 2f plan)
+- **What happened:** `src/sim/rng.js` exports `randomSeed()` (`Math.random`), which the purity scan flags; its unit test imports it from there.
+- **Decision:** it stays, as the purity test's one allowlisted line, and the test also checks that no sim module calls it. New farm seeds in the sim come from `engine.rng('seeds')`; the entry seeds the engine randomly per visit (Rally #35).
+- **Status:** planned (2f T1: allowlisted).
+
+### 87. Per-step sound cues computed in the frame loop: Tractor Pickup (phase 2f plan)
+- **What happened:** `main.js`'s `stepSounds` runs after each `game.step` and reads wheel contacts to fire `whee`, `cheer` and the sandbox's squelch; the view cannot see steps.
+- **Change:** the farm step emits `whee`, `cheer` and `squelch` events; the view plays them.
+- **Status:** planned (2f T3).
+
+### 88. Tests poke sync internals: Tractor Pickup (phase 2f plan)
+- **What happened:** the mp suites replace `sync.after`, wrap `sync.handlers.claim`, reassign `w.host.game` and call `sync.before` directly.
+- **Change:** the farm step looks the sync up on `state.net` every step and calls its methods by name; the engine-path harness exposes `game` with a setter. No test file changes.
+- **Status:** planned (2f T6, T7).
+
+### 89. The vendored `handshake.js` stays game-side: Tractor Pickup, engine (phase 2f plan)
+- **What happened:** spec §10 leaves Handshake vendoring open; Tractor's contract test reads `src/net/handshake.js` by path and checks its first line.
+- **Decision:** keep it (and `session.js`) game-side in 2f/2g; the engine's room link takes a Room object and imports nothing from it.
+- **Status:** open (spec §10).
+
+### 90. Systems keep running while a scene loads; only `step` is suspended: engine, Tractor Pickup (phase 2f plan)
+- **What happened:** [S-6] suspends a loading scene's `step` hook, but `ctx.system`s keep running. A farm pipeline built from systems would step the old game (or none) during a rebuild.
+- **Decision:** Tractor's whole pipeline is the farm scene's `step` hook (as Rally's stage), so a load suspends it; command handlers still run and only record.
+- **Status:** planned (2f T3).
+
+### 91. Schema-derived binary commands would change the wire: Tractor Pickup (phase 2f plan)
+- **What happened:** the round asks for a schema-derived wire codec; Tractor's event messages are JSON today, and NET_VERSION 3 devices are deployed.
+- **Decision:** the engine builds both codecs (`json`, `binary`) from the same schema; Tractor uses `json`, so its wire is unchanged, NET_VERSION stays 3, and an old-path device plays with an engine-path one (2f T7's interop test). Adopting `binary` is a NET_VERSION 4 decision for a later release.
+- **Status:** planned (2f T-E5: built, not adopted).
 
