@@ -16,11 +16,11 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Tractor Pickup, Pig Pens open |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Pig Pens planned (2e P2–P4); Tractor Pickup open |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
-| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Tractor Pickup's radial pair merge, Pig Pens' scene-scoped stick and gamepad.mapping open |
+| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad planned (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge and gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
 | 10 | `onRender` is a single slot | all | done (2d D9) |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI) |
@@ -64,6 +64,22 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7; watch in the Tractor migration) |
 | 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
+| 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | planned (2e P-E1) |
+| 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | planned (2e P-E2) |
+| 54 | Screen-space aim offsets under a finger | Pig Pens | planned (2e P3, P6) |
+| 55 | A tap acts on what was picked at pointer down | Pig Pens | planned (2e P3); engine won't |
+| 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
+| 57 | A game-owned event queue next to engine events | Pig Pens | planned (2e P2 bridge); kit-herd open |
+| 58 | The game's RNG and seed live outside the engine streams | Pig Pens | open (phase 4/7) |
+| 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | open |
+| 60 | Sim inputs computed per frame in the view | Pig Pens | planned (2e P2–P4) |
+| 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | planned (2e P3) |
+| 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
+| 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
+| 64 | No finite invariant before the World | engine, Pig Pens | planned (2e P-E3) |
+| 65 | No helper for mouse gestures on world points | engine, Pig Pens | planned (2e P-E4) |
+| 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
+| 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
 
 ## Entries
 
@@ -94,7 +110,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Tractor Pickup: `main.js` sets `g.mode = 'reward'`, and the sim waits on `showDone`/`rewardDone`, which come from view animations.
   - Pig Pens: `driving`, `tool` and `selected` live in `main()`'s closures.
 - **Engine change:** scenes own flow (S-4). View animations end with an ack event, which needs scene-scoped listeners (`ctx.on`).
-- **Status:** Rally part done in 2c-rally R2–R3; Tractor Pickup and Pig Pens remain.
+- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens planned (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup remains.
 
 ### 5. Positional input can't be expressed as actions: Pig Pens, Tractor Pickup
 - **What happened:**
@@ -128,7 +144,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - scene-scoped devices;
   - a per-source vector merge for stick pairs.
 - **2d:** pointer filters done (2d D3: `bindPointer` `filter`).
-- **Status:** done for Rally's needs; Tractor Pickup's radial pair merge, Pig Pens' scene-scoped stick and gamepad.mapping open.
+- **Status:** done for Rally's needs; Pig Pens' pad planned (2e P-E2, `bindStick({ origin: 'centre' })`, #53). Pig Pens doesn't need a scene-scoped stick: `#drive` is `display: none` outside drive mode, so the pad gets no pointers, and the sim reads `throttle`/`steer` only while driving. Its mouse-vs-tool filter is `bindPointer`'s `filter.button`. Tractor Pickup's radial pair merge and gamepad.mapping open.
 
 ### 9. UI controls need more than a text label: Tractor Pickup, Rally
 - **What happened:**
@@ -350,3 +366,82 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 51. `policy.every` doesn't restart when the sim behind it is replaced: Rally (phase 2d R1)
 - **What happened:** Rally's old autopilot cache was keyed by the `Sim` object. `policy.every` keys its cadence to engine steps only, so after a jump or rebuild it can repeat a stale output for up to n−1 steps. The goldens are unaffected.
 - **Engine change:** `policy.every(n, fn, { key: (h) => object })`, which recomputes immediately when the key changes. Status: done (0.5.1 final review): `key(h)` is compared with `===` on every call; a change recomputes at once and re-anchors the cadence.
+
+### 52. `bindPointer`'s `at()` can't tell a move from a press: Pig Pens (phase 2e plan)
+- **What happened:** the Hand tool must send nothing while the finger drags (the view turns the drag into a camera orbit) but must still send the 0.75 s press on the tractor. `at(clientX, clientY, event)` gets `undefined` as the event for both the coalesced move and the press that `update(dt)` sends, so it can't return `null` for one and a payload for the other.
+- **Engine change:** pass the phase: `at(clientX, clientY, event, phase)`. Status: planned (2e P-E1).
+
+### 53. A fixed-centre thumb pad vs the floating stick: Pig Pens (phase 2e plan; see #8)
+- **What happened:** Pig Pens' drive pad (`#stick`, 132 px, bottom left) is always visible while driving and deflects from its own centre on the first touch (`main.js:489-497`, travel 36% of its width, no dead zone). `bindStick` with an adopted base hides the base when idle, moves it under the thumb and reads zero on the first touch.
+- **Decision:** add `bindStick({ origin: 'centre' })`: the origin is the base's centre at pointerdown, the down position is the first move, and the base is never hidden or moved. The floating stick would change the feel of the main drive control. Status: planned (2e P-E2).
+
+### 54. Screen-space aim offsets under a finger: Pig Pens (phase 2e plan)
+- **What happened:** with a finger, Grab lifts the held animal to 80 px above the finger, eased over 0.18 s, and the Hose aims 55 px above it (v2 spec §16.2). Both are screen-space offsets eased per frame in `main.js`, so they can't be a sim input as they stand.
+- **Workaround:** the view's `at()` sends a second ray (`aim`) through the lifted point; the sim takes plane hits from both rays and blends them over 0.18 s. The start and end points are the same as before; the path during the ease is a world-space blend, not a screen-space one (flagged for the playtest).
+- **Engine lesson:** send rays, not hits, in positional commands. The sim then does all picking, and replays reproduce it. Status: planned (2e P3, P6).
+
+### 55. A tap acts on what was picked at pointer down: Pig Pens (phase 2e plan)
+- **What happened:** `main.js` classifies the Hand's target on pointerdown and acts on it at the tap; `bindPointer`'s `tap` carries the up position.
+- **Workaround:** the sim keeps per-gesture state (`ctx.state.gesture = { tool, pointer, down, target }`), picked on `down`, used on `tap` and `press`. A gesture also finishes with the tool it started with.
+- **Engine change:** none; per-gesture state is game state. Status: planned (2e P3); engine won't.
+
+### 56. A long press on capped device time runs slow at low frame rates: Pig Pens (phase 2e plan)
+- **What happened:** the v2 spec's defect 8 ("press and hold did not start the drive at a low frame rate") was fixed with a 750 ms `setTimeout`. `bindPointer` counts the press on device time, which the driver caps at `maxFrame` (0.1 s for Pig Pens, #44). Below 10 fps the hold still fires, but later in wall time (at 5 fps, about 1.5 s).
+- **Decision:** accepted for 2e (ruling: engine time, no timers); flagged for a real-device check.
+- **Engine change (maybe):** a `press` option that counts uncapped frame time. Status: open.
+
+### 57. A game-owned event queue next to engine events: Pig Pens (phase 2e plan)
+- **What happened:** `createSim` pushes events into its own `sim.events` (at most 64 queued) and `main.js` drains them once per frame for sound and hints. The phase-0 golden drains them per step.
+- **Workaround:** a `post` system drains `sim.events` into `engine.emit` every step (so the cap now applies per step). The farm's own events use other types (`FARM_EVENTS`), so the engine-path test can filter them and compare against the phase-0 golden.
+- **Engine change:** `kit-herd` (phase 7) emits through the engine. Status: planned (2e P2 bridge); kit open.
+
+### 58. The game's RNG and seed live outside the engine streams: Pig Pens (phase 2e plan)
+- **What happened:** `createSim` seeds its own mulberry32 from `opts.seed` (default 1); every first visit gets the same farm. `engine.rng` streams are not used.
+- **Workaround:** the farm passes `args.seed ?? engine.seed`; `boot`'s default seed 1 matches today's default, so unlike Rally (#35) the fixed first farm is kept.
+- **Engine change:** game randomness on `engine.rng` streams when the herd moves into `World`/kits (phases 4 and 7). Status: open.
+
+### 59. Camera gestures need a second pointer tracker on the same canvas: Pig Pens (phase 2e plan)
+- **What happened:** the canvas carries the tools (positional commands) and view-only camera gestures: one-finger Hand orbit after 10 px, two-finger orbit/pan/pinch, mouse right/middle drag, wheel, and the drive chase drag. `bindPointer` owns the tool gesture and cancels it on a second finger, but has no way to hand the multi-touch gesture to the view.
+- **Workaround:** a view-only listener on the same canvas keeps its own pointer map; it and `bindPointer` agree on the Hand's orbit through `at()` (#52). Two trackers could disagree about which finger came first.
+- **Engine change (maybe):** a view camera-gesture helper, or a `bindPointer` callback for the multi-touch gesture. Status: open.
+
+### 60. Sim inputs computed per frame in the view: Pig Pens (phase 2e plan; part of #4)
+- **What happened:** besides the flow state (#4), `main.js` feeds the sim from frame-time code:
+  - it eases the hose nozzle per frame and passes the eased value to `sim.setHose` as the spray source, which the zooming pigs use, so the sim depends on the frame rate;
+  - it sets the tractor's input and calls `rightIfTipped` per frame;
+  - it eases the grab lift per frame;
+  - it flips `lay.coop.open` directly;
+  - it limits Feed taps on `performance.now()`.
+- **Change:** each moves into a farm system or handler on engine time (`farm.ease`, `farm.keys`, `toggleDoor`, `TOSS_GAP`). Status: planned (2e P2–P4).
+
+### 61. `pointercancel` counted as a lift: Pig Pens (phase 2e plan)
+- **What happened:** `main.js` handles `pointercancel` with the same `end` as `pointerup`, so a touch the browser cancelled (iOS) could still count as a tap and select, toss or act.
+- **Change:** `bindPointer` sends `cancel`, never a tap. This is a user-visible fix, listed in the plan's parity table. Status: planned (2e P3).
+
+### 62. Stale browser scripts and print-only tests: Pig Pens (phase 2e plan; like #34)
+- **What happened:**
+  - `test/interact*.mjs` and `shot.mjs` use hard-coded `/opt/pw-browsers` and `/mnt/user-data/outputs` paths, `window.piggies`, and a removed `look` tool. Nothing runs them.
+  - The headless scripts (`day`, `door`, `food`, `gates_fox`, `grain`, `hose`, `nan`, `night`, `scenarios`, `tractor`, …) print results; `npm test` runs only the golden.
+  - `createSim` ignores the `hour` option that `day.mjs`, `grain.mjs` and `gates_fox.mjs` pass, so `gates_fox.mjs`'s fox part never starts a visit.
+- **Change:** the browser scripts are deleted, and the e2e suite covers their flows. `nan.mjs` becomes an engine-path invariant test, and the v2 spec's §13.1 facts are asserted in `sim.test.mjs`; the other tuning scripts stay manual. Status: planned (2e P5, P9).
+
+### 63. Safe areas read `env()` directly: Pig Pens (phase 2e plan; like #31)
+- **What happened:** `template.html` uses `env(safe-area-inset-*)`, which Chromium can't emulate, so the Playwright presets' `--lh-sa-*` variables don't apply.
+- **Change:** `var(--lh-sa-X, env(safe-area-inset-X, 0px))` everywhere. P8 also measures the Get out button, which its CSS makes about 43 px tall (under the 44 px guideline); no restyling in 2e. Status: planned (2e P6, P8).
+
+### 64. No finite invariant before the World: engine, Pig Pens (phase 2e plan)
+- **What happened:** [T-1] says a `finite()` invariant over every `xf` and body is always on, but there is no `World` yet (phase 4), so nothing checks. `nan.mjs` checks the birds' positions by hand.
+- **Engine change:** `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step. Status: planned (2e P-E3).
+
+### 65. No helper for mouse gestures on world points: engine, Pig Pens (phase 2e plan)
+- **What happened:** `game.touch.*` resolves `{ world }` targets through `view.project`, but desktop presets have no touch, and Pig Pens' tools need left clicks and drags on world points (and right-drags for the camera).
+- **Engine change:** `game.point(target)` exposes the resolver for `page.mouse`. Status: planned (2e P-E4).
+
+### 66. The old loop zeroed its remainder after a capped frame: Pig Pens (phase 2e plan)
+- **What happened:** `main.js` set `acc = 0` whenever it ran 4 catch-up steps, even with less than one step left over; the engine loop keeps a sub-step remainder after the cap (`acc %= dt`).
+- **Decision:** won't change: it only shifts the next step's phase by less than one step and is invisible.
+
+### 67. Audio unlock needs a user-gesture hook: Pig Pens (phase 2e plan)
+- **What happened:** Web Audio must be unlocked from a user gesture. `main.js` calls `sound.unlock()` from each game control's handler, but registry controls and devices give the game no first-gesture hook.
+- **Workaround:** the view adds one capturing `pointerdown`/`keydown` listener on the document, so audio now unlocks on any first tap or key (flagged as a small change).
+- **Engine change:** an audio service with its own unlock. Status: open (audio service).
