@@ -265,7 +265,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 - **[S-1]** A scene has a sim half and a view half, keyed by the same name:
   - **Sim half** (headless-safe): `{ enter(engine, args), exit(engine), step(engine, dt), ui(ui), presets }`.
-  - **View half** (browser): `{ enter(engine, view), exit(), frame(engine, alpha) }`. It builds the HUD and other DOM, and sets up camera rigs.
+  - **View half** (browser): `{ enter(engine, view), exit(), frame(engine, alpha) }`. It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time) and `wait(promise)`.
 - **[S-2]** `engine.go(name, args)` replaces the main scene. `engine.overlay(name, args)` stacks a scene on top, and `engine.close(name)` removes it. An overlay may set `pauses: true` to freeze the sim below it while it is still drawn.
 - **[S-3]** Each main scene owns a `World` and a Rapier world. Leaving the scene disposes both, plus the scene's GPU resources.
 - **[S-4]** **Flow state lives in scenes or the sim, never in the view.** A view animation that gates flow (a show, a reward card) either becomes a scene timer or ends by emitting an ack event that the sim scene waits for.
@@ -274,12 +274,12 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 ### 5.3 Input
 
-- **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`.
+- **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`; a press shorter than a step is latched until the next apply.
 - **[I-2]** Devices bind to actions. They are view-only modules.
-  - **Keyboard:** configurable ease ramps; keys are ignored while a text field has focus.
-  - **Gamepad:** `getGamepads()` is polled every frame, using the standard mapping.
+  - **Keyboard:** configurable ease ramps (a number or a function of time), `shift+` chords; keys are ignored while a text field has focus.
+  - **Gamepad:** `getGamepads()` is polled every frame, using the standard mapping; axes take response curves.
   - **Touch:**
-    - A floating stick with a 24 px left-edge guard and a radial dead zone, plus hold buttons.
+    - A floating stick with a 24 px left-edge guard and a radial dead zone (or a one-axis slider mode), plus hold buttons.
     - Fingers are tracked by `pointerId`, with listeners on the root element.
     - `pointercancel` and `lostpointercapture` count as a release.
     - The root has `touch-action: none`.
@@ -290,7 +290,8 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 ### 5.4 UI helpers
 
-- **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })` and `ui.toggle(...)`:
+- **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })`, `ui.toggle(...)`, `ui.choice(...)` and `ui.field(...)`:
+  - A game's markup marked `data-lh-slot` is adopted instead of the engine creating its own element.
   - In the browser they render as real `<button>` elements with an accessible name and `data-testid="<scene>.<id>"`. Toggles use `aria-pressed`.
   - Headless, they are registered without DOM so tests can tap them (§7.4).
 - **[U-2]** HUD readouts use `<output data-testid="hud.<id>" data-value="<raw>">`.
@@ -384,7 +385,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - **other:** `net`, `rng(name)`, `policies`, and the game's `debug()` extras.
 - **[D-5]** `window.piggies`, `window.rally` and `window.tp` remain as aliases until their game finishes phase 2.
 - **[D-6]** `settled()` is true when:
-  - no asset, font or shader loads are pending;
+  - no asset, font or shader loads are pending (including promises handed to `view.wait`);
   - no element has `data-lh-state="opening|closing"`;
   - no scene transition is running.
 
