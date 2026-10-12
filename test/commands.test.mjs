@@ -82,3 +82,48 @@ test('2f: command data is always checked as plain JSON and delivered as a copy, 
   assert.throws(() => e.command('keep', { f: () => 1 }), /engine: command data must be plain JSON/);
   assert.throws(() => e.command('keep', { n: NaN }), /plain JSON/);
 });
+
+import { F } from '../src/index.sim.js';
+const IDS = F.list(F.uint(2, 0xfffe), 16);
+test('2f: a schema\'d command is checked at issue, gets the checked copy, and is game-wide only (#49)', () => {
+  const got = [];
+  const g = defineGame({ id: 'sch', start: 's', commands: { 'host.claim': { schema: { ids: IDS }, handler: (e, d) => got.push(d) } },
+    scenes: { s: { enter(e, ctx) { assert.throws(() => ctx.command('host.claim', () => {}), /'host.claim' has a schema: handle it in defineGame/); } } } });
+  const h = headless(g);
+  h.command('host.claim', { ids: [1], junk: 2, from: 'g2', at: 5, reliable: true }).step(1);
+  assert.deepEqual(got, [{ ids: [1], from: 'g2', at: 5, reliable: true }]);
+  assert.throws(() => h.command('host.claim', { ids: [1.5] }), /engine: command 'host.claim' does not match its schema/);
+  assert.throws(() => defineGame({ id: 'r', start: 's', scenes: { s: {} }, commands: { x: { schema: { from: F.bool() }, handler() {} } } }), /may not declare reserved key 'from'/);
+});
+test('2f: the plain-JSON check runs first; reserved keys are type-checked on every command; recording logs the checked copy (#72, #77)', () => {
+  const got = [];
+  const g = defineGame({ id: 'sch2', start: 's', commands: { claim: { schema: { ids: IDS }, handler: (e, d) => got.push(d) }, free: (e, d) => got.push(d) }, scenes: { s: {} } });
+  const e = createEngine(g, { record: true });
+  assert.throws(() => e.command('claim', { ids: [NaN] }), /engine: command data must be plain JSON/);
+  for (const [k, v] of [['from', 3], ['at', null], ['at', '5'], ['reliable', 1]]) for (const type of ['claim', 'free'])
+    assert.throws(() => e.command(type, { ids: [1], [k]: v }), new RegExp(`reserved key '${k}' must be`), `${type} ${k}`);
+  assert.throws(() => e.command('claim', null), /does not match its schema/);
+  const src = { ids: [2], x: 1, from: 'p' }; e.command('claim', src).command('free', { y: 1, at: 3 }); src.ids.push(9); e.stepN(1);
+  assert.deepEqual(got, [{ ids: [2], from: 'p' }, { y: 1, at: 3 }]);
+  assert.deepEqual(e.tape().log[0].ops, [['command', 'claim', { ids: [2], from: 'p' }], ['command', 'free', { y: 1, at: 3 }]]);
+  e.system('inner', en => { if (en.time.step === 1) assert.throws(() => en.command('claim', { ids: 'no' }), /does not match its schema/); }); e.stepN(1);
+});
+test('2f: engine.net hands a step\'s sends to its onStep listeners, then empties (no port, no growth)', () => {
+  const g = defineGame({ id: 'out', start: 's', scenes: { s: { step(e, dt, c) { if (c.state.send !== false) e.net.send('g1', { t: 'help', id: 1 }, true); } } } });
+  const e = createEngine(g), seen = [];
+  const off = e.onStep(en => en.net.drain(x => seen.push(x))); e.stepN(1); off();
+  assert.deepEqual(seen, [{ to: 'g1', data: { t: 'help', id: 1 }, reliable: true }]);
+  e.stepN(2); assert.equal(e.net.pending, 0, 'nobody drained: discarded after each step');
+  e.scene.state.send = false; e.net.leave(); assert.equal(e.net.pending, 1, 'a send between steps waits for the next step');
+  e.onStep(en => en.net.drain(x => seen.push(x))); e.stepN(1); assert.deepEqual(seen.at(-1), { leave: true });
+});
+test('2f: engine.net sends in order, defaults to unreliable, refuses non-messages, and a throwing drain keeps the rest', () => {
+  const g = defineGame({ id: 'out2', start: 's', scenes: { s: {} } }), e = createEngine(g), buf = new ArrayBuffer(8);
+  e.net.send('a', { t: 'x' }); e.net.send(null, buf, true);
+  assert.throws(() => e.net.send('a', { id: 1 }), /net.send data must be/); assert.throws(() => e.net.send('a', null), /net.send data must be/);
+  let n = 0; assert.throws(() => e.net.drain(() => { if (n++) throw new Error('boom'); }), /boom/); assert.equal(e.net.pending, 0, 'both handed out');
+  e.net.send('a', { t: 'x' }); e.net.send('b', { t: 'y' }); n = 0;
+  assert.throws(() => e.net.drain(() => { n++; throw new Error('boom'); }), /boom/); assert.equal(n, 1); assert.equal(e.net.pending, 1);
+  const seen = []; e.net.drain(x => seen.push(x)); assert.deepEqual(seen, [{ to: 'b', data: { t: 'y' }, reliable: false }]);
+  e.net.send(null, buf, true); const got = []; e.net.drain(x => got.push(x)); assert.equal(got[0].data, buf); assert.equal(got[0].reliable, true);
+});

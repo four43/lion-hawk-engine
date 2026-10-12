@@ -15,3 +15,4 @@ export { FRAME, MAX_FRAME, REPEAT, createRegistry, encodeRecord, encodeFrame, de
 export { DELAY, lerp, lerpAngle, lerpPose, createInterp } from './sim/interp.js';
 export { FORECAST, newPose, extrapolate, createForecast } from './sim/forecast.js';
 export { createRate, createWarnOnce } from './sim/limits.js';
+export { checkSchema, wireCodec } from './sim/schema.js';

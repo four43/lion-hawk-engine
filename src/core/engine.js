@@ -7,6 +7,12 @@ import { createSchedule, STEP_STAGES } from './schedule.js';
 import { createLoop } from './loop.js';
 import { actions as defineActions, createInput } from './actions.js';
 import { createUi } from './ui.js';
+import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
+import { createRegistry } from '../sim/replica.js';
+
+// [I-7] reserved keys a port sets on any command's data (#77); a schema may not declare them
+const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
+const RESERVED_TYPE = { from: 'a string', at: 'a finite number', reliable: 'a boolean' };
 
 const HOOKS = ['enter', 'exit', 'step', 'ui'];
 export function defineGame(spec) {
@@ -15,11 +21,42 @@ export function defineGame(spec) {
   if (!spec.scenes || !Object.keys(spec.scenes).length) fail('scenes must not be empty');
   if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
-  for (const [k, f] of Object.entries(spec.commands ?? {})) if (typeof f !== 'function') fail(`commands.${k} must be a function`);
+  // [I-7] a command is a handler, or { schema, handler } (N-3: checked at issue); game.commands keeps the handlers, game.schemas the schemas
+  const commands = {}, schemas = {};
+  for (const [k, c] of Object.entries(spec.commands ?? {})) {
+    if (typeof c === 'function') { commands[k] = c; continue; }
+    if (c === null || typeof c !== 'object' || typeof c.handler !== 'function') fail(`commands.${k} must be a function or { schema, handler }`);
+    try { checkFields(c.schema, `commands.${k}.schema`); } catch (err) { fail(err.message); }
+    for (const r in RESERVED) if (Object.hasOwn(c.schema, r)) fail(`commands.${k}.schema may not declare reserved key '${r}'`);
+    commands[k] = c.handler; schemas[k] = c.schema;
+  }
   for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
-  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands: spec.commands ?? {} });
+  const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail);
+  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands, schemas, net });
+}
+// the game net config (N-3): every limit a port applies, and every wire tag naming a schema'd command (built once to check it)
+function netConfig(n, schemas, fail) {
+  if (n === null || typeof n !== 'object') fail('net must be an object');
+  const c = { maxJson: 2048, maxFrame: 16384, codec: 'json', ...n };
+  const pos = (v, p, int) => { if (typeof v !== 'number' || !(v > 0) || !Number.isFinite(v) || (int && !Number.isInteger(v))) fail(`${p} must be a positive ${int ? 'integer' : 'number'}`); };
+  if (!Array.isArray(c.kinds)) fail('net.kinds must be an array of kinds');
+  if (!Number.isInteger(c.maxSender) || c.maxSender < 1 || c.maxSender > 255) fail('net.maxSender must be an integer in 1..255');
+  try { createRegistry(c.kinds, { maxSender: c.maxSender }); } catch (err) { fail(`net.kinds: ${err.message}`); }
+  pos(c.maxJson, 'net.maxJson', true); pos(c.maxFrame, 'net.maxFrame', true);
+  if (c.codec !== 'json' && c.codec !== 'binary') fail("net.codec must be 'json' or 'binary'");
+  for (const [role, keys] of [['host', ['reliable', 'fast', 'reliableFrames']], ['guest', ['reliable', 'fast']]]) {
+    const r = c.rates?.[role]; if (r === null || typeof r !== 'object') fail(`net.rates.${role} must be an object`);
+    for (const k of keys) if (k !== 'reliableFrames' || r[k] !== undefined) pos(r[k], `net.rates.${role}.${k}`);
+  }
+  for (const dir of ['toHost', 'toGuest']) {
+    const w = c.wire?.[dir]; if (w === null || typeof w !== 'object') fail(`net.wire.${dir} must be an object`);
+    const table = {};
+    for (const [tag, type] of Object.entries(w)) { if (!Object.hasOwn(schemas, type)) fail(`net.wire.${dir}.${tag}: '${type}' is not a command with a schema`); table[tag] = schemas[type]; }
+    try { wireCodec(table, { codec: c.codec }); } catch (err) { fail(`net.wire.${dir}: ${err.message}`); }
+  }
+  return Object.freeze(c);
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0 } = {}) {
@@ -27,6 +64,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
+  const schemas = game.schemas ?? {}; // N-3: declared command schemas (defineGame)
   let wallBase = wall0, wallBaseStep = 0, step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
   const streams = new Map(), time = { step: 0, sim: 0, frames: 0, wall: wall0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
   let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
@@ -98,6 +136,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     // #5: scene-scoped command handlers live on the stack entry, so they leave with the scene (exit or a rolled-back enter)
     ctx.command = (type, fn) => {
       if (typeof fn !== 'function') throw new Error(`engine: command '${type}' handler must be a function`);
+      if (Object.hasOwn(schemas, type)) throw new Error(`engine: '${type}' has a schema: handle it in defineGame({ commands }) (#49)`);
       let list = cmds.get(type); if (!list) cmds.set(type, list = []); list.push(fn);
       return () => { // while delivering, the slot is blanked (compacted after the batch) so the next handler is not skipped
         const i = list.indexOf(fn); if (i === -1) return;
@@ -199,6 +238,31 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     }
   };
   const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };
+  // #72 then N-3: plain JSON first (today's message), then the schema (its checked copy: unknown keys dropped), then the
+  // reserved keys (#77), type-checked and copied through. One copy per command, never per step.
+  const checked = (type, data) => {
+    const d = json(data, 'command data'), schema = Object.hasOwn(schemas, type) ? schemas[type] : undefined;
+    const out = schema ? checkSchema(schema, d) : d;
+    if (schema && !out) throw new Error(`engine: command '${type}' does not match its schema`);
+    if (d === null || typeof d !== 'object' || Array.isArray(d)) return d;
+    for (const k in RESERVED) if (Object.hasOwn(d, k)) {
+      if (!RESERVED[k](d[k])) throw new Error(`engine: command '${type}' reserved key '${k}' must be ${RESERVED_TYPE[k]}`);
+      out[k] = d[k];
+    }
+    return out;
+  };
+  // engine.net (N-3): the sim-side outbox. A port drains it in an onStep listener; whatever is left after the listeners is
+  // discarded, so with no port (headless, replays) it never grows. A send between steps goes out after the next step.
+  const outbox = [];
+  const net = {
+    send(to, data, reliable = false) {
+      if (!(data instanceof ArrayBuffer) && (data === null || typeof data !== 'object' || typeof data.t !== 'string')) throw new Error('engine: net.send data must be { t, ... } or an ArrayBuffer');
+      outbox.push({ to, data, reliable: reliable === true }); // one item per message
+    },
+    leave() { outbox.push({ leave: true }); },
+    drain(fn) { let k = 0; try { while (k < outbox.length) fn(outbox[k++]); } finally { if (k === outbox.length) outbox.length = 0; else outbox.splice(0, k); } }, // in order; a throwing fn keeps the rest
+    get pending() { return outbox.length; },
+  };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: rendered, step(dt, stamp) {
     inStep = stepping = true; let failure = null;
@@ -218,6 +282,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     try { schedule.run('events.flush', engine, dt); } catch (err) { failure ??= err; }
     stepping = false; step++; syncTime();
     try { const l = stepFns; for (let i = 0; i < l.length; i++) l[i](engine); } catch (err) { failure ??= err; } // N-4: after the flush and the counter
+    outbox.length = 0; // N-3: undrained sends are discarded (no port, no growth)
     if (failure) throw failure;
   } });
   // would `name` still be open once everything queued so far has applied? (replays the pending requests over the stack)
@@ -249,7 +314,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     cmds.push({ type, data }); return engine;
   };
   const engine = {
-    game, seed: base.seed, events, input, loop, commands, loading,
+    game, seed: base.seed, events, input, loop, commands, loading, net,
     get acks() { return acks; }, get blocked() { return blocks.size; },
     presented() { if (acks !== 'frames') throw new Error("engine: presented() needs acks: 'frames'"); present(); },
     onPresent(fn) {
@@ -277,7 +342,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     jump: (name, preset, opts, a) => rec
       ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))
       : reqJump(name, preset, opts, a),
-    command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, json(data, 'command data')),
+    command: (type, data = {}) => rec ? recorded(o => o.push('command', type, checked(type, data)), o => issue(type, o ? copy(o[2]) : checked(type, data))) : issue(type, checked(type, data)),
     // #36: `pending` projects over queued requests (what the duplicate check sees); an unknown scene throws
     isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: (s, now) => loop.frame(s, now),

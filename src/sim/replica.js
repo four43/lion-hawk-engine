@@ -13,7 +13,8 @@ const TAU = Math.PI * 2, HEAD = 7, BAD = new Error('bad frame');
 export const createRegistry = (kinds, { maxSender = 255 } = {}) => { for (const [i, k] of kinds.entries()) if (kinds.some((o, j) => j < i && (o.name === k.name || o.code === k.code))) throw new Error('duplicate kind ' + k.name); return { list: kinds, byName: new Map(kinds.map(k => [k.name, k])), byCode: new Map(kinds.map(k => [k.code, k])), maxSender }; };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : 0));
-function put(c, f, val) {
+// put/get pack one field at cursor c = { v: DataView, o: offset }; shared with the binary command codec (schema.js, #91)
+export function put(c, f, val) {
   const v = c.v;
   switch (f.t) {
     case 'uint': if (!Number.isInteger(val) || val < f.min || val > f.max) throw new Error('bad uint ' + val); if (f.bytes === 1) v.setUint8(c.o, val); else if (f.bytes === 2) v.setUint16(c.o, val, true); else v.setUint32(c.o, val, true); c.o += f.bytes; return;
@@ -34,7 +35,7 @@ function put(c, f, val) {
     case 'list': if (!Array.isArray(val) || val.length > f.max || val.length < f.min) throw new Error('bad list'); v.setUint8(c.o++, val.length); for (const x of val) put(c, f.of, x); return;
   }
 }
-function get(c, f) {
+export function get(c, f) {
   const v = c.v;
   switch (f.t) {
     case 'uint': { const x = f.bytes === 1 ? v.getUint8(c.o) : f.bytes === 2 ? v.getUint16(c.o, true) : v.getUint32(c.o, true); c.o += f.bytes; if (x > f.max || x < f.min) throw BAD; return x; }
