@@ -3,7 +3,7 @@
 const boolsOf = fields => Object.keys(fields).filter(k => fields[k].t === 'bool');
 export const F = {
   bool: () => ({ t: 'bool' }), // the bools of one obj share a flags byte (at most 8)
-  uint: (bytes, max = 2 ** (8 * bytes) - 1, min = 0) => { if (![1, 2, 4].includes(bytes)) throw new Error('bad uint width ' + bytes); return { t: 'uint', bytes, max, min }; }, // min: encode throws below it, decode drops (N-8)
+  uint: (bytes, max = 2 ** (8 * bytes) - 1, min = 0) => { if (![1, 2, 4].includes(bytes)) throw new Error('bad uint width ' + bytes); if (!Number.isInteger(min) || !Number.isInteger(max) || min > max) throw new Error(`bad uint range ${min}..${max}`); return { t: 'uint', bytes, max, min }; }, // min: encode throws below it, decode drops (N-8)
   id: () => ({ t: 'id' }), // u16; null travels as 0xffff
   oneOf: list => ({ t: 'enum', list }), // u8 index
   fixed: (lo, hi, step) => ({ t: 'fixed', lo, hi, step, n: Math.round((hi - lo) / step) }), // u16 steps from lo; values are clamped into lo..hi

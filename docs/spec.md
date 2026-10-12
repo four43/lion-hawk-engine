@@ -191,7 +191,7 @@ Every block is optional.
   - `hub`: an in-memory hub for many peers in one Node process, with latency, jitter, loss and a `drop(from, to, data, reliable)` hook;
   - `bridge`: browser pages connected through a Node test process's hub (§7.5).
 - **[N-3]** Rate limits, size limits and message validation are part of the transport layer. They are applied to every message, and games cannot skip them.
-- **[N-4]** All net timing reads an injected clock. The default is wall time; tests use sim time.
+- **[N-4]** All net timing reads an injected clock. The default is wall time; tests use sim time. `engine.time.wall` stamps each step (real from the driver's frame time, virtual `wall0 + n * 1000 / hz` otherwise); a tape recorded with real stamps replays with a virtual wall from `wall0`, so wall-dependent sim state must not feed into results a tape checks.
 
 ### 4.2 Sessions and versions
 

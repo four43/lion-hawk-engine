@@ -27,7 +27,7 @@ test('countdown emits on whole seconds; events carry their step; time advances',
   const e = createEngine(game, { scene: 'race' });
   e.advance(3);
   assert.deepEqual(e.events.since(0).map(x => `${x.type}${x.n ?? ''}@${x.step}`), ['count2@59', 'count1@119', 'count0@179', 'go@179']);
-  assert.ok(Math.abs(e.time.wall - 3000) < 1e-6); assert.deepEqual({ ...e.time, wall: 0 }, { step: 180, sim: 3, frames: 180, wall: 0 });
+  assert.deepEqual(e.time, { step: 180, sim: 3, frames: 180, wall: 3000 });
 });
 test('a pausing overlay freezes the main scene; string actions press for one step', () => {
   const e = createEngine(game, { scene: 'race' });
@@ -74,7 +74,7 @@ test('scene and time are persistent live views', () => {
   assert.equal(e.scene, sc); assert.equal(e.time, tm);
   e.go('race'); assert.equal(sc.name, 'race'); assert.equal(sc.state, e.scene.state);
   e.overlay('pause'); assert.deepEqual(sc.overlays, ['pause']);
-  e.stepN(60); assert.ok(Math.abs(tm.wall - 1000) < 1e-6); assert.deepEqual({ ...tm, wall: 0 }, { step: 60, sim: 1, frames: 60, wall: 0 });
+  e.stepN(60); assert.deepEqual(tm, { step: 60, sim: 1, frames: 60, wall: 1000 });
   e.close('pause'); assert.deepEqual(sc.overlays, []);
 });
 

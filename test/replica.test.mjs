@@ -126,3 +126,13 @@ test('2f: the engine codec encodes the same bytes as Tractor Pickup\'s replica.j
   const buf = T.encodeFrame({ key: true, sender: 1, time: 9, groups: [{ kind: tA, records: animals }] });
   assert.deepEqual(E.decodeFrame(buf, E.createRegistry([eA, eT], { maxSender: 4 })), T.decodeFrame(buf, T.createRegistry([tA, tT], { maxSender: 4 })), 'decode agrees');
 });
+test('F.uint rejects a bad range', () => {
+  assert.throws(() => F.uint(1, 5, 6), /bad uint range/); assert.throws(() => F.uint(1, 5.5), /bad uint range/); assert.throws(() => F.uint(1, 5, 0.5), /bad uint range/);
+});
+test('F.actions: a second flags byte for more than 8 buttons; decode rejects stray high bits', () => {
+  const names = Array.from({ length: 10 }, (_, i) => 'b' + i), K = kind({ name: 'pad', code: 3, authority: 'owner', max: 1, idMin: 1, idMax: 2, fields: { pad: F.actions(actions(Object.fromEntries(names.map(n => [n, button()])))) } });
+  const reg = createRegistry([K]), pad = Object.fromEntries(names.map((n, i) => [n, i === 9 || i === 0]));
+  const buf = encodeFrame({ key: false, sender: 1, time: 1, groups: [{ kind: K, records: [[1, { pad }]] }] }), b = new Uint8Array(buf);
+  assert.deepEqual([b[12], b[13]], [1, 2]); assert.deepEqual(decodeFrame(buf, reg).groups.get('pad').records.get(1).pad, pad);
+  const bad = b.slice(); bad[13] = 0x06; assert.equal(decodeFrame(bad.buffer, reg), null, 'bit 2 of the second byte has no button');
+});

@@ -24,3 +24,17 @@ test('the forecast holds 250 ms past the newest record when records stop (M-65)'
   const fc = createForecast(1); fc.push(0, [body(0, 0, { v: { x: 6, y: 0, z: 0 } })]);
   fc.sample(100, 100); near(fc.poses[0].p.x, 0.6, 1e-9, 'moving on'); fc.sample(5000, 5000); near(fc.poses[0].p.x, 6 * FORECAST.horizon / 1000, 1e-9, 'then holds');
 });
+test('a train driven at 6 m/s draws smoothly from jittery 20 Hz records, with no stall and little lag (M-65)', () => {
+  const fc = createForecast(1), at = t => 6 * t / 1000; let prev = null, worst = 0, lag = 0, i = 0, next = 0;
+  for (let now = 0; now < 4000; now += 1000 / 60) {
+    while (next <= now - 5) { fc.push(next, [body(at(next), 0, { v: { x: 6, y: 0, z: 0 } })]); next += 50 + (i++ % 3) * 7; } // arrives 5 ms after its stamp
+    fc.sample(now - 5, now); const x = fc.poses[0].p.x;
+    if (prev !== null && now > 500) { worst = Math.max(worst, Math.abs(x - prev - 6 / 60)); assert.ok(x > prev, 'never stands still'); lag = Math.max(lag, Math.abs(x - at(now))); }
+    prev = x;
+  }
+  assert.ok(worst < 0.03, `worst step error ${worst}`); assert.ok(lag < 0.25, `lag ${lag}`);
+});
+test('restart() shows the next forecast as it is, with no fade from the old place (M-65)', () => {
+  const fc = createForecast(1); fc.push(0, [body(0, 0)]); fc.sample(0, 0);
+  fc.restart(); fc.push(10, [body(2, 0)]); fc.sample(10, 10); near(fc.poses[0].p.x, 2, 1e-9, 'jumps');
+});

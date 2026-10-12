@@ -27,7 +27,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
-  let step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
+  let wallBase = wall0, wallBaseStep = 0, step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
   const streams = new Map(), time = { step: 0, sim: 0, frames: 0, wall: wall0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
   let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
   // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
@@ -202,7 +202,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: rendered, step(dt, stamp) {
     inStep = stepping = true; let failure = null;
-    time.wall = stamp === undefined ? time.wall + 1000 / game.sim.hz : stamp; // N-4, M-69: the injected clock; virtual when stepped by hand
+    // N-4, M-69: the injected clock. A real stamp re-anchors it; a step without one is virtual, exactly base + n * 1000 / hz (no float drift).
+    // A tape recorded with real stamps replays with a virtual wall from wall0, so wall-dependent state must not feed into results a tape checks.
+    if (stamp === undefined) time.wall = wallBase + (step + 1 - wallBaseStep) * 1000 / game.sim.hz; else { time.wall = stamp; wallBase = stamp; wallBaseStep = step + 1; }
     try {
       if (acks === 'steps') present(); // [S-6] every step is a presented frame
       schedule.run('input.apply', engine, dt);
