@@ -87,10 +87,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 72 | Command data passed by reference when not recording | Pig Pens | done (2f T-E1) |
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | planned (2f T-E10) |
 | 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
-| 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
+| 75 | Network messages are handled on arrival, between frames | Tractor Pickup | engine half done (2f T-E6: the port queues arrivals as commands for the next step); Tractor adoption planned (T6, T7) |
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
-| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | engine half done (2f T-E5: reserved `from`/`at`/`reliable` keys); Tractor adoption planned (T6) |
-| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4 done; T-E6, T8 open) |
+| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | engine half done (2f T-E5: reserved `from`/`at`/`reliable` keys); Tractor adoption planned (T6; the port fills `from`, 2f T-E6) |
+| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4, T-E6 done: frames arrive as plain-JSON `net.frame` commands; T8 open) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
 | 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
 | 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | planned (2f T3, T-E8) |
@@ -105,6 +105,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | planned (2f T3: pipeline in `step`) |
 | 91 | Schema-derived binary commands would change the wire | Tractor Pickup | built, not adopted (2f T-E5: `wireCodec` json + binary; fixed/angle quantise like the replica; NET_VERSION stays 3) |
 | 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
+| 93 | A late peer's virtual wall is an ulp off the hub's | engine | open (tolerance in tests; `wallStep0` engine option if exactness is ever needed) |
+| 94 | The hub drops at send, so in-flight messages still land after a blackout starts | engine, Tractor Pickup | kept (Tractor's M-53 behaviour; documented by the mp drop test) |
 
 ## Entries
 
@@ -595,3 +597,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - The virtual wall is computed, not summed: `wallBase + (step - wallBaseStep) * 1000 / hz`, re-anchored on every real stamp. The strict tests were restored.
   - Tapes carry only `wall0`, so a browser-recorded tape replays with a virtual wall. Wall-dependent state must not feed tape-checked sim results.
 - **Status:** fixed (fix round 1).
+
+### 93. A late peer's virtual wall is an ulp off the hub's: engine (phase 2f T-E7)
+- **What happened:** `mp()` sets the hub to `k * 1000 / hz`. A peer that joins at step `j` reads `wall0 + m * 1000 / hz` with `wall0 = j * 1000 / hz`, which differs from `(j + m) * 1000 / hz` by one ulp in about a quarter of cases at 60 Hz.
+- **Decision:** tests compare a late peer's wall with a tolerance. The exact fix, if one is ever needed, is a `createEngine({ wallStep0 })` option: wall0 becomes 0 and the base step becomes `-wallStep0`, so the virtual wall is `(j + n) * 1000 / hz`. Tapes would carry it.
+- **Status:** open.
+
+### 94. The hub drops at send, so in-flight messages still land after a blackout starts: engine, Tractor Pickup (phase 2f T-E7)
+- **What happened:** the plan's mp test expected nothing to arrive once `hub.drop` returned true, but with a 200 ms delay the messages already sent still land. The hub decides a drop at send time, as Tractor's `link.js` did.
+- **Decision:** keep drop-at-send. Moving it to delivery would change Tractor's blackout tests. The test now asserts that in-flight messages land, then that nothing new arrives.
+- **Status:** kept.
