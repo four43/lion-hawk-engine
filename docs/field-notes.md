@@ -114,7 +114,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 99 | Playwright bindings resolve asynchronously, so a two-page bridge needs sequence numbers | engine | done (2g G-E1: per-call seq, `room.step` waits for each page's calls; early events queued by an init-script stub; reload unsupported) |
 | 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | open (the command waits for the next step; option: `untilLoaded` also waits while `engine.commands.pending` > 0) |
 | 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.lh-stick` translate −50%) |
-| 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | open (2g G1 kept the move; fix in G5 or phase 4) |
+| 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | open (2g G1 kept the move; G5 must fix: `drawAt` also advances the forecast state the sim's `before` reads, so the host sim depends on frame timing) |
 
 ## Entries
 
@@ -643,7 +643,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 100. `untilLoaded` right after `game.command` returns at once: engine, Tractor Pickup (phase 2g G1)
 - **What happened:** `game.command('farm.new')` only queues the command until the next step ([I-7]). `untilLoaded` checks `engine.loading.active` before stepping, finds no load, and returns 0.
-- **Decision:** Tractor's test steps once between the two calls. Engine option: `untilLoaded` (and `untilEvent`) also wait while `engine.commands.pending` > 0.
+- **Decision:** Tractor's test steps once between the two calls. Engine option: headless and Playwright `untilLoaded` keep stepping while `engine.commands.pending` > 0 (`untilEvent` already steps). Drop Tractor's extra `step(1)` when it lands.
 - **Status:** open.
 
 ### 101. `bindStick` places an adopted floating base by its centre: Tractor Pickup (phase 2g G1)
@@ -653,5 +653,5 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 102. The view writes sim animals for other players' carried riders: Tractor Pickup (phase 2g G1)
 - **What happened:** `players.drawAt(now, herd)` places other players' carried animals in `game.herd` every frame (M-65). It moved unchanged into the farm view's `frame`, which breaks "view halves never write the sim". A tape recorded in a room could depend on frame timing.
-- **Decision:** kept in G1, which moved code without rewriting it. Fix in G5: a pose-override map like the show's copies (#79), or place the riders in the sync's `before`.
+- **Decision:** kept in G1, which moved code without rewriting it (no room is bound in G1, so it never runs). The G1 review found it is wider: `players.sample(now)` also advances the forecast state (`last`, the error fade, the `next` record) that the sim's `before` reads. G5 must give the view a read-only `players.poseAt(now, out)` and draw carried riders from a view pose-override map (as #79).
 - **Status:** open.
