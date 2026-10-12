@@ -81,10 +81,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
 | 68 | Goldens compare to 6 digits | Pig Pens | planned (2f T-E2) |
-| 69 | Control when/get receive the engine, not ctx | Pig Pens | planned (2f T-E1) |
+| 69 | Control when/get receive the engine, not ctx | Pig Pens | done (2f T-E1) |
 | 70 | Headless has no h.debug | Pig Pens | planned (2f T-E2) |
 | 71 | Events emitted outside a step appear after the next step | Pig Pens | planned (2f T-E2) |
-| 72 | Command data passed by reference when not recording | Pig Pens | planned (2f T-E1) |
+| 72 | Command data passed by reference when not recording | Pig Pens | done (2f T-E1) |
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | planned (2f T-E10) |
 | 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
 | 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
@@ -477,7 +477,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 69. Control `when`/`get` receive the engine, not the scene context: Pig Pens (phase 2e P2 review)
 - **What happened:** farm controls read `e.scene.state`, which is always the main scene's state. That breaks for overlay controls and after re-entry.
 - **Workaround:** close over `ctx.state` from `ui(u, e, ctx)`.
-- **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: planned (2f T-E1: the control's own scene ctx, and game-wide command handlers get the main scene's ctx).
+- **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: done (2f T-E1: the control's own scene ctx, and game-wide command handlers get the main scene's ctx).
 
 ### 70. Headless has no `h.debug`: Pig Pens (phase 2e P3)
 - **What happened:** tests call `h.engine.game.debug(h.engine)` by hand.
@@ -490,7 +490,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 72. Command data is passed by reference when not recording: Pig Pens (phase 2e P3 review)
 - **What happened:** the farm scene stores `d.ray` and `d.aim` from a command in the held grab state. If the view reuses ray arrays to avoid allocation, that state changes underneath it. Recording copies the data, so tests don't see this.
 - **Rule for games:** the view sends fresh arrays per command, or the handler copies the arrays it keeps.
-- **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: planned (2f T-E1: command data is always checked as plain JSON and delivered as a copy, recording or not; a behaviour change for callers that passed non-JSON data).
+- **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: done (2f T-E1: command data is always checked as plain JSON and delivered as a copy, recording or not; a behaviour change for callers that passed non-JSON data).
 
 ### 73. `view.project` returns no depth or on-screen flag: Pig Pens (phase 2e P6–P7)
 - **What happened:** the HUD has to project with the camera itself to hide labels behind the camera. Playwright's `game.point` can't reject points that are off-screen or behind the camera.

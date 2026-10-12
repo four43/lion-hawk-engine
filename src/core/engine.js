@@ -40,7 +40,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
-  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds });
+  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds, ctxOf: name => stack.find(o => o.ctx.name === name)?.ctx });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
   // engine.presented() (the browser driver acks a rendered frame at the start of the next tick). Listeners are
   // copy-on-write, so presenting allocates nothing. Listener timing: with 'steps' they run at the start of a step, so
@@ -134,12 +134,12 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // #5: commands, the third input layer. Queued in FIFO order, delivered by lh.commands at the next step's input.apply:
   // the game's handler first (never paused), then each open scene bottom-up that handles the type and is not covered by a
   // pausing overlay. Only the commands queued before delivery starts are delivered (a handler's command waits a step).
-  // Not recording, handlers get the caller's object as-is: don't mutate data after issuing it.
+  // #72: data is checked as plain JSON at issue and delivered as that copy (one allocation per command, never per step).
   const cmds = [], holes = []; let dropped = 0, delivering = false;
   const handles = type => Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.some(f => f) === true);
   const deliver = c => {
     let ran = false; const gf = Object.hasOwn(game.commands, c.type) ? game.commands[c.type] : undefined;
-    if (gf) { ran = true; gf(engine, c.data); }
+    if (gf) { ran = true; gf(engine, c.data, stack[0]?.ctx); }
     const p = pausedFrom();
     for (let i = 0; i < stack.length; i++) {
       if (p > 0 && i < p) continue;
@@ -270,7 +270,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     jump: (name, preset, opts, a) => rec
       ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))
       : reqJump(name, preset, opts, a),
-    command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, data),
+    command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, json(data, 'command data')),
     // #36: `pending` projects over queued requests (what the duplicate check sees); an unknown scene throws
     isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),

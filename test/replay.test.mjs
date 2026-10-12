@@ -46,8 +46,8 @@ test('2d fix: recorded payloads must be plain JSON; checked at issue', () => {
   assert.throws(() => h.go('title', { n: Infinity }), /must be plain JSON/);
   assert.throws(() => h.jump('race', 'running', { x: NaN }), /must be plain JSON/);
   assert.equal(h.engine.commands.pending, 0);
-  const plain = headless(game, { scene: 'race' }), obj = { dx: 1 }; // not recording: the caller's object, as-is
-  plain.command('nudge', obj); obj.dx = 2; plain.step(1); assert.equal(plain.state().x, 2);
+  const plain = headless(game, { scene: 'race' }), obj = { dx: 1 }; // 2f #72: not recording is a copy too
+  plain.command('nudge', obj); obj.dx = 2; plain.step(1); assert.equal(plain.state().x, 1);
 });
 test('2d fix: replay rejects a tape recorded at another hz', () => {
   const h = headless(game, { record: true }); h.step(1);

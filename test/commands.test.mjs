@@ -62,3 +62,23 @@ test('2d fix: handlers added during delivery wait for the next command; a remova
   assert.deepEqual(seen, ['a', 'b', 'b', 'c']);
   e.command('x'); e.stepN(1); assert.deepEqual(seen.slice(4), ['b', 'c']);
 });
+
+test('2f: game-wide handlers get the main scene ctx and can start its load; a second request while loading waits (#69, S-6)', () => {
+  const freed = [];
+  const g = defineGame({ id: 'rebuild', start: 'farm',
+    commands: { 'farm.new': (e, d, ctx) => { if (e.loading.active) { ctx.state.next = d.seed; return; }
+      ctx.load({ build: (en, c) => { freed.push(c.state.world.id); c.state.world = { id: d.seed }; }, frames: 1 }); } },
+    scenes: { farm: { enter(e, ctx) { ctx.state.world = { id: 0 }; }, exit(e, ctx) { freed.push(ctx.state.world.id); } } } });
+  const h = headless(g);
+  h.command('farm.new', { seed: 7 }).command('farm.new', { seed: 8 }).step(1);
+  assert.equal(h.engine.loading.active, true); assert.equal(h.scene.state.next, 8);
+  h.untilLoaded(); assert.equal(h.scene.state.world.id, 7); assert.deepEqual(freed, [0]); // the old world went in the build, once
+});
+test('2f: command data is always checked as plain JSON and delivered as a copy, recording or not (#72)', () => {
+  const got = [], g = defineGame({ id: 'copy', start: 's', scenes: { s: {} }, commands: { keep: (e, d) => got.push(d) } });
+  const e = createEngine(g), ray = [1, 2, 3];
+  e.command('keep', { ray }); ray[0] = 99; e.stepN(1);
+  assert.deepEqual(got[0], { ray: [1, 2, 3] });
+  assert.throws(() => e.command('keep', { f: () => 1 }), /engine: command data must be plain JSON/);
+  assert.throws(() => e.command('keep', { n: NaN }), /plain JSON/);
+});

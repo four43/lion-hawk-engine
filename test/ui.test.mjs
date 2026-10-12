@@ -97,3 +97,20 @@ test('2d: an action that releases another hold does not skip or double-advance i
   assert.deepEqual(e.scene.state.log, ['b']); assert.equal(t('s.a').pressed, false);
   assert.ok(Math.abs(t('s.c').progress - 15 / 120) < 1e-9); // advanced once per step, never twice
 });
+
+test('2f: when/get/set and function actions get (engine, ctx) of their own scene, also on an overlay (#69)', async () => {
+  const { defineGame } = await import('../src/index.sim.js'), { headless } = await import('../testing/index.js');
+  const seen = [];
+  const g = defineGame({ id: 'ctxui', start: 'main', scenes: {
+    main: { ui(u) { u.toggle({ id: 't', label: 'T', get: (e, c) => !!c.state.on, set: (v, e, c) => { c.state.on = v; } }); } },
+    menu: { enter(e, c) { c.state.k = 'menu'; }, ui(u) {
+      u.button({ id: 'b', label: 'B', when: (e, c) => c.state.k === 'menu', action: (e, c) => seen.push(['action', c.name, e.scene.name]) });
+      u.hold({ id: 'h', label: 'H', seconds: 1 / 60, action: (e, c) => seen.push(['hold', c.name]) });
+    } } } });
+  const h = headless(g); h.overlay('menu');
+  h.tap('main.t'); assert.equal(h.scene.state.on, true);
+  assert.equal(h.engine.ui.tree().find(c => c.id === 'main.t').pressed, true);
+  h.tap('menu.b'); h.press('menu.h'); h.step(1);
+  assert.deepEqual(seen, [['action', 'menu', 'main'], ['hold', 'menu']]);
+  assert.equal(h.enabled('menu.b'), true);
+});
