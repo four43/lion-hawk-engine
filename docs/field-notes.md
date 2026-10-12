@@ -219,7 +219,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 32. CDP `touchEnd` semantics disagree: Rally, engine
 - **What happened:** Rally's mobile test lifts one of two touches with `touchEnd` listing the point that lifts ("CDP: touchEnd lists the points that lift"); the engine's `game.touch.end` sends `touchEnd` listing the points that stay down. Both have passed their own checks.
-- **Status:** open. Verify in 2c-rally R7 with Rally's "gas released, steering still held" check; fix whichever is wrong.
+- **Status:** done. Rally was right: Chromium's `touchEnd` lists the points that LIFT. The engine helper was wrong (fixed, see #43).
 
 ### 33. Every debug jump rebuilds the world: Rally
 - **What happened:** `engine.jump('stage', preset)` re-enters the stage, so each jump generates the track and builds the Rapier world again (about 0.2 s). `rally.debug.screen` reused the live world.
@@ -272,4 +272,4 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 43. Playwright `touch.end(id)` lifted the wrong finger: engine test helper (phase 2c R5; confirms #32)
 - **What happened:** `game.touch.end(2)` lifted the steering touch instead of the gas touch.
-- **Engine change:** CDP `touchEnd` must keep the remaining fingers in `touchPoints`. Status: planned (2c R7).
+- **Engine change:** CDP `touchEnd` lists the fingers that lift, not the ones that stay down; `touch.end` now sends exactly the lifted points (test/touch-e2e.test.mjs). A zero-velocity move before the lift did not avoid the fling, so the 150 ms wait stays. Status: done.

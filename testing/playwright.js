@@ -127,9 +127,13 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       async end(...ids) {
         const lifting = ids.filter(id => active.has(id)).map(id => active.get(id));
         for (const id of ids) active.delete(id);
-        // A lift straight after a fast move makes Chromium start a fling, which swallows the next tap's click: dwell like a finger does.
-        if (lifting.length) { await new Promise(r => setTimeout(r, 150)); await send('touchEnd', [...active.values()]); } // CDP: touchEnd lists the points that stay down
-                await ev(() => window.engine.render(0));
+        if (lifting.length) {
+          // A lift straight after a fast move makes Chromium start a fling, which swallows the next tap's click.
+          // A zero-velocity touchMove first does not avoid it, so dwell like a finger does.
+          await new Promise(r => setTimeout(r, 150));
+          await send('touchEnd', lifting); // CDP: touchEnd lists the points that LIFT; the rest stay down
+        }
+        await ev(() => window.engine.render(0));
       },
     },
     errors: async () => [...errors, ...(await ev(() => window.engine.errors.map(e => ({ ...e }))))],
