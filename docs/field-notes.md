@@ -87,20 +87,20 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 72 | Command data passed by reference when not recording | Pig Pens | done (2f T-E1) |
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | done (2f T-E10: `{ x, y, z, onScreen }`; `game.point` refuses off-screen) |
 | 74 | openGame has no init-script hook | Pig Pens | done (2f T-E10: `openGame({ initScript })` on the context) |
-| 75 | Network messages are handled on arrival, between frames | Tractor Pickup | engine half done (2f T-E6: the port queues arrivals as commands for the next step); Tractor adoption planned (T6, T7) |
+| 75 | Network messages are handled on arrival, between frames | Tractor Pickup | done (2f T-E6 port; T6–T7: handled at the next step; sweep 98/99 on `TP_MP=engine`, the frozen-frame rate test the one by-design exception; relay rate drops 1178 → 1137 from the window phase only) |
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
-| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | engine half done (2f T-E5: reserved `from`/`at`/`reliable` keys); Tractor adoption planned (T6; the port fills `from`, 2f T-E6) |
-| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4, T-E6 done: frames arrive as plain-JSON `net.frame` commands; T8 open) |
+| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | done (2f T-E5/T-E6 reserved keys, the port fills `from`; T6: the host drops a frame whose sender is not the peer's player) |
+| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4, T-E6, T6 done: a guest's tape logs `net.open`/`net.peer`/`guest.welcome`/`net.frame` as plain JSON; T8 replay open) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | sim half done (2f T4: `show` event, `show.done { spots, gen }` places riders before `finishShow`); view pacing 2g G3 |
-| 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | host half done (2f T5: `then` calls `sync.setGame`; guests ignore `farm.new`); welcome rebuild 2f T6 |
+| 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | done (2f T5 host; T6 guest: welcome deferred, `farmReady` applies it after `ctx.load`; one step later than the old path, parity row 23; two repair tests step 2) |
 | 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption 2g (use `PILOT.revCone`) |
 | 82 | Keys override the stick and a pad overrides both, vs a length merge | Tractor Pickup | accepted (2f T-E8: longest vector wins, ties to the first source); on the 2g playtest list |
 | 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | done in the sim (2f T-E9 engine; T4–T5: parent 2 s, skip 1 s, wake 5 s as `ui.hold({ wall: true })`); DOM adoption 2g |
 | 84 | Player records in browser storage are read by the flow | Tractor Pickup | sim half done (2f T4: sim owns progress/settings via commands; events carry copies); storage saver 2g |
 | 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | sim half done (2f T5: bedtime checked each step against the last `clock`/`bed.set` date); 1 Hz view clock 2g G4 |
-| 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | planned (2f T1: allowlisted) |
+| 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | done (2f T1: the one allowlisted exception in the purity test; no sim module calls it) |
 | 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | sim half done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order); view plays them in 2g |
-| 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | planned (2f T6, T7) |
+| 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | done (2f T6–T7: per-step sync lookup and the harness `game`/`sync` accessors keep them working) |
 | 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
 | 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | done for Tractor (2f T3: the whole pipeline is the farm `step` hook, goldens bit-exact); engine-level rule still open |
 | 91 | Schema-derived binary commands would change the wire | Tractor Pickup | built, not adopted (2f T-E5: `wireCodec` json + binary; fixed/angle quantise like the replica; NET_VERSION stays 3) |
@@ -108,6 +108,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 93 | A late peer's virtual wall is an ulp off the hub's | engine | open (tolerance in tests; `wallStep0` engine option if exactness is ever needed) |
 | 94 | The hub drops at send, so in-flight messages still land after a blackout starts | engine, Tractor Pickup | kept (Tractor's M-53 behaviour; documented by the mp drop test) |
 | 95 | `engine.overlay` throws on an overlay already open or pending | engine, Tractor Pickup | open (Tractor guards with `isOpen(name, { pending: true })`; consider `{ once: true }`) |
+| 96 | Host diffs that arrive while a guest farm builds are dropped until the next keyframe | Tractor Pickup | accepted (same as the old show-deferred path; settles within M-58) |
+| 97 | An interop test that only checks the guest's view passes with the guest→host link cut | Tractor Pickup | fixed (2f T7 fix 1: host-side train, paint and a cross-path boop, proven by a drop probe) |
 
 ## Entries
 
@@ -613,3 +615,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** Tractor can reach the same overlay from a cue, a command or a hold, so it can request the overlay again. `engine.overlay(name)` throws in that case, so every caller needs an `isOpen(name, { pending: true })` guard. Tractor wraps this in `flow.open`.
 - **Decision:** the guard stays game-side for now. If a second game needs it too, add `engine.overlay(name, args, { once: true })` (a no-op when already open or pending).
 - **Status:** open.
+
+### 96. Host diffs that arrive while a guest farm builds are dropped until the next keyframe: Tractor Pickup (phase 2f T6)
+- **What happened:** diffs that land during the one- to two-step farm build go into the store, then `useFarm` clears the store and re-applies only the kept keyframe. Anything that changed in those steps is stale until the next host keyframe.
+- **Decision:** accept it. The old show-deferred path did the same, and it settles within M-58.
+- **Status:** accepted.
+
+### 97. An interop test that only checks the guest's view passes with the guest→host link cut: Tractor Pickup (phase 2f T7)
+- **What happened:** the first interop test compared `disagreements()`, which reads the guest's view. The host gets the roster from the JSON hello, so a probe that dropped every guest→host frame still passed.
+- **Decision:** multiplayer parity tests assert both directions: the host has the guest's train, the guest's paint, and a claimed and granted cross-path boop. A drop probe proves each direction can fail. Engine-level, `mp()` might offer a `both(w, check)` helper later.
+- **Status:** fixed (fix round 1).
