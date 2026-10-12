@@ -62,8 +62,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | done (2d D11) |
 | 48 | `expectTappable` only accepts test IDs | Rally | done (2d D11) |
 | 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7; watch in the Tractor migration) |
-| 50 | Playwright until vs view.wait loads | Rally | open |
-| 51 | policy.every restart on sim swap | Rally | open |
+| 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
+| 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 
 ## Entries
 
@@ -345,8 +345,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 50. Playwright `until` can't wait out a load held by `view.wait`: Rally (phase 2d R1)
 - **What happened:** `until`/`step` run in one in-page `evaluate` loop. A load whose settle waits on a view promise (a dynamic import) never settles inside that synchronous loop under `?lh-test`.
 - **Workaround:** Rally reverted its stage view's `built` hook, so the track view doesn't block the load.
-- **Engine change:** in-page `until`/`step` returns control to Node and awaits `settled()` whenever `engine.loading.phase === 'settle'` with blocks pending, or add a `game.untilLoaded()`. Status: open.
+- **Engine change:** in-page `until`/`step` returns control to Node and awaits `settled()` whenever `engine.loading.phase === 'settle'` with blocks pending, or add a `game.untilLoaded()`. Status: done (0.5.1 final review): `step`, `until` and `untilEvent` pause in Node while a settle is blocked, poll until the blocks clear (bounded `timeout`), then continue; `game.untilLoaded({ maxSteps, timeout })` added. Rally can restore its stage view's `built` hook.
 
 ### 51. `policy.every` doesn't restart when the sim behind it is replaced: Rally (phase 2d R1)
 - **What happened:** Rally's old autopilot cache was keyed by the `Sim` object. `policy.every` keys its cadence to engine steps only, so after a jump or rebuild it can repeat a stale output for up to n−1 steps. The goldens are unaffected.
-- **Engine change:** `policy.every(n, fn, { key: (h) => object })`, which recomputes immediately when the key changes. Status: open.
+- **Engine change:** `policy.every(n, fn, { key: (h) => object })`, which recomputes immediately when the key changes. Status: done (0.5.1 final review): `key(h)` is compared with `===` on every call; a change recomputes at once and re-anchors the cadence.

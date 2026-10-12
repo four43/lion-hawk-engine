@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-10-12
+
+Phase 2d final-review fixes.
+
+- Input: a rise from one device source is an owed tap only when no other source already holds the button, so a second device pressing a held button no longer forces a release and re-press (double gear shifts or horns); clearing a button's last contributing source drops its owed taps.
+- Loading (S-6): `ctx.load` on a scene that is already loading throws `engine: '<scene>' is already loading` instead of silently restarting `hold`/`frames`. The spec now says that command handlers still run for a loading scene.
+- Playwright (#50): `game.step`, `until` and `untilEvent` hand control back to Node while a load's settle is held by blocks (a `view.wait`), poll until they clear (bounded `timeout`), then keep stepping; new `game.untilLoaded({ maxSteps, timeout })`. A browser test covers `unpress` keeping a stick finger down.
+- Policies (#51): `policy.every(n, fn, { key })` recomputes at once when `key(h)` changes.
+- View: a `view.focus` that gives up after its retries warns once (`console.warn`) under `?debug`.
+
 ## 0.5.0 — 2026-10-12
 
 Phase 2d, the engine round from the Rally field notes.
