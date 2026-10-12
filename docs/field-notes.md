@@ -86,6 +86,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 71 | Events emitted outside a step appear after the next step | Pig Pens | open |
 | 72 | Command data passed by reference when not recording | Pig Pens | open |
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | open |
+| 74 | openGame has no init-script hook | Pig Pens | open |
 
 ## Entries
 
@@ -477,4 +478,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 73. `view.project` returns no depth or on-screen flag: Pig Pens (phase 2e P6–P7)
 - **What happened:** the HUD has to project with the camera itself to hide labels behind the camera. Playwright's `game.point` can't reject points that are off-screen or behind the camera.
 - **Engine change:** the `view.project` contract returns `{ x, y, z, onScreen }`, and `game.point` throws when a point is behind the camera or off-screen. Status: open.
+
+### 74. `openGame` has no init-script hook: Pig Pens (phase 2e P8)
+- **What happened:** a test can't stub WebGL or other globals before the page boots, so the "no WebGL" frame guard has no browser test.
+- **Engine change:** `openGame(browser, url, { initScript })`, passed to `context.addInitScript`. Status: open.
 
