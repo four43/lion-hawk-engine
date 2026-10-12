@@ -16,7 +16,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Pig Pens in progress (2e P2 farm scene 932f19a; P3–P4); Tractor Pickup open |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup open |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
@@ -66,16 +66,16 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 | 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
 | 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | done (2e P-E2) |
-| 54 | Screen-space aim offsets under a finger | Pig Pens | in progress (2e P3: grab ease in sim; P6 view) |
+| 54 | Screen-space aim offsets under a finger | Pig Pens | done (2e P3, P6) |
 | 55 | A tap acts on what was picked at pointer down | Pig Pens | done (2e P3 2dff968) |
 | 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
-| 57 | A game-owned event queue next to engine events | Pig Pens | bridged (2e P2 932f19a: farm.events re-emits sim.events each step, no allocation); kit-herd open |
+| 57 | A game-owned event queue next to engine events | Pig Pens | done for Pig Pens (2e P2 932f19a: farm.events re-emits sim.events each step, no allocation); kit-herd open |
 | 58 | The game's RNG and seed live outside the engine streams | Pig Pens | open (phase 4/7) |
 | 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | open |
-| 60 | Sim inputs computed per frame in the view | Pig Pens | in progress (2e P2–P3; P4) |
+| 60 | Sim inputs computed per frame in the view | Pig Pens | done (2e P2–P4) |
 | 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | done (2e P3 2dff968) |
-| 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
-| 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
+| 62 | Stale browser scripts and print-only tests | Pig Pens | done (2e P5, P9 c7af1cc) |
+| 63 | Safe areas read `env()` directly | Pig Pens | done (2e P6, P8); Get out restyle open (final pass) |
 | 64 | No finite invariant before the World | engine, Pig Pens | done (2e P-E3) |
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
@@ -117,7 +117,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Tractor Pickup: `main.js` sets `g.mode = 'reward'`, and the sim waits on `showDone`/`rewardDone`, which come from view animations.
   - Pig Pens: `driving`, `tool` and `selected` live in `main()`'s closures.
 - **Engine change:** scenes own flow (S-4). View animations end with an ack event, which needs scene-scoped listeners (`ctx.on`).
-- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens planned (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup remains.
+- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens done (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup remains.
 
 ### 5. Positional input can't be expressed as actions: Pig Pens, Tractor Pickup
 - **What happened:**
@@ -385,12 +385,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 54. Screen-space aim offsets under a finger: Pig Pens (phase 2e plan)
 - **What happened:** with a finger, Grab lifts the held animal to 80 px above the finger, eased over 0.18 s, and the Hose aims 55 px above it (v2 spec §16.2). Both are screen-space offsets eased per frame in `main.js`, so they can't be a sim input as they stand.
 - **Workaround:** the view's `at()` sends a second ray (`aim`) through the lifted point; the sim takes plane hits from both rays and blends them over 0.18 s. The start and end points are the same as before; the path during the ease is a world-space blend, not a screen-space one (flagged for the playtest).
-- **Engine lesson:** send rays, not hits, in positional commands. The sim then does all picking, and replays reproduce it. Status: planned (2e P3, P6).
+- **Engine lesson:** send rays, not hits, in positional commands. The sim then does all picking, and replays reproduce it. Status: done (2e P3, P6).
 
 ### 55. A tap acts on what was picked at pointer down: Pig Pens (phase 2e plan)
 - **What happened:** `main.js` classifies the Hand's target on pointerdown and acts on it at the tap; `bindPointer`'s `tap` carries the up position.
 - **Workaround:** the sim keeps per-gesture state (`ctx.state.gesture = { tool, pointer, down, target }`), picked on `down`, used on `tap` and `press`. A gesture also finishes with the tool it started with.
-- **Engine change:** none; per-gesture state is game state. Status: planned (2e P3); engine won't.
+- **Engine change:** none; per-gesture state is game state. Status: done (2e P3); engine won't.
 
 ### 56. A long press on capped device time runs slow at low frame rates: Pig Pens (phase 2e plan)
 - **What happened:** the v2 spec's defect 8 ("press and hold did not start the drive at a low frame rate") was fixed with a 750 ms `setTimeout`. `bindPointer` counts the press on device time, which the driver caps at `maxFrame` (0.1 s for Pig Pens, #44). Below 10 fps the hold still fires, but later in wall time (at 5 fps, about 1.5 s).
@@ -400,7 +400,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 57. A game-owned event queue next to engine events: Pig Pens (phase 2e plan)
 - **What happened:** `createSim` pushes events into its own `sim.events` (at most 64 queued) and `main.js` drains them once per frame for sound and hints. The phase-0 golden drains them per step.
 - **Workaround:** a `post` system drains `sim.events` into `engine.emit` every step (so the cap now applies per step). The farm's own events use other types (`FARM_EVENTS`), so the engine-path test can filter them and compare against the phase-0 golden.
-- **Engine change:** `kit-herd` (phase 7) emits through the engine. Status: planned (2e P2 bridge); kit open.
+- **Engine change:** `kit-herd` (phase 7) emits through the engine. Status: done for Pig Pens (2e P2 bridge); kit open.
 
 ### 58. The game's RNG and seed live outside the engine streams: Pig Pens (phase 2e plan)
 - **What happened:** `createSim` seeds its own mulberry32 from `opts.seed` (default 1); every first visit gets the same farm. `engine.rng` streams are not used.
@@ -419,22 +419,22 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - it eases the grab lift per frame;
   - it flips `lay.coop.open` directly;
   - it limits Feed taps on `performance.now()`.
-- **Change:** each moves into a farm system or handler on engine time (`farm.ease`, `farm.keys`, `toggleDoor`, `TOSS_GAP`). Status: planned (2e P2–P4).
+- **Change:** each moves into a farm system or handler on engine time (`farm.ease`, `farm.keys`, `toggleDoor`, `TOSS_GAP`). Status: done (2e P2–P4).
 
 ### 61. `pointercancel` counted as a lift: Pig Pens (phase 2e plan)
 - **What happened:** `main.js` handles `pointercancel` with the same `end` as `pointerup`, so a touch the browser cancelled (iOS) could still count as a tap and select, toss or act.
-- **Change:** `bindPointer` sends `cancel`, never a tap. This is a user-visible fix, listed in the plan's parity table. Status: planned (2e P3).
+- **Change:** `bindPointer` sends `cancel`, never a tap. This is a user-visible fix, listed in the plan's parity table. Status: done (2e P3 2dff968).
 
 ### 62. Stale browser scripts and print-only tests: Pig Pens (phase 2e plan; like #34)
 - **What happened:**
   - `test/interact*.mjs` and `shot.mjs` use hard-coded `/opt/pw-browsers` and `/mnt/user-data/outputs` paths, `window.piggies`, and a removed `look` tool. Nothing runs them.
   - The headless scripts (`day`, `door`, `food`, `gates_fox`, `grain`, `hose`, `nan`, `night`, `scenarios`, `tractor`, …) print results; `npm test` runs only the golden.
   - `createSim` ignores the `hour` option that `day.mjs`, `grain.mjs` and `gates_fox.mjs` pass, so `gates_fox.mjs`'s fox part never starts a visit.
-- **Change:** the browser scripts are deleted, and the e2e suite covers their flows. `nan.mjs` becomes an engine-path invariant test, and the v2 spec's §13.1 facts are asserted in `sim.test.mjs`; the other tuning scripts stay manual. Status: planned (2e P5, P9).
+- **Change:** the browser scripts are deleted, and the e2e suite covers their flows. `nan.mjs` becomes an engine-path invariant test, and the v2 spec's §13.1 facts are asserted in `sim.test.mjs`; the other tuning scripts stay manual. Status: done (2e P5; P9 c7af1cc deleted the browser scripts).
 
 ### 63. Safe areas read `env()` directly: Pig Pens (phase 2e plan; like #31)
 - **What happened:** `template.html` uses `env(safe-area-inset-*)`, which Chromium can't emulate, so the Playwright presets' `--lh-sa-*` variables don't apply.
-- **Change:** `var(--lh-sa-X, env(safe-area-inset-X, 0px))` everywhere. P8 also measures the Get out button, which its CSS makes about 43 px tall (under the 44 px guideline); no restyling in 2e. Status: planned (2e P6, P8).
+- **Change:** `var(--lh-sa-X, env(safe-area-inset-X, 0px))` everywhere. P8 also measures the Get out button, which its CSS makes about 43 px tall (under the 44 px guideline); no restyling in 2e: measured 101.7 × 42 px (2e P8). Known gap: the e2e asserts `{ min: 40 }` only, and the restyle is planned in the final pass. Status: done (2e P6, P8); Get out restyle open.
 
 ### 64. No finite invariant before the World: engine, Pig Pens (phase 2e plan)
 - **What happened:** [T-1] says a `finite()` invariant over every `xf` and body is always on, but there is no `World` yet (phase 4), so nothing checks. `nan.mjs` checks the birds' positions by hand.
