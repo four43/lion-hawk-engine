@@ -38,7 +38,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 23 | Pause was a state of the game's own state machine | Rally | done (2c-rally) |
 | 24 | Browser-only defaults inside sim modules | Rally | done (2c-rally) |
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
-| 26 | Policies that run slower than the sim | Rally | open (worked around in 2c-rally R2) |
+| 26 | Policies that run slower than the sim | Rally | done (2d D5) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
 | 28 | Sim objects live in the scene's `state` | Rally | open (2c-rally R2 workaround; phase 4 World) |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
@@ -48,17 +48,17 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 33 | Every debug jump rebuilds the world | Rally | won't for now (2c-rally R3) |
 | 34 | Stale browser tooling | Rally | done (2c-rally) |
 | 35 | A fixed engine seed gives every visitor the same first track | Rally | done (2c-rally) |
-| 36 | Can't ask "is this overlay open or pending?" | Rally | open (worked around in 2c-rally R2) |
+| 36 | Can't ask "is this overlay open or pending?" | Rally | done (2d D5) |
 | 37 | Policies have no per-handle state or rate | Rally | open (worked around in 2c-rally R2) |
 | 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | done (2d D4: frame acks, engine.onPresent) |
-| 39 | A control can't both trigger an action and be gated | Rally | open |
+| 39 | A control can't both trigger an action and be gated | Rally | done (2d D5) |
 | 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance open |
 | 41 | The input latch drops a second tap if no step sees the key go up | Rally | open (worked around in 2c-rally R5) |
 | 42 | `bindHold` lets the button take focus | Rally | open (worked around in 2c-rally R5) |
 | 43 | Playwright `touch.end(id)` lifted the wrong finger | engine test helper | done |
 | 44 | Device ramps use uncapped frame time | Rally | open (worked around in 2c-rally R6) |
-| 45 | No query for "is this control enabled?" | Rally | open (worked around by matching error text) |
-| 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | open (worked around in 2c-rally R6) |
+| 45 | No query for "is this control enabled?" | Rally | done (2d D5) |
+| 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | open |
 | 48 | `expectTappable` only accepts test IDs | Rally | open |
 
@@ -271,7 +271,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 36. Can't ask "is this overlay open or pending?": Rally (phase 2c R2)
 - **What happened:** results can be requested from several places in one step. A second `overlay('results')` throws "already open" at request time, which is the F2 ruling.
 - **Workaround:** Rally's `openOnce` swallows only that error.
-- **Engine change:** add `engine.isOpen(name, { pending: true })`, or an `overlay(name, args, { ifClosed: true })` option. Status: open.
+- **Engine change:** add `engine.isOpen(name, { pending: true })`, or an `overlay(name, args, { ifClosed: true })` option. Status: done (2d D5): `engine.isOpen(name, { pending })`; an unknown scene throws.
 
 ### 37. Policies have no per-handle state or rate: Rally (phase 2c R2; see #26)
 - **What happened:** Rally's autopilot runs at 60 Hz inside the 240 Hz sim and keeps controller state between calls.
@@ -284,7 +284,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 39. A control can't both trigger an action and be gated: Rally (phase 2c R2)
 - **What happened:** the Pause chip opens the overlay directly. A pause key and a chip tap in the same frame then open and close pause. Routing the chip through the `pause` action conflicts with the `when` gate on overlay state.
-- **Engine change:** let `u.button({ action: 'pause', when })` press the action with the gate evaluated at tap time, and document "controls press actions; scenes own transitions". Status: open.
+- **Engine change:** let `u.button({ action: 'pause', when })` press the action with the gate evaluated at tap time, and document "controls press actions; scenes own transitions". Status: done (2d D5): semantics plus docs only; taps already pressed the action for the next step with `when` decided at tap time. Controls press actions; scenes own transitions.
 
 ### 40. Determinism makes some comparisons meaningless: Rally (phase 2c R4)
 - **What happened:** with the engine's step-exact policies, both runs of the "best kept only if faster" test finish in exactly 167.400 s. That check can no longer tell `min(a, b)` from `a`.
@@ -316,12 +316,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 45. No query for "is this control enabled?": Rally (phase 2c R5 review)
 - **What happened:** Rally's hidden-page auto-pause tells expected tap failures apart by matching the error text (`/is disabled|is covered|no control/`), which is brittle.
-- **Engine change:** `engine.ui.enabled(id)`, or a `tryTap(id) → boolean`. Status: open.
+- **Engine change:** `engine.ui.enabled(id)`, or a `tryTap(id) → boolean`. Status: done (2d D5): `engine.ui.enabled(id)` and `engine.ui.tryTap(id)` (also on the hook and `h.enabled`/`h.tryTap`); neither throws for a missing, covered or disabled control.
 
 ### 46. An overlay view half's `enter` runs before `ui.sync()`: Rally (phase 2c R6)
 - **What happened:** when an overlay's view `enter` runs, its buttons are still disabled, so it can't focus the default button.
 - **Workaround:** Rally retries focus every frame.
-- **Engine change:** `boot`'s refresh should sync the UI before calling view-half `enter`, or add `view.focus(testid)`, applied after the next sync. Status: open.
+- **Engine change:** `boot`'s refresh should sync the UI before calling view-half `enter`, or add `view.focus(testid)`, applied after the next sync. Status: done (2d D5): `boot` syncs the UI before view-half `enter`, and `view.focus(testid)` focuses once the control exists and is enabled, unless the player moved focus first.
 
 ### 47. Under `?lh-test` the driver still renders every frame: Rally (phase 2c R6)
 - **What happened:** a test can't observe what `exit` left in the DOM across page calls, because the next automatic render changes it.

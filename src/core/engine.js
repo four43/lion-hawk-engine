@@ -254,11 +254,15 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))
       : reqJump(name, preset, opts, a),
     command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, data),
+    // #36: `pending` projects over queued requests (what the duplicate check sees); an unknown scene throws
+    isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
     render(alpha) { render(alpha); },
     ui: {
       tree: () => ui.tree(engine),
+      enabled: id => ui.enabled(id, engine), // #45
+      tryTap(id) { if (!ui.enabled(id, engine)) return false; engine.ui.tap(id); return true; },
       tap: id => rec ? recorded(o => o.push('tap', id), () => ui.tap(id, engine)) : ui.tap(id, engine),
       fill: (id, t) => rec ? recorded(o => o.push('fill', id, String(t)), () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),
     },

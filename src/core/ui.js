@@ -34,6 +34,10 @@ export function createUi({ onAction, coveredBy = () => undefined }) {
       if (c.role !== 'textbox') throw new Error(`ui: control '${id}' is not a field`);
       c.set(String(text), ctx);
     },
+    enabled(id, ctx) { // [#45] never throws: missing, covered or `when` false -> false
+      const c = controls.get(id);
+      return !!c && !coveredBy(c.scene) && !(c.when && !c.when(ctx));
+    },
     tap(id, ctx) {
       const c = usable(id, ctx);
       if (c.role === 'textbox') throw new Error(`ui: control '${id}' is a field: use fill`);

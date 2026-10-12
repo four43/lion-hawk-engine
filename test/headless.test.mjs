@@ -73,3 +73,9 @@ const fieldGame = defineGame({ id: 'f', start: 't', scenes: { t: {
 test('2c: h.fill fills a field', () => {
   const h = headless(fieldGame); assert.equal(h.fill('t.seed', 'b'), h); assert.equal(h.engine.scene.state.seed, 'b');
 });
+
+test('2d: h.enabled and h.tryTap', () => {
+  const h = headless(game, { scene: 'race' });
+  assert.equal(h.enabled('race.pause'), false); assert.equal(h.tryTap('race.pause'), false);
+  h.jump('race', 'running'); assert.equal(h.tryTap('race.pause'), true);
+});

@@ -111,3 +111,23 @@ test('2d: view.wait blocks loads; settled() is false while a load is active', as
   app.hook.stepN(1); assert.equal(app.engine.loading.active, false); assert.equal(app.hook.settled(), true);
   app.dispose();
 });
+
+test('2d: a view half enters after the UI sync; view.focus applies once the control is enabled (#46)', () => {
+  let seen;
+  const halves = defineView({ scenes: {
+    pause: { enter(e, v) { const b = v.doc.querySelector('[data-testid="pause.resume"]'); seen = !!b && !b.disabled; v.focus('pause.resume'); } },
+    race: { enter(e, v) { v.focus('race.pause'); } },
+  } });
+  const { app, document } = run('?lh-test', halves);
+  app.hook.go('race'); assert.notEqual(document.activeElement?.getAttribute('data-testid'), 'race.pause'); // disabled until running
+  app.engine.scene.state.running = true; app.hook.render(0);
+  assert.equal(document.activeElement?.getAttribute('data-testid'), 'race.pause');
+  app.hook.overlay('pause'); assert.equal(seen, true);
+  assert.equal(document.activeElement?.getAttribute('data-testid'), 'pause.resume');
+});
+test('2d: view.focus is dropped when the player moves focus first', () => {
+  const halves = defineView({ scenes: { race: { enter(e, v) { v.focus('race.pause'); } } } });
+  const { app, document } = run('?lh-test', halves);
+  app.hook.go('race'); const other = document.createElement('button'); document.body.appendChild(other); other.focus();
+  app.engine.scene.state.running = true; app.hook.render(0); assert.equal(document.activeElement, other);
+});

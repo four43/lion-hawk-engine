@@ -297,3 +297,22 @@ test('scene instance ids: new id per enter, overlays in overlayIds', () => {
   e.overlay('pause'); const o = e.scene.overlayIds[0]; assert.equal(e.scene.overlayIds.length, 1);
   e.close('pause'); e.overlay('pause'); assert.ok(e.scene.overlayIds[0] > o);
 });
+
+test('2d: isOpen sees requested overlays with { pending } (#36)', () => {
+  const e = createEngine(game, { scene: 'race' }); const seen = [];
+  e.system('t', en => {
+    en.overlay('pause'); seen.push(en.isOpen('pause'), en.isOpen('pause', { pending: true }));
+    en.close('pause'); seen.push(en.isOpen('pause', { pending: true }));
+  }, { stage: 'post' });
+  e.stepN(1); assert.deepEqual(seen, [false, true, false]); assert.equal(e.isOpen('race'), true);
+  assert.throws(() => e.isOpen('nope'), /no scene 'nope'/);
+});
+test('2d: ui.enabled and ui.tryTap report instead of throwing; an action control presses its action (#45, #39)', () => {
+  const e = createEngine(game, { scene: 'race' });
+  assert.equal(e.ui.enabled('race.pause'), false); assert.equal(e.ui.tryTap('race.pause'), false);
+  assert.equal(e.ui.enabled('race.nope'), false); assert.equal(e.ui.tryTap('race.nope'), false);
+  e.jump('race', 'running'); assert.equal(e.ui.enabled('race.pause'), true);
+  assert.equal(e.ui.tryTap('race.pause'), true); assert.equal(e.ui.tryTap('race.pause'), true); // two taps, one press
+  e.stepN(1); assert.deepEqual(e.scene.overlays, ['pause']);
+  assert.equal(e.ui.enabled('race.pause'), false); // covered by the pausing overlay
+});

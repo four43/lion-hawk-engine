@@ -22,7 +22,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   }
   // [S-6] ?lh-test counts every step as a presented frame (deterministic; game.until never waits for a rAF)
   const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames' });
-  const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, wait: p => wait(p) }; // #19: dt is the driver frame time; 0 for renders the driver didn't start
+  const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, wait: p => wait(p), focus: id => focus(id) }; // #19: dt is the driver frame time; 0 for renders the driver didn't start
   const frameDt = { update(dt) { view.dt = dt; } }; // first device: later devices and the frame see this frame's dt
   const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine))], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
@@ -35,6 +35,15 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   // View halves follow the ACTUAL stack: each refresh diffs the previous and current entries (main scene keyed by name
   // plus its state object, which is new on every enter) and calls exit/enter for the differences, so nothing depends
   // on when 'scene'/'overlay' events flush.
+  // #46: view.focus(testid) focuses the control once it exists and is enabled, unless the player moved focus first
+  let want = null;
+  const focus = id => { want = { id, before: doc.activeElement ?? null }; };
+  const applyFocus = () => {
+    if (!want) return;
+    const a = doc.activeElement; if (a && a !== want.before && a !== doc.body) { want = null; return; }
+    const el = doc.querySelector(`[data-testid="${String(want.id).replace(/["\\]/g, '\\$&')}"]`);
+    if (el && !el.disabled) { want = null; el.focus?.({ preventScroll: true }); }
+  };
   let active = [], busy = false, pending = 0, settledAttr, disposed = false;
   const entries = () => {
     const s = engine.scene, out = [];
@@ -51,13 +60,15 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
         if (!gone.length && !added.length) break;
         active = cur.slice(); // set first: a half that transitions re-enters via the next pass
         for (let i = gone.length - 1; i >= 0; i--) caught(() => views[gone[i].name]?.exit?.(engine, view));
+        ui.sync(); // #46: the entering halves see their scene's controls created, adopted and enabled
         for (const c of added) caught(() => views[c.name]?.enter?.(engine, view));
+        applyFocus();
       }
     } finally { busy = false; }
   }
   const refresh = () => {
     if (disposed) return;
-    reconcile(); ui.sync();
+    reconcile(); ui.sync(); applyFocus();
     const s = hook.settled() ? '1' : '0'; if (s !== settledAttr) { settledAttr = s; doc.documentElement.setAttribute('data-lh-settled', s); }
   };
   function wait(p) { // #20: until p settles, settled() is false; a rejection lands in errors. [S-6] it also blocks a settling load
@@ -76,7 +87,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const hook = installEngine(engine, { driver, target, errors, after: refresh, busy: () => pending > 0, view });
   refresh();
   const dispose = () => {
-    if (disposed) return; disposed = true;
+    if (disposed) return; disposed = true; want = null;
     driver.stop(); for (const d of driver.devices) d.dispose?.();
     ui.dispose(); hook.dispose(); sa.remove(); off(); engine.onRender(() => {});
   };
