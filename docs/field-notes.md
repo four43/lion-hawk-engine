@@ -111,6 +111,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 96 | Host diffs that arrive while a guest farm builds are dropped until the next keyframe | Tractor Pickup | accepted (same as the old show-deferred path; settles within M-58) |
 | 97 | An interop test that only checks the guest's view passes with the guest→host link cut | Tractor Pickup | fixed (2f T7 fix 1: host-side train, paint and a cross-path boop, proven by a drop probe) |
 | 98 | The sim reads `time.wall`, so browser-recorded tapes would not replay exactly | engine, Tractor Pickup | open (only headless/`mp()` tapes replay exactly; fix option: per-step wall stamps on tapes) |
+| 99 | Playwright bindings resolve asynchronously, so a two-page bridge needs sequence numbers | engine | done (2g G-E1: per-call seq, `room.step` waits for each page's calls; early events queued by an init-script stub; reload unsupported) |
+| 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | open (the command waits for the next step; option: `untilLoaded` also waits while `engine.commands.pending` > 0) |
+| 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.lh-stick` translate −50%) |
+| 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | open (2g G1 kept the move; fix in G5 or phase 4) |
 
 ## Entries
 
@@ -630,4 +634,24 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 98. The sim reads `time.wall`, so browser-recorded tapes would not replay exactly: engine, Tractor Pickup (phase 2f T8)
 - **What happened:** Tractor's sim reads the wall clock in its syncs (`game/net.js`: rate limits, the silence watchdog, hello/horn/regrow timers, the barn wait), in `sync.before`/`after` (placing the other tractors the herd reacts to), and in three `ui.hold({ wall })` controls. Headless and `mp()` engines run a virtual wall, so their tapes replay exactly. A browser tape would carry only `wall0` and replay on a virtual wall, so it would diverge after a hitch or a hidden tab (#92).
 - **Decision:** browser recording stays out of scope ([T-9]); no tests may assert on browser-recorded tapes. If browser recording lands, tapes must carry per-step wall stamps and replay must feed them back as real stamps.
+- **Status:** open.
+
+### 99. Playwright bindings resolve asynchronously, so a two-page bridge needs sequence numbers: engine (phase 2g G-E1)
+- **What happened:** an exposed binding call may reach Node after the `evaluate` that caused it has resolved. Events can also reach a page before the game creates its transport.
+- **Decision:** every bridge call carries a sequence number, and `room.step` waits until Node has each page's calls. An init-script stub queues early events and replays them in a microtask after `bridgeTransport()`, so the port is created in the same turn. Reloading a `peers()` page is unsupported, because the counter would restart and the bridge would stall.
+- **Status:** done (0.7.1).
+
+### 100. `untilLoaded` right after `game.command` returns at once: engine, Tractor Pickup (phase 2g G1)
+- **What happened:** `game.command('farm.new')` only queues the command until the next step ([I-7]). `untilLoaded` checks `engine.loading.active` before stepping, finds no load, and returns 0.
+- **Decision:** Tractor's test steps once between the two calls. Engine option: `untilLoaded` (and `untilEvent`) also wait while `engine.commands.pending` > 0.
+- **Status:** open.
+
+### 101. `bindStick` places an adopted floating base by its centre: Tractor Pickup (phase 2g G1)
+- **What happened:** `bindStick` sets `left`/`top` to the thumb point, but Tractor's CSS placed the box's top-left at thumb − R.
+- **Decision:** the adopted base gets the class `lh-stick` with `translate(-50%, -50%)`. The old path is unchanged.
+- **Status:** worked around. The engine could document the centre anchoring.
+
+### 102. The view writes sim animals for other players' carried riders: Tractor Pickup (phase 2g G1)
+- **What happened:** `players.drawAt(now, herd)` places other players' carried animals in `game.herd` every frame (M-65). It moved unchanged into the farm view's `frame`, which breaks "view halves never write the sim". A tape recorded in a room could depend on frame timing.
+- **Decision:** kept in G1, which moved code without rewriting it. Fix in G5: a pose-override map like the show's copies (#79), or place the riders in the sync's `before`.
 - **Status:** open.
