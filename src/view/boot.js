@@ -88,7 +88,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     if (h) caught(() => views[h.name]?.built?.(engine, view));
     refresh();
   });
-  engine.onRender(alpha => {
+  const offRender = engine.onRender(alpha => {
     if (disposed) return;
     reconcile();
     for (const e of active.slice()) if (active.some(a => same(a, e))) caught(() => views[e.name]?.frame?.(engine, alpha, view)); // snapshot; skip halves a previous frame exited
@@ -99,7 +99,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const dispose = () => {
     if (disposed) return; disposed = true; want = null;
     driver.stop(); for (const d of driver.devices) d.dispose?.();
-    ui.dispose(); hook.dispose(); sa.remove(); off(); offBuilt(); engine.onRender(() => {});
+    ui.dispose(); hook.dispose(); sa.remove(); off(); offBuilt(); offRender();
   };
 
   if (flags.lhTest) {

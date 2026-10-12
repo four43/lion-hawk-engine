@@ -316,3 +316,10 @@ test('2d: ui.enabled and ui.tryTap report instead of throwing; an action control
   e.stepN(1); assert.deepEqual(e.scene.overlays, ['pause']);
   assert.equal(e.ui.enabled('race.pause'), false); // covered by the pausing overlay
 });
+
+test('2d: onRender is additive and returns an unsubscribe (#10)', () => {
+  const e = createEngine(game), got = [];
+  const a = e.onRender(x => got.push(['a', x])); e.onRender(x => got.push(['b', x]));
+  e.render(0.5); a(); a(); e.render(0.25);
+  assert.deepEqual(got, [['a', 0.5], ['b', 0.5], ['b', 0.25]]);
+});

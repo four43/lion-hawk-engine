@@ -8,6 +8,7 @@
     "./sim": "./src/index.sim.js",
     "./view": "./src/index.view.js",
     "./test": "./testing/index.js",
+    "./build": "./tools/dedupe.js",
     "./playwright": "./testing/playwright.js",
     "./package.json": "./package.json"
   },

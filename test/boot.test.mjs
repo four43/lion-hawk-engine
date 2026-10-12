@@ -160,3 +160,9 @@ test('2d: a pending view.focus is dropped on a scene change or after a few rende
   r.app.engine.scene.state.running = true; r.app.hook.render(0);
   assert.notEqual(r.document.activeElement?.getAttribute('data-testid'), 'race.pause'); // gave up after a few renders
 });
+
+test('2d: a game onRender after boot no longer silences view halves (#10)', () => {
+  const { app, log } = run('?lh-test'); app.hook.go('race'); log.length = 0;
+  let n = 0; app.engine.onRender(() => n++); app.hook.render(0);
+  assert.deepEqual(log, ['frame race']); assert.equal(n, 1);
+});

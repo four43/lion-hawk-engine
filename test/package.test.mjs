@@ -8,5 +8,5 @@ test('ENGINE_VERSION matches package.json (G-3)', () => {
   assert.equal(ENGINE_VERSION, pkg.version);
 });
 test('package entry points load', async () => {
-  await import('lion-hawk/sim'); await import('lion-hawk/view'); await import('lion-hawk/test');
+  await import('lion-hawk/sim'); await import('lion-hawk/view'); await import('lion-hawk/test'); await import('lion-hawk/build');
 });

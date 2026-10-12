@@ -22,8 +22,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Tractor Pickup's radial pair merge, Pig Pens' scene-scoped stick and gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
-| 10 | `onRender` is a single slot | all | open |
-| 11 | Engine code must not import three/Rapier until builds alias them | all | open |
+| 10 | `onRender` is a single slot | all | done (2d D9) |
+| 11 | Engine code must not import three/Rapier until builds alias them | all | done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI) |
 | 12 | Tests borrowed tools from a parent folder | engine | done |
 | 13 | Short presses fall between steps | Rally | done (2c-rally) |
 | 14 | Keyboard feel needs stateful ramps, chords and release by key code | Rally | done (2c-rally) |
@@ -139,11 +139,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** a game calling `engine.onRender` after `boot` silently disables view-half frames.
 - **Engine change:** make it additive and return an unsubscribe.
 - **2c-rally:** not needed: Rally renders from its `stage` view half's `frame`, never `engine.onRender`. Stays open for the other games.
+- **Status:** done (2d D9): `engine.onRender(fn)` appends and returns an unsubscribe; `boot` keeps its own slot.
 
 ### 11. Engine code must not import three/Rapier until builds alias them: all
 - **What happened:** the engine lives in its own repo with its own `node_modules`. A bare `import 'three'` in engine source would bundle a second copy of three.js.
 - **Workaround:** a workspace test asserts that engine source imports neither.
 - **Engine change:** the phase 3 CLI aliases three and Rapier to the game's copies.
+- **Status:** done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI): `dedupe({ root })` is an esbuild plugin (`tools/dedupe.js`) that re-resolves three and Rapier from the game's root. Today's builds use the esbuild CLI, which takes no plugins; the workspace purity rule stays until then.
 
 ### 12. Tests borrowed tools from a parent folder: engine
 - **What happened:** the e2e test used esbuild from the old games workspace. It broke once the engine moved to its own repo.

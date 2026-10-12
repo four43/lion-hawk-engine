@@ -26,7 +26,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
-  let step = 0, render = () => {};
+  let step = 0, renderFns = []; // [R-7] additive render slots, copy-on-write (#10)
   const streams = new Map(), time = { step: 0, sim: 0, frames: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
   let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
   // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
@@ -52,7 +52,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const blocks = new Set(); // one token per unreleased engine.block(label)
   const present = () => { unacked = false; time.frames++; const l = presentFns; for (let i = 0; i < l.length; i++) l[i](engine); };
   const drawn = () => time.frames + (acks === 'frames' && unacked ? 1 : 0); // presented frames once the pending ack lands
-  const rendered = a => { unacked = true; render(a); };
+  const rendered = a => { unacked = true; const l = renderFns; for (let i = 0; i < l.length; i++) l[i](a); };
   // [S-6] loading is a scene state (#21, #38): a scene with a load has its step hook suspended; in that slot the load
   // ticks, builds after `hold` seconds of engine time and `frames` presented frames, then (with `settle`) waits for a
   // presented frame after the build and no engine.block() before `then`. One load in the engine at a time.
@@ -273,7 +273,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     // #36: `pending` projects over queued requests (what the duplicate check sees); an unknown scene throws
     isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
-    onRender(fn) { render = fn; },
+    onRender(fn) { renderFns = [...renderFns, fn]; return () => { renderFns = renderFns.filter(f => f !== fn); }; },
     render(alpha) { rendered(alpha); },
     ui: {
       tree: () => ui.tree(engine),
