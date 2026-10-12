@@ -52,3 +52,13 @@ test('2d: h.command and window.engine.command', () => {
   const target = {}, e = createEngine(game); installEngine(e, { driver: { manual() {} }, target });
   target.engine.command('tap', { x: 1, z: 1 }); e.stepN(1); assert.equal(e.scene.state.taps.length, 1);
 });
+test('2d fix: handlers added during delivery wait for the next command; a removal does not skip the next handler', () => {
+  const seen = [];
+  const g = defineGame({ id: 'c3', start: 's', scenes: { s: { enter(e, ctx) {
+    const rm = ctx.command('x', () => { seen.push('a'); rm(); ctx.command('x', () => seen.push('c')); });
+    ctx.command('x', () => seen.push('b'));
+  } } } });
+  const e = createEngine(g); e.command('x').command('x'); e.stepN(1);
+  assert.deepEqual(seen, ['a', 'b', 'b', 'c']);
+  e.command('x'); e.stepN(1); assert.deepEqual(seen.slice(4), ['b', 'c']);
+});

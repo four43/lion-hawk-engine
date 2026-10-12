@@ -46,7 +46,10 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     ctx.command = (type, fn) => {
       if (typeof fn !== 'function') throw new Error(`engine: command '${type}' handler must be a function`);
       let list = cmds.get(type); if (!list) cmds.set(type, list = []); list.push(fn);
-      return () => { const i = list.indexOf(fn); if (i !== -1) list.splice(i, 1); };
+      return () => { // while delivering, the slot is blanked (compacted after the batch) so the next handler is not skipped
+        const i = list.indexOf(fn); if (i === -1) return;
+        if (delivering) { list[i] = null; holes.push(list); } else list.splice(i, 1);
+      };
     };
     const entry = { s, ctx, scoped, cmds };
     stack.push(entry); sync();
@@ -78,8 +81,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // #5: commands, the third input layer. Queued in FIFO order, delivered by lh.commands at the next step's input.apply:
   // the game's handler first (never paused), then each open scene bottom-up that handles the type and is not covered by a
   // pausing overlay. Only the commands queued before delivery starts are delivered (a handler's command waits a step).
-  const cmds = []; let dropped = 0;
-  const handles = type => Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.length > 0);
+  // Not recording, handlers get the caller's object as-is: don't mutate data after issuing it.
+  const cmds = [], holes = []; let dropped = 0, delivering = false;
+  const handles = type => Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.some(f => f) === true);
   const deliver = c => {
     let ran = false; const gf = Object.hasOwn(game.commands, c.type) ? game.commands[c.type] : undefined;
     if (gf) { ran = true; gf(engine, c.data); }
@@ -87,26 +91,49 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     for (let i = 0; i < stack.length; i++) {
       if (p > 0 && i < p) continue;
       const list = stack[i].cmds.get(c.type); if (!list) continue;
-      for (let j = 0; j < list.length; j++) { ran = true; list[j](engine, c.data, stack[i].ctx); }
+      for (let j = 0, n = list.length; j < n; j++) { const f = list[j]; if (f) { ran = true; f(engine, c.data, stack[i].ctx); } } // fixed length: added handlers wait
     }
     if (!ran) dropped++;
   };
   const deliverAll = () => {
     const n = cmds.length; if (!n) return;
     let k = 0;
+    delivering = true;
     try { while (k < n) deliver(cmds[k++]); } // a throwing handler's command counts as delivered; the rest stay queued
-    finally { cmds.copyWithin(0, k); cmds.length -= k; }
+    finally {
+      delivering = false; cmds.copyWithin(0, k); cmds.length -= k;
+      while (holes.length) { const l = holes.pop(); let w = 0; for (let r = 0; r < l.length; r++) if (l[r]) l[w++] = l[r]; l.length = w; }
+    }
   };
   // [T-9] recording: only what comes from outside the sim. An op is external when no step, transition drain or boot is
   // running and no other recorded op is (a tap whose action calls go() records the tap only). `rec` exists only when
   // recording, so a plain engine allocates nothing here.
   const rec = record ? { depth: 0, log: [], last: null } : null;
   const copy = x => JSON.parse(JSON.stringify(x ?? null));
+  // recorded payloads must be plain JSON (plain objects/arrays, finite numbers, strings, booleans, null), so the tape and
+  // the replay see exactly what the handlers saw; returns a fresh copy, checked at issue
+  const json = (x, what) => {
+    const bad = () => { throw new Error(`engine: ${what} must be plain JSON`); }, seen = [];
+    const walk = v => {
+      if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+      if (typeof v === 'number') return Number.isFinite(v) ? v : bad();
+      if (typeof v !== 'object' || seen.includes(v)) return bad();
+      const arr = Array.isArray(v), proto = Object.getPrototypeOf(v);
+      if (!arr && proto !== Object.prototype && proto !== null) return bad();
+      seen.push(v);
+      let o; if (arr) { o = []; for (let i = 0; i < v.length; i++) o.push(v[i] === undefined ? bad() : walk(v[i])); }
+      else { o = {}; for (const k of Object.keys(v)) { if (v[k] === undefined) bad(); o[k] = walk(v[k]); } }
+      seen.pop(); return o;
+    };
+    return walk(x);
+  };
+  const live = x => x === null ? undefined : copy(x); // what the scene receives: a copy of the logged value
+  const arg = (x, what) => x === undefined ? null : json(x, what); // a missing args/opts is stored as null
   const entryAt = k => { const l = rec.log, x = l[l.length - 1]; if (x?.step === k) return x; const y = { step: k }; l.push(y); return y; };
   const recorded = (op, fn) => {
     const top = rec.depth === 0 && !stepping && !draining && !booting;
-    const o = top ? op() : null; // copied before it runs (a handler may keep the data); logged once it applied
-    rec.depth++; let r; try { r = fn(); } finally { rec.depth--; }
+    let o = null; if (top) op(o = []); // built (and its payload checked and copied) before it runs; logged once it applied
+    rec.depth++; let r; try { r = fn(o); } finally { rec.depth--; }
     if (top) (entryAt(step).ops ??= []).push(o); // under the step it precedes
     return r;
   };
@@ -169,18 +196,21 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
-    go: (name, a) => rec ? recorded(() => ['go', name, copy(a)], () => reqGo(name, a)) : reqGo(name, a),
-    overlay: (name, a) => rec ? recorded(() => ['overlay', name, copy(a)], () => reqOverlay(name, a)) : reqOverlay(name, a),
-    close: name => rec ? recorded(() => ['close', name], () => reqClose(name)) : reqClose(name),
-    jump: (name, preset, opts, a) => rec ? recorded(() => ['jump', name, preset, copy(opts), copy(a)], () => reqJump(name, preset, opts, a)) : reqJump(name, preset, opts, a),
-    command: (type, data = {}) => rec ? recorded(() => ['command', type, copy(data)], () => issue(type, data)) : issue(type, data),
+    // recording, an external op's payload is validated and the scene/handler receives a copy of what was logged
+    go: (name, a) => rec ? recorded(o => o.push('go', name, arg(a, 'scene args')), o => reqGo(name, o ? live(o[2]) : a)) : reqGo(name, a),
+    overlay: (name, a) => rec ? recorded(o => o.push('overlay', name, arg(a, 'scene args')), o => reqOverlay(name, o ? live(o[2]) : a)) : reqOverlay(name, a),
+    close: name => rec ? recorded(o => o.push('close', name), () => reqClose(name)) : reqClose(name),
+    jump: (name, preset, opts, a) => rec
+      ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))
+      : reqJump(name, preset, opts, a),
+    command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, data),
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
     render(alpha) { render(alpha); },
     ui: {
       tree: () => ui.tree(engine),
-      tap: id => rec ? recorded(() => ['tap', id], () => ui.tap(id, engine)) : ui.tap(id, engine),
-      fill: (id, t) => rec ? recorded(() => ['fill', id, String(t)], () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),
+      tap: id => rec ? recorded(o => o.push('tap', id), () => ui.tap(id, engine)) : ui.tap(id, engine),
+      fill: (id, t) => rec ? recorded(o => o.push('fill', id, String(t)), () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),
     },
     // [T-9] the recorded tape: start options plus, per step, the external ops and input changes (a deep copy)
     tape() {

@@ -27,3 +27,29 @@ test('2d: commands issued by the sim are not recorded', () => {
   h.step(10); assert.equal(h.tape().log.some(x => x.ops?.some(o => o[0] === 'command')), false);
   assert.throws(() => headless(game).tape(), /headless: not recording/);
 });
+test('2d fix: nothing stays held after replay; later input applies as on the original handle', () => {
+  const h = headless(game, { record: true }); h.tap('title.play'); h.step(240, { throttle: 1 });
+  const r = replay(game, JSON.parse(JSON.stringify(h.tape())));
+  h.step(30, { throttle: -1 }); r.step(30, { throttle: -1 });
+  assert.equal(r.checksum(), h.checksum()); assert.deepEqual(r.state(), h.state());
+});
+test('2d fix: recorded command data is delivered as logged, so mutating it after issue replays the same', () => {
+  const h = headless(game, { scene: 'race', record: true }), scratch = { dx: 1 };
+  h.command('nudge', scratch); scratch.dx = 100; h.step(60);
+  assert.equal(h.state().x, 1);
+  assert.equal(replay(game, JSON.parse(JSON.stringify(h.tape()))).checksum(), h.checksum());
+});
+test('2d fix: recorded payloads must be plain JSON; checked at issue', () => {
+  const h = headless(game, { scene: 'race', record: true }), cyc = {}; cyc.self = cyc;
+  for (const bad of [{ dx: NaN }, cyc, { f: () => 1 }, { d: new Date(0) }, { u: undefined }])
+    assert.throws(() => h.command('nudge', bad), /engine: command data must be plain JSON/);
+  assert.throws(() => h.go('title', { n: Infinity }), /must be plain JSON/);
+  assert.throws(() => h.jump('race', 'running', { x: NaN }), /must be plain JSON/);
+  assert.equal(h.engine.commands.pending, 0);
+  const plain = headless(game, { scene: 'race' }), obj = { dx: 1 }; // not recording: the caller's object, as-is
+  plain.command('nudge', obj); obj.dx = 2; plain.step(1); assert.equal(plain.state().x, 2);
+});
+test('2d fix: replay rejects a tape recorded at another hz', () => {
+  const h = headless(game, { record: true }); h.step(1);
+  assert.throws(() => replay(game, { ...h.tape(), hz: 30 }), /replay: tape hz differs/);
+});
