@@ -259,3 +259,17 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - `policy.every(n, fn, { phase })` (see #37), so tests can vary phase explicitly.
   - Guidance: when a test compares two runs, perturb one of them on purpose.
 - **Game change:** final-pass fix to Rally `test/game.mjs`: start run 2 at a different autopilot phase. Status: open.
+
+### 41. The input latch drops a second tap if no step sees the key go up: Rally (phase 2c R5)
+- **What happened:** under manual stepping, two Esc taps with no step between them collapse into one press. A double tap faster than one sim step could do the same.
+- **Workaround:** the Rally test steps once between the taps.
+- **Engine change:** the latch queues a forced release for the next apply, so press → release → press within one step yields two pressed edges across two steps. Status: open.
+
+### 42. `bindHold` lets the button take focus: Rally (phase 2c R5; see #15)
+- **What happened:** after tapping a held pedal, Space and Enter belong to that button.
+- **Workaround:** Rally prevents focus locally.
+- **Engine change:** `bindHold(..., { focus: false })`, default false for pedals: `preventDefault` on `pointerdown`, or `tabindex=-1`. Status: open.
+
+### 43. Playwright `touch.end(id)` lifted the wrong finger: engine test helper (phase 2c R5; confirms #32)
+- **What happened:** `game.touch.end(2)` lifted the steering touch instead of the gas touch.
+- **Engine change:** CDP `touchEnd` must keep the remaining fingers in `touchPoints`. Status: planned (2c R7).
