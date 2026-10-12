@@ -1,9 +1,18 @@
 // I-1, I-4, I-6: games declare named actions; devices, tests and the network write layered values; once per step
 // apply() turns them into one snapshot that systems read. Axes are numbers in [-1, 1]; buttons carry edges.
-export const axis = () => Object.freeze({ kind: 'axis' });
+// axis({ pair }) pairs two axes (#8): they merge per source as one vector (by length), so a stick and keys never mix halves.
+export const axis = ({ pair } = {}) => Object.freeze(pair === undefined ? { kind: 'axis' } : { kind: 'axis', pair });
 export const button = () => Object.freeze({ kind: 'button' });
 export function actions(map) {
   for (const [k, v] of Object.entries(map)) if (v?.kind !== 'axis' && v?.kind !== 'button') throw new Error(`actions: '${k}' must be axis() or button()`);
+  const paired = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (v.pair === undefined) continue; const p = v.pair;
+    if (!Object.hasOwn(map, p)) throw new Error(`actions: '${k}' pairs with unknown action '${p}'`);
+    if (map[p].kind !== 'axis' || p === k) throw new Error(`actions: '${k}' pairs with '${p}', which must be an axis`);
+    if (map[p].pair !== undefined) throw new Error(`actions: declare the pair '${k}'/'${p}' once`);
+    for (const n of [k, p]) { if (paired[n]) throw new Error(`actions: '${n}' is in two pairs`); paired[n] = true; }
+  }
   return Object.freeze({ ...map });
 }
 
@@ -17,12 +26,20 @@ export function createInput(schema) {
   const fresh = name => ({ name, values: Object.fromEntries(names.map(n => [n, isAxis[n] ? 0 : false])), rises: Object.fromEntries(buttons.map(n => [n, 0])), owes: Object.fromEntries(buttons.map(n => [n, false])) });
   const check = p => { for (const k in p) if (!(k in isAxis)) throw new Error(`input: unknown action '${k}'`); return p; };
   const clear = o => { for (const k in o) delete o[k]; };
-  // axis: largest |value| across sources, ties to the first registered; button: OR. Allocation-free.
+  const mate = {}; for (const n of names) if (schema[n].pair !== undefined) { mate[n] = schema[n].pair; mate[schema[n].pair] = n; } // #8: built once
+  const num = v => typeof v === 'number' && v === v ? v : 0;
+  // axis: largest |value| across sources, ties to the first registered; a paired axis takes the source whose pair vector is
+  // longest (ties to the first), so both halves come from one source (#8); button: OR. Allocation-free.
   const merged = n => {
-    let best, any = false;
+    let best, any = false; const m = mate[n];
+    if (m !== undefined) {
+      let len = -1;
+      for (let i = 0; i < sources.length; i++) { const vs = sources[i].values, l = Math.hypot(num(vs[n]), num(vs[m])); if (l > len) { len = l; best = num(vs[n]); } }
+      return len < 0 ? undefined : best;
+    }
     for (let i = 0; i < sources.length; i++) {
       const v = sources[i].values[n];
-      if (isAxis[n]) { const x = typeof v === 'number' && v === v ? v : 0; if (!any || Math.abs(x) > Math.abs(best)) best = x; any = true; }
+      if (isAxis[n]) { const x = num(v); if (!any || Math.abs(x) > Math.abs(best)) best = x; any = true; }
       else if (v) return true;
     }
     return isAxis[n] ? (any ? best : undefined) : false;

@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { bindStick, bindHold, createEngine, defineGame, actions, axis, button } from '../src/index.view.js';
 import { dom } from './helpers/dom.mjs';
 
-const setup = () => {
+const setupWith = schema => {
   const { window, document } = dom();
-  const engine = createEngine(defineGame({ id: 't', start: 's', scenes: { s: { update() {} } }, actions: actions({ steer: axis(), throttle: axis(), horn: button() }) }));
+  const engine = createEngine(defineGame({ id: 't', start: 's', scenes: { s: { update() {} } }, actions: schema }));
   const root = document.createElement('div'); document.body.appendChild(root);
   const btn = document.createElement('button'); root.appendChild(btn);
   const ev = (el, type, pointerId, x = 0, y = 0) => el.dispatchEvent(new window.PointerEvent(type, { pointerId, clientX: x, clientY: y, bubbles: true, cancelable: true }));
   const v = () => engine.input.apply();
   return { window, document, engine, root, btn, ev, v };
 };
+const setup = () => setupWith(actions({ steer: axis(), throttle: axis(), horn: button() }));
 const stick = (s, o = {}) => bindStick(s.engine, { root: s.root, x: ['steer', 1], y: ['throttle', 1], doc: s.document, ...o });
 
 test('full right gives steer 1; up 35px gives dead-zoned throttle', () => {
@@ -172,4 +173,28 @@ test('2e: origin centre: a fixed pad deflects from its centre at once and is nev
   h.dispose(); assert.equal(base.hidden, false); assert.equal(base.isConnected, true);
   assert.throws(() => bindStick(s.engine, { root: base, x: ['steer', 1], origin: 'centre', doc: s.document }), /origin 'centre' needs a base/);
   assert.throws(() => bindStick(s.engine, { root: base, base, x: ['steer', 1], origin: 'middle', doc: s.document }), /origin must be 'thumb' or 'centre'/);
+});
+
+const WORLD = actions({ goX: axis({ pair: 'goZ' }), goZ: axis(), goBack: button() });
+const camMap = cam => ({ from: ['sx', 'sy'], to: (x, y, out) => {
+  const m = Math.min(1, Math.hypot(x, y)), a = Math.atan2(x, y), w = cam.yaw - a;
+  out.goX = m * Math.sin(w); out.goZ = m * Math.cos(w); out.goBack = m > 0 && Math.abs(a) > Math.PI * 0.8; return out; } });
+test('2f: bindStick map turns the stick into world-frame actions and re-applies it each update while held (#8, #81)', () => {
+  const s = setupWith(WORLD), cam = { yaw: 0 }, near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
+  const st = bindStick(s.engine, { root: s.root, x: ['sx', 1], y: ['sy', 1], map: camMap(cam), deadZone: 0, doc: s.document });
+  s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230); // straight up, full
+  let v = s.v(); near(v.goX, 0); near(v.goZ, 1); assert.equal(v.goBack.down, false);
+  cam.yaw = Math.PI / 2; st.update(0.016); v = s.v(); near(v.goX, 1); near(v.goZ, 0); // the camera turned under a still thumb
+  s.ev(s.window, 'pointermove', 1, 200, 370); v = s.v(); assert.equal(v.goBack.down, true);
+  s.ev(s.window, 'pointerup', 1); v = s.v(); assert.deepEqual([v.goX, v.goZ, v.goBack.down], [0, 0, false]);
+});
+test('2f: bindStick map: update is a no-op without a finger or without a map; a bad map throws (#8)', () => {
+  const s = setupWith(WORLD), cam = { yaw: 0 }, seen = [];
+  const st = bindStick(s.engine, { root: s.root, x: ['sx', 1], y: ['sy', 1], map: camMap(cam), deadZone: 0, doc: s.document });
+  const dev = s.engine.input.device; s.engine.input.device = (p, src) => { seen.push(Object.keys(p).sort().join()); dev(p, src); };
+  st.update(0.016); assert.equal(seen.length, 0);
+  s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230); st.update(0.016);
+  assert.deepEqual(seen, ['goBack,goX,goZ', 'goBack,goX,goZ']); // the virtual names never reach engine.input
+  const plain = setup(), p = stick(plain); assert.equal(typeof p.update, 'function'); p.update(0.016);
+  assert.throws(() => bindStick(s.engine, { root: s.root, x: ['sx', 1], y: ['sy', 1], map: { from: ['sx'], to: () => ({}) }, doc: s.document }), /bindStick: map.from must be two distinct names/);
 });

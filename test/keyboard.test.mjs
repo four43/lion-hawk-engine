@@ -97,3 +97,19 @@ test('2c (changed F4): Enter and Space on a focused button are left to the butto
   assert.equal(fire(document.body, 'Enter'), true); assert.equal(fire(b, 'w'), true);
   kb.update(0.016); assert.equal(calls.at(-1).ok, true); assert.equal(calls.at(-1).t, 1);
 });
+
+const camMap = cam => ({ from: ['sx', 'sy'], to: (x, y, out) => {
+  const m = Math.min(1, Math.hypot(x, y)), a = Math.atan2(x, y), w = cam.yaw - a;
+  out.goX = m * Math.sin(w); out.goZ = m * Math.cos(w); out.goBack = m > 0 && Math.abs(a) > Math.PI * 0.8; return out; } });
+test('2f: bindKeyboard map: W+D is a normalised diagonal, S alone is goBack, the virtual names never leave (#8)', () => {
+  const { window, document } = dom(), calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const kb = bindKeyboard(engine, { w: ['sy', 1], s: ['sy', -1], a: ['sx', -1], d: ['sx', 1], h: 'horn' }, { target: window, doc: document, map: camMap({ yaw: 0 }) });
+  const key = (type, k) => document.body.dispatchEvent(new window.KeyboardEvent(type, { key: k, bubbles: true, cancelable: true }));
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`), last = () => calls[calls.length - 1];
+  key('keydown', 'w'); key('keydown', 'd'); kb.update(0.016);
+  near(-last().goX, Math.SQRT1_2); near(last().goZ, Math.SQRT1_2); assert.equal(last().goBack, false); // camMap: screen right is world -x at yaw 0
+  assert.deepEqual(Object.keys(last()).sort(), ['goBack', 'goX', 'goZ', 'horn']);
+  key('keyup', 'w'); key('keyup', 'd'); key('keydown', 's'); key('keydown', 'h'); kb.update(0.016);
+  assert.equal(last().goBack, true); assert.equal(last().horn, true);
+});

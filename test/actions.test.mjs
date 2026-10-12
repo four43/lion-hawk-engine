@@ -113,3 +113,22 @@ test('final review: clearing a button\'s last contributing source drops its owed
   inp.clearDevice('k');
   assert.deepEqual(seq(inp), [false, false, true]); assert.deepEqual(seq(inp), [true, true, false]);
 });
+
+test('2f: a paired axis merges per source by vector length, not per axis (#8)', () => {
+  const inp = createInput(actions({ gx: axis({ pair: 'gz' }), gz: axis(), other: axis() }));
+  inp.device({ gx: 0.9, gz: 0 }, 'keys'); inp.device({ gx: 0.5, gz: 0.8 }, 'stick'); // 0.9 < 0.943
+  let s = inp.apply(); assert.deepEqual([s.gx, s.gz], [0.5, 0.8]);
+  inp.device({ gx: 1, gz: 0.5 }, 'keys'); s = inp.apply(); assert.deepEqual([s.gx, s.gz], [1, 0.5]); // both from keys now
+  inp.set({ gz: -1 }); s = inp.apply(); assert.deepEqual([s.gx, s.gz], [1, -1]); // set still overrides one axis
+  assert.throws(() => actions({ a: axis({ pair: 'b' }) }), /actions: 'a' pairs with unknown action 'b'/);
+  assert.throws(() => actions({ a: axis({ pair: 'b' }), b: button() }), /actions: 'a' pairs with 'b', which must be an axis/);
+  assert.throws(() => actions({ a: axis({ pair: 'b' }), b: axis({ pair: 'a' }) }), /actions: declare the pair 'a'\/'b' once/);
+});
+test('2f: pairs: a tie goes to the first source, an axis is in one pair, and an unpaired axis keeps the per-axis merge (#8)', () => {
+  const inp = createInput(actions({ gx: axis({ pair: 'gz' }), gz: axis(), other: axis() }));
+  inp.device({ gx: 0, gz: 1, other: 0.2 }, 'a'); inp.device({ gx: 1, gz: 0, other: -0.7 }, 'b');
+  const s = inp.apply(); assert.deepEqual([s.gx, s.gz, s.other], [0, 1, -0.7]);
+  assert.throws(() => actions({ a: axis({ pair: 'c' }), b: axis({ pair: 'c' }), c: axis() }), /actions: 'c' is in two pairs/);
+  assert.throws(() => actions({ a: axis({ pair: 'a' }) }), /must be an axis/);
+  assert.deepEqual(axis(), { kind: 'axis' });
+});

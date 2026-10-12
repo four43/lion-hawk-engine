@@ -47,3 +47,14 @@ test('2d: a curve is not applied at rest; an empty binding list throws (E2 minor
   pad.update(); assert.equal(calls.at(-1).steer, 0);
   assert.throws(() => bindGamepad(engine, { buttons: { 0: [] } }, { getGamepads: () => [] }), /bindGamepad: button 0 has an empty binding list/);
 });
+
+test('2f: bindGamepad map: a radial dead zone over the pair, then world-frame actions (#8)', () => {
+  const camMap = cam => ({ from: ['sx', 'sy'], to: (x, y, out) => {
+    const m = Math.min(1, Math.hypot(x, y)), a = Math.atan2(x, y), w = cam.yaw - a;
+    out.goX = m * Math.sin(w); out.goZ = m * Math.cos(w); out.goBack = m > 0 && Math.abs(a) > Math.PI * 0.8; return out; } });
+  const pads = [{ index: 0, axes: [0.1, -0.1], buttons: btns() }], calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const pad = bindGamepad(engine, { axes: { 0: ['sx', 1], 1: ['sy', -1] }, buttons: { 0: 'horn' }, deadZone: 0, map: { ...camMap({ yaw: 0 }), radial: 0.15 } }, { getGamepads: () => pads });
+  pad.update(); assert.deepEqual(calls[0], { horn: false, goX: 0, goZ: 0, goBack: false }); // inside the radial zone, outside a per-axis one
+  pads[0].axes = [0, -1]; pad.update(); assert.equal(calls[1].goZ, 1); assert.ok(Math.abs(calls[1].goX) < 1e-12);
+});

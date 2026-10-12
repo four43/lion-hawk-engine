@@ -1,6 +1,8 @@
+import { mapper } from './mapPair.js';
 // Touch devices: a floating thumb stick (origin 'thumb') or a fixed pad deflecting from its centre (origin 'centre', #53) and hold buttons on pointer events -> named actions in per-source device layers (I-3: released on cancel/blur/hide).
+// map (#8, #81): x/y may target map.from's virtual names; the stick then writes map.to's world-frame actions, and update() re-applies them while held.
 // Moves/ups route by pointerId on the window (iOS does not reliably retarget captured moves); cancel and lostpointercapture are releases.
-export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: adoptKnob, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', preventDefault = true, origin = 'thumb', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
+export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: adoptKnob, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', preventDefault = true, origin = 'thumb', map, doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
   if (origin !== 'thumb' && origin !== 'centre') throw new Error("bindStick: origin must be 'thumb' or 'centre'");
   if (origin === 'centre' && !adoptBase) throw new Error("bindStick: origin 'centre' needs a base");
   const fixed = origin === 'centre'; // a fixed pad: never hidden, shown or moved
@@ -12,9 +14,10 @@ export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: ado
   else { base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true; base.style.position = 'fixed'; knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); parent.appendChild(base); }
   const prevTA = surface.style.touchAction; surface.style.touchAction = 'none';
   const out = {}; if (x) out[x[0]] = 0; if (y) out[y[0]] = 0; // reused every move
+  const lay = map ? mapper(map, 'bindStick') : null;
   let id = null, ox = 0, oy = 0, R = 70;
 
-  const write = (vx, vy) => { if (x) out[x[0]] = vx * x[1] + 0; if (y) out[y[0]] = vy * y[1] + 0; engine.input.device(out, source); }; // +0 normalises -0
+  const write = (vx, vy) => { if (x) out[x[0]] = vx * x[1] + 0; if (y) out[y[0]] = vy * y[1] + 0; engine.input.device(lay ? lay(out) : out, source); }; // +0 normalises -0
   const release = () => {
     if (id === null) return; id = null; if (!fixed) base.hidden = true; knob.style.transform = ''; surface.removeAttribute('data-lh-active'); write(0, 0);
   };
@@ -54,6 +57,7 @@ export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: ado
   win.addEventListener('pointermove', onMove); win.addEventListener('pointerup', onEnd); win.addEventListener('pointercancel', onEnd);
   win.addEventListener('blur', release); win.addEventListener('pagehide', release); doc.addEventListener('visibilitychange', onVis);
   return {
+    update() { if (lay && id !== null) engine.input.device(lay(out), source); }, // #81: the camera may turn under a still thumb
     dispose() {
       surface.removeEventListener('pointerdown', onDown); surface.removeEventListener('lostpointercapture', onEnd);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onEnd); win.removeEventListener('pointercancel', onEnd);

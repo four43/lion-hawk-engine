@@ -1,5 +1,8 @@
 // Gamepad device: polled axes (per-axis dead zone) and buttons -> named actions in a per-source layer.
+// map.map (#8): axes may target map.map.from's virtual names; update() writes map.map.to's actions in their place (radial zone in map.map.radial).
+import { mapper } from './mapPair.js';
 export function bindGamepad(engine, map, { getGamepads, source = 'pad' } = {}) {
+  const lay = map.map ? mapper(map.map, 'bindGamepad') : null;
   const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? []);
   const dz = map.deadZone ?? 0.15;
   const axisMap = Object.keys(map.axes ?? {}).map(i => ({ i: +i, name: map.axes[i][0], sign: map.axes[i][1], curve: map.axes[i][2] }));
@@ -28,7 +31,7 @@ export function bindGamepad(engine, map, { getGamepads, source = 'pad' } = {}) {
         else if (bt.pressed) out[m.name] = true;
       }
     }
-    if (any) engine.input.device(out, source); else engine.input.clearDevice(source);
+    if (any) engine.input.device(lay ? lay(out) : out, source); else engine.input.clearDevice(source);
   }
   const dispose = () => engine.input.clearDevice(source);
   return { update, dispose };

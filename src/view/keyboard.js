@@ -1,7 +1,10 @@
 // Keyboard device: held keys -> named actions in a per-source input layer (I-3: released on blur/hide).
+import { mapper } from './mapPair.js';
 const GUARD = 'input, textarea, select, [contenteditable]';
 
-export function bindKeyboard(engine, bindings, { target, doc, source = 'keyboard', ramps = {} } = {}) {
+// map (#8): bindings may target map.from's virtual names; update() writes map.to's actions in their place (after ramps).
+export function bindKeyboard(engine, bindings, { target, doc, source = 'keyboard', ramps = {}, map } = {}) {
+  const lay = map ? mapper(map, 'bindKeyboard') : null;
   target = target ?? globalThis.window; doc = doc ?? target.document ?? globalThis.document;
   const keys = Object.keys(bindings).map(k => k.toLowerCase());
   const src = bindings; bindings = {}; Object.keys(src).forEach((k, i) => { bindings[keys[i]] = src[k]; });
@@ -57,7 +60,7 @@ export function bindKeyboard(engine, bindings, { target, doc, source = 'keyboard
     for (let i = 0; i < buttons.length; i++) out[buttons[i]] = false;
     for (let i = 0; i < keys.length; i++) { const b = bindings[keys[i]]; if ((held[keys[i]] || tap[keys[i]]) && !Array.isArray(b)) out[b] = true; }
     for (let i = 0; i < keys.length; i++) tap[keys[i]] = false;
-    engine.input.device(out, source);
+    engine.input.device(lay ? lay(out) : out, source);
   }
   function dispose() {
     target.removeEventListener('keydown', onDown); target.removeEventListener('keyup', onUp);
