@@ -90,7 +90,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
 | 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | planned (2f T-E5, T6) |
-| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | planned (2f T-E4, T-E6, T8) |
+| 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4 done; T-E6, T8 open) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
 | 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
 | 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | planned (2f T3, T-E8) |
@@ -518,7 +518,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 78. Binary replica frames vs plain-JSON tapes: Tractor Pickup (phase 2f plan)
 - **What happened:** replica frames are `ArrayBuffer`s; tapes must be plain JSON ([T-9]).
 - **Change:** the port decodes frames (`decodeFrame`, the N-3 check) and issues `net.frame` with `frameToJson`'s plain form; the sync gets `frameFromJson`'s decoded form, the same values `decodeFrame` gave. Binary stays in the outbox and on the wire only. A guest's tape then replays without its host (2f T8).
-- **Status:** planned (2f T-E4, T-E6, T8).
+- **Status:** in progress (2f T-E4 done: codec, frameToJson/frameFromJson; T-E6, T8 open).
 
 ### 79. The show writes sim animals from the view, paced by the voice: Tractor Pickup (phase 2f plan)
 - **What happened:** `ui/show.js` sets each rider's `state = 'show'` and tweens its `x/y/z/yaw` (a sim object) from the view, with waits on `setTimeout` and on the voice's promises; the layout depends on the screen (portrait vs landscape). After the show the herd walks the animals into the barn from wherever the view left them, so the sim's next state depends on the view.
