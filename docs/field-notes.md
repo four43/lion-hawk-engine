@@ -40,7 +40,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
 | 26 | Policies that run slower than the sim | Rally | done (2d D10) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
-| 28 | Sim objects live in the scene's `state` | Rally, Pig Pens | open (Rally R2 and Pig Pens P2 workarounds; phase 4 World) |
+| 28 | Sim objects live in the scene's `state` | Rally, Pig Pens | open (Rally R2, Pig Pens P2 and Tractor T3 hold the game object in `state`; phase 4 World) |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
 | 30 | First pad only vs. every pad merged | Rally | won't (accepted; 2c-rally R5) |
 | 31 | Two sets of safe-area variables | Rally | done (2c-rally) |
@@ -93,16 +93,16 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4, T-E6 done: frames arrive as plain-JSON `net.frame` commands; T8 open) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
 | 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
-| 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); Tractor adoption 2g (use `PILOT.revCone`) |
+| 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption 2g (use `PILOT.revCone`) |
 | 82 | Keys override the stick and a pad overrides both, vs a length merge | Tractor Pickup | accepted (2f T-E8: longest vector wins, ties to the first source); on the 2g playtest list |
 | 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | engine half done (2f T-E9: `ui.hold({ wall })`, e2e on throttled frames); Tractor adoption 2g |
 | 84 | Player records in browser storage are read by the flow | Tractor Pickup | planned (2f T4) |
 | 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | planned (2f T5, 2g G4) |
 | 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | planned (2f T1: allowlisted) |
-| 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | planned (2f T3) |
+| 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | sim half done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order); view plays them in 2g |
 | 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | planned (2f T6, T7) |
 | 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
-| 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | planned (2f T3: pipeline in `step`) |
+| 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | done for Tractor (2f T3: the whole pipeline is the farm `step` hook, goldens bit-exact); engine-level rule still open |
 | 91 | Schema-derived binary commands would change the wire | Tractor Pickup | built, not adopted (2f T-E5: `wireCodec` json + binary; fixed/angle quantise like the replica; NET_VERSION stays 3) |
 | 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
 | 93 | A late peer's virtual wall is an ulp off the hub's | engine | open (tolerance in tests; `wallStep0` engine option if exactness is ever needed) |
