@@ -48,6 +48,19 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 33 | Every debug jump rebuilds the world | Rally | won't for now (2c-rally R3) |
 | 34 | Stale browser tooling | Rally | done (2c-rally) |
 | 35 | A fixed engine seed gives every visitor the same first track | Rally | done (2c-rally) |
+| 36 | Can't ask "is this overlay open or pending?" | Rally | open (worked around in 2c-rally R2) |
+| 37 | Policies have no per-handle state or rate | Rally | open (worked around in 2c-rally R2) |
+| 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | open |
+| 39 | A control can't both trigger an action and be gated | Rally | open |
+| 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance open |
+| 41 | The input latch drops a second tap if no step sees the key go up | Rally | open (worked around in 2c-rally R5) |
+| 42 | `bindHold` lets the button take focus | Rally | open (worked around in 2c-rally R5) |
+| 43 | Playwright `touch.end(id)` lifted the wrong finger | engine test helper | done |
+| 44 | Device ramps use uncapped frame time | Rally | open (worked around in 2c-rally R6) |
+| 45 | No query for "is this control enabled?" | Rally | open (worked around by matching error text) |
+| 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | open (worked around in 2c-rally R6) |
+| 47 | Under `?lh-test` the driver still renders every frame | Rally | open |
+| 48 | `expectTappable` only accepts test IDs | Rally | open |
 
 ## Entries
 
@@ -278,7 +291,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Engine change:**
   - `policy.every(n, fn, { phase })` (see #37), so tests can vary phase explicitly.
   - Guidance: when a test compares two runs, perturb one of them on purpose.
-- **Game change:** final-pass fix to Rally `test/game.mjs`: start run 2 at a different autopilot phase. Status: open.
+- **Game change:** final-pass fix to Rally `test/game.mjs`: run 2 starts one step later (the autopilot's phase shifts), giving 167.400 s vs 167.492 s, and the test asserts the two differ. Status: done for Rally; the engine guidance is open.
 
 ### 41. The input latch drops a second tap if no step sees the key go up: Rally (phase 2c R5)
 - **What happened:** under manual stepping, two Esc taps with no step between them collapse into one press. A double tap faster than one sim step could do the same.
@@ -314,4 +327,5 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 48. `expectTappable` only accepts test IDs: Rally (phase 2c R7)
 - **What happened:** Rally's pedals and HUD chips aren't registry controls (they're devices and plain DOM), so `mobile.mjs` keeps local box/hit checks for them. The research predicted `mobile.mjs` would shrink to about 80 lines; measured, it stayed at 197 lines (727 → 797 checks).
+- **Size of the migration:** Rally's `src` did not shrink either. It was 4123 lines before the migration (a39cbaf) and is 4316 after (+193, of which +81 is the autopilot moved from `test/` into `src`). The gain is structure, not size: a single flow owner, headless-testable flow, and no wall-clock timers in the sim.
 - **Engine change:** `expectTappable`, `expectFitsSafeArea` and `expectNoOverlap` accept any selector or locator. Status: open.

@@ -265,7 +265,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 - **[S-1]** A scene has a sim half and a view half, keyed by the same name:
   - **Sim half** (headless-safe): `{ enter(engine, args), exit(engine), step(engine, dt), ui(ui), presets }`.
-  - **View half** (browser): `{ enter(engine, view), exit(), frame(engine, alpha) }`. It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time) and `wait(promise)`.
+  - **View half** (browser): `{ enter(engine, view), exit(engine, view), frame(engine, alpha, view) }`. It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time) and `wait(promise)`.
 - **[S-2]** `engine.go(name, args)` replaces the main scene. `engine.overlay(name, args)` stacks a scene on top, and `engine.close(name)` removes it. An overlay may set `pauses: true` to freeze the sim below it while it is still drawn.
 - **[S-3]** Each main scene owns a `World` and a Rapier world. Leaving the scene disposes both, plus the scene's GPU resources.
 - **[S-4]** **Flow state lives in scenes or the sim, never in the view.** A view animation that gates flow (a show, a reward card) either becomes a scene timer or ends by emitting an ack event that the sim scene waits for.
@@ -277,10 +277,12 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 - **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`; a press shorter than a step is latched until the next apply.
 - **[I-2]** Devices bind to actions. They are view-only modules.
   - **Keyboard:** configurable ease ramps (a number or a function of time), `shift+` chords; keys are ignored while a text field has focus.
+    - A key is released by `e.code`, since Shift may change `e.key` between down and up.
+    - Enter and Space on a focused `<button>` belong to the button (the browser clicks it); the keyboard device does not bind them.
   - **Gamepad:** `getGamepads()` is polled every frame, using the standard mapping; axes take response curves.
   - **Touch:**
     - A floating stick with a 24 px left-edge guard and a radial dead zone (or a one-axis slider mode), plus hold buttons.
-    - Fingers are tracked by `pointerId`, with listeners on the root element.
+    - Fingers are tracked by `pointerId`. `pointerdown` (and `lostpointercapture`) listen on the surface element. Moves, `pointerup` and `pointercancel` are routed by `pointerId` on the window, because iOS does not reliably retarget captured moves.
     - `pointercancel` and `lostpointercapture` count as a release.
     - The root has `touch-action: none`.
 - **[I-3]** On `blur` and `visibilitychange`, every held action is released.
@@ -292,7 +294,10 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 - **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })`, `ui.toggle(...)`, `ui.choice(...)` and `ui.field(...)`:
   - A game's markup marked `data-lh-slot` is adopted instead of the engine creating its own element.
-  - In the browser they render as real `<button>` elements with an accessible name and `data-testid="<scene>.<id>"`. Toggles use `aria-pressed`.
+  - In the browser, buttons and toggles render as real `<button>` elements with an accessible name and `data-testid="<scene>.<id>"`. Toggles use `aria-pressed`.
+  - A `field` renders as an `<input type="text">` with `aria-label`. It commits on `change` or on Enter (then blurs), and is not overwritten while focused.
+  - A `choice` renders one `<button>` per option (`data-testid="<scene>.<id>.<value>"`) with `aria-pressed` set on the selected one. The options share a `group` in `ui.tree()`; the DOM has no wrapper element for them.
+  - An adopted (`data-lh-slot`) control keeps the game's markup: the engine only sets `data-testid`, `disabled` and `aria-pressed`, and leaves the label alone. When the control leaves the registry it loses its `data-testid` and is disabled, not removed. Engine-created elements are removed.
   - Headless, they are registered without DOM so tests can tap them (§7.4).
 - **[U-2]** HUD readouts use `<output data-testid="hud.<id>" data-value="<raw>">`.
 - **[U-3]** The `<html>` element carries `data-lh-scene`, `data-lh-overlays` and `data-lh-settled`. Overlay roots carry `data-lh-overlay="<name>"`.
@@ -383,7 +388,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - **settling:** `settled()`;
   - **view:** `view.project`, `ui.tree()`;
   - **other:** `net`, `rng(name)`, `policies`, and the game's `debug()` extras.
-- **[D-5]** `window.piggies`, `window.rally` and `window.tp` remain as aliases until their game finishes phase 2.
+- **[D-5]** `window.rally` is removed (Rally has migrated). `window.piggies` and `window.tp` remain as aliases until their games finish phase 2.
 - **[D-6]** `settled()` is true when:
   - no asset, font or shader loads are pending (including promises handed to `view.wait`);
   - no element has `data-lh-state="opening|closing"`;
@@ -409,6 +414,7 @@ These run under `node:test`.
   - `h.place(e, opts)`, `h.spawn(desc)`, `h.despawn(e)`.
   - `h.go`, `h.overlay`, `h.jump`.
   - `h.tap(testid)` taps a registered UI control. It fails if the control is not present, or its `when` is false.
+  - `h.fill(testid, value)` sets a `field` control. It fails if the control is not a field, or its `when` is false.
 - **[T-6] Fixtures.** `fixtures.define(name, (h, ...args) => ...)` and `h.use('quietYard', 'warm:60', ['ahead', e])`. The built-in `warm:N` steps N times with `policy.still`.
 - **[T-7] State.** `h.snapshot()`, `h.restore(snap)`, `h.fork()`, `h.checksum({ parts: 'sim' })`, `diff(a, b, { tol })`, and golden files with `--bless`.
 - **[T-8] Spies and logs.** `h.spy(obj, method)` returns `{ calls, count }`. Warnings and errors are captured, and fail the test unless it calls `h.expectWarning(re)`.
@@ -439,7 +445,7 @@ These run under `node:test`.
   - State and scenes: `render`, `state`, `query`, `go`, `jump`.
   - Input: `input.hold` / `release`.
   - Touch: `touch.start/move/end/drag` through CDP, so taps are hit-tested and multi-touch works. Targets are a locator, `{x, y}` or `{ world: [x, y, z] }`.
-  - UI: `tap(label)` and `control(testid)`.
+  - UI: `tap(label)`, `fill(testid, value)` and `control(testid)`. `fill` types into the real `<input>` and presses Enter to commit it.
   - Screenshots: `shot(name, { mask })`.
   - Errors: `errors` must be empty at teardown.
 - **[T-18] Matchers.** `toBeInScene`, `toHaveEmitted`, `toBeSettled`, `toHaveState`, `toBeTappable({ min })`, `toFitSafeArea`, `toNotOverlap`, `toBeThumbReachable(side)`.
