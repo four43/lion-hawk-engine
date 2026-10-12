@@ -258,30 +258,39 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   step:  input.apply → systems.pre → physics.world → systems.post → events.flush
   ```
   Systems order themselves within a stage with `before` / `after`. `engine.schedule()` returns the resolved order.
-- **[R-7] Manual mode.** `engine.manual(true)` stops automatic stepping. `stepN(n)`, `advance(sec)` and `render(alpha)` then drive the engine by hand. Headless runs are always manual.
+  - `input.apply` runs `lh.ui` (hold-control progress on engine time, [U-1]), then `lh.input`, then `lh.commands` ([I-7]), then the game's systems. In `pre`, `lh.scene` steps the scenes (a loading scene's slot runs its load tick instead, [S-6]).
+  - With step acks (`acks: 'steps'`, the default: headless and `?lh-test`), `engine.presented()` runs at the very start of each step, so every step counts as a presented frame. A browser boot uses frame acks ([S-6]).
+  - `engine.onRender(fn)` appends a render slot and returns an unsubscribe; `engine.render(alpha)` calls every slot in registration order (removal during a render applies from the next one). `boot` keeps its own slot, so a game's `onRender` no longer silences the view halves.
+- **[R-7] Manual mode.** `engine.manual(true)` stops automatic stepping. `stepN(n)`, `advance(sec)` and `render(alpha)` then drive the engine by hand. Headless runs are always manual. `driver.manual('all')` (also `?lh-test=render`, [D-1]) additionally stops automatic rendering: the tick updates devices only (no step, no render, so no frame ack), and tests call `render()` themselves.
 - **[R-8] No allocation.** Nothing is allocated per step or per frame in engine code. Enforced by [T-13].
 
 ### 5.2 Scenes
 
 - **[S-1]** A scene has a sim half and a view half, keyed by the same name:
-  - **Sim half** (headless-safe): `{ enter(engine, args), exit(engine), step(engine, dt), ui(ui), presets }`.
-  - **View half** (browser): `{ enter(engine, view), exit(engine, view), frame(engine, alpha, view) }`. It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time) and `wait(promise)`.
+  - **Sim half** (headless-safe): `{ enter(engine, ctx), exit(engine, ctx), step(engine, dt, ctx), ui(ui), presets }`. `ctx` is the scene instance: `name`, `id`, `args`, `state`, `system(name, fn, opts)` (removed on exit), `command(type, fn)` ([I-7]) and `load(opts)` ([S-6]).
+  - **View half** (browser): `{ enter(engine, view), exit(engine, view), frame(engine, alpha, view) }`. It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time), `wait(promise)`, `focus(testid)` ([U-1]) and `project` (the game's world-to-client projection, set by its view half; exposed as `window.engine.view.project`). A view half may also define `built(engine, view)`, called right after a load's build ([S-6]). View halves enter after the UI sync, so their scene's controls already exist, are adopted and enabled.
 - **[S-2]** `engine.go(name, args)` replaces the main scene. `engine.overlay(name, args)` stacks a scene on top, and `engine.close(name)` removes it. An overlay may set `pauses: true` to freeze the sim below it while it is still drawn.
 - **[S-3]** Each main scene owns a `World` and a Rapier world. Leaving the scene disposes both, plus the scene's GPU resources.
 - **[S-4]** **Flow state lives in scenes or the sim, never in the view.** A view animation that gates flow (a show, a reward card) either becomes a scene timer or ends by emitting an ack event that the sim scene waits for.
 - **[S-5]** Scenes export `presets`: named functions that put the scene in a known state (`race.nearFinish`, `farm.reward`). `engine.jump(scene, preset, opts)` enters the scene and applies the preset.
-- **[S-6]** The engine provides a `loading` scene that shows asset progress and warms materials.
+- **[S-6] Loading is a scene state, not a scene.** `ctx.load({ build, then, hold = 0, frames = 1, settle = false, label = '' })` (#6, #21, #38) suspends that scene's `step` hook; in that slot the engine counts ticks and calls `build(engine, ctx)` once `hold` seconds of engine time have passed and `frames` frames have been presented since the request (a frame drawn before the request, such as one still waiting for its ack, does not count). Then `then(engine, ctx)` runs: at once, or with `settle: true` once a frame has been presented after the build and no `engine.block()` is outstanding. `load.then` may be reassigned while the load is pending. One load is active in the engine at a time; exiting the scene drops its load; a throwing build drops the load and rethrows.
+  - `engine.loading` is a live `{ active, scene, label, phase: '' | 'hold' | 'settle', blocks }` (`blocks`: the labels of unreleased blocks). `engine.onBuilt(fn)` runs `fn(engine, ctx)` right after a build, before settle is evaluated, so a view half's `built` can start a `view.wait` that blocks the settle in the same slot.
+  - **Frame acks.** `engine.time.frames` counts presented frames. With step acks (headless, `?lh-test`) every step is one, so the first-tick behaviour is deterministic. With frame acks (a real browser boot) the driver calls `engine.presented()` at the start of the next tick after it rendered (the frame drew in the previous rAF, so it has been presented); `engine.onPresent(fn)` subscribes. If the build queued a `go`, `then` still runs and the go applies at the end of the step.
+  - `engine.block(label)` returns a release; `engine.blocked` counts unreleased blocks. `view.wait(promise)` takes a block until the promise settles. `settled()` is false while a load is active ([D-6]).
+  - Asset progress and material warming (the old "loading scene") move to phase 3 with `assets.preload`.
 
 ### 5.3 Input
 
-- **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`; a press shorter than a step is latched until the next apply.
+- **[I-1]** A game declares its actions with `actions({ name: axis() | button() })`. An axis is in [-1, 1]. A button exposes `down`, `pressed` and `released`; a press shorter than a step is not lost: each device source counts its own rising edges since the last apply and every edge is owed as a press, spread over successive steps (pressed, released, pressed, ...; at most 3 owed), so two taps between two steps give two presses (#41). A `set` or `hold` of the button wins and clears what is owed.
 - **[I-2]** Devices bind to actions. They are view-only modules.
   - **Keyboard:** configurable ease ramps (a number or a function of time), `shift+` chords; keys are ignored while a text field has focus.
     - A key is released by `e.code`, since Shift may change `e.key` between down and up.
     - Enter and Space on a focused `<button>` belong to the button (the browser clicks it); the keyboard device does not bind them.
   - **Gamepad:** `getGamepads()` is polled every frame, using the standard mapping; axes take response curves.
   - **Touch:**
-    - A floating stick with a 24 px left-edge guard and a radial dead zone (or a one-axis slider mode), plus hold buttons.
+    - A floating stick with a 24 px left-edge guard and a radial dead zone (or a one-axis slider mode), plus hold buttons. `bindStick` calls `preventDefault` on the pointerdown it accepts (option `preventDefault`, default on), guards a non-positive or non-finite `radius()` (falls back to 70) and a knob-less adopted base. `bindHold(engine, el, action, { source, value, focus = false })` stops the button taking focus on pointerdown/mousedown unless `focus: true` (#42); Space and Enter stay the game's.
+    - `bindPointer(engine, { surface, type, at, filter, ignore, edge, tap, press, doc })` turns pointer gestures into commands ([I-7]) of the given `type` with data `{ phase: 'down' | 'move' | 'up' | 'cancel' | 'tap' | 'press', pointer, button, kind, ...at(clientX, clientY, event) }` (#5, #8). It owns the gesture: filters (`filter.pointerType`, `filter.button`), an `ignore` selector (UI controls by default), an `edge` guard, pointer capture, window routing of move/up/cancel, a second finger cancelling the active gesture (and blocking until all lift), cancel on blur, pagehide and a hidden tab, moves coalesced to one per `update(dt)`, a tap (up within `tap.move` px, default 12, and `tap.seconds`, default 0.45, with no `press`) and an optional long press after `press` seconds. The reserved keys cannot be overridden by `at()`; if `at()` returns null on down the gesture is silent, and a null on move or press sends nothing. `at()` supplies the payload (a ground hit, a ray, an entity hint) so the sim does the picking and a replay reproduces it; `bindPointer` never sees three.js. Time counts only `update(dt)`, never wall-clock timers.
+    - Devices get frame time capped at the loop's `maxFrame` (#44), so ramps do not jump after a long frame.
     - Fingers are tracked by `pointerId`. `pointerdown` (and `lostpointercapture`) listen on the surface element. Moves, `pointerup` and `pointercancel` are routed by `pointerId` on the window, because iOS does not reliably retarget captured moves.
     - `pointercancel` and `lostpointercapture` count as a release.
     - The root has `touch-action: none`.
@@ -289,10 +298,20 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 - **[I-4]** Once per step (`input.apply`), the local snapshot is copied into the local player's actor as `e.input`. Systems read only `e.input`.
 - **[I-5]** Game-specific interpretation (for example Tractor Pickup's point-to-go stick) is a system in `input.apply` that the game registers.
 - **[I-6]** `engine.input.set(snapshot)`, `hold(snapshot)` and `release()` override device input for tests and bots.
+- **[I-7] Commands.** `engine.command(type, data = {})` queues a typed message for the sim: positional input, network messages, view acks (#5). It is the third input layer, after the action snapshot.
+  - **Handlers.** `defineGame({ commands: { [type]: (engine, data) => void } })` are game-wide; `ctx.command(type, (engine, data, ctx) => void)` registers a scene handler (returns a remover, and the handler leaves with the scene). `engine.commands` is live `{ pending, dropped, handles(type) }`.
+  - **Delivery.** Commands queue FIFO and are delivered by `lh.commands` at the next step's `input.apply` (after `lh.input`): the game handler first, then each open scene bottom-up that handles the type. Only the commands queued before delivery starts are delivered; a command issued by a handler waits a step. A handler that throws counts its command as delivered; the rest stay queued.
+  - **Covering rule (#49).** While an overlay with `pauses` is open, game-wide handlers still run, but scene handlers of scenes below the topmost pausing overlay are skipped. A command no handler ran is dropped (counted in `commands.dropped`, not held). That suits positional taps; **network messages and view acks must be game-wide handlers**, or they are lost behind a pause menu.
+  - **Recording.** On an engine created with `record: true`, a command issued from outside the sim is validated as plain JSON (plain objects and arrays, finite numbers, strings, booleans, null) and delivered as a copy of what was logged ([T-9]); not recording, handlers get the caller's object, so do not mutate it after issuing.
 
 ### 5.4 UI helpers
 
-- **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })`, `ui.toggle(...)`, `ui.choice(...)` and `ui.field(...)`:
+- **[U-1]** A scene's `ui(ui)` declares controls with `ui.button({ id, label, action, when })`, `ui.toggle(...)`, `ui.choice(...)`, `ui.field(...)` and `ui.hold(...)`:
+  - **Controls press actions; scenes own transitions** (#39). A button's `action` is an action name (pressed for the next step) or a function; its `when` gate is decided at tap time. A pause chip should press the `pause` action and let a scene hook open the overlay, not open it directly.
+  - `engine.ui.enabled(id)` never throws: false for a missing, covered or gated control. `engine.ui.tryTap(id)` taps and returns true, or returns false in those cases (#45).
+  - `ui.hold({ id, label, seconds, action, when })` is a hold-to-fire control on engine time (#9). `engine.ui.press(id)` starts it and `engine.ui.release(id)` cancels it; `lh.ui` advances it each step and, when `seconds` have been held, fires `action` once (an action name or a function). It is cancelled if it is removed, covered or its `when` turns false. `seconds` must be > 0 and a named action must exist. Tree entries of role `'hold'` carry `{ pressed, progress }`. The DOM sets `--lh-progress` (0 to 1) and `data-lh-down` on the element; a hold presses on pointerdown (captured) or Space/Enter and releases when the last pointer or key lifts, on blur, pagehide or a hidden tab, and is not clicked. Custom content (an SVG, a progress ring) is adopted game markup (`data-lh-slot`) that reads `--lh-progress`.
+  - `view.focus(testid)` focuses the control once it exists and is enabled, unless the player moved focus first; it gives up after 5 refreshes without the control, or on a scene change (#46).
+  - Before a view half's `enter`, the UI is synced, so its controls exist (#46).
   - A game's markup marked `data-lh-slot` is adopted instead of the engine creating its own element.
   - In the browser, buttons and toggles render as real `<button>` elements with an accessible name and `data-testid="<scene>.<id>"`. Toggles use `aria-pressed`.
   - A `field` renders as an `<input type="text">` with `aria-label`. It commits on `change` or on Enter (then blurs), and is not overwritten while focused.
@@ -370,7 +389,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 ### 7.3 Debug
 
-- **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug`, `?tune`, `?fps`, `?seed=`, `?replay=`, `?slow=`, `?nosw`, `?mute`, `?lh-test`.
+- **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug`, `?tune`, `?fps`, `?seed=`, `?replay=`, `?slow=`, `?nosw`, `?mute`, `?lh-test`. `?lh-test=render` (`flags.lhRender`) additionally boots in full-manual mode: nothing renders until a test calls `render()` (#47).
 - **[D-2]** `?tune` lazy-loads lil-gui. Kits and games register tunables with `engine.tune(group, obj, spec)`.
 - **[D-3]** `?fps` shows:
   - frame ms;
@@ -381,16 +400,18 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 - **[D-4] `window.engine`** is always present and exposes:
   - **lifecycle:** `ready`, `version`, `seed`, `errors`;
   - **loop:** `manual`, `stepN`, `advance`, `render`, `time`;
-  - **scenes:** `scene`, `go`, `overlay`, `close`, `jump`, `on(...)`;
+  - **scenes:** `scene`, `go`, `overlay`, `close`, `jump`, `isOpen(name, { pending })`, `on(...)`;
+  - **commands and loading:** `command(type, data)`, `loading` (the live `engine.loading`);
   - **events:** `events.since(seq)`;
   - **state:** `state`, `query`, `snapshot`, `restore`, `checksum`;
-  - **input:** `input.set/hold/release/read`;
+  - **input:** `input.set/hold/release/read`; `ui.enabled/tryTap/tap/press/release`;
   - **settling:** `settled()`;
-  - **view:** `view.project`, `ui.tree()`;
+  - **view:** `view.project` (set by the game's view half; world targets call it), `ui.tree()`;
   - **other:** `net`, `rng(name)`, `policies`, and the game's `debug()` extras.
 - **[D-5]** `window.rally` is removed (Rally has migrated). `window.piggies` and `window.tp` remain as aliases until their games finish phase 2.
 - **[D-6]** `settled()` is true when:
   - no asset, font or shader loads are pending (including promises handed to `view.wait`);
+  - no scene load is active (`engine.loading.active`, [S-6]);
   - no element has `data-lh-state="opening|closing"`;
   - no scene transition is running.
 
@@ -403,7 +424,9 @@ These run under `node:test`.
 - **[T-1] Setup.** `headless(game, { seed, scene, args, clock: 'virtual', invariants, record: 'on-fail' })` returns a handle `h`. The `finite()` invariant (no NaN or Infinity in any `xf` or body) is always on.
 - **[T-2] Stepping and policies.**
   - Stepping: `h.step(n, input)`, `h.seconds(s, input)`, `h.hold(input)`, `h.release()`.
-  - Policies: `policy.still`, `policy.const({...})`, `policy.seq([[steps, input]...])`, `policy.fn((h) => input)`.
+  - Policies: `policy.still`, `policy.const({...})`, `policy.seq([[steps, input]...])`, `policy.fn((h) => input)`, `policy.every(n, fn, { phase })`. `policy` is exported by `lion-hawk/sim` (games register policies in `game.sim.js`, which is bundled for the browser) and re-exported by `lion-hawk/test`.
+  - Every policy is called as `fn(h, i, scratch)`: `scratch` is one persistent object per handle and policy function. `policy.every(n, fn, { phase = 0 })` recomputes every `n` engine steps and holds the output in between (`n` a positive integer, `phase` an integer in `[0, n)`; cadence follows engine steps, so one-step `h.step(1, p)` loops keep it, and a gap of `n` steps or more re-anchors at the next call) (#26, #37).
+  - When a test compares two runs, perturb one on purpose (`phase`, or a step offset): with step-exact policies two identical runs cannot tell `min(a, b)` from `a` (#40).
   - Games register named policies (for example `autopilot`) in `game.policies`.
 - **[T-3] Waiting.**
   - `h.until(pred, { maxSteps | maxSeconds, input, message })`, `h.untilEvent(typeOrPred, opts)`, `h.untilScene(name, opts)`. All are counted in steps.
@@ -415,10 +438,17 @@ These run under `node:test`.
   - `h.go`, `h.overlay`, `h.jump`.
   - `h.tap(testid)` taps a registered UI control. It fails if the control is not present, or its `when` is false.
   - `h.fill(testid, value)` sets a `field` control. It fails if the control is not a field, or its `when` is false.
+  - `h.command(type, data)` issues a command; it throws if no handler (game-wide or in an open scene) handles the type. `h.enabled(id)` and `h.tryTap(id)` are the non-throwing queries ([U-1]). `h.press(id)` and `h.unpress(id)` hold and release a `ui.hold` control.
+  - `h.untilLoaded(opts)` steps until `engine.loading.active` is false (a load with `hold` and `frames` completes in steps, since every step is a frame).
+  - `stripComments(src)` (the function the purity scan uses: string-aware, line comments removed, block comments blanked keeping newlines) is exported for games' own source scans.
 - **[T-6] Fixtures.** `fixtures.define(name, (h, ...args) => ...)` and `h.use('quietYard', 'warm:60', ['ahead', e])`. The built-in `warm:N` steps N times with `policy.still`.
 - **[T-7] State.** `h.snapshot()`, `h.restore(snap)`, `h.fork()`, `h.checksum({ parts: 'sim' })`, `diff(a, b, { tol })`, and golden files with `--bless`.
 - **[T-8] Spies and logs.** `h.spy(obj, method)` returns `{ calls, count }`. Warnings and errors are captured, and fail the test unless it calls `h.expectWarning(re)`.
-- **[T-9] Replay.** `replay.run(file, { game })` replays seed plus per-step inputs and checks a checksum every 60 steps. `record: 'on-fail'` writes a replay file when a test fails.
+- **[T-9] Record and replay.** `headless(game, { record: true })` records what comes from outside the sim; `h.tape()` returns `{ v: 1, game, seed, scene, args, hz, log, end, sums }`.
+  - `log` is `[{ step, ops?, input? }]`. `ops` are the external operations issued before that step, in order: `['tap', id]`, `['fill', id, text]`, `['press', id]`, `['release', id]`, `['command', type, data]`, `['go', name, args]`, `['overlay', name, args]`, `['close', name]`, `['jump', scene, preset, opts, args]`. An operation made from inside a step, a transition or boot (a tap whose action calls `go`) is not recorded. `input` holds the action values that changed in that step's snapshot (axes as numbers, buttons as down).
+  - **Plain-JSON rule while recording:** command data, scene args and jump opts must be plain JSON (checked at issue, and the handler or scene receives a copy of what was logged), so the tape and the replay see exactly what the handlers saw.
+  - `sums` is `[[step, checksum]]`, one every 60 steps, taken after each step run through the handle (`h.step`, `until`) and not by `engine.stepN` called directly; `end` is the final step.
+  - `replay(game, tape, { invariants })` (from `lion-hawk/test`) starts a headless handle from the tape's seed, scene and args, re-issues the ops before the steps they preceded, **sets** (not holds) the recorded input before every step so nothing stays held afterwards, and compares every checkpoint: the first divergence throws `replay: checksum differs at step N`. It rejects a tape of another version, game or `hz`. Replay and recording are headless only (a browser engine with `record` throws); `record: 'on-fail'` files are still deferred.
 - **[T-10] Determinism.** `checks.determinism(game, { seed, steps })` runs twice and reports the first step whose checksums differ.
 - **[T-11] Multiplayer.** `mp(game, { peers, link: { latency, jitter, loss } })` returns `w` with:
   - `w.host`, `w.guests` and `w.step` / `w.seconds` (inputs as an array or `(peer, i) => input`);
@@ -440,15 +470,15 @@ These run under `node:test`.
 
   The browser is located automatically.
 - **[T-17] The `game` fixture.**
-  - Opening: `open({ scene, args, seed, query, settings })` loads with `?lh-test` and waits for `ready` and `settled()`.
+  - Opening: `open({ scene, args, seed, query, settings, render })` loads with `?lh-test` (`render: 'manual'` loads with `?lh-test=render`, [D-1]; `testUrl(url, opts)` builds the URL) and waits for `ready` and `settled()`.
   - Stepping: `step`, `seconds`, `until`, `untilEvent`, each running in one `evaluate`.
-  - State and scenes: `render`, `state`, `query`, `go`, `jump`.
+  - State and scenes: `render`, `state`, `query`, `go`, `jump`, `command(type, data)`.
   - Input: `input.hold` / `release`.
   - Touch: `touch.start/move/end/drag` through CDP, so taps are hit-tested and multi-touch works. Targets are a locator, `{x, y}` or `{ world: [x, y, z] }`.
-  - UI: `tap(label)`, `fill(testid, value)` and `control(testid)`. `fill` types into the real `<input>` and presses Enter to commit it.
+  - UI: `tap(label)`, `fill(testid, value)`, `press(testid)` / `unpress(testid)` (a held CDP touch beside the active touches on touch presets, the mouse on desktop; for `ui.hold` controls) and `control(testid)`. `fill` types into the real `<input>` and presses Enter to commit it.
   - Screenshots: `shot(name, { mask })`.
   - Errors: `errors` must be empty at teardown.
-- **[T-18] Matchers.** `toBeInScene`, `toHaveEmitted`, `toBeSettled`, `toHaveState`, `toBeTappable({ min })`, `toFitSafeArea`, `toNotOverlap`, `toBeThumbReachable(side)`.
+- **[T-18] Matchers.** The layout assertions `expectTappable(game, target, { min })`, `expectFitsSafeArea(game, target)` and `expectNoOverlap(game, a, b)` take a target: a string (a test id for `expectTappable`, a CSS selector for the other two), `{ testid }`, `{ css }` or a Playwright locator, and name the target in their failure messages (#48). Matcher names: `toBeInScene`, `toHaveEmitted`, `toBeSettled`, `toHaveState`, `toBeTappable({ min })`, `toFitSafeArea`, `toNotOverlap`, `toBeThumbReachable(side)`.
 - **[T-19] Screenshots.** `@visual` tests run only with `--visual`, in a pinned container.
 - **[T-20] Peers.** `test.peers(n, { link })` opens n browser contexts joined through the `bridge` transport ([N-2]).
 - **[T-21]** Real-iPad audio and touch checks remain a manual checklist in each game's docs.
@@ -515,8 +545,8 @@ export default defineView({ scenes: { title, farm, show, reward } }); // view ha
 ### 8.3 Packaging
 
 - **[G-2]** Packaging rules:
-  - The engine package exposes `lion-hawk/sim`, `lion-hawk/view`, `lion-hawk/kits/*`, `lion-hawk/test` and `lion-hawk/playwright` through `exports`.
-  - three.js and Rapier are peer dependencies, and the esbuild config forces one copy of each.
+  - The engine package exposes `lion-hawk/sim`, `lion-hawk/view`, `lion-hawk/kits/*`, `lion-hawk/test`, `lion-hawk/playwright` and `lion-hawk/build` through `exports`.
+  - three.js and Rapier are peer dependencies, and the esbuild config forces one copy of each. `lion-hawk/build` exports `dedupe({ root, packages = ['three', '@dimforge/rapier3d-compat'] })`, an esbuild plugin that re-resolves those packages (and their subpaths) from the game's `root`, so the engine and the game share one copy (#11). It lives in `tools/`, not `src/`: engine source imports neither three nor Rapier. Games adopt it with the phase 3 CLI; today's builds use the esbuild CLI, which takes no plugins.
   - Each game build bundles a snapshot of the engine.
 - **[G-3]** The engine has its own semver version (0.x until migration ends) and a `CHANGELOG.md`.
 - **[G-4]** `npm test` in `games/` runs every workspace's tests. An engine change ships only when all of them pass.

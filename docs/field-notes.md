@@ -61,6 +61,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | done (2d D11) |
 | 48 | `expectTappable` only accepts test IDs | Rally | done (2d D11) |
+| 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7; watch in the Tractor migration) |
 
 ## Entries
 
@@ -337,4 +338,4 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 49. Commands to a scene under a pausing overlay are dropped: engine (phase 2d D1 review)
 - **What happened:** scene-scoped command handlers skip covered scenes, and the command is dropped, not held. That suits positional taps.
-- **Rule for Tractor Pickup:** network messages and view acks must be game-wide handlers, or they are lost behind the pause menu. Status: open (document in spec D12; watch in the Tractor migration).
+- **Rule for Tractor Pickup:** network messages and view acks must be game-wide handlers, or they are lost behind the pause menu. Status: done (2d D12: documented in spec [I-7]; watch in the Tractor migration).

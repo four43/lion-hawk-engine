@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — 2026-10-12
+
+Phase 2d, the engine round from the Rally field notes.
+
+- Commands and replay (#5, #49, T-9): `engine.command(type, data)`, game-wide handlers (`defineGame({ commands })`) and scene handlers (`ctx.command`), delivered FIFO by `lh.commands` at the next step's `input.apply`; a command no handler ran is dropped (`engine.commands.dropped`), and handlers of scenes covered by a pausing overlay are skipped, so network messages and view acks belong in game-wide handlers. `h.command`, `game.command` and `window.engine.command`. `headless(game, { record: true })` records external ops and input changes as a plain-JSON tape (`h.tape()`: `v`, `game`, `seed`, `scene`, `args`, `hz`, `log`, `end`, `sums`); `replay(game, tape)` re-feeds it, sets the recorded input at every step and names the first checkpoint that differs. Command data, scene args and jump opts must be plain JSON while recording.
+- Pointer: `bindPointer` turns world-position taps, drags and long presses into commands (filters, capture, window routing, second-finger cancel, coalesced moves); `window.engine.view.project` is wired from `view.project`, which the game's view half sets.
+- Loading and acks (S-6, #6, #21, #38): `ctx.load({ build, then, hold, frames, settle, label })` suspends the scene's step and builds after `hold` seconds and `frames` presented frames, then waits (with `settle`) for a frame after the build and no `view.wait`; `engine.loading` (with `blocks`), `engine.block`, `engine.onBuilt` (and the view half's `built`), `engine.onPresent`, `engine.time.frames`, `h.untilLoaded`; `settled()` is false while a load is active. Step acks in headless and `?lh-test`, frame acks in a browser boot. Frames drawn before the request do not count.
+- UI (#9, #36, #39, #45, #46): `ui.hold` (hold-to-fire on engine time, `--lh-progress`, `data-lh-down`), `engine.ui.press/release`, `h.press/unpress`, `game.press/unpress`; `engine.isOpen(name, { pending })`; `engine.ui.enabled` and `tryTap` (`h.enabled`, `h.tryTap`); `view.focus(testid)` (gives up after 5 refreshes); controls press actions and scenes own transitions (documented).
+- Devices (#41, #42, #44): two taps between two steps now give two presses (owed presses per source); `bindHold` prevents focus by default (`focus: true` restores it); devices get frame time capped at `maxFrame`; stick, gamepad and field minors (`preventDefault` option, bad `radius()` guard, curves not applied at rest, IME-safe Enter in fields, released `aria-pressed`, hold release on blur and key up).
+- Render slots and build (#10, #11): `engine.onRender` is additive and returns an unsubscribe (`boot` keeps its own slot); `lion-hawk/build` exports the esbuild `dedupe({ root })` plugin.
+- Policies (#26, #37, #40): `policy.every(n, fn, { phase })`, a per-handle scratch object (`fn(h, i, scratch)`), `policy` exported from `lion-hawk/sim` (still re-exported by `lion-hawk/test`), `stripComments` exported from `lion-hawk/test`.
+- Tooling (#47, #48): `?lh-test=render` and `driver.manual('all')` (no step, no render); `openGame(…, { render: 'manual' })` and `testUrl`; `expectTappable`, `expectFitsSafeArea` and `expectNoOverlap` take a string, `{ testid }`, `{ css }` or a Playwright locator. Fixes: `game.press` keeps the active touches down, `bindPointer` and the hold DOM review minors.
+- Behaviour changes: two taps between steps give two presses (#41); `bindHold` prevents focus by default (#42); devices get capped dt (#44); a boot outside `?lh-test` acks real frames; view halves enter after the UI sync.
+
 ## 0.4.0 — 2026-10-11
 
 Phase 2c-rally, the engine additions Rally's migration needs.
