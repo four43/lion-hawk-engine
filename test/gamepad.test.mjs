@@ -28,3 +28,15 @@ test('two pads merge by largest magnitude', () => {
     { index: 1, axes: [-1, 0], buttons: btns({ 0: { pressed: true, value: 1 } }) }]);
   pad.update(); assert.equal(last().steer, -1); assert.equal(last().horn, true);
 });
+
+test('2c: axis curve after the dead zone; one button drives two actions (#16)', () => {
+  const calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const curve = v => 0.35 * v * Math.abs(v) + 0.65 * v;
+  const pad = bindGamepad(engine, { deadZone: 0.08, axes: { 0: ['steer', -1, curve] }, buttons: { 0: [['handbrake', 1], 'confirm'], 7: ['throttle', 1] } },
+    { getGamepads: () => [{ index: 0, axes: [0.54], buttons: btns({ 0: { pressed: true, value: 1 }, 7: { pressed: false, value: 0.25 } }) }] });
+  pad.update();
+  const s = (0.54 - 0.08) / 0.92;
+  assert.ok(Math.abs(calls.at(-1).steer - -curve(s)) < 1e-12);
+  assert.equal(calls.at(-1).handbrake, 1); assert.equal(calls.at(-1).confirm, true); assert.equal(calls.at(-1).throttle, 0.25);
+});

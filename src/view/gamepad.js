@@ -2,8 +2,10 @@
 export function bindGamepad(engine, map, { getGamepads, source = 'pad' } = {}) {
   const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? []);
   const dz = map.deadZone ?? 0.15;
-  const axisMap = Object.keys(map.axes ?? {}).map(i => ({ i: +i, name: map.axes[i][0], sign: map.axes[i][1] }));
-  const btnMap = Object.keys(map.buttons ?? {}).map(i => { const b = map.buttons[i]; return Array.isArray(b) ? { i: +i, name: b[0], sign: b[1], axis: true } : { i: +i, name: b, axis: false }; });
+  const axisMap = Object.keys(map.axes ?? {}).map(i => ({ i: +i, name: map.axes[i][0], sign: map.axes[i][1], curve: map.axes[i][2] }));
+  // one entry per binding; a list of bindings (first element not a string) is flattened here (#16)
+  const btnMap = [], bind = (i, b) => btnMap.push(Array.isArray(b) ? { i, name: b[0], sign: b[1], axis: true } : { i, name: b, axis: false });
+  for (const k of Object.keys(map.buttons ?? {})) { const b = map.buttons[k]; if (Array.isArray(b) && typeof b[0] !== 'string') for (const x of b) bind(+k, x); else bind(+k, b); }
   const out = {};
   for (const a of axisMap) out[a.name] = 0;
   for (const b of btnMap) out[b.name] = b.axis ? 0 : false;
@@ -16,7 +18,8 @@ export function bindGamepad(engine, map, { getGamepads, source = 'pad' } = {}) {
       const pad = pads[p]; if (!pad) continue; any = true;
       for (let i = 0; i < axisMap.length; i++) {
         const m = axisMap[i], raw = pad.axes[m.i] ?? 0, mag = Math.abs(raw);
-        const v = mag <= dz ? 0 : Math.sign(raw) * (mag - dz) / (1 - dz);
+        let v = mag <= dz ? 0 : Math.sign(raw) * (mag - dz) / (1 - dz);
+        if (m.curve) v = m.curve(v);
         out[m.name] = best(out[m.name], v * m.sign);
       }
       for (let i = 0; i < btnMap.length; i++) {
