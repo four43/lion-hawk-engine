@@ -72,7 +72,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     for (const e of active.slice()) if (active.some(a => same(a, e))) caught(() => views[e.name]?.frame?.(engine, alpha, view)); // snapshot; skip halves a previous frame exited
     view.dt = 0; refresh();
   });
-  const hook = installEngine(engine, { driver, target, errors, after: refresh, busy: () => pending > 0 });
+  const hook = installEngine(engine, { driver, target, errors, after: refresh, busy: () => pending > 0, view });
   refresh();
   const dispose = () => {
     if (disposed) return; disposed = true;

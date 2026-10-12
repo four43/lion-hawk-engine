@@ -45,3 +45,9 @@ test('2c: window.engine.ui.fill fills a field', () => {
   installEngine(engine, { driver: { manual: () => false }, target });
   target.engine.ui.fill('t.seed', 'c'); assert.equal(engine.scene.state.seed, 'c');
 });
+test('2d: window.engine.view.project forwards to the view (T-17 world targets)', () => {
+  const target = {}, engine = createEngine(game), view = { project: ([x, y, z]) => ({ x: x * 2, y: z }) };
+  installEngine(engine, { driver: { manual() {} }, target, view });
+  assert.deepEqual(target.engine.view.project([1, 0, 3]), { x: 2, y: 3 });
+  view.project = undefined; assert.equal(target.engine.view.project, undefined);
+});

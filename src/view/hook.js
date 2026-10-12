@@ -15,7 +15,7 @@ export function safeEvent(e) {
   return o;
 }
 
-export function installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false } = {}) {
+export function installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false, view } = {}) {
   const note = (...a) => { after(); return a[0]; };
   const onError = ev => errors.push({ type: 'error', message: String(ev.message ?? ev.error ?? 'error'), stack: ev.error?.stack });
   const onReject = ev => errors.push({ type: 'unhandledrejection', message: String(ev.reason?.message ?? ev.reason), stack: ev.reason?.stack });
@@ -38,6 +38,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
       return !d.querySelector('[data-lh-state="opening"],[data-lh-state="closing"]');
     },
     ui: { tree: () => engine.ui.tree(), tap: id => { engine.ui.tap(id); after(); }, fill: (id, t) => { engine.ui.fill(id, t); after(); } },
+    view: { get project() { return view?.project; } }, // T-17: world targets call the game view's projection
     rng: n => engine.rng(n),
     get debug() { return engine.game.debug?.(engine) ?? {}; },
     dispose() { target.removeEventListener?.('error', onError); target.removeEventListener?.('unhandledrejection', onReject); },
