@@ -10,7 +10,7 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
   const hidden = () => document()?.visibilityState === 'hidden';
   function tick(ts) {
     handle = null;
-    if (!running || hidden()) return;
+    if (!running || hidden()) { rendered = false; return; } // a frame drawn before hiding may never have been shown
     try {
       // [S-6] #38: the previous tick's render was drawn in that rAF, so it has been presented by now
       if (rendered) { rendered = false; if (engine.acks === 'frames') engine.presented(); }
@@ -29,7 +29,7 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
   };
   return {
     start() {
-      if (running) return; running = true; last = null; engine.loop.reset();
+      if (running) return; running = true; last = null; rendered = false; engine.loop.reset();
       if (!listening) { document()?.addEventListener('visibilitychange', onVisibility); listening = true; }
       if (!hidden()) schedule();
     },

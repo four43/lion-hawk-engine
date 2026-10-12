@@ -43,13 +43,23 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
   // engine.presented() (the browser driver acks a rendered frame at the start of the next tick). Listeners are
-  // copy-on-write, so presenting allocates nothing.
-  let presentFns = [], blocked = 0;
-  const present = () => { time.frames++; const l = presentFns; for (let i = 0; i < l.length; i++) l[i](engine); };
+  // copy-on-write, so presenting allocates nothing. Listener timing: with 'steps' they run at the start of a step, so
+  // a transition they request applies at the end of that step; with 'frames' presented() runs between ticks (outside
+  // any step), so a transition applies at once.
+  // `unacked`: a render happened that no presented() has acked yet. A load requested meanwhile (e.g. from a click
+  // between ticks) must not count that frame: it was drawn before the request (its toast is not on it).
+  let presentFns = [], builtFns = [], unacked = false;
+  const blocks = new Set(); // one token per unreleased engine.block(label)
+  const present = () => { unacked = false; time.frames++; const l = presentFns; for (let i = 0; i < l.length; i++) l[i](engine); };
+  const drawn = () => time.frames + (acks === 'frames' && unacked ? 1 : 0); // presented frames once the pending ack lands
+  const rendered = a => { unacked = true; render(a); };
   // [S-6] loading is a scene state (#21, #38): a scene with a load has its step hook suspended; in that slot the load
   // ticks, builds after `hold` seconds of engine time and `frames` presented frames, then (with `settle`) waits for a
   // presented frame after the build and no engine.block() before `then`. One load in the engine at a time.
+  // engine.onBuilt listeners run right after the build, before settle is evaluated, so a view can react to the build
+  // (and view.wait) in the same slot. If the build queued a go, `then` still runs; the go applies at the end of the step.
   const loading = { active: false, scene: undefined, label: '', phase: '' };
+  Object.defineProperty(loading, 'blocks', { get: () => { const o = []; for (const b of blocks) o.push(b.label); return o; } }); // labels of unreleased blocks (read-only)
   let loader = null; // the stack entry that is loading
   const setLoading = entry => {
     const l = entry?.load; loader = l ? entry : null;
@@ -58,10 +68,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const dropLoad = entry => { if (entry.load) { entry.load = null; if (loader === entry) setLoading(null); } };
   const load = (entry, { build, then, hold = 0, frames = 1, settle = false, label = '' } = {}) => {
     if (typeof build !== 'function') throw new Error('engine: load needs a build function');
+    for (const [k, v] of [['hold', hold], ['frames', frames]]) if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`engine: load ${k} must be a finite number >= 0`);
     if (!stack.includes(entry)) throw new Error(`engine: scene '${entry.ctx.name}' is not open`);
     if (loader && loader !== entry) throw new Error(`engine: scene '${loader.ctx.name}' is already loading`);
     const pub = { label: String(label), then }; // `then` may be reassigned until it runs
-    entry.load = { pub, build, hold, frames, settle, ticks: 0, f0: time.frames, fb: 0, phase: 'hold' };
+    entry.load = { pub, build, hold, frames, settle, ticks: 0, f0: drawn(), fb: 0, phase: 'hold' };
     setLoading(entry); return pub;
   };
   const finishLoad = (entry, l) => { dropLoad(entry); l.pub.then?.(engine, entry.ctx); };
@@ -72,11 +83,12 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
         l.ticks++;
         if (l.ticks * dt < l.hold - 1e-9 || time.frames - l.f0 < l.frames) return;
         l.build(engine, entry.ctx);
-        if (entry.load !== l) return; // the build replaced or dropped its load
+        const fns = builtFns; for (let i = 0; i < fns.length; i++) fns[i](engine, entry.ctx);
+        if (entry.load !== l) return; // the build (or a listener) replaced or dropped its load
         if (!l.settle) return finishLoad(entry, l);
-        l.fb = time.frames; l.phase = loading.phase = 'settle';
+        l.fb = drawn(); l.phase = loading.phase = 'settle';
       }
-      if (blocked === 0 && (acks === 'steps' || time.frames > l.fb)) finishLoad(entry, l);
+      if (blocks.size === 0 && (acks === 'steps' || time.frames > l.fb)) finishLoad(entry, l);
     } catch (err) { if (entry.load === l) dropLoad(entry); throw err; }
   };
   const enter = (name, a) => {
@@ -186,7 +198,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
-  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
+  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: rendered, step(dt) {
     inStep = stepping = true; let failure = null;
     try {
       if (acks === 'steps') present(); // [S-6] every step is a presented frame
@@ -232,14 +244,18 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const engine = {
     game, seed: base.seed, events, input, loop, commands, loading,
-    get acks() { return acks; }, get blocked() { return blocked; },
+    get acks() { return acks; }, get blocked() { return blocks.size; },
     presented() { if (acks !== 'frames') throw new Error("engine: presented() needs acks: 'frames'"); present(); },
     onPresent(fn) {
       if (typeof fn !== 'function') throw new Error('engine: onPresent needs a function');
       presentFns = [...presentFns, fn]; return () => { presentFns = presentFns.filter(f => f !== fn); };
     },
+    onBuilt(fn) { // [S-6] fn(engine, ctx) after a load's build, before settle
+      if (typeof fn !== 'function') throw new Error('engine: onBuilt needs a function');
+      builtFns = [...builtFns, fn]; return () => { builtFns = builtFns.filter(f => f !== fn); };
+    },
     block(label = '') { // [S-6] e.g. view.wait: a settling load waits until every block is released
-      void label; let on = true; blocked++; return () => { if (on) { on = false; blocked--; } };
+      const b = { label: String(label) }; blocks.add(b); return () => { blocks.delete(b); };
     },
     time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
@@ -258,7 +274,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
-    render(alpha) { render(alpha); },
+    render(alpha) { rendered(alpha); },
     ui: {
       tree: () => ui.tree(engine),
       enabled: id => ui.enabled(id, engine), // #45

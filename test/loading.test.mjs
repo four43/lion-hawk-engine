@@ -86,3 +86,18 @@ test('2d: a throwing build clears the load and rethrows; a stale ctx cannot load
   e.stepN(1); assert.equal(e.scene.state.steps, 1); // the step hook runs again
   e.go('menu'); assert.throws(() => ctx.load({ build() {} }), /scene 'stage' is not open/);
 });
+test('2d fix: onBuilt listeners run after the build and before settle is evaluated', () => {
+  const e = createEngine(game), log = []; let release;
+  const off = e.onBuilt((en, ctx) => { log.push(['built', ctx.name, en.loading.phase]); release = en.block('reaction'); });
+  e.scene.state.ctx.load({ settle: true, build: () => log.push('build'), then: () => log.push('then') });
+  e.stepN(1); assert.deepEqual(log, ['build', ['built', 'stage', 'hold']]); assert.equal(e.loading.phase, 'settle');
+  assert.deepEqual(e.loading.blocks, ['reaction']); assert.equal(Object.keys(e.loading).includes('blocks'), false);
+  release(); e.stepN(1); assert.deepEqual(log.at(-1), 'then'); assert.deepEqual(e.loading.blocks, []);
+  off(); e.scene.state.ctx.load({ build() {} }); e.stepN(1); assert.equal(log.length, 3);
+});
+test('2d fix: hold and frames must be finite numbers >= 0', () => {
+  const e = createEngine(game), ctx = e.scene.state.ctx;
+  for (const o of [{ hold: -1 }, { hold: NaN }, { hold: Infinity }, { hold: '1' }, { frames: -1 }, { frames: Infinity }])
+    assert.throws(() => ctx.load({ build() {}, ...o }), /load (hold|frames) must be a finite number >= 0/);
+  assert.equal(e.loading.active, false);
+});

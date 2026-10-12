@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEngine } from '../src/index.sim.js';
+import { createEngine, defineGame } from '../src/index.sim.js';
 import { createDriver } from '../src/index.view.js';
 import { dom } from './helpers/dom.mjs';
 import game from './fixtures/countdown.js';
 
-const setup = (extra = {}) => {
+const setup = (extra = {}, opts = { scene: 'race' }) => {
   const q = []; const raf = f => q.push(f); const caf = () => {}; const tick = ts => q.shift()(ts);
   const { document } = dom(); let vis = 'visible';
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => vis });
   const setVis = v => { vis = v; document.dispatchEvent(new document.defaultView.Event('visibilitychange')); };
-  const engine = createEngine(game, { scene: 'race' });
+  const engine = createEngine(game, opts);
   const driver = createDriver(engine, { raf, caf, doc: document, ...extra });
   return { q, tick, engine, driver, setVis };
 };
@@ -72,4 +72,23 @@ test('2d: the driver acks a rendered frame at the start of the next tick (#38)',
   let acks = 0; engine.onPresent(() => acks++);
   const driver = createDriver(engine, { raf, caf() {}, doc: document });
   driver.start(); tick(0); assert.equal(acks, 0); tick(16); assert.equal(acks, 1); tick(32); assert.equal(acks, 2);
+});
+test('2d fix: a load requested between ticks builds only after a frame drawn after the request (#38)', () => {
+  const g = defineGame({ id: 'dl', start: 's', scenes: { s: { enter(e, ctx) { ctx.state.ctx = ctx; } } } });
+  const q = []; const raf = f => q.push(f), tick = ts => q.shift()(ts);
+  const { document } = dom(); const engine = createEngine(g, { acks: 'frames' }), log = [];
+  engine.onRender(() => log.push('render'));
+  const driver = createDriver(engine, { raf, caf() {}, doc: document });
+  driver.start(); tick(0); // a frame drawn before the request
+  engine.scene.state.ctx.load({ build: () => log.push('build') }); log.push('request'); // a click: outside any tick
+  tick(20); assert.deepEqual(log, ['render', 'request', 'render']); // the ack here is for the pre-request frame
+  tick(40); assert.deepEqual(log, ['render', 'request', 'render', 'build', 'render']);
+});
+test('2d fix: the driver drops a pending ack on start() and on hidden ticks', () => {
+  const { tick, engine, driver, setVis } = setup({}, { scene: 'race', acks: 'frames' }); let acks = 0; engine.onPresent(() => acks++);
+  driver.start(); tick(0); driver.stop(); driver.start(); tick(16); assert.equal(acks, 0); // stop/start forgets the frame
+  tick(32); assert.equal(acks, 1);
+  setVis('hidden'); tick(40); // the queued rAF still fires (caf is a no-op here) and returns early while hidden
+  setVis('visible'); tick(48); assert.equal(acks, 1); // the frame drawn before hiding is not acked
+  tick(64); assert.equal(acks, 2);
 });

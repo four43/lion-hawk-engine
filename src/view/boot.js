@@ -7,7 +7,7 @@ import { installEngine } from './hook.js';
 
 export function defineView({ scenes } = {}) {
   if (!scenes || typeof scenes !== 'object') throw new Error('defineView: scenes required');
-  for (const [n, s] of Object.entries(scenes)) for (const h of ['enter', 'exit', 'frame']) if (s[h] !== undefined && typeof s[h] !== 'function') throw new Error(`defineView: scene '${n}'.${h} must be a function`);
+  for (const [n, s] of Object.entries(scenes)) for (const h of ['enter', 'exit', 'frame', 'built']) if (s[h] !== undefined && typeof s[h] !== 'function') throw new Error(`defineView: scene '${n}'.${h} must be a function`);
   return Object.freeze({ scenes: Object.freeze({ ...scenes }) });
 }
 
@@ -78,6 +78,15 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     return p;
   }
   const off = engine.events.on(e => { if (e.type === 'scene' || e.type === 'overlay') refresh(); });
+  // [S-6] a load's build: the loading scene's view half reacts in the same slot (built(engine, view)), so a view.wait it
+  // starts blocks the load's settle before `then` runs, with step acks as with frame acks
+  const offBuilt = engine.onBuilt((e, ctx) => {
+    if (disposed) return;
+    reconcile();
+    const h = active.find(a => a.name === ctx.name && a.key === ctx.id);
+    if (h) caught(() => views[h.name]?.built?.(engine, view));
+    refresh();
+  });
   engine.onRender(alpha => {
     if (disposed) return;
     reconcile();
@@ -89,7 +98,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const dispose = () => {
     if (disposed) return; disposed = true; want = null;
     driver.stop(); for (const d of driver.devices) d.dispose?.();
-    ui.dispose(); hook.dispose(); sa.remove(); off(); engine.onRender(() => {});
+    ui.dispose(); hook.dispose(); sa.remove(); off(); offBuilt(); engine.onRender(() => {});
   };
 
   if (flags.lhTest) {

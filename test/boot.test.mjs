@@ -131,3 +131,20 @@ test('2d: view.focus is dropped when the player moves focus first', () => {
   app.hook.go('race'); const other = document.createElement('button'); document.body.appendChild(other); other.focus();
   app.engine.scene.state.running = true; app.hook.render(0); assert.equal(document.activeElement, other);
 });
+test('2d fix: a view half that waits in reaction to a build delays `then` until the wait settles, in both ack modes', async () => {
+  for (const q of ['?lh-test', '']) {
+    const log = []; let resolve;
+    const g = defineGame({ id: 'vb', start: 's', scenes: { s: { enter(e, ctx) { ctx.state.ctx = ctx; } } } });
+    const v = defineView({ scenes: { s: { built(e, view) { log.push('built'); view.wait(new Promise(r => { resolve = r; })); } } } });
+    const { document } = dom();
+    const app = boot(g, v, { doc: document, target: { document }, raf, caf, flags: parseFlags(q) });
+    const frames = app.engine.acks === 'frames', ack = () => { if (frames) app.engine.presented(); };
+    app.engine.scene.state.ctx.load({ settle: true, build: () => log.push('build'), then: () => log.push('then') });
+    ack(); app.hook.stepN(1); assert.deepEqual(log, ['build', 'built'], q); assert.equal(app.engine.blocked, 1, q);
+    ack(); app.hook.stepN(1); assert.deepEqual(log, ['build', 'built'], q);
+    resolve(); await new Promise(r => setTimeout(r, 0));
+    app.hook.stepN(1); assert.deepEqual(log, ['build', 'built', 'then'], q);
+    assert.throws(() => defineView({ scenes: { s: { built: 1 } } }), /built must be a function/);
+    app.dispose();
+  }
+});
