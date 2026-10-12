@@ -273,3 +273,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 43. Playwright `touch.end(id)` lifted the wrong finger: engine test helper (phase 2c R5; confirms #32)
 - **What happened:** `game.touch.end(2)` lifted the steering touch instead of the gas touch.
 - **Engine change:** CDP `touchEnd` lists the fingers that lift, not the ones that stay down; `touch.end` now sends exactly the lifted points (test/touch-e2e.test.mjs). A zero-velocity move before the lift did not avoid the fling, so the 150 ms wait stays. Status: done.
+
+### 44. Device ramps use uncapped frame time: Rally (phase 2c R5 review)
+- **What happened:** Rally's old controls ramped with `min(0.1, dt)`. The engine's `bindKeyboard` `{rise, fall}` ramps take the driver's raw dt, so a 0.3 s hitch snaps the throttle from 0.58 to 1.0.
+- **Workaround:** Rally uses function ramps that cap dt (R6).
+- **Engine change:** the driver passes devices a dt clamped like the loop's `maxFrame` (or 0.1 s), or `bindKeyboard` caps dt itself. Status: open.
+
+### 45. No query for "is this control enabled?": Rally (phase 2c R5 review)
+- **What happened:** Rally's hidden-page auto-pause tells expected tap failures apart by matching the error text (`/is disabled|is covered|no control/`), which is brittle.
+- **Engine change:** `engine.ui.enabled(id)`, or a `tryTap(id) → boolean`. Status: open.
