@@ -82,3 +82,19 @@ test('F7: data-lh-settled is 1/0', () => {
   const { app, document } = run('?lh-test');
   assert.equal(document.documentElement.getAttribute('data-lh-settled'), '1'); app.dispose();
 });
+test('2c: view.dt is the driver frame time in frame(), 0 for hook renders; view.wait holds settled (#19, #20)', async () => {
+  const { document } = dom(); let tick; const seen = [];
+  const view = defineView({ scenes: { title: { frame: (e, a, v) => seen.push(v.dt) } } });
+  const target = { document, addEventListener() {}, removeEventListener() {} };
+  const app = boot(game, view, { doc: document, target, raf: f => { tick = f; return 1; }, caf() {}, flags: parseFlags('') });
+  tick(1000); tick(1016); app.hook.render(0);
+  assert.deepEqual(seen.map(x => +x.toFixed(3)), [0, 0.016, 0]);
+  let resolve; const p = new Promise(r => { resolve = r; });
+  assert.equal(app.view.wait(p), p);
+  assert.equal(app.hook.settled(), false); assert.equal(document.documentElement.getAttribute('data-lh-settled'), '0');
+  resolve(); await p; await new Promise(r => setTimeout(r, 0));
+  assert.equal(app.hook.settled(), true); assert.equal(document.documentElement.getAttribute('data-lh-settled'), '1');
+  app.view.wait(Promise.reject(new Error('no track view'))); await new Promise(r => setTimeout(r, 0));
+  assert.match(target.engine.errors.at(-1).message, /no track view/); assert.equal(app.hook.settled(), true);
+  app.dispose();
+});

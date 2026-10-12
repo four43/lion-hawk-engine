@@ -15,7 +15,7 @@ export function safeEvent(e) {
   return o;
 }
 
-export function installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {} } = {}) {
+export function installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false } = {}) {
   const note = (...a) => { after(); return a[0]; };
   const onError = ev => errors.push({ type: 'error', message: String(ev.message ?? ev.error ?? 'error'), stack: ev.error?.stack });
   const onReject = ev => errors.push({ type: 'unhandledrejection', message: String(ev.reason?.message ?? ev.reason), stack: ev.reason?.stack });
@@ -32,6 +32,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     state: () => engine.state(),
     input: { set: p => engine.input.set(p), hold: p => engine.input.hold(p), release: (...n) => engine.input.release(...n), read: () => engine.input.values() },
     settled() {
+      if (busy()) return false; // #20: view.wait promises pending
       const d = target.document; if (!d?.querySelector) return true;
       return !d.querySelector('[data-lh-state="opening"],[data-lh-state="closing"]');
     },
