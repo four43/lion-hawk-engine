@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-10-12
+
+Phase 2e, the engine additions Pig Pens' migration needs. No behaviour changes for existing callers.
+
+- Pointer (#52): `bindPointer`'s `at(clientX, clientY, event, phase)` gets the command phase, so a game can silence moves but keep the press.
+- Touch (#53, #8): `bindStick({ origin: 'centre' })`, a fixed pad that deflects from its centre on pointerdown and is never hidden or moved (`'thumb'`, the floating stick, stays the default).
+- Testing (#64): `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step of the first non-finite value.
+- Playwright (#65): `game.point(target)` resolves a selector, `{ x, y }` or `{ world }` to client coordinates for `page.mouse`.
+
 ## 0.5.1 — 2026-10-12
 
 Phase 2d final-review fixes.
