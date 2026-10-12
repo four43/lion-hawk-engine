@@ -13,7 +13,8 @@ export function createInput(schema) {
   const buttons = names.filter(n => !isAxis[n]), owed = Object.fromEntries(buttons.map(n => [n, 0]));
   // each source keeps every key preset (stable shape) and counts its own rising edges per button since the last apply() (#13, #41)
   const sources = [], once = {}, held = {};
-  const fresh = name => ({ name, values: Object.fromEntries(names.map(n => [n, isAxis[n] ? 0 : false])), rises: Object.fromEntries(buttons.map(n => [n, 0])) });
+  // owes[n]: this source fed taps into owed[n] that have not all been shown yet (so clearDevice can drop them)
+  const fresh = name => ({ name, values: Object.fromEntries(names.map(n => [n, isAxis[n] ? 0 : false])), rises: Object.fromEntries(buttons.map(n => [n, 0])), owes: Object.fromEntries(buttons.map(n => [n, false])) });
   const check = p => { for (const k in p) if (!(k in isAxis)) throw new Error(`input: unknown action '${k}'`); return p; };
   const clear = o => { for (const k in o) delete o[k]; };
   // axis: largest |value| across sources, ties to the first registered; button: OR. Allocation-free.
@@ -26,6 +27,8 @@ export function createInput(schema) {
     }
     return isAxis[n] ? (any ? best : undefined) : false;
   };
+  // is button n down in any source other than src?
+  const downElsewhere = (n, src) => { for (let i = 0; i < sources.length; i++) if (sources[i] !== src && sources[i].values[n]) return true; return false; };
   const kinds = Object.freeze(Object.fromEntries(names.map(n => [n, schema[n].kind])));
   return {
     snapshot, kinds,
@@ -34,9 +37,19 @@ export function createInput(schema) {
       let src = null; for (let i = 0; i < sources.length; i++) if (sources[i].name === source) { src = sources[i]; break; }
       if (!src) sources.push(src = fresh(source));
       check(p);
-      for (const k in p) { if (!isAxis[k] && p[k] && !src.values[k]) src.rises[k]++; src.values[k] = p[k]; }
+      // a rise is an owed tap only when it lifts the merged level: pressing a button another source already holds adds no edge
+      for (const k in p) { if (!isAxis[k] && p[k] && !src.values[k] && !downElsewhere(k, src)) { src.rises[k]++; src.owes[k] = true; } src.values[k] = p[k]; }
     },
-    clearDevice(source) { for (let i = 0; i < sources.length; i++) if (sources[i].name === source) { sources.splice(i, 1); return; } },
+    // drops a source; a button whose last contributing source this was also drops its owed taps
+    clearDevice(source) {
+      let src = null; for (let i = 0; i < sources.length; i++) if (sources[i].name === source) { src = sources[i]; sources.splice(i, 1); break; }
+      if (!src) return;
+      for (let i = 0; i < buttons.length; i++) {
+        const n = buttons[i]; if (!src.owes[n] && !src.values[n]) continue;
+        let other = false; for (let j = 0; j < sources.length; j++) if (sources[j].owes[n] || sources[j].values[n]) { other = true; break; }
+        if (!other) owed[n] = 0;
+      }
+    },
     set: p => { Object.assign(once, check(p)); },
     hold: p => { Object.assign(held, check(p)); },
     release(...ns) { if (!ns.length) clear(held); else for (const n of ns) delete held[n]; },
@@ -45,14 +58,14 @@ export function createInput(schema) {
     apply() {
       for (let i = 0; i < names.length; i++) {
         const n = names[i]; let v;
-        if (n in held) { v = held[n]; owed[n] = 0; }
-        else if (n in once) { v = once[n]; owed[n] = 0; }
+        if (n in held || n in once) { v = n in held ? held[n] : once[n]; if (!isAxis[n]) { owed[n] = 0; for (let j = 0; j < sources.length; j++) sources[j].owes[n] = false; } }
         else if (isAxis[n]) v = merged(n);
         else {
           let o = owed[n]; for (let j = 0; j < sources.length; j++) o += sources[j].rises[n];
           if (o > 3) o = 3;
           if (o > 0) { if (snapshot[n].down) v = false; else { v = true; o--; } } else v = merged(n);
           owed[n] = o;
+          if (o === 0) for (let j = 0; j < sources.length; j++) sources[j].owes[n] = false;
         }
         if (isAxis[n]) snapshot[n] = typeof v === 'number' && v === v ? Math.max(-1, Math.min(1, v)) : 0;
         else { const b = snapshot[n], d = !!v; b.pressed = d && !b.down; b.released = !d && b.down; b.down = d; }

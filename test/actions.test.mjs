@@ -86,3 +86,30 @@ test('2d: clearDevice drops that source\'s unapplied taps; hold still wins (E1 m
   assert.deepEqual(seq(inp), [false, false, false]); inp.release(); inp.device({ horn: false }, 'k');
   assert.deepEqual(seq(inp), [false, false, false]); // the hold consumed the owed presses
 });
+test('final review: a second source pressing a held button adds no edge; only the last release shows', () => {
+  const inp = createInput(schema); inp.device({ horn: true }, 'keyboard');
+  assert.deepEqual(seq(inp), [true, true, false]);
+  inp.device({ horn: true }, 'pad');
+  assert.deepEqual(seq(inp), [true, false, false]); // no forced release + re-press (no double gear shift / horn)
+  assert.deepEqual(seq(inp), [true, false, false]);
+  inp.device({ horn: false }, 'pad');
+  assert.deepEqual(seq(inp), [true, false, false]); // keyboard still holds
+  inp.device({ horn: false }, 'keyboard');
+  assert.deepEqual(seq(inp), [false, false, true]);
+  assert.deepEqual(seq(inp), [false, false, false]);
+});
+test('final review: clearing a button\'s last contributing source drops its owed taps', () => {
+  const inp = createInput(schema);
+  for (const v of [true, false, true, false, true, false]) inp.device({ horn: v }, 'pad');
+  assert.deepEqual(seq(inp), [true, true, false]); // two more taps owed
+  inp.clearDevice('pad');
+  assert.deepEqual(seq(inp), [false, false, true]);
+  assert.deepEqual(seq(inp), [false, false, false]);
+  assert.deepEqual(seq(inp), [false, false, false]);
+  // owed taps survive when another source still holds a contribution
+  for (const v of [true, false, true, false]) inp.device({ horn: v }, 'pad');
+  inp.device({ horn: true }, 'k');
+  assert.deepEqual(seq(inp), [true, true, false]);
+  inp.clearDevice('k');
+  assert.deepEqual(seq(inp), [false, false, true]); assert.deepEqual(seq(inp), [true, true, false]);
+});
