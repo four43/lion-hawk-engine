@@ -41,6 +41,7 @@ test('2g: two pages play host and guest through the Node bridge (T-20)', async t
     assert.ok((await guest.state()).logged > 1, 'the guest logged net.open and the host\'s says');
     assert.ok((await host.state()).n >= 29, 'the host stepped');
     await host.close(); await room.step(2);
+    assert.deepEqual((await logOf(guest, 'net.peer')).filter(p => p.event === 'closed').map(p => p.reason), ['host_left'], 'the guest heard the room close');
     assert.deepEqual(await guest.errors(), []);
   } finally { await room.close(); }
 });
@@ -75,6 +76,18 @@ test('2g: a binary frame arrives byte-identical as an ArrayBuffer (N-2 copy sema
   } finally { await room.close(); }
 });
 
+test('2g: guest-to-host bytes arrive byte-identical as an ArrayBuffer (N-2 copy semantics)', async t => {
+  if (skip) return t.skip(skip);
+  const room = await peers(chrome.browser, base, 2);
+  try {
+    const [host, guest] = room.games, all = Array.from({ length: 256 }, (_, i) => i);
+    await room.step(1);
+    await guest.page.evaluate(b => window.transport.send('h1', new Uint8Array(b).buffer, true), all);
+    await room.step(2); // the send goes out on the bridge at once and lands at the next tick
+    assert.deepEqual(await host.page.evaluate(() => window.bytes), [all]);
+  } finally { await room.close(); }
+});
+
 test('2g: a guest that closes leaves the hub (the host hears peerLeft); argsOf gives each page its own args', async t => {
   if (skip) return t.skip(skip);
   const room = await peers(chrome.browser, base, 3, { args: { who: 'all' }, argsOf: i => ({ who: i }) });
@@ -101,4 +114,11 @@ test('2g: without argsOf every page boots with args; a guest that leaves through
     assert.deepEqual((await logOf(guest, 'net.peer')).filter(p => p.event === 'closed').map(p => p.reason), ['left']);
     assert.deepEqual(await guest.errors(), []);
   } finally { await room.close(); }
+});
+
+test('2g: when a page fails to open, peers() closes the pages already open and rethrows', async t => {
+  if (skip) return t.skip(skip);
+  const before = chrome.browser.contexts().length;
+  await assert.rejects(peers(chrome.browser, base, 3, { argsOf: i => { if (i === 2) throw new Error('no args for page 2'); return {}; } }), /no args for page 2/);
+  assert.equal(chrome.browser.contexts().length, before, 'the host and the first guest were closed');
 });

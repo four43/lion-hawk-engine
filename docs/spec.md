@@ -422,7 +422,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - **input:** `input.set/hold/release/read`; `ui.enabled/tryTap/tap/press/release`;
   - **settling:** `settled()`;
   - **view:** `view.project` (set by the game's view half; world targets call it), `ui.tree()`;
-  - **other:** `net`, `rng(name)`, `policies`, and the game's `debug()` extras.
+  - **other:** `rng(name)`, `policies`, and the game's `debug()` extras.
 - **[D-5]** `window.rally` is removed (Rally has migrated). `window.piggies` and `window.tp` remain as aliases until their games finish phase 2.
 - **[D-6]** `settled()` is true when:
   - no asset, font or shader loads are pending (including promises handed to `view.wait`);
@@ -503,6 +503,8 @@ These run under `node:test`.
   - `argsOf(i, name)` gives page `i` its own args and overrides `args`; other options go to each page's open ([T-17]);
   - `room.step(n)` does, `n` times, what `mp()` does ([T-11]): it advances the hub clock by `1000 / hz`, ticks the hub, delivers each page's events in order, then steps every open page once (the pages are in manual mode, so a run is deterministic), waiting after each page's step until Node has every bridge call that page made (bounded by `timeout` ms);
   - closing a page's driver (`game.close()`) leaves the hub for it: its host hears `peerLeft`, and a closed host closes the room (`closed`) for its guests; `room.close()` closes every page.
+  - if a page fails to open, the pages already open are closed before the error is rethrown; `bridgeEnd(net)` (exported for tests) is the Node end of one page's bridge, applying its calls in sequence order;
+  - a page must not reload or navigate: `info.sent` restarts at 0 while Node's sequence counter does not, so that page's bridge stalls.
 - **[T-21]** Real-iPad audio and touch checks remain a manual checklist in each game's docs.
 
 ### 7.6 Deferred

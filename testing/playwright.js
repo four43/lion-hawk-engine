@@ -266,7 +266,24 @@ async function open(browser, url, { preset = 'desktop', seed, scene, args, query
 // bridgeTransport() when it sees ?lh-bridge. room.step(n) does, n times, what mp() does: advance the hub clock by 1000 / hz,
 // tick the hub, deliver each page's hub events in order, then step every open page once (manual mode: deterministic), waiting
 // after each page's step until Node has every send it made. Closing a page's driver leaves the hub for it.
+// A page reload restarts info.sent at 0 while Node's sequence counter keeps its value, so that page's bridge stalls: don't navigate.
 const BRIDGE_EVENTS = ['peer', 'peerLeft', 'peerAway', 'peerBack', 'hostAway', 'hostBack', 'closed'];
+// The Node end of one page's bridge: the page's binding calls (seq, op, to, data, reliable, bytes) arrive asynchronously and are
+// applied to its hub net in seq order (a later call waits for the earlier ones); byte arrays become ArrayBuffers again.
+export function bridgeEnd(net) {
+  const held = new Map(); let next = 0;
+  const end = { closed: false, onCall: null, get next() { return next; },
+    call(seq, ...a) {
+      held.set(seq, a);
+      while (held.has(next)) {
+        const [op, to, data, reliable, bytes] = held.get(next); held.delete(next); next++;
+        if (end.closed) continue;
+        if (op === 'leave') net.leave(); else net.send(to, bytes ? new Uint8Array(data).buffer : data, reliable); // the hub copies, as between two Node peers
+      }
+      end.onCall?.();
+    } };
+  return end;
+}
 export async function peers(browser, url, n, { link = {}, preset = 'desktop', seed = 1, args, argsOf, query = {}, timeout = 10000, ...rest } = {}) {
   if (!Number.isInteger(n) || n < 1) throw new Error('peers: n must be a positive integer');
   const hub = createMemoryHub({ rng: rng(seed).fork('peers.link').next, ...link }), list = [];
@@ -277,29 +294,21 @@ export async function peers(browser, url, n, { link = {}, preset = 'desktop', se
     await p.game.page.evaluate(b => { const f = window.__lhBridgeIn; for (const a of b) f(...a); }, batch);
   };
   const caught = async p => { // waits until every call the page has made (info.sent) reached Node
-    const sent = await p.game.page.evaluate(() => window.__lhBridgeInfo.sent);
-    if (p.next >= sent) return;
+    const sent = await p.game.page.evaluate(() => window.__lhBridgeInfo.sent), end = p.end;
+    if (end.next >= sent) return;
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`peers: page ${p.index} made ${sent} bridge calls, only ${p.next} arrived in ${timeout} ms`)), timeout);
-      p.wake = () => { if (p.next >= sent) { clearTimeout(timer); p.wake = null; resolve(); } };
+      const timer = setTimeout(() => { end.onCall = null; reject(new Error(`peers: page ${p.index} made ${sent} bridge calls, only ${end.next} arrived in ${timeout} ms`)); }, timeout);
+      end.onCall = () => { if (end.next >= sent) { clearTimeout(timer); end.onCall = null; resolve(); } };
     });
   };
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i++) try {
     const role = i ? 'guest' : 'host', name = i ? `guest${i}` : 'host';
     const net = i ? hub.join() : hub.host();
-    const p = { index: i, name, role, net, inbox: [], next: 0, held: new Map(), wake: null, closed: false, game: null };
+    const p = { index: i, name, role, net, inbox: [], end: bridgeEnd(net), closed: false, game: null };
     for (const e of BRIDGE_EVENTS) net.on(e, (...a) => p.inbox.push([e, ...a]));
     net.on('message', (from, d, reliable) => p.inbox.push(d instanceof ArrayBuffer ? ['message', from, [...new Uint8Array(d)], reliable, true] : ['message', from, d, reliable, false]));
-    const apply = (op, to, data, reliable, bytes) => {
-      if (op === 'leave') return net.leave();
-      net.send(to, bytes ? new Uint8Array(data).buffer : data, reliable); // the hub copies, as between two Node peers
-    };
     const prepare = async (context, page) => {
-      await page.exposeBinding('__lhBridge', (src, seq, ...a) => { // calls resolve asynchronously: apply them in the page's order
-        p.held.set(seq, a);
-        while (p.held.has(p.next)) { const c = p.held.get(p.next); p.held.delete(p.next); p.next++; if (!p.closed) apply(...c); }
-        p.wake?.();
-      });
+      await page.exposeBinding('__lhBridge', (src, ...a) => p.end.call(...a));
       await page.addInitScript(info => {
         window.__lhBridgeInfo = info;
         const queue = [], early = (...a) => { queue.push(a); }; early.queue = queue; window.__lhBridgeIn = early; // until bridgeTransport() takes over
@@ -308,8 +317,11 @@ export async function peers(browser, url, n, { link = {}, preset = 'desktop', se
     const a = argsOf ? argsOf(i, name) : args;
     p.game = await open(browser, url, { ...rest, preset, seed, args: a, query: { ...query, 'lh-bridge': role } }, prepare);
     const close = p.game.close;
-    p.game.close = async () => { if (p.closed) return; p.closed = true; hub.leave(net.id, 'left'); await close(); };
+    p.game.close = async () => { if (p.closed) return; p.closed = p.end.closed = true; hub.leave(net.id, 'left'); await close(); };
     list.push(p);
+  } catch (e) { // page i failed to open: close the pages already open, then rethrow
+    for (const q of list) await q.game.close().catch(() => {});
+    throw e;
   }
   hz = await list[0].game.page.evaluate(() => window.engine.hz);
   const room = {

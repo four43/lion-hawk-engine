@@ -56,6 +56,9 @@ test('#50: until waits out a load whose settle is held by view.wait; untilLoaded
     await game.page.evaluate(() => { window.waitMs = 5000; });
     await game.command('reload'); await game.step(1);
     await assert.rejects(game.untilLoaded({ timeout: 300 }), /untilLoaded: load still blocked by view\.wait after 300 ms/);
+    const t0 = Date.now(); // seconds gives up the same way, within its timeout
+    await assert.rejects(game.seconds(1, undefined, 300), /seconds: load still blocked by view\.wait after 300 ms/);
+    assert.ok(Date.now() - t0 < 2000, `gave up after ${Date.now() - t0} ms`);
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });

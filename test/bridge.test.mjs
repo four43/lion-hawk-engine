@@ -30,3 +30,23 @@ test('2g: bridgeTransport rebuilds byte messages as ArrayBuffers and replays eve
 test('2g: bridgeTransport without the binding says how to get one', () => {
   assert.throws(() => bridgeTransport({ target: {} }), /no '__lhBridge' binding on this page \(open it with lion-hawk\/playwright peers\(\)\)/);
 });
+
+// the Node end (lion-hawk/playwright bridgeEnd): a fake hub net records what the page's calls become
+const hubNet = () => { const got = []; return { got, send: (to, d, rel) => got.push(['send', to, d, rel]), leave: () => got.push(['leave']) }; };
+test('2g: bridgeEnd applies binding calls in seq order when they arrive swapped', async () => {
+  const { bridgeEnd } = await import('lion-hawk/playwright');
+  const net = hubNet(), end = bridgeEnd(net); let wakes = 0; end.onCall = () => wakes++;
+  end.call(1, 'send', 'h1', { t: 'echo', n: 2 }, true, false);
+  assert.deepEqual([net.got, end.next], [[], 0], 'seq 1 waits for seq 0');
+  end.call(2, 'leave'); end.call(0, 'send', 'h1', { t: 'echo', n: 1 }, true, false);
+  assert.deepEqual(net.got, [['send', 'h1', { t: 'echo', n: 1 }, true], ['send', 'h1', { t: 'echo', n: 2 }, true], ['leave']]);
+  assert.deepEqual([end.next, wakes], [3, 3]);
+  end.closed = true; end.call(3, 'leave'); assert.equal(net.got.length, 3, 'a closed end applies nothing'); assert.equal(end.next, 4);
+});
+test('2g: bridgeEnd rebuilds a page byte array as a byte-identical ArrayBuffer (guest to host)', async () => {
+  const { bridgeEnd } = await import('lion-hawk/playwright');
+  const net = hubNet(), all = Array.from({ length: 256 }, (_, i) => i);
+  bridgeEnd(net).call(0, 'send', 'h1', all, false, true);
+  const [[, to, d, rel]] = net.got;
+  assert.deepEqual([to, rel], ['h1', false]); assert.ok(d instanceof ArrayBuffer); assert.deepEqual([...new Uint8Array(d)], all);
+});
