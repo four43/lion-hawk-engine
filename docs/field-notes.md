@@ -242,3 +242,11 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** Rally's autopilot runs at 60 Hz inside the 240 Hz sim and keeps controller state between calls.
 - **Workaround:** a per-engine WeakMap in Rally.
 - **Engine change:** `policy.every(n, fn)`, plus a per-handle scratch object passed as `fn(h, i, scratch)`. Status: open.
+
+### 38. No "a frame has been drawn" signal for deferring heavy sim work: Rally (phase 2c R2; see #21, S-6)
+- **What happened:** Rally shows a "Building the track…" toast, waits LOAD_HOLD (12 steps), then builds. With maxCatchUp 12, all 12 steps can run in a single rAF frame, so the toast never paints.
+- **Engine change:** a render-ack, either `engine.afterRender(fn)` or a view-side "frame presented" event that the loading protocol can wait on; headless runs treat every step as a frame. Status: open.
+
+### 39. A control can't both trigger an action and be gated: Rally (phase 2c R2)
+- **What happened:** the Pause chip opens the overlay directly. A pause key and a chip tap in the same frame then open and close pause. Routing the chip through the `pause` action conflicts with the `when` gate on overlay state.
+- **Engine change:** let `u.button({ action: 'pause', when })` press the action with the gate evaluated at tap time, and document "controls press actions; scenes own transitions". Status: open.
