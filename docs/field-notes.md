@@ -66,14 +66,14 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 | 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
 | 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | done (2e P-E2) |
-| 54 | Screen-space aim offsets under a finger | Pig Pens | planned (2e P3, P6) |
-| 55 | A tap acts on what was picked at pointer down | Pig Pens | planned (2e P3); engine won't |
+| 54 | Screen-space aim offsets under a finger | Pig Pens | in progress (2e P3: grab ease in sim; P6 view) |
+| 55 | A tap acts on what was picked at pointer down | Pig Pens | done (2e P3 2dff968) |
 | 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
 | 57 | A game-owned event queue next to engine events | Pig Pens | bridged (2e P2 932f19a: farm.events re-emits sim.events each step, no allocation); kit-herd open |
 | 58 | The game's RNG and seed live outside the engine streams | Pig Pens | open (phase 4/7) |
 | 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | open |
-| 60 | Sim inputs computed per frame in the view | Pig Pens | in progress (2e P2 moved gesture/grab/hose/ring state into the farm scene; P3–P4) |
-| 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | planned (2e P3) |
+| 60 | Sim inputs computed per frame in the view | Pig Pens | in progress (2e P2–P3; P4) |
+| 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | done (2e P3 2dff968) |
 | 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
 | 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
 | 64 | No finite invariant before the World | engine, Pig Pens | done (2e P-E3) |
@@ -82,6 +82,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
 | 68 | Goldens compare to 6 digits | Pig Pens | open |
 | 69 | Control when/get receive the engine, not ctx | Pig Pens | open |
+| 70 | Headless has no h.debug | Pig Pens | open |
+| 71 | Events emitted outside a step appear after the next step | Pig Pens | open |
+| 72 | Command data passed by reference when not recording | Pig Pens | open |
 
 ## Entries
 
@@ -456,4 +459,17 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** farm controls read `e.scene.state`, which is always the main scene's state. That breaks for overlay controls and after re-entry.
 - **Workaround:** close over `ctx.state` from `ui(u, e, ctx)`.
 - **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: open.
+
+### 70. Headless has no `h.debug`: Pig Pens (phase 2e P3)
+- **What happened:** tests call `h.engine.game.debug(h.engine)` by hand.
+- **Engine change:** a memoised `h.debug` getter, mirroring `window.engine.debug`. Status: open.
+
+### 71. Events emitted outside a step appear only after the next step: Pig Pens (phase 2e P3)
+- **What happened:** a debug or preset call that emits an event, outside any step, isn't visible in `h.events` until a step flushes it. Tests have to call `h.step(1)` first.
+- **Engine change:** flush on read in `since()`/`h.events`, or document the behaviour clearly in T-4. Status: open.
+
+### 72. Command data is passed by reference when not recording: Pig Pens (phase 2e P3 review)
+- **What happened:** the farm scene stores `d.ray` and `d.aim` from a command in the held grab state. If the view reuses ray arrays to avoid allocation, that state changes underneath it. Recording copies the data, so tests don't see this.
+- **Rule for games:** the view sends fresh arrays per command, or the handler copies the arrays it keeps.
+- **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: open.
 
