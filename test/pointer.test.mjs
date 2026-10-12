@@ -77,3 +77,16 @@ test('2d: at() cannot override reserved keys; a null at() skips move and press b
   s.ev(s.window, 'pointerup', 1, 600, 50); assert.deepEqual(s.phases(), ['up']);
   const t = setup(); t.ev(t.el, 'pointerdown', 1, 50, 50); t.ev(t.window, 'pointerup', 1, 200, 50); assert.deepEqual(t.phases(), ['down', 'up']); // up 150 px away, no move between
 });
+
+test('2e: at() gets the phase as its fourth argument, so a game can silence moves but keep the press (#52)', () => {
+  const seen = [];
+  const s = setup({ press: 0.1, at: (x, y, ev, phase) => { seen.push([phase, ev === undefined]); return phase === 'move' ? null : { x }; } });
+  s.ev(s.el, 'pointerdown', 1, 50, 50); s.ev(s.window, 'pointermove', 1, 52, 50); s.p.update(0.016);
+  s.p.update(0.1); s.ev(s.window, 'pointerup', 1, 52, 50);
+  assert.deepEqual(s.phases(), ['down', 'press', 'up']); // the move was silenced by at(), the press was not
+  assert.deepEqual(seen, [['down', false], ['move', true], ['press', true], ['up', false]]);
+  seen.length = 0; s.ev(s.el, 'pointerdown', 2, 50, 50); s.ev(s.window, 'pointerup', 2, 50, 50);
+  assert.deepEqual(s.phases(), ['down', 'up', 'tap']); assert.deepEqual(seen.map(x => x[0]), ['down', 'up', 'tap']);
+  seen.length = 0; s.ev(s.el, 'pointerdown', 3, 50, 50); s.window.dispatchEvent(new s.window.Event('blur'));
+  assert.deepEqual(s.phases(), ['down', 'cancel']); assert.deepEqual(seen, [['down', false], ['cancel', true]]);
+});

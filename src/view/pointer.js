@@ -1,7 +1,7 @@
 // #5/#8: bindPointer owns the gesture (filters, capture, window routing, move coalescing, tap/press, second-finger cancel);
-// the game's at(clientX, clientY, event) supplies the payload, so the sim does the picking and a replay reproduces it.
-// `event` is optional in at(): it is the pointer event for down/move/up, and undefined for the move and press that update(dt)
-// sends. Long-press time counts only update(dt) (engine/frame time), never wall-clock timers, so a paused game never presses.
+// the game's at(clientX, clientY, event, phase) supplies the payload, so the sim does the picking and a replay reproduces it.
+// `phase` is the command phase being built (#52), so at() can silence moves but keep the press. `event` is optional in at(): it is
+// the pointer event for down/up, and undefined for the move and press that update(dt) sends and for cancels. Long-press time counts only update(dt) (engine/frame time), never wall-clock timers, so a paused game never presses.
 export function bindPointer(engine, { surface, type, at, filter = {}, ignore = 'button, input, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *', edge = 0, tap = {}, press = 0, doc } = {}) {
   if (!type) throw new Error('bindPointer: type required');
   if (typeof at !== 'function') throw new Error('bindPointer: at must be a function');
@@ -10,7 +10,7 @@ export function bindPointer(engine, { surface, type, at, filter = {}, ignore = '
   const tracked = new Set(); // accepted pointers currently down; a second one cancels and blocks until all lift
   let a = null; // the active press: { id, button, kind, sx, sy, x, y, lx, ly, held, far, pressed, silent }
   const send = (phase, x, y, ev) => {
-    const p = at(x, y, ev);
+    const p = at(x, y, ev, phase);
     if (p == null && (phase === 'move' || phase === 'press')) return; // nothing under the pointer: no command (up, cancel and tap always go)
     engine.command(type, { ...p, phase, pointer: a.id, button: a.button, kind: a.kind }); // reserved keys last: at() cannot override them
   };
@@ -27,7 +27,7 @@ export function bindPointer(engine, { surface, type, at, filter = {}, ignore = '
     if (e.clientX < edge) return;
     if (tracked.size > 0) { if (a) end('cancel'); tracked.add(e.pointerId); return; } // second finger: the multi-touch gesture stays the game's
     tracked.add(e.pointerId);
-    const p = at(e.clientX, e.clientY, e);
+    const p = at(e.clientX, e.clientY, e, 'down');
     a = { id: e.pointerId, button: e.button, kind: e.pointerType, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, held: 0, far: false, pressed: false, silent: p == null };
     if (p == null) return;
     surface.setPointerCapture?.(e.pointerId);

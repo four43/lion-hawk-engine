@@ -64,7 +64,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7; watch in the Tractor migration) |
 | 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
-| 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | planned (2e P-E1) |
+| 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
 | 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | planned (2e P-E2) |
 | 54 | Screen-space aim offsets under a finger | Pig Pens | planned (2e P3, P6) |
 | 55 | A tap acts on what was picked at pointer down | Pig Pens | planned (2e P3); engine won't |
@@ -369,7 +369,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 52. `bindPointer`'s `at()` can't tell a move from a press: Pig Pens (phase 2e plan)
 - **What happened:** the Hand tool must send nothing while the finger drags (the view turns the drag into a camera orbit) but must still send the 0.75 s press on the tractor. `at(clientX, clientY, event)` gets `undefined` as the event for both the coalesced move and the press that `update(dt)` sends, so it can't return `null` for one and a payload for the other.
-- **Engine change:** pass the phase: `at(clientX, clientY, event, phase)`. Status: planned (2e P-E1).
+- **Engine change:** pass the phase: `at(clientX, clientY, event, phase)`. Status: done (2e P-E1).
 
 ### 53. A fixed-centre thumb pad vs the floating stick: Pig Pens (phase 2e plan; see #8)
 - **What happened:** Pig Pens' drive pad (`#stick`, 132 px, bottom left) is always visible while driving and deflects from its own centre on the first touch (`main.js:489-497`, travel 36% of its width, no dead zone). `bindStick` with an adopted base hides the base when idle, moves it under the thumb and reads zero on the first touch.
