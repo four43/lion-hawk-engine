@@ -160,7 +160,18 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
   return game;
 }
 
-export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings } = {}) {
+// the URL openGame loads: ?lh-test (or ?lh-test=render for render: 'manual', #47) plus seed, scene, args and extras
+export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } = {}) {
+  const u = new URL(url);
+  u.searchParams.set('lh-test', render === 'manual' ? 'render' : '');
+  if (seed !== undefined) u.searchParams.set('seed', String(seed));
+  if (scene !== undefined) u.searchParams.set('scene', String(scene));
+  if (args !== undefined) u.searchParams.set('args', JSON.stringify(args));
+  for (const [k, v] of Object.entries(query)) u.searchParams.set(k, String(v));
+  return u.href.replace('lh-test=&', 'lh-test&').replace(/lh-test=$/, 'lh-test');
+}
+
+export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto' } = {}) {
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
   const { safeArea, ...ctxOpts } = p;
@@ -169,13 +180,8 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   const errors = [];
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: String(e) }));
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);
-  const u = new URL(url);
-  u.searchParams.set('lh-test', '');
-  if (seed !== undefined) u.searchParams.set('seed', String(seed));
-  if (scene !== undefined) u.searchParams.set('scene', String(scene));
-  if (args !== undefined) u.searchParams.set('args', JSON.stringify(args));
-  for (const [k, v] of Object.entries(query)) u.searchParams.set(k, String(v));
-  await page.goto(u.href.replace('lh-test=', 'lh-test'));
+  const goto = testUrl(url, { seed, scene, args, query, render });
+  await page.goto(goto);
   await page.evaluate(sa => { for (const [k, v] of Object.entries(sa)) document.documentElement.style.setProperty(`--lh-sa-${k}`, `${v}px`); }, safeArea);
   await page.waitForFunction(() => window.engine, null, { timeout: 30000 });
   await page.evaluate(() => window.engine.ready);
@@ -197,34 +203,45 @@ export async function expectState(game, p, value) {
   if (!same(v, value)) fail(`expectState: ${p} is ${JSON.stringify(v)}, expected ${JSON.stringify(value)}`, v, value);
 }
 
-const boxOf = (game, sel) => game.page.evaluate(sel => {
-  const el = document.querySelector(sel); if (!el) return { missing: true };
+// #48: a target is a string (a test id for expectTappable, CSS for the others), { testid }, { css } or a Playwright
+// locator (anything with evaluate). The in-page measurer is serialised: it closes over nothing.
+const measure = el => {
+  if (!el) return { missing: true };
   const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
   const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0 && Number(cs.opacity) > 0;
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return { x: r.left, y: r.top, w: r.width, h: r.height, visible, hit: !!hit && (hit === el || el.contains(hit)) };
-}, sel);
+};
+const bySelector = new Function('sel', `return (${measure.toString()})(document.querySelector(sel))`);
+const target = (t, asTestid) => {
+  if (typeof t === 'string') return asTestid ? { name: t, css: `[data-testid="${t}"]` } : { name: t, css: t };
+  if (t && typeof t.evaluate === 'function') return { name: String(t), loc: t };
+  if (t && typeof t.testid === 'string') return { name: t.testid, css: `[data-testid="${t.testid}"]` };
+  if (t && typeof t.css === 'string') return { name: t.css, css: t.css };
+  throw new TypeError('expect*: a target is a string, { testid }, { css } or a locator');
+};
+const boxOf = (game, t) => t.loc ? t.loc.evaluate(measure) : game.page.evaluate(bySelector, t.css);
 const insideSafe = (game, b) => {
   const { viewport: v, safeArea: s } = game.preset;
   return b.x >= s.left - 0.5 && b.y >= s.top - 0.5 && b.x + b.w <= v.width - s.right + 0.5 && b.y + b.h <= v.height - s.bottom + 0.5;
 };
 const dims = b => `${b.w.toFixed(0)}x${b.h.toFixed(0)} at ${b.x.toFixed(0)},${b.y.toFixed(0)}`;
 
-export async function expectFitsSafeArea(game, selector) {
-  const b = await boxOf(game, selector);
-  if (b.missing) fail(`expectFitsSafeArea: '${selector}' not found`);
-  if (!insideSafe(game, b)) fail(`expectFitsSafeArea: '${selector}' (${dims(b)}) leaves the safe area ${JSON.stringify(game.preset.safeArea)}`);
+export async function expectFitsSafeArea(game, tgt) {
+  const t = target(tgt), b = await boxOf(game, t);
+  if (b.missing) fail(`expectFitsSafeArea: '${t.name}' not found`);
+  if (!insideSafe(game, b)) fail(`expectFitsSafeArea: '${t.name}' (${dims(b)}) leaves the safe area ${JSON.stringify(game.preset.safeArea)}`);
 }
-export async function expectTappable(game, testid, { min = 44 } = {}) {
-  const sel = `[data-testid="${testid}"]`, b = await boxOf(game, sel);
-  if (b.missing) fail(`expectTappable: '${testid}' not found`);
-  if (!b.visible) fail(`expectTappable: '${testid}' is not visible`);
-  if (!insideSafe(game, b)) fail(`expectTappable: '${testid}' (${dims(b)}) leaves the safe area ${JSON.stringify(game.preset.safeArea)}`);
-  if (b.w < min || b.h < min) fail(`expectTappable: '${testid}' is ${dims(b)}, needs at least ${min}x${min}`);
-  if (!b.hit) fail(`expectTappable: '${testid}' is covered at its centre (elementFromPoint is another element)`);
+export async function expectTappable(game, tgt, { min = 44 } = {}) {
+  const t = target(tgt, true), b = await boxOf(game, t), n = t.name;
+  if (b.missing) fail(`expectTappable: '${n}' not found`);
+  if (!b.visible) fail(`expectTappable: '${n}' is not visible`);
+  if (!insideSafe(game, b)) fail(`expectTappable: '${n}' (${dims(b)}) leaves the safe area ${JSON.stringify(game.preset.safeArea)}`);
+  if (b.w < min || b.h < min) fail(`expectTappable: '${n}' is ${dims(b)}, needs at least ${min}x${min}`);
+  if (!b.hit) fail(`expectTappable: '${n}' is covered at its centre (elementFromPoint is another element)`);
 }
-export async function expectNoOverlap(game, selA, selB) {
-  const [a, b] = [await boxOf(game, selA), await boxOf(game, selB)];
-  if (a.missing || b.missing) fail(`expectNoOverlap: '${a.missing ? selA : selB}' not found`);
-  if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fail(`expectNoOverlap: '${selA}' (${dims(a)}) overlaps '${selB}' (${dims(b)})`);
+export async function expectNoOverlap(game, tgtA, tgtB) {
+  const ta = target(tgtA), tb = target(tgtB), [a, b] = [await boxOf(game, ta), await boxOf(game, tb)];
+  if (a.missing || b.missing) fail(`expectNoOverlap: '${a.missing ? ta.name : tb.name}' not found`);
+  if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fail(`expectNoOverlap: '${ta.name}' (${dims(a)}) overlaps '${tb.name}' (${dims(b)})`);
 }

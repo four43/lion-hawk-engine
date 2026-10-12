@@ -97,3 +97,9 @@ test('2d: devices (and view.dt) get dt capped at sim.maxFrame (#44)', () => {
   const seen = []; const { tick, driver } = setup({ devices: [{ update: dt => seen.push(dt) }] });
   driver.start(); tick(0); tick(1000); assert.deepEqual(seen, [0, 0.25]);
 });
+
+test('2d: manual("all") stops renders and steps; devices still update (#47)', () => {
+  const order = []; const { tick, engine, driver } = setup({ devices: [{ update: () => order.push('dev') }] });
+  engine.onRender(() => order.push('render')); driver.manual('all'); driver.start(); const s0 = engine.time.step;
+  tick(0); tick(100); assert.deepEqual(order, ['dev', 'dev']); assert.equal(engine.time.step, s0); assert.equal(driver.manual(), 'all');
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presets, gameDriver, formatFailure, expectScene, expectState } from 'lion-hawk/playwright';
+import { presets, gameDriver, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap } from 'lion-hawk/playwright';
 
 test('presets have the documented shape', () => {
   assert.deepEqual(Object.keys(presets).sort(), ['desktop', 'iPad Pro 11 landscape', 'iPhone 15 Pro landscape', 'iPhone 15 Pro portrait', 'iPhone SE']);
@@ -71,4 +71,18 @@ test('2d: game.press on a touch preset keeps the active touches down and is trac
   assert.deepEqual(sent, [['touchStart', [1]], ['touchStart', [1, 90]], ['touchEnd', [90]]]);
   await g.press('s.a'); await g.press('s.b'); assert.deepEqual(sent.at(-1), ['touchStart', [1, 90, 91]]);
   await g.touch.end(1); assert.deepEqual(sent.at(-1), ['touchEnd', [1]]); // lifting the stick finger leaves the holds down
+});
+
+test('2d: testUrl adds lh-test=render for manual rendering (#47)', () => {
+  assert.equal(new URL(testUrl('http://x/', { seed: 3 })).search, '?lh-test&seed=3');
+  assert.equal(new URL(testUrl('http://x/', { render: 'manual' })).searchParams.get('lh-test'), 'render');
+});
+test('2d: layout assertions accept a test id, { testid }, { css } or a locator (#48)', async () => {
+  const box = { x: 10, y: 10, w: 60, h: 60, visible: true, hit: true }, seen = [];
+  const g = fake(async (fn, sel) => { seen.push(sel); return sel === '#b' ? { ...box, x: 40 } : box; });
+  await expectTappable(g, 'title.play'); await expectTappable(g, { css: '#gas' }); await expectTappable(g, { testid: 'a.b' });
+  assert.deepEqual(seen, ['[data-testid="title.play"]', '#gas', '[data-testid="a.b"]']);
+  const loc = { evaluate: async () => box, toString: () => 'locator(#chip)' };
+  await expectTappable(g, loc); await expectFitsSafeArea(g, loc);
+  await assert.rejects(expectNoOverlap(g, loc, { css: '#b' }), /'locator\(#chip\)' .* overlaps '#b'/);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseFlags, FLAGS } from '../src/core/flags.js';
 
 test('defaults when nothing is set', () => {
-  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, seed: null, slow: null, replay: null, extra: {} });
+  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, lhRender: false, seed: null, slow: null, replay: null, extra: {} });
 });
 test('booleans: present means on, unless 0 or false', () => {
   const f = parseFlags('?tune&fps=1&mute=0&debug=false&lh-test');
@@ -20,4 +20,9 @@ test('slow and replay, unknown params land in extra, result is frozen', () => {
   assert.equal(parseFlags('?slow=fast').slow, null);
   assert.ok(Object.isFrozen(f) && Object.isFrozen(f.extra));
   assert.ok(FLAGS.includes('lh-test'));
+});
+
+test('2d: ?lh-test=render turns on manual rendering (#47)', () => {
+  const f = parseFlags('?lh-test=render'); assert.equal(f.lhTest, true); assert.equal(f.lhRender, true);
+  assert.equal(parseFlags('?lh-test').lhRender, false);
 });

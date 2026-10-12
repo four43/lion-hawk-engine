@@ -59,8 +59,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 44 | Device ramps use uncapped frame time | Rally | done (2d D7) |
 | 45 | No query for "is this control enabled?" | Rally | done (2d D5) |
 | 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
-| 47 | Under `?lh-test` the driver still renders every frame | Rally | open |
-| 48 | `expectTappable` only accepts test IDs | Rally | open |
+| 47 | Under `?lh-test` the driver still renders every frame | Rally | done (2d D11) |
+| 48 | `expectTappable` only accepts test IDs | Rally | done (2d D11) |
 
 ## Entries
 
@@ -328,12 +328,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 47. Under `?lh-test` the driver still renders every frame: Rally (phase 2c R6)
 - **What happened:** a test can't observe what `exit` left in the DOM across page calls, because the next automatic render changes it.
-- **Engine change:** a full-manual option, `driver.manual('all')` or `?lh-test=render`, that also stops automatic renders. Tests then call `render()` themselves. Status: open.
+- **Engine change:** a full-manual option, `driver.manual('all')` or `?lh-test=render`, that also stops automatic renders. Tests then call `render()` themselves. Status: done (2d D11): `?lh-test=render` (`flags.lhRender`) boots with `driver.manual('all')`; `openGame(…, { render: 'manual' })`; devices still update, nothing steps or renders, so no frame ack.
 
 ### 48. `expectTappable` only accepts test IDs: Rally (phase 2c R7)
 - **What happened:** Rally's pedals and HUD chips aren't registry controls (they're devices and plain DOM), so `mobile.mjs` keeps local box/hit checks for them. The research predicted `mobile.mjs` would shrink to about 80 lines; measured, it stayed at 197 lines (727 → 797 checks).
 - **Size of the migration:** Rally's `src` did not shrink either. It was 4123 lines before the migration (a39cbaf) and is 4316 after (+193, of which +81 is the autopilot moved from `test/` into `src`). The gain is structure, not size: a single flow owner, headless-testable flow, and no wall-clock timers in the sim.
-- **Engine change:** `expectTappable`, `expectFitsSafeArea` and `expectNoOverlap` accept any selector or locator. Status: open.
+- **Engine change:** `expectTappable`, `expectFitsSafeArea` and `expectNoOverlap` accept any selector or locator. Status: done (2d D11): a string, `{ testid }`, `{ css }` or a Playwright locator; failure messages name the target.
 
 ### 49. Commands to a scene under a pausing overlay are dropped: engine (phase 2d D1 review)
 - **What happened:** scene-scoped command handlers skip covered scenes, and the command is dropped, not held. That suits positional taps.

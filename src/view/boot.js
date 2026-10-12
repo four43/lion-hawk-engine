@@ -103,7 +103,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   };
 
   if (flags.lhTest) {
-    driver.manual(true); // devices update and frames render every rAF, but the sim never steps
+    driver.manual(flags.lhRender ? 'all' : true); // devices update and frames render every rAF (not with ?lh-test=render, #47), but the sim never steps
     const st = doc.createElement('style'); st.textContent = '*{transition:none!important;animation:none!important}';
     (doc.head ?? doc.documentElement).appendChild(st);
   }

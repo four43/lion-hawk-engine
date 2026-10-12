@@ -166,3 +166,7 @@ test('2d: a game onRender after boot no longer silences view halves (#10)', () =
   let n = 0; app.engine.onRender(() => n++); app.hook.render(0);
   assert.deepEqual(log, ['frame race']); assert.equal(n, 1);
 });
+
+test('2d: ?lh-test=render boots in full-manual mode', () => {
+  const { app } = run('?lh-test=render'); assert.equal(app.driver.manual(), 'all');
+});

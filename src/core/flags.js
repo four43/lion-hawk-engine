@@ -9,6 +9,7 @@ export function parseFlags(search) {
   out.seed = seed === null ? null : /^\d+$/.test(seed) ? Number(BigInt(seed) & 0xffffffffn) : seed;
   out.slow = slow === null || !Number.isFinite(parseFloat(slow)) ? null : parseFloat(slow);
   out.replay = p.get('replay');
+  out.lhRender = out.lhTest && p.get('lh-test') === 'render'; // #47: full-manual rendering
   for (const [k, v] of p) if (!FLAGS.includes(k)) extra[k] = v;
   out.extra = Object.freeze(extra);
   return Object.freeze(out);
