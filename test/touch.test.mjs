@@ -114,3 +114,27 @@ test('F3: a canvas surface mounts the base under body, with fixed position', () 
   s.ev(canvas, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230); assert.equal(s.v().throttle, 1);
   st.dispose(); assert.equal(s.document.querySelector('.lh-stick'), null);
 });
+
+test('2c slider: x only, vertical ignored, per-axis clamp, function radius per gesture, adopted base/knob (#17)', () => {
+  const s = setup();
+  const base = s.document.createElement('div'), knob = s.document.createElement('div');
+  base.hidden = true; base.appendChild(knob); s.document.body.appendChild(base);
+  let r = 100;
+  const h = bindStick(s.engine, { root: s.root, x: ['steer', -1], axis: 'x', radius: () => r, deadZone: 0, edge: 20, base, knob, doc: s.document });
+  s.ev(s.root, 'pointerdown', 1, 300, 300);
+  assert.equal(base.hidden, false); assert.equal(base.style.left, '300px'); assert.equal(base.style.getPropertyValue('--lh-r'), '100px');
+  assert.equal(s.root.hasAttribute('data-lh-active'), true);
+  r = 50; // read again only on the next pointerdown
+  s.ev(s.window, 'pointermove', 1, 350, 390); assert.equal(s.v().steer, -0.5); // 50 of 100 px right; 90 px down ignored
+  assert.equal(knob.style.transform, 'translate(50px, 0px)');
+  s.ev(s.window, 'pointermove', 1, 100, 300); assert.equal(s.v().steer, 1); // clamped on x alone
+  s.ev(s.window, 'pointerup', 1);
+  assert.equal(s.v().steer, 0); assert.equal(base.hidden, true); assert.equal(s.root.hasAttribute('data-lh-active'), false);
+  h.dispose(); assert.equal(base.isConnected, true); assert.equal(s.document.querySelector('.lh-stick'), null);
+});
+test('2c: bindHold marks its element with data-lh-down while pressed (#17)', () => {
+  const s = setup(); const h = bindHold(s.engine, s.btn, 'throttle');
+  s.ev(s.btn, 'pointerdown', 5); assert.equal(s.btn.hasAttribute('data-lh-down'), true); assert.equal(s.v().throttle, 1);
+  s.ev(s.btn, 'pointerup', 5); assert.equal(s.btn.hasAttribute('data-lh-down'), false);
+  h.dispose(); assert.equal(s.btn.hasAttribute('data-lh-down'), false);
+});

@@ -1,33 +1,44 @@
 // Touch devices: a floating thumb stick and hold buttons on pointer events -> named actions in per-source device layers (I-3: released on cancel/blur/hide).
 // Moves/ups route by pointerId on the window (iOS does not reliably retarget captured moves); cancel and lostpointercapture are releases.
-export function bindStick(engine, { root, x, y, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
+export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: adoptKnob, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
+  if (axis === 'x') y = undefined; else if (axis === 'y') x = undefined; // slider mode (#17): the other axis is never read or written
   if (!x && !y) throw new Error('bindStick: x or y required');
   surface ??= root; doc = doc ?? surface.ownerDocument; parent ??= doc.body; const win = doc.defaultView ?? globalThis.window;
-  const base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true; base.style.position = 'fixed';
-  const knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); parent.appendChild(base);
+  const adopted = !!adoptBase; let base = adoptBase, knob = adoptKnob; // adopted elements are positioned and shown, not styled, and survive dispose()
+  if (adopted) { base.hidden = true; knob ??= base.firstElementChild; }
+  else { base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true; base.style.position = 'fixed'; knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); parent.appendChild(base); }
   const prevTA = surface.style.touchAction; surface.style.touchAction = 'none';
   const out = {}; if (x) out[x[0]] = 0; if (y) out[y[0]] = 0; // reused every move
-  let id = null, ox = 0, oy = 0;
+  let id = null, ox = 0, oy = 0, R = 70;
 
   const write = (vx, vy) => { if (x) out[x[0]] = vx * x[1] + 0; if (y) out[y[0]] = vy * y[1] + 0; engine.input.device(out, source); }; // +0 normalises -0
   const release = () => {
-    if (id === null) return; id = null; base.hidden = true; knob.style.transform = ''; write(0, 0);
+    if (id === null) return; id = null; base.hidden = true; knob.style.transform = ''; surface.removeAttribute('data-lh-active'); write(0, 0);
   };
   const onDown = e => {
     if (id !== null) return;
     if (e.target?.closest?.(ignore)) return;
     if (e.clientX < edge) return; // viewport edge (Safari back swipe), not root's
-    id = e.pointerId; ox = e.clientX; oy = e.clientY;
+    id = e.pointerId; ox = e.clientX; oy = e.clientY; R = typeof radius === 'function' ? radius() : radius;
+    base.style.setProperty('--lh-r', R + 'px'); surface.setAttribute('data-lh-active', '');
     base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.hidden = false; knob.style.transform = 'translate(0px, 0px)';
   };
   const onMove = e => {
     if (e.pointerId !== id) return;
-    let dx = e.clientX - ox, dy = e.clientY - oy; const len = Math.hypot(dx, dy);
-    if (len > radius) { dx = dx / len * radius; dy = dy / len * radius; }
+    let dx = e.clientX - ox, dy = e.clientY - oy;
+    if (axis === 'x') dy = 0; else if (axis === 'y') dx = 0;
+    if (axis) { dx = Math.max(-R, Math.min(R, dx)); dy = Math.max(-R, Math.min(R, dy)); } // per-axis clamp
+    else { const len = Math.hypot(dx, dy); if (len > R) { dx = dx / len * R; dy = dy / len * R; } }
     // the one per-move allocation: DOM style writes allocate anyway, so the transform string stays
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    const nx = dx / R, ny = -dy / R;
+    if (axis) { // dead zone on the one axis, rescaled to 0..1
+      const n = axis === 'x' ? nx : ny, m = Math.abs(n);
+      const v = m <= deadZone ? 0 : Math.sign(n) * Math.min(1, (m - deadZone) / (1 - deadZone));
+      return axis === 'x' ? write(v, 0) : write(0, v);
+    }
     // radial dead zone, then length rescaled to 0..1; screen up is +y
-    const nx = dx / radius, ny = -dy / radius, m = Math.hypot(nx, ny);
+    const m = Math.hypot(nx, ny);
     if (m <= deadZone) return write(0, 0);
     const k = Math.min(1, (m - deadZone) / (1 - deadZone)) / m;
     write(nx * k, ny * k);
@@ -42,7 +53,7 @@ export function bindStick(engine, { root, x, y, surface, parent, radius = 70, ed
       surface.removeEventListener('pointerdown', onDown); surface.removeEventListener('lostpointercapture', onEnd);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onEnd); win.removeEventListener('pointercancel', onEnd);
       win.removeEventListener('blur', release); win.removeEventListener('pagehide', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; base.remove(); surface.style.touchAction = prevTA; engine.input.clearDevice(source);
+      id = null; if (adopted) { base.hidden = true; knob.style.transform = ''; } else base.remove(); surface.removeAttribute('data-lh-active'); surface.style.touchAction = prevTA; engine.input.clearDevice(source);
     },
   };
 }
@@ -53,8 +64,8 @@ export function bindHold(engine, el, action, { source = 'hold:' + action, value 
   const on = { [action]: value ?? (isAxis ? 1 : true) }, off = { [action]: isAxis ? 0 : false };
   let id = null;
   el.setAttribute('data-lh-hold', '');
-  const onDown = e => { if (id !== null) return; id = e.pointerId; el.setPointerCapture?.(e.pointerId); engine.input.device(on, source); };
-  const release = () => { if (id === null) return; id = null; engine.input.device(off, source); };
+  const onDown = e => { if (id !== null) return; id = e.pointerId; el.setPointerCapture?.(e.pointerId); el.setAttribute('data-lh-down', ''); engine.input.device(on, source); };
+  const release = () => { if (id === null) return; id = null; el.removeAttribute('data-lh-down'); engine.input.device(off, source); };
   const onEnd = e => { if (e.pointerId === id) release(); };
   const onCtx = e => e.preventDefault();
   const onVis = () => { if (doc.visibilityState === 'hidden') release(); };
@@ -66,7 +77,7 @@ export function bindHold(engine, el, action, { source = 'hold:' + action, value 
       el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointerup', onEnd); el.removeEventListener('pointercancel', onEnd);
       el.removeEventListener('lostpointercapture', onEnd); el.removeEventListener('contextmenu', onCtx);
       win.removeEventListener('pagehide', release); win.removeEventListener('blur', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; el.removeAttribute('data-lh-hold'); engine.input.clearDevice(source);
+      id = null; el.removeAttribute('data-lh-hold'); el.removeAttribute('data-lh-down'); engine.input.clearDevice(source);
     },
   };
 }
