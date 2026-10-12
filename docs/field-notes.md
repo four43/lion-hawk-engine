@@ -38,7 +38,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 23 | Pause was a state of the game's own state machine | Rally | done (2c-rally) |
 | 24 | Browser-only defaults inside sim modules | Rally | done (2c-rally) |
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
-| 26 | Policies that run slower than the sim | Rally | done (2d D5) |
+| 26 | Policies that run slower than the sim | Rally | done (2d D10) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
 | 28 | Sim objects live in the scene's `state` | Rally | open (2c-rally R2 workaround; phase 4 World) |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
@@ -49,10 +49,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 34 | Stale browser tooling | Rally | done (2c-rally) |
 | 35 | A fixed engine seed gives every visitor the same first track | Rally | done (2c-rally) |
 | 36 | Can't ask "is this overlay open or pending?" | Rally | done (2d D5) |
-| 37 | Policies have no per-handle state or rate | Rally | open (worked around in 2c-rally R2) |
+| 37 | Policies have no per-handle state or rate | Rally | done (2d D10) |
 | 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | done (2d D4: frame acks, engine.onPresent) |
 | 39 | A control can't both trigger an action and be gated | Rally | done (2d D5) |
-| 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance open |
+| 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance done (2d D10) |
 | 41 | The input latch drops a second tap if no step sees the key go up | Rally | done (2d D7) |
 | 42 | `bindHold` lets the button take focus | Rally | done (2d D8) |
 | 43 | Playwright `touch.end(id)` lifted the wrong finger | engine test helper | done |
@@ -228,7 +228,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 26. Policies that run slower than the sim: Rally
 - **What happened:** the autopilot runs at 60 Hz inside the 240 Hz sim (every 4th step) in the golden and the game tests. A policy is called every step with no per-handle state.
 - **Workaround (2c-rally R2):** the `autopilot` policy caches its last output per engine in a `WeakMap` and recomputes every 4 steps.
-- **Engine change:** a `policy.every(n, fn)` helper, or a per-handle scratch object passed to policies.
+- **Engine change:** a `policy.every(n, fn)` helper, or a per-handle scratch object passed to policies. Status: done (2d D10): `policy.every(n, fn, { phase })`; see #37.
 
 ### 27. Events are delivered after physics, not inside game logic: Rally
 - **What happened:** `Game` listeners ran synchronously inside `game.step()`, before that step's physics. Engine events flush at `events.flush`, after physics. A test that teleports the car when it sees a `split` acts one step later than before.
@@ -278,7 +278,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 37. Policies have no per-handle state or rate: Rally (phase 2c R2; see #26)
 - **What happened:** Rally's autopilot runs at 60 Hz inside the 240 Hz sim and keeps controller state between calls.
 - **Workaround:** a per-engine WeakMap in Rally.
-- **Engine change:** `policy.every(n, fn)`, plus a per-handle scratch object passed as `fn(h, i, scratch)`. Status: open.
+- **Engine change:** `policy.every(n, fn)`, plus a per-handle scratch object passed as `fn(h, i, scratch)`. Status: done (2d D10): `policy` moved to `lion-hawk/sim` (re-exported by `lion-hawk/test`); every policy is called `fn(h, i, scratch)` with one scratch object per (handle, policy function); `every` follows engine steps and re-anchors after a gap of n steps or more.
 
 ### 38. No "a frame has been drawn" signal for deferring heavy sim work: Rally (phase 2c R2; see #21, S-6)
 - **What happened:** Rally shows a "Building the track…" toast, waits LOAD_HOLD (12 steps), then builds. With maxCatchUp 12, all 12 steps can run in a single rAF frame, so the toast never paints.
@@ -295,6 +295,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Engine change:**
   - `policy.every(n, fn, { phase })` (see #37), so tests can vary phase explicitly.
   - Guidance: when a test compares two runs, perturb one of them on purpose.
+  - Status: engine side done (2d D10): `policy.every` takes `{ phase }`; spec T-2 carries the guidance.
 - **Game change:** final-pass fix to Rally `test/game.mjs`: run 2 starts one step later (the autopilot's phase shifts), giving 167.400 s vs 167.492 s, and the test asserts the two differ. Status: done for Rally; the engine guidance is open.
 
 ### 41. The input latch drops a second tap if no step sees the key go up: Rally (phase 2c R5)

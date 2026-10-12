@@ -9,3 +9,4 @@ export { createLoop } from './core/loop.js';
 export { axis, button, actions, createInput } from './core/actions.js';
 export { createUi } from './core/ui.js';
 export { defineGame, createEngine } from './core/engine.js';
+export { policy } from './core/policy.js';

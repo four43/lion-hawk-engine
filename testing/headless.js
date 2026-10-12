@@ -2,13 +2,9 @@
 // scene jumps and UI taps. Everything counts steps, never milliseconds.
 import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
+import { policy } from '../src/core/policy.js';
 
-export const policy = {
-  still: () => ({}),
-  const: p => () => p,
-  seq: list => (h, i) => { let k = i; for (const [n, p] of list) { if (k < n) return p; k -= n; } return {}; },
-  fn: f => f,
-};
+export { policy };
 const matcher = m => typeof m === 'function' ? m : e => e.type === m;
 export function eventList(arr) {
   return Object.assign(arr, {
@@ -22,6 +18,8 @@ export function eventList(arr) {
 
 export function headless(game, { seed = 1, scene, args, invariants = [], record = false } = {}) {
   const engine = createEngine(game, { seed, scene, args, record }), hz = game.sim.hz;
+  const scratch = new Map(); // [T-2] one persistent object per (handle, policy function) (#37)
+  const sc = f => { let o = scratch.get(f); if (!o) scratch.set(f, o = {}); return o; };
   const sums = record ? [] : null; // [T-9] a checksum every 60 steps while recording
   // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
   const log = eventList([]); engine.events.on(e => { log.push(e); });
@@ -32,7 +30,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     return () => input;
   };
   const one = (f, k) => {
-    if (f) engine.input.set(f(h, k)); engine.stepN(1);
+    if (f) engine.input.set(f(h, k, sc(f))); engine.stepN(1);
     if (sums && engine.time.step % 60 === 0) sums.push([engine.time.step, checksum(engine.state())]);
     for (const inv of invariants) inv(h);
   };

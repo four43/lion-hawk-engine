@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { headless, policy } from '../testing/index.js';
+import { headless, policy, stripComments } from '../testing/index.js';
 import { defineGame } from '../src/index.sim.js';
 import game from './fixtures/countdown.js';
 
@@ -78,4 +78,27 @@ test('2d: h.enabled and h.tryTap', () => {
   const h = headless(game, { scene: 'race' });
   assert.equal(h.enabled('race.pause'), false); assert.equal(h.tryTap('race.pause'), false);
   h.jump('race', 'running'); assert.equal(h.tryTap('race.pause'), true);
+});
+
+test('2d: policy.every recomputes every n engine steps and holds in between, with a phase (#37, #40)', () => {
+  const calls = []; const p = policy.every(4, (h, i, sc) => { sc.n = (sc.n ?? 0) + 1; calls.push(h.time.step); return { throttle: sc.n / 10 }; });
+  const h = headless(game, { scene: 'race' }); h.jump('race', 'running');
+  for (let k = 0; k < 9; k++) h.step(1, p);
+  assert.deepEqual(calls, [0, 4, 8]); assert.ok(Math.abs(h.scene.state.x - (0.1 * 4 + 0.2 * 4 + 0.3) * 10 / 60) < 1e-9);
+  const q = []; headless(game).step(9, policy.every(4, x => { q.push(x.time.step); return {}; }, { phase: 1 }));
+  assert.deepEqual(q, [0, 3, 7]);
+  assert.throws(() => policy.every(0, () => ({})), /policy.every: n must be a positive integer/);
+  assert.throws(() => policy.every(4, () => ({}), { phase: 4 }), /policy.every: phase must be an integer in \[0, 4\)/);
+});
+test('2d: one scratch object per handle and policy; a gap re-anchors every()', () => {
+  const seen = new Set(); const p = (h, i, sc) => { seen.add(sc); return {}; };
+  const a = headless(game), b = headless(game); a.step(3, p); b.step(2, p); a.step(1, p); assert.equal(seen.size, 2);
+  const at = []; const e = policy.every(4, x => { at.push(x.time.step); return {}; }); const h = headless(game);
+  h.step(2, e); h.step(5); h.step(3, e); assert.deepEqual(at, [0, 7]);
+});
+test('2d: stripComments is exported for game scans', () => {
+  assert.equal(stripComments('a(); // setTimeout(x)\n/* document. */b'), 'a(); \n' + ' '.repeat(15) + 'b');
+});
+test('2d: policy comes from lion-hawk/sim too', async () => {
+  const sim = await import('../src/index.sim.js'); assert.equal(sim.policy, policy);
 });

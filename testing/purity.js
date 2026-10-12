@@ -13,7 +13,7 @@ const RULES = [
 ];
 // Blank comments, keeping newlines so line numbers survive. String contents are kept (imports live in strings) but are
 // skipped when looking for comment openers, so '/*' or 'http://x' do not hide code after them.
-function stripComments(src) {
+export function stripComments(src) {
   let out = '', i = 0;
   while (i < src.length) {
     const c = src[i], n = src[i + 1];
