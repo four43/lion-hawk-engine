@@ -156,3 +156,20 @@ test('2d: stick radius guard, knob-less adopted base, --lh-r cleared, pointerdow
   s.ev(s.window, 'pointermove', 1, 235, 300); assert.ok(Math.abs(s.v().steer - (0.5 - 0.1) / 0.9) < 1e-9);
   st.dispose(); assert.equal(base.style.getPropertyValue('--lh-r'), '');
 });
+
+test('2e: origin centre: a fixed pad deflects from its centre at once and is never hidden or moved (#53)', () => {
+  const s = setup();
+  const base = s.document.createElement('div'), knob = s.document.createElement('div'); base.appendChild(knob); s.document.body.appendChild(base);
+  base.getBoundingClientRect = () => ({ left: 100, top: 200, width: 132, height: 132, right: 232, bottom: 332, x: 100, y: 200 }); // centre (166, 266)
+  const h = bindStick(s.engine, { root: base, base, knob, origin: 'centre', x: ['steer', -1], y: ['throttle', 1], radius: () => 50, deadZone: 0, edge: 0, doc: s.document });
+  assert.equal(base.hidden, false);
+  s.ev(base, 'pointerdown', 1, 166, 241); // 25 px above the centre: half throttle on the touch itself
+  let v = s.v(); assert.equal(v.throttle, 0.5); assert.equal(v.steer, 0);
+  assert.equal(knob.style.transform, 'translate(0px, -25px)'); assert.equal(base.style.left, ''); assert.equal(base.hidden, false);
+  assert.equal(base.style.getPropertyValue('--lh-r'), '50px'); assert.equal(base.hasAttribute('data-lh-active'), true);
+  s.ev(s.window, 'pointermove', 1, 266, 266); v = s.v(); assert.equal(v.steer, -1); assert.equal(v.throttle, 0); // clamped radially
+  s.ev(s.window, 'pointerup', 1); v = s.v(); assert.equal(v.steer, 0); assert.equal(base.hidden, false); assert.equal(knob.style.transform, '');
+  h.dispose(); assert.equal(base.hidden, false); assert.equal(base.isConnected, true);
+  assert.throws(() => bindStick(s.engine, { root: base, x: ['steer', 1], origin: 'centre', doc: s.document }), /origin 'centre' needs a base/);
+  assert.throws(() => bindStick(s.engine, { root: base, base, x: ['steer', 1], origin: 'middle', doc: s.document }), /origin must be 'thumb' or 'centre'/);
+});

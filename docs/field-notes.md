@@ -20,7 +20,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
-| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad planned (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge and gamepad.mapping open |
+| 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge and gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
 | 10 | `onRender` is a single slot | all | done (2d D9) |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI) |
@@ -65,7 +65,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 | 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
-| 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | planned (2e P-E2) |
+| 53 | A fixed-centre thumb pad vs the floating stick | Pig Pens | done (2e P-E2) |
 | 54 | Screen-space aim offsets under a finger | Pig Pens | planned (2e P3, P6) |
 | 55 | A tap acts on what was picked at pointer down | Pig Pens | planned (2e P3); engine won't |
 | 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
@@ -144,7 +144,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - scene-scoped devices;
   - a per-source vector merge for stick pairs.
 - **2d:** pointer filters done (2d D3: `bindPointer` `filter`).
-- **Status:** done for Rally's needs; Pig Pens' pad planned (2e P-E2, `bindStick({ origin: 'centre' })`, #53). Pig Pens doesn't need a scene-scoped stick: `#drive` is `display: none` outside drive mode, so the pad gets no pointers, and the sim reads `throttle`/`steer` only while driving. Its mouse-vs-tool filter is `bindPointer`'s `filter.button`. Tractor Pickup's radial pair merge and gamepad.mapping open.
+- **Status:** done for Rally's needs; Pig Pens' pad done (2e P-E2, `bindStick({ origin: 'centre' })`, #53). Pig Pens doesn't need a scene-scoped stick: `#drive` is `display: none` outside drive mode, so the pad gets no pointers, and the sim reads `throttle`/`steer` only while driving. Its mouse-vs-tool filter is `bindPointer`'s `filter.button`. Tractor Pickup's radial pair merge and gamepad.mapping open.
 
 ### 9. UI controls need more than a text label: Tractor Pickup, Rally
 - **What happened:**
@@ -373,7 +373,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 53. A fixed-centre thumb pad vs the floating stick: Pig Pens (phase 2e plan; see #8)
 - **What happened:** Pig Pens' drive pad (`#stick`, 132 px, bottom left) is always visible while driving and deflects from its own centre on the first touch (`main.js:489-497`, travel 36% of its width, no dead zone). `bindStick` with an adopted base hides the base when idle, moves it under the thumb and reads zero on the first touch.
-- **Decision:** add `bindStick({ origin: 'centre' })`: the origin is the base's centre at pointerdown, the down position is the first move, and the base is never hidden or moved. The floating stick would change the feel of the main drive control. Status: planned (2e P-E2).
+- **Decision:** add `bindStick({ origin: 'centre' })`: the origin is the base's centre at pointerdown, the down position is the first move, and the base is never hidden or moved. The floating stick would change the feel of the main drive control. Status: done (2e P-E2).
 
 ### 54. Screen-space aim offsets under a finger: Pig Pens (phase 2e plan)
 - **What happened:** with a finger, Grab lifts the held animal to 80 px above the finger, eased over 0.18 s, and the Hose aims 55 px above it (v2 spec §16.2). Both are screen-space offsets eased per frame in `main.js`, so they can't be a sim input as they stand.
