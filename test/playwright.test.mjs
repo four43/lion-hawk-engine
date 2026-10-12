@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presets, gameDriver, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap } from 'lion-hawk/playwright';
+import { presets, gameDriver, openGame, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap } from 'lion-hawk/playwright';
 
 test('presets have the documented shape', () => {
   assert.deepEqual(Object.keys(presets).sort(), ['desktop', 'iPad Pro 11 landscape', 'iPhone 15 Pro landscape', 'iPhone 15 Pro portrait', 'iPhone SE']);
@@ -96,4 +96,23 @@ test('2e: game.point resolves a selector, {x, y} or { world } to client coordina
   assert.deepEqual(await g.point('#stick'), { x: 30, y: 50 });
   assert.deepEqual(await g.point({ x: 3, y: 4 }), { x: 3, y: 4 });
   assert.deepEqual(await g.point({ world: [1, 0, 5] }), { x: 2, y: 10 });
+});
+
+test('2f: game.point refuses a { world } point behind the camera or off-screen (#73)', async () => {
+  const page = { evaluate: async (fn, w) => w[0] > 0 ? { x: 5, y: 6, z: 0.5, onScreen: true } : { x: -9, y: 6, z: 1.2, onScreen: false } };
+  const g = gameDriver({ page, context: {}, preset: presets.desktop, presetName: 'desktop' });
+  assert.deepEqual(await g.point({ world: [1, 0, 0] }), { x: 5, y: 6 });
+  await assert.rejects(g.point({ world: [-1, 0, 0] }), /off-screen or behind the camera/);
+  const old = gameDriver({ page: { evaluate: async () => ({ x: -9, y: 6 }) }, context: {}, preset: presets.desktop, presetName: 'desktop' });
+  assert.deepEqual(await old.point({ world: [-1, 0, 0] }), { x: -9, y: 6 }); // a project without onScreen keeps today's behaviour
+});
+test('2f: openGame adds initScript before the page loads (#74)', async () => {
+  const calls = [];
+  const page = { on() {}, addInitScript: async (f, a) => calls.push(['init', typeof f === 'function' ? 'fn' : f.content]), goto: async u => calls.push(['goto', u]),
+    evaluate: async () => {}, waitForFunction: async () => {} };
+  const browser = { newContext: async () => ({ newPage: async () => page }) };
+  await openGame(browser, 'http://x/', { initScript: () => { window.WebGLRenderingContext = undefined; } });
+  assert.deepEqual(calls.map(c => c[0]), ['init', 'goto']);
+  calls.length = 0; await openGame(browser, 'http://x/', { initScript: { content: 'window.x = 1' } });
+  assert.deepEqual(calls.map(c => c[1]).slice(0, 1), ['window.x = 1']);
 });

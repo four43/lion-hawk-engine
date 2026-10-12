@@ -127,6 +127,7 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     if (target.world) {
       const p = await ev(w => { const v = window.engine.view; if (!v?.project) return null; return v.project(w); }, target.world);
       if (!p) throw new Error('touch: { world } needs engine.view.project (not provided by this game)');
+      if (p.onScreen === false) throw new Error(`touch: { world } point is off-screen or behind the camera (${JSON.stringify(target.world)})`); // #73: a project without onScreen keeps the old behaviour
       return { x: p.x, y: p.y };
     }
     return { x: target.x, y: target.y };
@@ -220,7 +221,8 @@ export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } 
   return u.href.replace('lh-test=&', 'lh-test&').replace(/lh-test=$/, 'lh-test');
 }
 
-export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto' } = {}) {
+// #74: initScript (a function or { content }) runs in the page before any of its scripts, e.g. to stub WebGL.
+export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript } = {}) {
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
   const { safeArea, ...ctxOpts } = p;
@@ -228,6 +230,7 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: String(e) }));
+  if (initScript) await page.addInitScript(initScript);
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);
   const goto = testUrl(url, { seed, scene, args, query, render });
   await page.goto(goto);
