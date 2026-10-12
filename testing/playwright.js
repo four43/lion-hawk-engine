@@ -51,24 +51,71 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
   const ev = (fn, arg) => page.evaluate(fn, arg);
   const fnSource = f => typeof f === 'function' ? f.toString() : String(f);
 
-  // One evaluate: loop engine.stepN(1) in the page until the predicate source (or event type) hits, then render the DOM.
-  const run = async (what, { pred, type }, { maxSteps = 1200, input } = {}) => {
-    const r = await ev(({ pred, type, maxSteps, input }) => {
-      const e = window.engine, held = input ? Object.keys(input) : [];
-      if (input) e.input.hold(input);
-      try {
-        const test = pred ? new Function(`return (${pred})`)() : null;
-        let mark = 0; { const all = e.events.since(0); if (all.length) mark = all[all.length - 1].seq ?? all.length; }
-        for (let k = 0; k <= maxSteps; k++) {
-          if (type ? e.events.since(mark).some(x => x.type === type) : test(e.state(), e)) { e.render(0); return { k }; }
-          if (k < maxSteps) e.stepN(1);
+  // #50: an in-page loop can't wait out a load whose settle is held by view.wait (the promise needs the page's event
+  // loop). Each loop below hands back to Node when `engine.loading.phase === 'settle'` with blocks pending; Node polls
+  // until the blocks clear (bounded by `timeout` ms of real time), then the loop continues where it stopped.
+  const unblocked = async (what, t0, timeout) => {
+    for (;;) {
+      const b = await ev(() => { const l = window.engine.loading; return l.phase === 'settle' ? [...(l.blocks ?? [])] : []; });
+      if (!b.length) return;
+      if (Date.now() - t0 >= timeout) throw new Error(`${what}: load still blocked by ${b.join(', ')} after ${timeout} ms`);
+      await new Promise(r => setTimeout(r, 20));
+    }
+  };
+  const stalled = 'e.loading.phase === "settle" && e.loading.blocks.length > 0'; // in-page test, spliced into the loops
+
+  // One evaluate per stretch: loop engine.stepN(1) in the page until the predicate source (or event type) hits, then render the DOM.
+  const run = async (what, { pred, type }, { maxSteps = 1200, input, timeout = 30000 } = {}) => {
+    const t0 = Date.now(); let from = 0, mark = null;
+    for (;;) {
+      const r = await ev(({ pred, type, maxSteps, input, from, mark, stalled }) => {
+        const e = window.engine, held = input ? Object.keys(input) : [], blocked = new Function('e', `return ${stalled}`);
+        if (input) e.input.hold(input);
+        try {
+          const test = pred ? new Function(`return (${pred})`)() : null;
+          if (mark === null) { mark = 0; const all = e.events.since(0); if (all.length) mark = all[all.length - 1].seq ?? all.length; }
+          for (let k = from; k <= maxSteps; k++) {
+            if (type ? e.events.since(mark).some(x => x.type === type) : test(e.state(), e)) { e.render(0); return { k }; }
+            if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k, mark }; } e.stepN(1); }
+          }
+          e.render(0);
+          return { fail: true, step: e.state().step, scene: e.scene.name, overlays: [...e.scene.overlays], events: e.events.since(0).slice(-8) };
+        } finally { if (held.length) e.input.release(...held); }
+      }, { pred, type, maxSteps, input, from, mark, stalled });
+      if (r.wait) { from = r.k; mark = r.mark; await unblocked(what, t0, timeout); continue; }
+      if (r.fail) throw new Error(formatFailure(what, r, maxSteps));
+      return r.k;
+    }
+  };
+  // n steps, pausing (as above) while a load's settle is blocked; returns the step counter
+  const stepN = async (n, input, timeout = 30000) => {
+    const t0 = Date.now(); let left = n;
+    for (;;) {
+      const r = await ev(({ left, input, stalled }) => {
+        const e = window.engine, blocked = new Function('e', `return ${stalled}`); if (input) e.input.hold(input);
+        try { while (left > 0 && !blocked(e)) { e.stepN(1); left--; } e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); }
+        return { left, step: e.state().step };
+      }, { left, input, stalled });
+      if (r.left === 0) return r.step;
+      left = r.left; await unblocked('step', t0, timeout);
+    }
+  };
+  // steps until no load is active, waiting out view.wait blocks; returns the steps taken
+  const untilLoaded = async ({ maxSteps = 1200, timeout = 30000 } = {}) => {
+    const t0 = Date.now(); let k = 0;
+    for (;;) {
+      const r = await ev(({ k, maxSteps, stalled }) => {
+        const e = window.engine, blocked = new Function('e', `return ${stalled}`);
+        for (; k <= maxSteps; k++) {
+          if (!e.loading.active) { e.render(0); return { k }; }
+          if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k }; } e.stepN(1); }
         }
-        e.render(0);
-        return { fail: true, step: e.state().step, scene: e.scene.name, overlays: [...e.scene.overlays], events: e.events.since(0).slice(-8) };
-      } finally { if (held.length) e.input.release(...held); }
-    }, { pred, type, maxSteps, input });
-    if (r.fail) throw new Error(formatFailure(what, r, maxSteps));
-    return r.k;
+        e.render(0); return { fail: true, k, step: e.state().step, scene: e.scene.name, overlays: [...e.scene.overlays], events: e.events.since(0).slice(-8) };
+      }, { k, maxSteps, stalled });
+      if (r.wait) { k = r.k; await unblocked('untilLoaded', t0, timeout); continue; }
+      if (r.fail) throw new Error(formatFailure('untilLoaded', r, maxSteps));
+      return r.k;
+    }
   };
 
   const point = async target => {
@@ -92,10 +139,11 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
 
   const game = {
     page, preset, presetName,
-    step: (n, input) => ev(({ n, input }) => { const e = window.engine; if (input) e.input.hold(input); try { e.stepN(n); e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); } return e.state().step; }, { n, input }),
+    step: (n, input) => stepN(n, input),
     seconds: (s, input) => ev(({ s, input }) => { const e = window.engine; if (input) e.input.hold(input); try { e.advance(s); e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); } return e.state().step; }, { s, input }),
     until: (fn, opts) => run('until', { pred: fnSource(fn) }, opts),
     untilEvent: (type, opts) => run(`untilEvent(${type})`, { type }, opts),
+    untilLoaded, // #50: { maxSteps = 1200, timeout = 30000 }
     render: () => ev(() => window.engine.render(0)),
     state: () => ev(() => JSON.parse(JSON.stringify(window.engine.state()))),
     scene: () => ev(() => { const s = window.engine.scene; return { name: s.name, args: s.args, overlays: [...s.overlays] }; }),

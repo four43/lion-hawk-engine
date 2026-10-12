@@ -102,3 +102,13 @@ test('2d: stripComments is exported for game scans', () => {
 test('2d: policy comes from lion-hawk/sim too', async () => {
   const sim = await import('../src/index.sim.js'); assert.equal(sim.policy, policy);
 });
+test('final review: policy.every recomputes at once when key(h) changes, then keeps its cadence from there (#51)', () => {
+  let sim = { id: 1 }; const at = [];
+  const p = policy.every(4, x => { at.push(x.time.step); return {}; }, { key: () => sim });
+  const h = headless(game); h.step(6, p);
+  assert.deepEqual(at, [0, 4]);
+  sim = { id: 2 }; h.step(1, p); // step 6: the sim behind the policy was replaced
+  assert.deepEqual(at, [0, 4, 6]);
+  h.step(5, p); assert.deepEqual(at, [0, 4, 6, 10]);
+  assert.throws(() => policy.every(4, () => ({}), { key: 3 }), /policy.every: key must be a function/);
+});
