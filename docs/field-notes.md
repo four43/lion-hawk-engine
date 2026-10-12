@@ -85,6 +85,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 70 | Headless has no h.debug | Pig Pens | open |
 | 71 | Events emitted outside a step appear after the next step | Pig Pens | open |
 | 72 | Command data passed by reference when not recording | Pig Pens | open |
+| 73 | view.project returns no depth / on-screen flag | Pig Pens | open |
 
 ## Entries
 
@@ -472,4 +473,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** the farm scene stores `d.ray` and `d.aim` from a command in the held grab state. If the view reuses ray arrays to avoid allocation, that state changes underneath it. Recording copies the data, so tests don't see this.
 - **Rule for games:** the view sends fresh arrays per command, or the handler copies the arrays it keeps.
 - **Engine change:** document this in the command spec; optionally add a debug-mode freeze of command data. Status: open.
+
+### 73. `view.project` returns no depth or on-screen flag: Pig Pens (phase 2e P6–P7)
+- **What happened:** the HUD has to project with the camera itself to hide labels behind the camera. Playwright's `game.point` can't reject points that are off-screen or behind the camera.
+- **Engine change:** the `view.project` contract returns `{ x, y, z, onScreen }`, and `game.point` throws when a point is behind the camera or off-screen. Status: open.
 
