@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 — 2026-10-12
+
+Phase 2f, the network command round Tractor Pickup needs.
+
+- Commands (#69, #72): game-wide handlers and UI callbacks get the main scene's `ctx` (`(engine, data, ctx)`; `when`/`get`/`set`/`action` get `(engine, ctx)`). `engine.command` always checks `data` as plain JSON and delivers a copy, recording or not. **Behaviour change:** non-JSON command data now throws (`engine: command data must be plain JSON`) without recording, and handlers no longer see the caller's object.
+- Testing (#68, #70, #71): `h.debug` (the game's `debug()` extras, made once per handle); `h.events`, `h.since` and `window.engine.events.since` flush pending events on read; `golden(file, value, { exact })` stores unrounded values; `assertFinite` walks Map, Set, typed arrays and cycles.
+- Clock (N-4): `engine.time.wall` stamps each step on the injected clock (real from the driver's rAF time via `engine.frame(seconds, now)`, else virtual `wall0 + n * 1000 / hz`, re-anchored on real stamps); `createEngine({ wall0 })`, tapes carry `wall0`; `engine.onStep(fn)` runs after every step.
+- Replication in `lion-hawk/sim`: the replica codec (`F`, `kind`, `createRegistry`, `encodeFrame`, `decodeFrame`, trackers, stores, `frameToJson`/`frameFromJson`; `F.uint` takes a `min`, new `F.actions`), interpolation, forecast and `createRate`/`createWarnOnce`, moved from Tractor Pickup with no behaviour change.
+- Command schemas and the outbox: `defineGame({ commands: { [type]: { schema, handler } } })` checks data at issue and delivers the checked copy; `checkSchema` and `wireCodec` (json or binary; binary `fixed`/`angle`/`quat` quantise like the replica); the reserved keys `from`, `at` and `reliable`, type-checked on every command; commands issued inside a step are checked while recording; `defineGame({ net })`; `engine.net` (`send`, `leave`, `drain`, `pending`), emptied after each step.
+- `lion-hawk/net`: the in-memory hub, `withLag` (injectable `now`), `parseLag`, `roomLink`, and `createPort`, which turns transport events and messages into `net.open`, `net.peer`, `net.frame` and schema'd commands (rate, size and schema checks) and sends `engine.net` after each step.
+- Multiplayer tests (T-11): `mp(game, { peers, link, clock, record, seed, argsOf, beforeStep })` runs headless peers over the hub with ports.
+- Input (#8): `axis({ pair })` merges a pair per source by vector length; devices take `map: { from, to, radial }` to turn a stick, keys or a pad into world-frame actions; `bindStick` returns `update()`, which re-applies the map while a finger is down.
+- Holds and gestures (#56, #59, #83): devices get `update(dt, raw)` (capped and uncapped frame time) and `view.rawDt` sits beside `view.dt`; `bindPointer({ uncapped })` counts the long press on raw time; `ui.hold({ wall: true })` counts `engine.time.wall`; `bindGesture` (tap, hold, drag, pinch; view-only). A real-browser test covers a wall hold.
+- Playwright (#73, #74): `view.project` returns `{ x, y, z, onScreen }` and `game.point({ world })` refuses a point that is off-screen or behind the camera; `openGame(…, { initScript })` adds a script before the page loads.
+
 ## 0.6.0 — 2026-10-12
 
 Phase 2e, the engine additions Pig Pens' migration needs. No behaviour changes for existing callers.
