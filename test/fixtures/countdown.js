@@ -10,7 +10,7 @@ export default defineGame({
   scenes: {
     title: { ui(u) { u.button({ id: 'play', label: 'Play', action: e => e.go('race') }); } },
     race: {
-      enter(e, ctx) { Object.assign(ctx.state, { count: 3, t: 0, x: 0, running: false }); },
+      enter(e, ctx) { Object.assign(ctx.state, { count: 3, t: 0, x: 0, running: false }); ctx.command('nudge', (en, d, c) => { c.state.x += d.dx; }); },
       step(e, dt, ctx) {
         const s = ctx.state;
         if (!s.running) { s.t += dt; if (s.t >= 1 - 1e-9) { s.t = 0; s.count--; e.emit('count', { n: s.count }); if (s.count === 0) { s.running = true; e.emit('go'); } } return; }

@@ -22,7 +22,8 @@ export function defineGame(spec) {
   return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands: spec.commands ?? {} });
 }
 
-export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
+export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false } = {}) {
+  if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   let step = 0, render = () => {};
   const streams = new Map(), time = { step: 0, sim: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
@@ -63,7 +64,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
   // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
   // queued go (and the requests after it) apply: requests before it are dropped, they would be torn down at once.
-  let inStep = false, draining = false, booting = false; const queue = [];
+  let inStep = false, stepping = false, draining = false, booting = false; const queue = [];
   const drain = () => {
     draining = true;
     try {
@@ -96,10 +97,30 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     try { while (k < n) deliver(cmds[k++]); } // a throwing handler's command counts as delivered; the rest stay queued
     finally { cmds.copyWithin(0, k); cmds.length -= k; }
   };
+  // [T-9] recording: only what comes from outside the sim. An op is external when no step, transition drain or boot is
+  // running and no other recorded op is (a tap whose action calls go() records the tap only). `rec` exists only when
+  // recording, so a plain engine allocates nothing here.
+  const rec = record ? { depth: 0, log: [], last: null } : null;
+  const copy = x => JSON.parse(JSON.stringify(x ?? null));
+  const entryAt = k => { const l = rec.log, x = l[l.length - 1]; if (x?.step === k) return x; const y = { step: k }; l.push(y); return y; };
+  const recorded = (op, fn) => {
+    const top = rec.depth === 0 && !stepping && !draining && !booting;
+    const o = top ? op() : null; // copied before it runs (a handler may keep the data); logged once it applied
+    rec.depth++; let r; try { r = fn(); } finally { rec.depth--; }
+    if (top) (entryAt(step).ops ??= []).push(o); // under the step it precedes
+    return r;
+  };
+  const recordInput = () => { // after input.apply: the snapshot's changed values (axes as numbers, buttons as down)
+    const last = rec.last ??= Object.fromEntries(Object.keys(input.kinds).map(n => [n, input.kinds[n] === 'axis' ? 0 : false]));
+    for (const n in last) {
+      const v = input.kinds[n] === 'axis' ? input.snapshot[n] : input.snapshot[n].down;
+      if (v !== last[n]) { last[n] = v; (entryAt(step).input ??= {})[n] = v; }
+    }
+  };
   const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
-    inStep = true; let failure = null;
+    inStep = stepping = true; let failure = null;
     try {
       schedule.run('input.apply', engine, dt);
       const p = pausedFrom();
@@ -110,7 +131,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     // the step always finishes (queued transitions apply, events flush, step++) even when a system threw, then rethrows
     try { drain(); } catch (err) { failure ??= err; }
     try { schedule.run('events.flush', engine, dt); } catch (err) { failure ??= err; }
-    step++; syncTime();
+    stepping = false; step++; syncTime();
     if (failure) throw failure;
   } });
   // would `name` still be open once everything queued so far has applied? (replays the pending requests over the stack)
@@ -126,6 +147,21 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   };
   const doOverlay = (name, a) => { def(name); if (isOpen(name)) alreadyOpen(name); enter(name, a); events.emit('overlay', { name, open: true }); };
   const doClose = name => { const i = stack.findIndex((o, k) => k > 0 && o.ctx.name === name); if (i > 0) { exit(i); events.emit('overlay', { name, open: false }); } };
+  const reqGo = (name, a) => { def(name); request({ go: true, name, run: () => doGo(name, a) }); return engine; };
+  const reqOverlay = (name, a) => {
+    def(name); if (projectedOpen(name)) alreadyOpen(name); // at request time, so the caller's stack shows it
+    request({ overlay: name, run: () => doOverlay(name, a) }); return engine;
+  };
+  const reqClose = name => { request({ close: name, run: () => doClose(name) }); return engine; };
+  const reqJump = (name, preset, opts, a) => {
+    const p = def(name).presets?.[preset];
+    if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
+    request({ go: true, name, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
+  };
+  const issue = (type, data) => {
+    if (typeof type !== 'string' || !type) throw new Error('engine: command type must be a non-empty string');
+    cmds.push({ type, data }); return engine;
+  };
   const engine = {
     game, seed: base.seed, events, input, loop, commands,
     time, scene: sceneView, // live views: persistent objects, updated in place
@@ -133,28 +169,27 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     emit: (type, data) => events.emit(type, data),
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
-    go(name, a) { def(name); request({ go: true, name, run: () => doGo(name, a) }); return engine; },
-    overlay(name, a) {
-      def(name); if (projectedOpen(name)) alreadyOpen(name); // at request time, so the caller's stack shows it
-      request({ overlay: name, run: () => doOverlay(name, a) }); return engine;
-    },
-    close(name) { request({ close: name, run: () => doClose(name) }); return engine; },
-    jump(name, preset, opts, a) {
-      const p = def(name).presets?.[preset];
-      if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
-      request({ go: true, name, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
-    },
-    command(type, data = {}) {
-      if (typeof type !== 'string' || !type) throw new Error('engine: command type must be a non-empty string');
-      cmds.push({ type, data }); return engine;
-    },
+    go: (name, a) => rec ? recorded(() => ['go', name, copy(a)], () => reqGo(name, a)) : reqGo(name, a),
+    overlay: (name, a) => rec ? recorded(() => ['overlay', name, copy(a)], () => reqOverlay(name, a)) : reqOverlay(name, a),
+    close: name => rec ? recorded(() => ['close', name], () => reqClose(name)) : reqClose(name),
+    jump: (name, preset, opts, a) => rec ? recorded(() => ['jump', name, preset, copy(opts), copy(a)], () => reqJump(name, preset, opts, a)) : reqJump(name, preset, opts, a),
+    command: (type, data = {}) => rec ? recorded(() => ['command', type, copy(data)], () => issue(type, data)) : issue(type, data),
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
     render(alpha) { render(alpha); },
-    ui: { tree: () => ui.tree(engine), tap: id => ui.tap(id, engine), fill: (id, t) => ui.fill(id, t, engine) },
+    ui: {
+      tree: () => ui.tree(engine),
+      tap: id => rec ? recorded(() => ['tap', id], () => ui.tap(id, engine)) : ui.tap(id, engine),
+      fill: (id, t) => rec ? recorded(() => ['fill', id, String(t)], () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),
+    },
+    // [T-9] the recorded tape: start options plus, per step, the external ops and input changes (a deep copy)
+    tape() {
+      if (!rec) throw new Error('engine: not recording');
+      return copy({ v: 1, game: game.id, seed: base.seed, scene, args, hz: game.sim.hz, log: rec.log });
+    },
     state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };
-  schedule.add('lh.input', () => input.apply(), { stage: 'input.apply' });
+  schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });

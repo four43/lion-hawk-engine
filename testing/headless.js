@@ -20,8 +20,9 @@ export function eventList(arr) {
   });
 }
 
-export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) {
-  const engine = createEngine(game, { seed, scene, args }), hz = game.sim.hz;
+export function headless(game, { seed = 1, scene, args, invariants = [], record = false } = {}) {
+  const engine = createEngine(game, { seed, scene, args, record }), hz = game.sim.hz;
+  const sums = record ? [] : null; // [T-9] a checksum every 60 steps while recording
   // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
   const log = eventList([]); engine.events.on(e => { log.push(e); });
   const resolve = input => {
@@ -30,7 +31,11 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
     if (typeof input === 'string') { const p = Object.hasOwn(game.policies, input) ? game.policies[input] : undefined; if (!p) throw new Error(`headless: no policy '${input}'`); return p; }
     return () => input;
   };
-  const one = (f, k) => { if (f) engine.input.set(f(h, k)); engine.stepN(1); for (const inv of invariants) inv(h); };
+  const one = (f, k) => {
+    if (f) engine.input.set(f(h, k)); engine.stepN(1);
+    if (sums && engine.time.step % 60 === 0) sums.push([engine.time.step, checksum(engine.state())]);
+    for (const inv of invariants) inv(h);
+  };
   const fmt = e => { const { seq, step, type, ...rest } = e; return `  @${step} ${type} ${JSON.stringify(rest)}`; };
   const h = {
     engine, seed: engine.seed,
@@ -66,6 +71,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
     jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),
     checksum: () => checksum(engine.state()),
+    tape() { if (!sums) throw new Error('headless: not recording'); return { ...engine.tape(), end: engine.time.step, sums: sums.map(x => x.slice()) }; },
   };
   return h;
 }
