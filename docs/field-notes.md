@@ -16,38 +16,38 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | planned (2c; Rally: 2c-rally R2–R3) |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Tractor Pickup, Pig Pens open |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | open |
-| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | planned (2c-rally R2, R5; S-6 stays open) |
-| 7 | The world must survive menu screens | Rally | planned (2c-rally R2) |
-| 8 | Device needs beyond axes and buttons | all | planned for Rally's needs (2c-rally E1–E3); rest open |
-| 9 | UI controls need more than a text label | Tractor Pickup, Rally | planned for Rally's needs (2c-rally E4); rest open |
+| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done for Rally (2c-rally R2, R5; S-6 stays open) |
+| 7 | The world must survive menu screens | Rally | done (2c-rally) |
+| 8 | Device needs beyond axes and buttons | all | done for Rally's needs (2c-rally E1–E3); rest open |
+| 9 | UI controls need more than a text label | Tractor Pickup, Rally | done for Rally's needs (2c-rally E4); rest open |
 | 10 | `onRender` is a single slot | all | open |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | open |
 | 12 | Tests borrowed tools from a parent folder | engine | done |
-| 13 | Short presses fall between steps | Rally | planned (2c-rally E1) |
-| 14 | Keyboard feel needs stateful ramps, chords and release by key code | Rally | planned (2c-rally E1) |
-| 15 | Enter on a focused button fires twice | Rally | planned (2c-rally E1) |
-| 16 | One pad button, two actions | Rally | planned (2c-rally E2) |
-| 17 | The touch steering slider is the game's own markup | Rally | planned (2c-rally E3) |
-| 18 | Rich menus vs. a registry of plain buttons | Rally | planned (2c-rally E4) |
-| 19 | View halves need the frame time | Rally | planned (2c-rally E5) |
-| 20 | Async view loads and `settled()` | Rally | planned (2c-rally E5) |
-| 21 | A loading toast needs a paint before a synchronous build | Rally | planned (2c-rally R2) |
-| 22 | Flow and HUD timers on `setTimeout` | Rally | planned (2c-rally R2, R5) |
-| 23 | Pause was a state of the game's own state machine | Rally | planned (2c-rally R2) |
-| 24 | Browser-only defaults inside sim modules | Rally | planned (2c-rally R1) |
+| 13 | Short presses fall between steps | Rally | done (2c-rally) |
+| 14 | Keyboard feel needs stateful ramps, chords and release by key code | Rally | done (2c-rally) |
+| 15 | Enter on a focused button fires twice | Rally | done (2c-rally) |
+| 16 | One pad button, two actions | Rally | done (2c-rally) |
+| 17 | The touch steering slider is the game's own markup | Rally | done (2c-rally) |
+| 18 | Rich menus vs. a registry of plain buttons | Rally | done (2c-rally) |
+| 19 | View halves need the frame time | Rally | done (2c-rally) |
+| 20 | Async view loads and `settled()` | Rally | done (2c-rally) |
+| 21 | A loading toast needs a paint before a synchronous build | Rally | done (2c-rally) |
+| 22 | Flow and HUD timers on `setTimeout` | Rally | done (2c-rally) |
+| 23 | Pause was a state of the game's own state machine | Rally | done (2c-rally) |
+| 24 | Browser-only defaults inside sim modules | Rally | done (2c-rally) |
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
 | 26 | Policies that run slower than the sim | Rally | open (worked around in 2c-rally R2) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
 | 28 | Sim objects live in the scene's `state` | Rally | open (2c-rally R2 workaround; phase 4 World) |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
 | 30 | First pad only vs. every pad merged | Rally | won't (accepted; 2c-rally R5) |
-| 31 | Two sets of safe-area variables | Rally | planned (2c-rally R5) |
-| 32 | CDP `touchEnd` semantics disagree | Rally, engine | open (verify in 2c-rally R7) |
+| 31 | Two sets of safe-area variables | Rally | done (2c-rally) |
+| 32 | CDP `touchEnd` semantics disagree | Rally, engine | done (Rally was right; engine helper fixed, #43) |
 | 33 | Every debug jump rebuilds the world | Rally | won't for now (2c-rally R3) |
-| 34 | Stale browser tooling | Rally | planned (2c-rally R8) |
-| 35 | A fixed engine seed gives every visitor the same first track | Rally | planned (2c-rally R5) |
+| 34 | Stale browser tooling | Rally | done (2c-rally) |
+| 35 | A fixed engine seed gives every visitor the same first track | Rally | done (2c-rally) |
 
 ## Entries
 
@@ -78,6 +78,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Tractor Pickup: `main.js` sets `g.mode = 'reward'`, and the sim waits on `showDone`/`rewardDone`, which come from view animations.
   - Pig Pens: `driving`, `tool` and `selected` live in `main()`'s closures.
 - **Engine change:** scenes own flow (S-4). View animations end with an ack event, which needs scene-scoped listeners (`ctx.on`).
+- **Status:** Rally part done in 2c-rally R2–R3; Tractor Pickup and Pig Pens remain.
 
 ### 5. Positional input can't be expressed as actions: Pig Pens, Tractor Pickup
 - **What happened:**
@@ -89,6 +90,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** `RAPIER.init()` and Rally's `await loadTrack()` are async, while scene `enter` is synchronous.
 - **Engine change:** async init in `boot` before `createEngine`, plus a loading protocol (S-6) that has a synchronous headless path.
 - **2c-rally plan:** Rally's entry awaits `RAPIER.init()` before calling `boot` (no engine option: one `await` in the entry is all it needs). Track generation and the Rapier build are already synchronous, so the stage builds in `enter` and during a sim-side `loading` hold (#21). The async part that remains is the three.js track view (a dynamic import), which goes through `view.wait` (#20). S-6 itself stays open.
+- **Status:** Rally part done (2c-rally R2, R5, R8); S-6 stays open.
 
 ### 7. The world must survive menu screens: Rally
 - **What happened:** Rally's title is "the menu over the live scene". If title were its own scene, `go()` would dispose the world (S-3).
@@ -96,6 +98,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Rally uses one main `stage` scene, with title, pause and results as overlays.
   - Results must not pause, because the car keeps rolling.
   - Restart is a method inside the scene, not a `go`.
+- **Status:** done (2c-rally R2).
 
 ### 8. Device needs beyond axes and buttons: all
 - **What happened:**
@@ -107,6 +110,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - device options for curves, slider mode, modifiers, and `pointerType`/`button` filters;
   - scene-scoped devices;
   - a per-source vector merge for stick pairs.
+- **Status:** Rally's needs done (2c-rally E1–E3); the rest stays open.
 
 ### 9. UI controls need more than a text label: Tractor Pickup, Rally
 - **What happened:**
@@ -114,6 +118,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Rally's menus are rich HTML.
 - **Engine change:** custom content in controls (icon or render hook), a `ui.hold` control on engine time, and keyboard/gamepad focus and activation of UI buttons.
 - **2c-rally plan:** E4 adds `ui.choice`, `ui.field` and slot adoption (#18); adopted elements keep the game's own content, which covers icon buttons. Still open: `ui.hold`, focus and gamepad activation of UI buttons.
+- **Status:** Rally's needs done (2c-rally E4); the rest stays open.
 
 ### 10. `onRender` is a single slot: all
 - **What happened:** a game calling `engine.onRender` after `boot` silently disables view-half frames.
@@ -133,6 +138,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 13. Short presses fall between steps: Rally
 - **What happened:** Rally queues key and pad presses as events (`controls.events`) and handles every one, however short. In the engine, devices write a level once per frame and `apply()` turns levels into edges once per step. A key pressed and released between two device updates, or a `bindHold` tap that starts and ends between two steps, is never seen. On a 120 Hz iPad with a 60 Hz sim this loses taps; Rally's shift buttons fire on `pointerdown` and are tapped fast.
 - **Engine change (2c-rally E1):** `createInput` latches a button that any `device()` call set true since the last `apply()`, so it is down for that step even if it was released again. `bindKeyboard` reports a key tapped between two updates as held for one update. `hold`/`set` still override the latch.
+- **Status:** done (2c-rally).
 
 ### 14. Keyboard feel needs stateful ramps, chords and release by key code: Rally
 - **What happened:**
@@ -140,18 +146,22 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Rally binds R to reset and Shift+R to restart. The engine keyboard has no modifier bindings.
   - A shifted symbol key goes down as one character and comes up as another (`` ` `` / `~`), so releasing by `e.key` can leave it held.
 - **Engine change (2c-rally E1):** a ramp may be a function `(value, target, dt, scratch) => value` with a per-axis scratch object; bindings may be `shift+<key>` (wins over the plain key while Shift is down); keys are released by `e.code` as well as `e.key`.
+- **Status:** done (2c-rally).
 
 ### 15. Enter on a focused button fires twice: Rally
 - **What happened:** in 2b, `bindKeyboard` doesn't prevent Enter/Space on a focused button (so the button clicks) but still holds their bindings. Rally binds Enter to `confirm` (Drive on the title, Retry on the results card). After a click on a title choice (say "Stage"), focus stays on that button, so Enter would both click the choice and fire `confirm`, starting a run the player didn't ask for; Space (handbrake) would likewise click whatever is focused. Rally's own keyboard returns early for Enter on a button for this reason.
 - **Engine change (2c-rally E1):** Enter and Space on a focused `<button>` belong to the button: not prevented and not bound. This changes 2b's tested behaviour.
+- **Status:** done (2c-rally).
 
 ### 16. One pad button, two actions: Rally
 - **What happened:** pad A is the handbrake while driving and Drive/Retry (`confirm`) on menus. `bindGamepad` maps one action per button index. Rally's left stick also uses a slight expo curve (`0.35·s·|s| + 0.65·s`) after the dead zone.
 - **Engine change (2c-rally E2):** a button entry may be a list of bindings; an axis entry may take a curve function as its third element.
+- **Status:** done (2c-rally).
 
 ### 17. The touch steering slider is the game's own markup: Rally
 - **What happened:** Rally's steering is a horizontal slider, not a stick: vertical movement is ignored, travel clamps per axis, there is no dead zone, and full lock is `clamp(innerWidth · 0.12, 60, 110)` px, read when the thumb lands. The slider is Rally's own `#steerBase`/`#steerKnob` (sized from the range), the hint hides while steering, and the pedals show an `on` look while held. `bindStick` clamps radially (so a diagonal drag reduces steering), applies a radial dead zone, takes a fixed radius, and creates its own `.lh-stick` element.
 - **Engine change (2c-rally E3):** `bindStick({ axis: 'x' | 'y', radius: number | () => px, base, knob })`: single-axis slider mode, a function radius read on `pointerdown`, adopted base/knob elements (left in place on dispose) with `--lh-r` set on the base; the surface carries `data-lh-active` while driven; `bindHold` marks its element `data-lh-down` while pressed.
+- **Status:** done (2c-rally).
 
 ### 18. Rich menus vs. a registry of plain buttons: Rally
 - **What happened:** Rally's title menu is segmented choices (mode, track, style, theme, obstacles, car), a seed text field with a dice button, and footer buttons; its pause and results cards and settings sheet are styled markup with icons (`❚❚ Pause`, `🎲`). The 2b registry renders plain text buttons in its own container, has no choice or text control, and listens for clicks only inside its own root.
@@ -160,31 +170,38 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - `ui.field({ id, label, get, set })` is a text input, filled with `engine.ui.fill(id, text)` / `h.fill` / `game.fill`;
   - an element marked `data-lh-slot="<scene>.<id>"` (a `<button>`, or an `<input>` for a field) is adopted as that control: the engine manages its test id, `disabled`, `aria-pressed` and value but never its content; on removal it keeps its place, loses the test id and is disabled;
   - clicks are delegated from the document.
+- **Status:** done (2c-rally).
 
 ### 19. View halves need the frame time: Rally
 - **What happened:** Rally's chase camera, title orbit and the camera's FOV smoothing integrate frame time (`1 - exp(-dt·k)`). View-half `frame(engine, alpha, view)` gets no frame time.
 - **Engine change (2c-rally E5):** `view.dt` is the seconds since the previous driver frame during a driver frame, and 0 for renders the driver didn't start (hook renders).
+- **Status:** done (2c-rally).
 
 ### 20. Async view loads and `settled()`: Rally
 - **What happened:** Rally's renderer loads the track view with a dynamic `import()` after the world swaps. `window.engine.settled()` only looks for `data-lh-state` attributes, so a test could screenshot or measure before the track exists.
 - **Engine change (2c-rally E5):** `view.wait(promise)` marks the page unsettled until the promise settles (a rejection goes to `window.engine.errors`). This is the view half of S-6.
+- **Status:** done (2c-rally).
 
 ### 21. A loading toast needs a paint before a synchronous build: Rally
 - **What happened:** Rally shows "Building the track…", awaits one `requestAnimationFrame` so the toast paints, then generates the track (0.07–0.23 s) and builds the Rapier world synchronously. Inside the engine the build happens in a step, and all of a frame's steps run before the frame renders, so a toast set in the same step never paints.
 - **Workaround (2c-rally R2):** a title change puts the stage in `loading` and the build runs once 0.05 s of engine time has passed (12 steps at 240 Hz). In the browser that spans a few frames, so the toast paints; headless it is just 12 steps. The first build (in `enter`) is immediate, behind the page's own loading screen.
 - **Engine change:** S-6's loading protocol should offer "hold N seconds of engine time, then build" as its synchronous path.
+- **Status:** done (2c-rally).
 
 ### 22. Flow and HUD timers on `setTimeout`: Rally
 - **What happened:** the results card opens 1.5 s after the finish by `setTimeout` in `main.js`; `GameHud` hides banners, the split pill and the countdown lights with `setTimeout`; the toast too. These break U-5 and can't run headless or under `?lh-test`.
 - **Change:** the results timer moves into the stage scene on engine time (R2); `GameHud` and the toast take an engine-time clock (R5).
+- **Status:** done (2c-rally).
 
 ### 23. Pause was a state of the game's own state machine: Rally
 - **What happened:** `Game` had `paused` (with `resumeTo`) and the frame loop skipped `game.step()`/`sim.step()` while paused; `title` and `loading` were states too.
 - **Change (2c-rally R2):** pause is the `pause` overlay with `pauses: true`; `Game.pause()/resume()` go away and `paused` no longer appears in Rally's `state` events (nothing listened for it). `title` and `loading` stay as stage sub-states, with the title overlay open in `title`.
+- **Status:** done (2c-rally).
 
 ### 24. Browser-only defaults inside sim modules: Rally
 - **What happened:** `makeBests()` defaults to `globalThis.localStorage` (the purity scan doesn't flag it); new seeds come from `Math.random()` in `main.js` and `menus.js`; settings are loaded and saved in `main.js`.
 - **Change (2c-rally R1, R2):** bests take an injected store (in-memory by default), seeds come from `engine.rng('seeds')`, settings are normalised by a pure module and loaded/saved by the browser entry. Rally gets its own purity test, with extra rules for `localStorage`, timers and Rally's view modules.
+- **Status:** done (2c-rally).
 
 ### 25. Presets can't step the engine to reach a state: Rally
 - **What happened:** `rally.debug.screen('countdown', { n })` and `'running'` stepped the game and physics until the state was reached (`runTo`). A preset runs inside a transition; calling `stepN` there would run a step inside the drain.
@@ -216,6 +233,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 31. Two sets of safe-area variables: Rally
 - **What happened:** Rally's CSS reads `--sa-t/r/b/l` (set from `env()` and by its mobile test); the engine injects and the Playwright helpers set `--lh-sa-*`.
 - **Change (2c-rally R5):** Rally's `--sa-*` default to `var(--lh-sa-*, env(...))`, so both the old and the engine path work and `openGame` presets apply.
+- **Status:** done (2c-rally R5).
 
 ### 32. CDP `touchEnd` semantics disagree: Rally, engine
 - **What happened:** Rally's mobile test lifts one of two touches with `touchEnd` listing the point that lifts ("CDP: touchEnd lists the points that lift"); the engine's `game.touch.end` sends `touchEnd` listing the points that stay down. Both have passed their own checks.
@@ -228,10 +246,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 34. Stale browser tooling: Rally
 - **What happened:** `test/browser.py` uses selectors that no longer exist (`#gasPad`, `#brakePad`) and `window.rally.pause()`; nothing runs it.
 - **Change (2c-rally R8):** deleted; the Playwright suites cover it.
+- **Status:** done (2c-rally R8: `test/browser.py` deleted; `window.rally` removed in R9, Rally 0b6fa13).
 
 ### 35. A fixed engine seed gives every visitor the same first track: Rally
 - **What happened:** `boot` seeds the engine with `?seed` or 1. Once Rally draws new seeds from `engine.rng('seeds')` (#24), every first visit would get the same track; today it's `Math.random()`.
 - **Change (2c-rally R5):** the browser entry passes a random `seed` to `boot` (view code may use `Math.random`); `?seed=` and `?lh-test` still fix it.
+- **Status:** done (2c-rally R5).
 
 ### 36. Can't ask "is this overlay open or pending?": Rally (phase 2c R2)
 - **What happened:** results can be requested from several places in one step. A second `overlay('results')` throws "already open" at request time, which is the F2 ruling.
