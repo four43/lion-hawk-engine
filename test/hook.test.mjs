@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEngine, installEngine } from '../src/index.view.js';
+import { createEngine, installEngine, defineGame } from '../src/index.view.js';
 import game from './fixtures/countdown.js';
 
 const setup = () => {
@@ -34,4 +34,14 @@ test('errors collect from the target', () => {
   const engine = createEngine(game); installEngine(engine, { driver: {}, target });
   ls.error({ message: 'boom' }); ls.unhandledrejection({ reason: new Error('rej') });
   assert.deepEqual(target.engine.errors.map(e => e.message), ['boom', 'rej']);
+});
+
+const fieldGame = defineGame({ id: 'f', start: 't', scenes: { t: {
+  enter(e, c) { c.state.seed = 'a'; },
+  ui(u) { u.field({ id: 'seed', label: 'Seed', get: e => e.scene.state.seed, set: (t, e) => { e.scene.state.seed = t; } }); },
+} } });
+test('2c: window.engine.ui.fill fills a field', () => {
+  const target = {}, engine = createEngine(fieldGame);
+  installEngine(engine, { driver: { manual: () => false }, target });
+  target.engine.ui.fill('t.seed', 'c'); assert.equal(engine.scene.state.seed, 'c');
 });

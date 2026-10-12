@@ -31,3 +31,27 @@ test('clear(scene) removes only that scene; duplicates throw', () => {
   assert.throws(() => ui.builder('a').button({ id: 'x', label: 'X', action: () => {} }), /duplicate control 'a.x'/);
   ui.clear('a'); assert.deepEqual(ui.tree({}).map(c => c.id), ['b.y']);
 });
+
+test('2c: choice registers one control per option; tap sets the original value (#18)', () => {
+  const ui = createUi({ onAction() {} }), ctx = { mode: 'stage', assist: false };
+  const b = ui.builder('title');
+  b.choice({ id: 'mode', options: [{ value: 'stage', label: 'Stage' }, { value: 'loop', label: 'Loop' }], get: c => c.mode, set: (v, c) => { c.mode = v; } });
+  b.choice({ id: 'assist', options: [{ value: true, label: 'Assisted' }, { value: false, label: 'Sim' }], get: c => c.assist, set: (v, c) => { c.assist = v; } });
+  assert.deepEqual(ui.tree(ctx).slice(0, 2), [
+    { id: 'title.mode.stage', scene: 'title', role: 'choice', label: 'Stage', enabled: true, pressed: true, group: 'title.mode' },
+    { id: 'title.mode.loop', scene: 'title', role: 'choice', label: 'Loop', enabled: true, pressed: false, group: 'title.mode' },
+  ]);
+  ui.tap('title.mode.loop', ctx); assert.equal(ctx.mode, 'loop');
+  ui.tap('title.assist.true', ctx); assert.equal(ctx.assist, true);
+});
+test('2c: field shows its value, fills with text, cannot be tapped (#18)', () => {
+  const ui = createUi({ onAction() {} }), ctx = { seed: 'abc', open: true };
+  ui.builder('title').field({ id: 'seed', label: 'Track seed', get: c => c.seed, set: (t, c) => { c.seed = t; }, when: c => c.open });
+  ui.builder('title').button({ id: 'go', label: 'Go', action: () => {} });
+  assert.deepEqual(ui.tree(ctx)[0], { id: 'title.seed', scene: 'title', role: 'textbox', label: 'Track seed', enabled: true, value: 'abc' });
+  ui.fill('title.seed', 'xyz', ctx); assert.equal(ctx.seed, 'xyz');
+  assert.throws(() => ui.tap('title.seed', ctx), /'title.seed' is a field: use fill/);
+  assert.throws(() => ui.fill('title.go', 'q', ctx), /'title.go' is not a field/);
+  ctx.open = false; assert.throws(() => ui.fill('title.seed', 'q', ctx), /is disabled/);
+  assert.throws(() => ui.fill('title.nope', 'q', ctx), /no control 'title.nope'/);
+});

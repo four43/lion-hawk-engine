@@ -116,6 +116,11 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       // the browser delivers a touch tap's click a frame later: wait two frames so the engine has seen it
       await ev(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => { window.engine.render(0); r(); }))));
     },
+    async fill(testid, text) {
+      const loc = page.locator(`[data-testid="${testid}"]`);
+      await loc.fill(text); await loc.press('Enter');
+      await ev(() => window.engine.render(0));
+    },
     touch: {
       async start(id, target) { const p = { ...(await point(target)), id }; active.set(id, p); await send('touchStart', [...active.values()]); },
       async move(id, target) { const p = { ...(await point(target)), id }; active.set(id, p); await send('touchMove', [...active.values()]); await ev(() => window.engine.render(0)); },

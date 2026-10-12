@@ -65,3 +65,11 @@ test('F5: the handle keeps an unbounded event log (h.events, since, until, until
   const r = h.until(() => h.time.step >= t0 + 15); assert.equal(r.events.count('tick'), 5);
   assert.ok(m >= 401); assert.equal(h.since(0).first('first').type, 'first');
 });
+
+const fieldGame = defineGame({ id: 'f', start: 't', scenes: { t: {
+  enter(e, c) { c.state.seed = 'a'; },
+  ui(u) { u.field({ id: 'seed', label: 'Seed', get: e => e.scene.state.seed, set: (t, e) => { e.scene.state.seed = t; } }); },
+} } });
+test('2c: h.fill fills a field', () => {
+  const h = headless(fieldGame); assert.equal(h.fill('t.seed', 'b'), h); assert.equal(h.engine.scene.state.seed, 'b');
+});

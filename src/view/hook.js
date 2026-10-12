@@ -35,7 +35,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
       const d = target.document; if (!d?.querySelector) return true;
       return !d.querySelector('[data-lh-state="opening"],[data-lh-state="closing"]');
     },
-    ui: { tree: () => engine.ui.tree(), tap: id => { engine.ui.tap(id); after(); } },
+    ui: { tree: () => engine.ui.tree(), tap: id => { engine.ui.tap(id); after(); }, fill: (id, t) => { engine.ui.fill(id, t); after(); } },
     rng: n => engine.rng(n),
     get debug() { return engine.game.debug?.(engine) ?? {}; },
     dispose() { target.removeEventListener?.('error', onError); target.removeEventListener?.('unhandledrejection', onReject); },

@@ -41,3 +41,10 @@ test('assertions throw AssertionError', async () => {
   await assert.rejects(expectScene(g, 'race'), { name: 'AssertionError' });
   await assert.rejects(expectState(g, 'a.b', 3), { name: 'AssertionError' });
 });
+
+test('2c: game.fill types into the control and commits with Enter', async () => {
+  const calls = [], loc = { fill: async t => calls.push(['fill', t]), press: async k => calls.push(['press', k]) };
+  const g = gameDriver({ page: { locator: s => { calls.push(['locator', s]); return loc; }, evaluate: async () => {} }, context: {}, preset: presets.desktop, presetName: 'desktop' });
+  await g.fill('title.seed', 'abc');
+  assert.deepEqual(calls, [['locator', '[data-testid="title.seed"]'], ['fill', 'abc'], ['press', 'Enter']]);
+});
