@@ -20,6 +20,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
   const engine = createEngine(game, { seed, scene, args, record }), hz = game.sim.hz;
   const scratch = new Map(); // [T-2] one persistent object per (handle, policy function) (#37)
   const sc = f => { let o = scratch.get(f); if (!o) scratch.set(f, o = {}); return o; };
+  let dbg; // h.debug, lazily
   const sums = record ? [] : null; // [T-9] a checksum every 60 steps while recording
   // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
   const log = eventList([]); engine.events.on(e => { log.push(e); });
@@ -60,7 +61,8 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     untilLoaded(opts = {}) { return h.until(x => !x.engine.loading.active, { message: 'untilLoaded', ...opts }); }, // [S-6]
     untilScene(name, opts = {}) { return h.until(x => x.scene.name === name || x.scene.overlays.includes(name), { message: `untilScene(${name})`, ...opts }); },
     mark: () => engine.events.seq,
-    events: log, since: m => log.since(m),
+    get events() { engine.flushEvents(); return log; }, since: m => { engine.flushEvents(); return log.since(m); }, // #71
+    get debug() { return dbg ??= game.debug?.(engine) ?? {}; }, // #70, made once per handle
     tap(id) { engine.ui.tap(id); return h; },
     press(id) { engine.ui.press(id); return h; }, unpress(id) { engine.ui.release(id); return h; }, // #9
     fill(id, t) { engine.ui.fill(id, t); return h; },

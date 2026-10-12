@@ -80,10 +80,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
-| 68 | Goldens compare to 6 digits | Pig Pens | planned (2f T-E2) |
+| 68 | Goldens compare to 6 digits | Pig Pens | done (2f T-E2) |
 | 69 | Control when/get receive the engine, not ctx | Pig Pens | done (2f T-E1) |
-| 70 | Headless has no h.debug | Pig Pens | planned (2f T-E2) |
-| 71 | Events emitted outside a step appear after the next step | Pig Pens | planned (2f T-E2) |
+| 70 | Headless has no h.debug | Pig Pens | done (2f T-E2) |
+| 71 | Events emitted outside a step appear after the next step | Pig Pens | done (2f T-E2) |
 | 72 | Command data passed by reference when not recording | Pig Pens | done (2f T-E1) |
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | planned (2f T-E10) |
 | 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
@@ -472,7 +472,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 68. Goldens compare to 6 digits; bit-exact comparison needs its own test: Pig Pens (phase 2e P2)
 - **What happened:** to prove the engine path reproduces `farm-seed3.json` exactly, P2 needed an extra `deepStrictEqual` against a direct `createSim` run, because `golden()` rounds to 6 digits.
-- **Engine change:** `golden(file, value, { exact: true })`, which skips rounding. Status: planned (2f T-E2; the file records `exact`, and a mode mix throws).
+- **Engine change:** `golden(file, value, { exact: true })`, which skips rounding. Status: done (2f T-E2; the file records `exact`, and a mode mix throws).
 
 ### 69. Control `when`/`get` receive the engine, not the scene context: Pig Pens (phase 2e P2 review)
 - **What happened:** farm controls read `e.scene.state`, which is always the main scene's state. That breaks for overlay controls and after re-entry.
@@ -481,11 +481,11 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 70. Headless has no `h.debug`: Pig Pens (phase 2e P3)
 - **What happened:** tests call `h.engine.game.debug(h.engine)` by hand.
-- **Engine change:** a memoised `h.debug` getter, mirroring `window.engine.debug`. Status: planned (2f T-E2).
+- **Engine change:** a memoised `h.debug` getter, mirroring `window.engine.debug`. Status: done (2f T-E2).
 
 ### 71. Events emitted outside a step appear only after the next step: Pig Pens (phase 2e P3)
 - **What happened:** a debug or preset call that emits an event, outside any step, isn't visible in `h.events` until a step flushes it. Tests have to call `h.step(1)` first.
-- **Engine change:** flush on read in `since()`/`h.events`, or document the behaviour clearly in T-4. Status: planned (2f T-E2: `engine.flushEvents()` outside a step, called by `h.events`, `h.since` and the hook's `events.since`).
+- **Engine change:** flush on read in `since()`/`h.events`, or document the behaviour clearly in T-4. Status: done (2f T-E2: `engine.flushEvents()` outside a step, called by `h.events`, `h.since` and the hook's `events.since`).
 
 ### 72. Command data is passed by reference when not recording: Pig Pens (phase 2e P3 review)
 - **What happened:** the farm scene stores `d.ray` and `d.aim` from a command in the held grab state. If the view reuses ray arrays to avoid allocation, that state changes underneath it. Recording copies the data, so tests don't see this.

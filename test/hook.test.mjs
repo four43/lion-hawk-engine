@@ -51,3 +51,9 @@ test('2d: window.engine.view.project forwards to the view (T-17 world targets)',
   assert.deepEqual(target.engine.view.project([1, 0, 3]), { x: 2, y: 3 });
   view.project = undefined; assert.equal(target.engine.view.project, undefined);
 });
+
+test('2f: window.engine.events.since sees an event emitted outside a step (#71)', () => {
+  const e = createEngine(defineGame({ id: 'hk', start: 's', scenes: { s: {} } })), target = {};
+  installEngine(e, { driver: { manual() {} }, target }); e.emit('poke', {});
+  assert.deepEqual(target.engine.events.since(0).map(x => x.type), ['poke']);
+});

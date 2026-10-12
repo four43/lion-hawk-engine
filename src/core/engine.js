@@ -261,6 +261,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
+    // #71: deliver events emitted outside a step (a tap, a command) now; during a step or transition the step's own flush does it
+    flushEvents() { if (!stepping && !draining && !booting) events.flush(); },
     system: (name, fn, opts = {}) => schedule.add(name, fn, { stage: 'pre', ...opts }),
     schedule: () => schedule.describe(),
     // recording, an external op's payload is validated and the scene/handler receives a copy of what was logged

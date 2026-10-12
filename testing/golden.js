@@ -5,17 +5,18 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonical, checksum, diff } from './state.js';
 
-export function golden(file, value, { digits = 6, bless = process.env.LH_BLESS === '1', ci = !!process.env.CI } = {}) {
+export function golden(file, value, { digits = 6, exact = false, bless = process.env.LH_BLESS === '1', ci = !!process.env.CI } = {}) {
   const path = file instanceof URL ? fileURLToPath(file) : file;
-  const sum = checksum(value, { digits }), current = JSON.parse(canonical(value, { digits }));
+  const sum = checksum(value, { digits, exact }), current = JSON.parse(canonical(value, { digits, exact }));
   const fileExists = existsSync(path);
   if (ci && !fileExists && !bless) throw new Error(`golden ${path} is missing. Run locally (or with LH_BLESS=1) to create it, then commit it.`);
   if (bless || !fileExists) {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify({ checksum: sum, value: current }, null, 1) + '\n');
+    writeFileSync(path, JSON.stringify(exact ? { checksum: sum, exact: true, value: current } : { checksum: sum, value: current }, null, 1) + '\n');
     return { written: true };
   }
   const stored = JSON.parse(readFileSync(path, 'utf8'));
+  if (!!stored.exact !== !!exact) throw new Error(`golden ${path}: stored exact=${!!stored.exact}, called with exact=${!!exact}`);
   if (stored.checksum === sum) return { written: false };
   const lines = diff(stored.value, current).slice(0, 10).map(d => `  ${d.path}: ${JSON.stringify(d.a)} → ${JSON.stringify(d.b)}`);
   let first = '';

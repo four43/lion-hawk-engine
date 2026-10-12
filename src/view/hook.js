@@ -29,7 +29,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     close: n => { engine.close(n); after(); }, jump: (n, p, o, a) => { engine.jump(n, p, o, a); after(); },
     command: (type, data) => { engine.command(type, data); after(); }, // #5
     on: (type, fn) => engine.events.on(e => { if (e.type === type) fn(safeEvent(e)); }),
-    events: { since: seq => engine.events.since(seq).map(safeEvent) },
+    events: { since: seq => { engine.flushEvents(); return engine.events.since(seq).map(safeEvent); } }, // #71
     state: () => engine.state(),
     input: { set: p => engine.input.set(p), hold: p => engine.input.hold(p), release: (...n) => engine.input.release(...n), read: () => engine.input.values() },
     settled() {

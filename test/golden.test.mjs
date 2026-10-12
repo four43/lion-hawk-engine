@@ -51,3 +51,11 @@ test('a shorter trail diverges at its length', () => {
   golden(f, { trail: ['a', 'b'] }, { bless: false, ci: false });
   assert.throws(() => golden(f, { trail: ['a', 'b', 'c'] }, { bless: false, ci: false }), /first divergence: trail\[2\]/);
 });
+
+test('2f: golden({ exact: true }) compares every bit and refuses a mode mix (#68)', () => {
+  const f = join(dir, 'exact.json');
+  golden(f, { x: 0.1 + 0.2 }, { exact: true, bless: true });
+  assert.doesNotThrow(() => golden(f, { x: 0.30000000000000004 }, { exact: true }));
+  assert.throws(() => golden(f, { x: 0.3 }, { exact: true }), /changed/);
+  assert.throws(() => golden(f, { x: 0.3 }), /stored exact=true, called with exact=false/);
+});

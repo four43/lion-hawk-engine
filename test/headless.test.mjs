@@ -123,3 +123,16 @@ test('2e: invariants.finite names the path, seed and step of the first non-finit
   assert.throws(() => h.step(1), /finite: bird\.x is not finite: NaN \(seed 7, step 5\)/);
   assert.throws(() => invariants.finite('nope'), /select must be a function/);
 });
+
+test('2f: h.debug is the game\'s debug extras, made once per handle (#70)', () => {
+  let made = 0;
+  const g = defineGame({ id: 'dbg', start: 's', scenes: { s: {} }, debug: e => { made++; return { step: () => e.time.step }; } });
+  const h = headless(g); assert.equal(h.debug.step(), 0); h.step(2); assert.equal(h.debug.step(), 2); assert.equal(made, 1);
+  assert.deepEqual(headless(defineGame({ id: 'nod', start: 's', scenes: { s: {} } })).debug, {});
+});
+test('2f: an event emitted outside a step is visible to h.events and h.since at once (#71)', () => {
+  const h = headless(defineGame({ id: 'ev', start: 's', scenes: { s: {} } }));
+  const m = h.mark(); h.engine.emit('poke', { n: 1 });
+  assert.deepEqual(h.events.of('poke').map(e => e.n), [1]); assert.equal(h.since(m).count('poke'), 1);
+  h.step(1); assert.equal(h.events.of('poke').length, 1, 'flushed once, not again');
+});

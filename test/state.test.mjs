@@ -29,3 +29,11 @@ test('typed arrays canonicalise and diff as plain arrays', () => {
   assert.deepEqual(diff({ a: new Float64Array([1, 2, 3]) }, { a: [1, 5, 3] }), [{ path: 'a[1]', a: 2, b: 5 }]);
   assert.deepEqual(diff(new Int16Array([1]), new Int16Array([1])), []);
 });
+
+test('2f: assertFinite walks Maps, Sets and typed arrays and survives cycles', () => {
+  const a = { m: new Map([['k', { v: 1 }]]), s: new Set([2]), t: new Float64Array([3]) }; a.self = a;
+  assert.doesNotThrow(() => assertFinite(a, 'a'));
+  a.m.get('k').v = NaN; assert.throws(() => assertFinite(a, 'a'), /a\.m\.k\.v is not finite: NaN/);
+  a.m.get('k').v = 1; a.s.add(Infinity); assert.throws(() => assertFinite(a, 'a'), /a\.s\[1\] is not finite: Infinity/);
+  a.s.delete(Infinity); a.t[0] = NaN; assert.throws(() => assertFinite(a, 'a'), /a\.t\[0\] is not finite: NaN/);
+});

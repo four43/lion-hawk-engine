@@ -4,8 +4,8 @@ import { fnv } from '../src/core/rng.js';
 
 const num = (v, digits) => Number.isNaN(v) ? 'NaN' : v === Infinity ? 'Infinity' : v === -Infinity ? '-Infinity' : Number(v.toFixed(digits)) + 0; // + 0 turns -0 into 0
 const isTyped = v => ArrayBuffer.isView(v) && !(v instanceof DataView);
-function norm(v, digits) {
-  if (typeof v === 'number') return num(v, digits);
+function norm(v, digits) { // digits null: exact (#68), every bit kept; -0 still becomes 0
+  if (typeof v === 'number') return digits === null ? (Number.isNaN(v) ? 'NaN' : v === Infinity ? 'Infinity' : v === -Infinity ? '-Infinity' : v + 0) : num(v, digits);
   if (v instanceof Map) return [...v].map(e => norm(e, digits));
   if (v instanceof Set) return [...v].map(e => norm(e, digits));
   if (isTyped(v)) return Array.from(v, e => norm(e, digits));
@@ -13,7 +13,7 @@ function norm(v, digits) {
   if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v).sort()) if (v[k] !== undefined) o[k] = norm(v[k], digits); return o; }
   return v;
 }
-export const canonical = (value, { digits = 6 } = {}) => JSON.stringify(norm(value, digits));
+export const canonical = (value, { digits = 6, exact = false } = {}) => JSON.stringify(norm(value, exact ? null : digits));
 export const checksum = (value, opts) => fnv(canonical(value, opts)).toString(16).padStart(8, '0');
 
 export function diff(a, b, { tol = 0 } = {}, path = '', out = []) {
@@ -28,10 +28,16 @@ export function diff(a, b, { tol = 0 } = {}, path = '', out = []) {
 }
 
 export function assertFinite(value, label = 'value') {
+  const seen = new WeakSet(); // #: each object once, so cycles and shared refs are fine
   const walk = (v, p) => {
     if (typeof v === 'number') { if (!Number.isFinite(v)) throw new Error(`${p} is not finite: ${v}`); return; }
-    if (Array.isArray(v)) v.forEach((e, i) => walk(e, `${p}[${i}]`));
-    else if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k], `${p}.${k}`);
+    if (!v || typeof v !== 'object' || seen.has(v)) return;
+    seen.add(v);
+    if (v instanceof Map) for (const [k, e] of v) walk(e, `${p}.${String(k)}`);
+    else if (v instanceof Set) { let i = 0; for (const e of v) walk(e, `${p}[${i++}]`); }
+    else if (isTyped(v)) v.forEach((e, i) => walk(e, `${p}[${i}]`)); // BigInt arrays are never non-finite numbers
+    else if (Array.isArray(v)) v.forEach((e, i) => walk(e, `${p}[${i}]`));
+    else for (const k of Object.keys(v)) walk(v[k], `${p}.${k}`);
   };
   walk(value, label);
 }
