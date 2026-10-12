@@ -16,9 +16,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup planned (2f T4–T5, 2g G3) |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup sim half done (2f T4–T5: trip, show ack, reward, menus, start screen in farm state + commands); cutscene ack 2g G3 |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
-| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
+| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4; Tractor new farms 2f T5 `frames: 1`, 78 ms build) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge done (2f T-E8: `axis({ pair })` + device `map` hook; one `map` option on all devices); gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
@@ -91,13 +91,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
 | 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | engine half done (2f T-E5: reserved `from`/`at`/`reliable` keys); Tractor adoption planned (T6; the port fills `from`, 2f T-E6) |
 | 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4, T-E6 done: frames arrive as plain-JSON `net.frame` commands; T8 open) |
-| 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
-| 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
+| 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | sim half done (2f T4: `show` event, `show.done { spots, gen }` places riders before `finishShow`); view pacing 2g G3 |
+| 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | host half done (2f T5: `then` calls `sync.setGame`; guests ignore `farm.new`); welcome rebuild 2f T6 |
 | 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption 2g (use `PILOT.revCone`) |
 | 82 | Keys override the stick and a pad overrides both, vs a length merge | Tractor Pickup | accepted (2f T-E8: longest vector wins, ties to the first source); on the 2g playtest list |
-| 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | engine half done (2f T-E9: `ui.hold({ wall })`, e2e on throttled frames); Tractor adoption 2g |
-| 84 | Player records in browser storage are read by the flow | Tractor Pickup | planned (2f T4) |
-| 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | planned (2f T5, 2g G4) |
+| 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | done in the sim (2f T-E9 engine; T4–T5: parent 2 s, skip 1 s, wake 5 s as `ui.hold({ wall: true })`); DOM adoption 2g |
+| 84 | Player records in browser storage are read by the flow | Tractor Pickup | sim half done (2f T4: sim owns progress/settings via commands; events carry copies); storage saver 2g |
+| 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | sim half done (2f T5: bedtime checked each step against the last `clock`/`bed.set` date); 1 Hz view clock 2g G4 |
 | 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | planned (2f T1: allowlisted) |
 | 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | sim half done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order); view plays them in 2g |
 | 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | planned (2f T6, T7) |
@@ -107,6 +107,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
 | 93 | A late peer's virtual wall is an ulp off the hub's | engine | open (tolerance in tests; `wallStep0` engine option if exactness is ever needed) |
 | 94 | The hub drops at send, so in-flight messages still land after a blackout starts | engine, Tractor Pickup | kept (Tractor's M-53 behaviour; documented by the mp drop test) |
+| 95 | `engine.overlay` throws on an overlay already open or pending | engine, Tractor Pickup | open (Tractor guards with `isOpen(name, { pending: true })`; consider `{ once: true }`) |
 
 ## Entries
 
@@ -607,3 +608,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** the plan's mp test expected nothing to arrive once `hub.drop` returned true, but with a 200 ms delay the messages already sent still land. The hub decides a drop at send time, as Tractor's `link.js` did.
 - **Decision:** keep drop-at-send. Moving it to delivery would change Tractor's blackout tests. The test now asserts that in-flight messages land, then that nothing new arrives.
 - **Status:** kept.
+
+### 95. `engine.overlay` throws on an overlay already open or pending: engine, Tractor Pickup (phase 2f T4)
+- **What happened:** Tractor can reach the same overlay from a cue, a command or a hold, so it can request the overlay again. `engine.overlay(name)` throws in that case, so every caller needs an `isOpen(name, { pending: true })` guard. Tractor wraps this in `flow.open`.
+- **Decision:** the guard stays game-side for now. If a second game needs it too, add `engine.overlay(name, args, { once: true })` (a no-op when already open or pending).
+- **Status:** open.
