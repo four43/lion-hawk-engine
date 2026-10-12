@@ -16,7 +16,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Pig Pens planned (2e P2–P4); Tractor Pickup open |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Pig Pens in progress (2e P2 farm scene 932f19a; P3–P4); Tractor Pickup open |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
@@ -40,7 +40,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
 | 26 | Policies that run slower than the sim | Rally | done (2d D10) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
-| 28 | Sim objects live in the scene's `state` | Rally | open (2c-rally R2 workaround; phase 4 World) |
+| 28 | Sim objects live in the scene's `state` | Rally, Pig Pens | open (Rally R2 and Pig Pens P2 workarounds; phase 4 World) |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
 | 30 | First pad only vs. every pad merged | Rally | won't (accepted; 2c-rally R5) |
 | 31 | Two sets of safe-area variables | Rally | done (2c-rally) |
@@ -69,10 +69,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 54 | Screen-space aim offsets under a finger | Pig Pens | planned (2e P3, P6) |
 | 55 | A tap acts on what was picked at pointer down | Pig Pens | planned (2e P3); engine won't |
 | 56 | A long press on capped device time runs slow at low frame rates | Pig Pens | open (accepted in 2e; playtest) |
-| 57 | A game-owned event queue next to engine events | Pig Pens | planned (2e P2 bridge); kit-herd open |
+| 57 | A game-owned event queue next to engine events | Pig Pens | bridged (2e P2 932f19a: farm.events re-emits sim.events each step, no allocation); kit-herd open |
 | 58 | The game's RNG and seed live outside the engine streams | Pig Pens | open (phase 4/7) |
 | 59 | Camera gestures need a second pointer tracker on the same canvas | Pig Pens | open |
-| 60 | Sim inputs computed per frame in the view | Pig Pens | planned (2e P2–P4) |
+| 60 | Sim inputs computed per frame in the view | Pig Pens | in progress (2e P2 moved gesture/grab/hose/ring state into the farm scene; P3–P4) |
 | 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | planned (2e P3) |
 | 62 | Stale browser scripts and print-only tests | Pig Pens | planned (2e P5, P9) |
 | 63 | Safe areas read `env()` directly | Pig Pens | planned (2e P6, P8) |
@@ -80,6 +80,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
+| 68 | Goldens compare to 6 digits | Pig Pens | open |
+| 69 | Control when/get receive the engine, not ctx | Pig Pens | open |
 
 ## Entries
 
@@ -445,3 +447,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** Web Audio must be unlocked from a user gesture. `main.js` calls `sound.unlock()` from each game control's handler, but registry controls and devices give the game no first-gesture hook.
 - **Workaround:** the view adds one capturing `pointerdown`/`keydown` listener on the document, so audio now unlocks on any first tap or key (flagged as a small change).
 - **Engine change:** an audio service with its own unlock. Status: open (audio service).
+
+### 68. Goldens compare to 6 digits; bit-exact comparison needs its own test: Pig Pens (phase 2e P2)
+- **What happened:** to prove the engine path reproduces `farm-seed3.json` exactly, P2 needed an extra `deepStrictEqual` against a direct `createSim` run, because `golden()` rounds to 6 digits.
+- **Engine change:** `golden(file, value, { exact: true })`, which skips rounding (canonical at 17 digits). Status: open.
+
+### 69. Control `when`/`get` receive the engine, not the scene context: Pig Pens (phase 2e P2 review)
+- **What happened:** farm controls read `e.scene.state`, which is always the main scene's state. That breaks for overlay controls and after re-entry.
+- **Workaround:** close over `ctx.state` from `ui(u, e, ctx)`.
+- **Engine change:** pass `ctx` as a second argument (`when(engine, ctx)`, `get(engine, ctx)`, `set(v, engine, ctx)`), or document the closure pattern. Status: open.
+
