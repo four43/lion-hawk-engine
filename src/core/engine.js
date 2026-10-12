@@ -71,6 +71,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     for (const [k, v] of [['hold', hold], ['frames', frames]]) if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`engine: load ${k} must be a finite number >= 0`);
     if (!stack.includes(entry)) throw new Error(`engine: scene '${entry.ctx.name}' is not open`);
     if (loader && loader !== entry) throw new Error(`engine: scene '${loader.ctx.name}' is already loading`);
+    if (entry.load) throw new Error(`engine: '${entry.ctx.name}' is already loading`); // no silent restart of hold/frames
     const pub = { label: String(label), then }; // `then` may be reassigned until it runs
     entry.load = { pub, build, hold, frames, settle, ticks: 0, f0: drawn(), fb: 0, phase: 'hold' };
     setLoading(entry); return pub;
@@ -84,7 +85,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
         if (l.ticks * dt < l.hold - 1e-9 || time.frames - l.f0 < l.frames) return;
         l.build(engine, entry.ctx);
         const fns = builtFns; for (let i = 0; i < fns.length; i++) fns[i](engine, entry.ctx);
-        if (entry.load !== l) return; // the build (or a listener) replaced or dropped its load
+        if (entry.load !== l) return; // the build (or a listener) dropped its load (left the scene)
         if (!l.settle) return finishLoad(entry, l);
         l.fb = drawn(); l.phase = loading.phase = 'settle';
       }

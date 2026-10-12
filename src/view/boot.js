@@ -40,7 +40,11 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const focus = id => { want = { id, before: doc.activeElement ?? null, scene: engine.scene.id, tries: 0 }; };
   const applyFocus = () => {
     if (!want) return;
-    if (want.scene !== engine.scene.id || ++want.tries > 5) { want = null; return; } // a scene change or a few renders without the control: give up
+    if (want.scene !== engine.scene.id) { want = null; return; } // a scene change: drop it quietly
+    if (++want.tries > 5) { // a few renders without the control: give up, and say so under ?debug
+      if (flags.debug) console.warn(`lion-hawk: view.focus('${want.id}') gave up: the control did not appear enabled after 5 refreshes`);
+      want = null; return;
+    }
     const a = doc.activeElement; if (a && a !== want.before && a !== doc.body) { want = null; return; }
     const el = doc.querySelector(`[data-testid="${String(want.id).replace(/["\\]/g, '\\$&')}"]`);
     if (el && !el.disabled) { want = null; el.focus?.({ preventScroll: true }); }

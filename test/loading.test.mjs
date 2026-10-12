@@ -33,7 +33,7 @@ test('2d: step acks: every step is a presented frame; settle passes at once; one
   e.stepN(3); assert.equal(n, 3); assert.equal(e.time.frames, 3); off(); e.stepN(1); assert.equal(n, 3);
   assert.throws(() => e.presented(), /presented\(\) needs acks: 'frames'/);
   req(e, { hold: 0, settle: true }); e.stepN(1); assert.deepEqual(built, [['build', 4], ['then', 4]]);
-  req(e); req(e); assert.equal(e.loading.active, true); // the same scene replaces its load
+  req(e); assert.throws(() => req(e), /engine: 'stage' is already loading/); assert.equal(e.loading.active, true); // no silent restart
   e.overlay('menu'); assert.throws(() => menuCtx.load({ build() {} }), /scene 'stage' is already loading/);
   e.go('stage'); assert.equal(e.loading.active, false); // leaving the scene drops its load
   assert.throws(() => createEngine(game, { acks: 'x' }), /acks must be 'steps' or 'frames'/);

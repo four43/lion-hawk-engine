@@ -170,3 +170,15 @@ test('2d: a game onRender after boot no longer silences view halves (#10)', () =
 test('2d: ?lh-test=render boots in full-manual mode', () => {
   const { app } = run('?lh-test=render'); assert.equal(app.driver.manual(), 'all');
 });
+test('final review: a view.focus that gives up after its retries warns once under ?debug only', t => {
+  const warns = []; t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+  const halves = defineView({ scenes: { race: { enter(e, v) { v.focus('race.pause'); } } } });
+  const quiet = run('?lh-test', halves); quiet.app.hook.go('race');
+  for (let i = 0; i < 8; i++) quiet.app.hook.render(0);
+  assert.deepEqual(warns, []); quiet.app.dispose();
+  const loud = run('?lh-test&debug', halves); loud.app.hook.go('race');
+  for (let i = 0; i < 8; i++) loud.app.hook.render(0);
+  assert.equal(warns.length, 1); assert.match(warns[0], /view\.focus\('race\.pause'\) gave up/);
+  loud.app.hook.go('title'); loud.app.hook.go('race'); loud.app.hook.go('title'); // a scene change is not a give-up
+  assert.equal(warns.length, 1); loud.app.dispose();
+});
