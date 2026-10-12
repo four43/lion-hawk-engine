@@ -61,7 +61,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | done (2d D11) |
 | 48 | `expectTappable` only accepts test IDs | Rally | done (2d D11) |
-| 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7); enforcement for schema'd commands planned (2f T-E5) |
+| 49 | Commands to a scene under a pausing overlay are dropped | engine, Tractor Pickup | done (2d D12: documented in spec I-7); schema'd commands are game-wide only, enforced at registration (2f T-E5) |
 | 50 | Playwright until vs view.wait loads | Rally | done (0.5.1 final review) |
 | 51 | policy.every restart on sim swap | Rally | done (0.5.1 final review) |
 | 52 | `bindPointer`'s `at()` can't tell a move from a press | Pig Pens | done (2e P-E1) |
@@ -89,7 +89,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
 | 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
-| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | planned (2f T-E5, T6) |
+| 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | engine half done (2f T-E5: reserved `from`/`at`/`reliable` keys); Tractor adoption planned (T6) |
 | 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | in progress (2f T-E4 done; T-E6, T8 open) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
 | 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | planned (2f T6) |
@@ -103,7 +103,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | planned (2f T6, T7) |
 | 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
 | 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | planned (2f T3: pipeline in `step`) |
-| 91 | Schema-derived binary commands would change the wire | Tractor Pickup | planned (2f T-E5: built, not adopted; NET_VERSION stays 3) |
+| 91 | Schema-derived binary commands would change the wire | Tractor Pickup | built, not adopted (2f T-E5: `wireCodec` json + binary; fixed/angle quantise like the replica; NET_VERSION stays 3) |
 | 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
 
 ## Entries
