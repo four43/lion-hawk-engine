@@ -102,3 +102,27 @@ test('2d: Space on a focused hold presses and releases', () => {
   assert.ok(b.hasAttribute('data-lh-down'));
   b.dispatchEvent(new window.KeyboardEvent('keyup', { key: ' ', bubbles: true })); ui.sync(); assert.equal(b.hasAttribute('data-lh-down'), false);
 });
+
+const fg = defineGame({ id: 'f', start: 's', scenes: {
+  s: { enter(e, c) { Object.assign(c.state, { name: 'a', n: 0, pick: 'x' }); },
+    ui(u) {
+      u.field({ id: 'name', label: 'Name', get: e => e.scene.state.name, set: (t, e) => { e.scene.state.name = t; e.scene.state.n++; } });
+      u.choice({ id: 'pick', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }], get: e => e.scene.state.pick, set: (v, e) => { e.scene.state.pick = v; } });
+    } },
+  t: {},
+} });
+test('2d: IME Enter does not commit; Enter then change commits once; a focused field is not overwritten (E4 minors)', () => {
+  const { window, document } = dom(), engine = createEngine(fg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
+  const f = document.querySelector('[data-testid="s.name"]'), key = o => f.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...o }));
+  f.focus(); f.value = 'b'; key({ isComposing: true }); assert.equal(engine.scene.state.n, 0);
+  key({ keyCode: 229 }); assert.equal(engine.scene.state.n, 0);
+  key({}); f.dispatchEvent(new window.Event('change', { bubbles: true })); assert.equal(engine.scene.state.n, 1); assert.equal(engine.scene.state.name, 'b');
+  f.focus(); engine.scene.state.name = 'z'; ui.sync(); assert.equal(f.value, 'b');
+  f.blur(); ui.sync(); assert.equal(f.value, 'z');
+});
+test('2d: a released adopted choice loses aria-pressed (E4 minor)', () => {
+  const { document } = dom(); const slot = document.createElement('button'); slot.setAttribute('data-lh-slot', 's.pick.x'); document.body.appendChild(slot);
+  const engine = createEngine(fg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
+  assert.equal(slot.getAttribute('aria-pressed'), 'true');
+  engine.go('t'); ui.sync(); assert.equal(slot.hasAttribute('aria-pressed'), false); assert.equal(slot.disabled, true);
+});

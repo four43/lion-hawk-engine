@@ -41,7 +41,7 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
       const o = ownerOf(e.target);
       if (o && buttons.get(o.id)?.hold) { e.preventDefault?.(); if (!e.repeat && keyId === undefined) { keyId = o.id; press(o.id); } return; }
     }
-    if (e.key !== 'Enter') return; const o = ownerOf(e.target); if (o?.el.tagName !== 'INPUT') return;
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return; const o = ownerOf(e.target); if (o?.el.tagName !== 'INPUT') return;
     const c = buttons.get(o.id); commit(o, c); o.el.blur?.(); e.preventDefault?.();
   };
   document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('keydown', onKey);
@@ -51,7 +51,7 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     const tag = role === 'textbox' ? 'INPUT' : 'BUTTON';
     for (const el of document.querySelectorAll(`[data-lh-slot="${id.replace(/["\\]/g, '\\$&')}"]`)) if (el.tagName === tag && !owned.has(el)) return el;
   };
-  const release = (id, b) => { owned.delete(b.el); if (b.adopted) { b.el.removeAttribute('data-testid'); b.el.disabled = true; } else b.el.remove(); };
+  const release = (id, b) => { owned.delete(b.el); if (b.adopted) { b.el.removeAttribute('data-testid'); b.el.removeAttribute('aria-pressed'); b.el.disabled = true; } else b.el.remove(); };
 
   function sync() {
     const stack = [engine.scene.name, ...engine.scene.overlays].filter(n => n !== undefined);

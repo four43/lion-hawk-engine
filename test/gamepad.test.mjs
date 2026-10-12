@@ -40,3 +40,10 @@ test('2c: axis curve after the dead zone; one button drives two actions (#16)', 
   assert.ok(Math.abs(calls.at(-1).steer - -curve(s)) < 1e-12);
   assert.equal(calls.at(-1).handbrake, 1); assert.equal(calls.at(-1).confirm, true); assert.equal(calls.at(-1).throttle, 0.25);
 });
+
+test('2d: a curve is not applied at rest; an empty binding list throws (E2 minors)', () => {
+  const calls = []; const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const pad = bindGamepad(engine, { axes: { 0: ['steer', 1, v => v * 0.5 + 0.1] } }, { getGamepads: () => [{ axes: [0], buttons: [] }] });
+  pad.update(); assert.equal(calls.at(-1).steer, 0);
+  assert.throws(() => bindGamepad(engine, { buttons: { 0: [] } }, { getGamepads: () => [] }), /bindGamepad: button 0 has an empty binding list/);
+});

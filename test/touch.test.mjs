@@ -138,3 +138,21 @@ test('2c: bindHold marks its element with data-lh-down while pressed (#17)', () 
   s.ev(s.btn, 'pointerup', 5); assert.equal(s.btn.hasAttribute('data-lh-down'), false);
   h.dispose(); assert.equal(s.btn.hasAttribute('data-lh-down'), false);
 });
+
+test('2d: bindHold keeps focus off its button unless focus: true (#42)', () => {
+  const s = setup(); bindHold(s.engine, s.btn, 'horn');
+  const pd = new s.window.PointerEvent('pointerdown', { pointerId: 1, bubbles: true, cancelable: true }); s.btn.dispatchEvent(pd);
+  const md = new s.window.MouseEvent('mousedown', { bubbles: true, cancelable: true }); s.btn.dispatchEvent(md);
+  assert.equal(pd.defaultPrevented, true); assert.equal(md.defaultPrevented, true);
+  const b2 = s.document.createElement('button'); s.root.appendChild(b2); bindHold(s.engine, b2, 'throttle', { focus: true });
+  const e2 = new s.window.PointerEvent('pointerdown', { pointerId: 2, bubbles: true, cancelable: true }); b2.dispatchEvent(e2);
+  assert.equal(e2.defaultPrevented, false);
+});
+test('2d: stick radius guard, knob-less adopted base, --lh-r cleared, pointerdown prevented (E3, R5 minors)', () => {
+  const s = setup(); const base = s.document.createElement('div'); s.document.body.appendChild(base);
+  const st = stick(s, { axis: 'x', base, radius: () => 0 });
+  const d = new s.window.PointerEvent('pointerdown', { pointerId: 1, clientX: 200, clientY: 300, bubbles: true, cancelable: true }); s.root.dispatchEvent(d);
+  assert.equal(d.defaultPrevented, true); assert.equal(base.style.getPropertyValue('--lh-r'), '70px');
+  s.ev(s.window, 'pointermove', 1, 235, 300); assert.ok(Math.abs(s.v().steer - (0.5 - 0.1) / 0.9) < 1e-9);
+  st.dispose(); assert.equal(base.style.getPropertyValue('--lh-r'), '');
+});

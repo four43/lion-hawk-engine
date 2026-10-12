@@ -1,11 +1,11 @@
 // Touch devices: a floating thumb stick and hold buttons on pointer events -> named actions in per-source device layers (I-3: released on cancel/blur/hide).
 // Moves/ups route by pointerId on the window (iOS does not reliably retarget captured moves); cancel and lostpointercapture are releases.
-export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: adoptKnob, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
+export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: adoptKnob, surface, parent, radius = 70, edge = 24, deadZone = 0.1, source = 'stick', preventDefault = true, doc, ignore = 'button, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *' }) {
   if (axis === 'x') y = undefined; else if (axis === 'y') x = undefined; // slider mode (#17): the other axis is never read or written
   if (!x && !y) throw new Error('bindStick: x or y required');
   surface ??= root; doc = doc ?? surface.ownerDocument; parent ??= doc.body; const win = doc.defaultView ?? globalThis.window;
   const adopted = !!adoptBase; let base = adoptBase, knob = adoptKnob; // adopted elements are positioned and shown, not styled, and survive dispose()
-  if (adopted) { base.hidden = true; knob ??= base.firstElementChild; }
+  if (adopted) { base.hidden = true; knob ??= base.firstElementChild ?? { style: {} }; } // a knob-less adopted base: knob writes land on a stub
   else { base = doc.createElement('div'); base.className = 'lh-stick'; base.hidden = true; base.style.position = 'fixed'; knob = doc.createElement('div'); knob.className = 'lh-knob'; base.appendChild(knob); parent.appendChild(base); }
   const prevTA = surface.style.touchAction; surface.style.touchAction = 'none';
   const out = {}; if (x) out[x[0]] = 0; if (y) out[y[0]] = 0; // reused every move
@@ -19,7 +19,8 @@ export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: ado
     if (id !== null) return;
     if (e.target?.closest?.(ignore)) return;
     if (e.clientX < edge) return; // viewport edge (Safari back swipe), not root's
-    id = e.pointerId; ox = e.clientX; oy = e.clientY; R = typeof radius === 'function' ? radius() : radius;
+    id = e.pointerId; ox = e.clientX; oy = e.clientY; R = typeof radius === 'function' ? radius() : radius; if (!(Number.isFinite(R) && R > 0)) R = 70; // a bad radius() must not divide by 0
+    if (preventDefault) e.preventDefault?.();
     base.style.setProperty('--lh-r', R + 'px'); surface.setAttribute('data-lh-active', '');
     base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.hidden = false; knob.style.transform = 'translate(0px, 0px)';
   };
@@ -53,12 +54,12 @@ export function bindStick(engine, { root, x, y, axis, base: adoptBase, knob: ado
       surface.removeEventListener('pointerdown', onDown); surface.removeEventListener('lostpointercapture', onEnd);
       win.removeEventListener('pointermove', onMove); win.removeEventListener('pointerup', onEnd); win.removeEventListener('pointercancel', onEnd);
       win.removeEventListener('blur', release); win.removeEventListener('pagehide', release); doc.removeEventListener('visibilitychange', onVis);
-      id = null; if (adopted) { base.hidden = true; knob.style.transform = ''; } else base.remove(); surface.removeAttribute('data-lh-active'); surface.style.touchAction = prevTA; engine.input.clearDevice(source);
+      id = null; if (adopted) { base.hidden = true; knob.style.transform = ''; base.style.removeProperty('--lh-r'); } else base.remove(); surface.removeAttribute('data-lh-active'); surface.style.touchAction = prevTA; engine.input.clearDevice(source);
     },
   };
 }
 
-export function bindHold(engine, el, action, { source = 'hold:' + action, value } = {}) {
+export function bindHold(engine, el, action, { source = 'hold:' + action, value, focus = false } = {}) {
   const doc = el.ownerDocument, win = doc.defaultView ?? globalThis.window;
   const isAxis = engine.input.kinds?.[action] === 'axis';
   const on = { [action]: value ?? (isAxis ? 1 : true) }, off = { [action]: isAxis ? 0 : false };
@@ -68,12 +69,15 @@ export function bindHold(engine, el, action, { source = 'hold:' + action, value 
   const release = () => { if (id === null) return; id = null; el.removeAttribute('data-lh-down'); engine.input.device(off, source); };
   const onEnd = e => { if (e.pointerId === id) release(); };
   const onCtx = e => e.preventDefault();
+  const noFocus = e => { if (!focus) e.preventDefault?.(); }; // #42: pointerdown/mousedown default is what focuses a button; Space/Enter stay the game's (#15)
   const onVis = () => { if (doc.visibilityState === 'hidden') release(); };
+  el.addEventListener('pointerdown', noFocus); el.addEventListener('mousedown', noFocus);
   el.addEventListener('pointerdown', onDown); el.addEventListener('pointerup', onEnd); el.addEventListener('pointercancel', onEnd);
   el.addEventListener('lostpointercapture', onEnd); el.addEventListener('contextmenu', onCtx);
   win.addEventListener('pagehide', release); win.addEventListener('blur', release); doc.addEventListener('visibilitychange', onVis);
   return {
     dispose() {
+      el.removeEventListener('pointerdown', noFocus); el.removeEventListener('mousedown', noFocus);
       el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointerup', onEnd); el.removeEventListener('pointercancel', onEnd);
       el.removeEventListener('lostpointercapture', onEnd); el.removeEventListener('contextmenu', onCtx);
       win.removeEventListener('pagehide', release); win.removeEventListener('blur', release); doc.removeEventListener('visibilitychange', onVis);
