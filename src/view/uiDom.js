@@ -14,7 +14,7 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
   const fail = err => { if (!/is disabled|is covered/.test(String(err?.message))) errors?.push({ type: 'error', message: String(err?.message ?? err), stack: err?.stack }); }; // disabled/covered: the DOM already says so
   const ownerOf = t => { for (let n = t; n; n = n.parentNode) { const id = owned.get(n); if (id !== undefined) return { el: n, id }; } };
   const onClick = e => {
-    const o = ownerOf(e.target); if (!o || o.el.tagName !== 'BUTTON') return;
+    const o = ownerOf(e.target); if (!o || o.el.tagName !== 'BUTTON' || buttons.get(o.id)?.hold) return; // a hold is pressed, not clicked (#9)
     try { engine.ui.tap(o.id); } catch (err) { fail(err); }
     sync(); onTap?.();
   };
@@ -25,11 +25,28 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     c.value = undefined; sync(); onTap?.(); // re-sync: the game may have normalised or refused the text
   };
   const onChange = e => { const o = ownerOf(e.target); if (o?.el.tagName === 'INPUT') commit(o, buttons.get(o.id)); };
+  // #9: holds press on pointerdown (captured) or Space/Enter and release when that pointer/key lifts
+  const downs = new Map(); let keyId; // pointerId -> control id
+  const press = id => { try { engine.ui.press(id); } catch (err) { fail(err); } sync(); onTap?.(); };
+  const lift = id => { engine.ui.release(id); sync(); onTap?.(); };
+  const onDown = e => {
+    const o = ownerOf(e.target); if (!o || !buttons.get(o.id)?.hold) return;
+    o.el.setPointerCapture?.(e.pointerId); downs.set(e.pointerId, o.id); press(o.id);
+  };
+  const onUp = e => { const id = downs.get(e.pointerId); if (id !== undefined) { downs.delete(e.pointerId); lift(id); } };
+  const onMenu = e => { const o = ownerOf(e.target); if (o && buttons.get(o.id)?.hold) e.preventDefault?.(); };
+  const onKeyUp = e => { if (keyId !== undefined && (e.key === ' ' || e.key === 'Enter')) { const id = keyId; keyId = undefined; e.preventDefault?.(); lift(id); } };
   const onKey = e => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      const o = ownerOf(e.target);
+      if (o && buttons.get(o.id)?.hold) { e.preventDefault?.(); if (!e.repeat && keyId === undefined) { keyId = o.id; press(o.id); } return; }
+    }
     if (e.key !== 'Enter') return; const o = ownerOf(e.target); if (o?.el.tagName !== 'INPUT') return;
     const c = buttons.get(o.id); commit(o, c); o.el.blur?.(); e.preventDefault?.();
   };
   document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('keydown', onKey);
+  document.addEventListener('keyup', onKeyUp); document.addEventListener('pointerdown', onDown); document.addEventListener('contextmenu', onMenu);
+  for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) document.addEventListener(n, onUp);
   const slotFor = (id, role) => {
     const tag = role === 'textbox' ? 'INPUT' : 'BUTTON';
     for (const el of document.querySelectorAll(`[data-lh-slot="${id.replace(/["\\]/g, '\\$&')}"]`)) if (el.tagName === tag && !owned.has(el)) return el;
@@ -57,13 +74,17 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
           let el = slotFor(c.id, c.role); const adopted = !!el;
           if (!el) { el = document.createElement(c.role === 'textbox' ? 'input' : 'button'); el.setAttribute('type', c.role === 'textbox' ? 'text' : 'button'); }
           el.setAttribute('data-testid', c.id); owned.set(el, c.id);
-          buttons.set(c.id, b = { el, adopted, label: undefined, enabled: undefined, pressed: undefined, value: undefined, last: undefined });
+          buttons.set(c.id, b = { el, adopted, hold: c.role === 'hold', prog: undefined, down: undefined, label: undefined, enabled: undefined, pressed: undefined, value: undefined, last: undefined });
         }
         if (b.label !== c.label) { b.label = c.label; if (!b.adopted) c.role === 'textbox' ? b.el.setAttribute('aria-label', c.label) : (b.el.textContent = c.label); }
         if (c.role === 'textbox' && b.value !== c.value && document.activeElement !== b.el) { b.value = c.value; b.last = c.value; if (b.el.value !== c.value) b.el.value = c.value; }
         if (b.enabled !== c.enabled) { b.enabled = c.enabled; b.el.disabled = !c.enabled; }
         const pressed = c.role === 'switch' || c.role === 'choice' ? !!c.pressed : undefined;
         if (b.pressed !== pressed) { b.pressed = pressed; pressed === undefined ? b.el.removeAttribute('aria-pressed') : b.el.setAttribute('aria-pressed', String(pressed)); }
+        if (b.hold) {
+          const p = String(Math.round(c.progress * 1000) / 1000); if (b.prog !== p) { b.prog = p; b.el.style.setProperty('--lh-progress', p); }
+          if (b.down !== c.pressed) { b.down = c.pressed; c.pressed ? b.el.setAttribute('data-lh-down', '') : b.el.removeAttribute('data-lh-down'); }
+        }
         if (!b.adopted) place(box.el, b.el, i);
       }
     }
@@ -72,5 +93,5 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     setHtml('data-lh-scene', stack[0] ?? '');
     setHtml('data-lh-overlays', stack.slice(1).join(' '));
   }
-  return { sync, dispose() { document.removeEventListener('click', onClick); document.removeEventListener('change', onChange); document.removeEventListener('keydown', onKey); for (const [id, b] of buttons) release(id, b); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
+  return { sync, dispose() { document.removeEventListener('click', onClick); document.removeEventListener('change', onChange); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.removeEventListener('pointerdown', onDown); document.removeEventListener('contextmenu', onMenu); for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) document.removeEventListener(n, onUp); for (const [id, b] of buttons) release(id, b); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
 }

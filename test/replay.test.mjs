@@ -53,3 +53,17 @@ test('2d fix: replay rejects a tape recorded at another hz', () => {
   const h = headless(game, { record: true }); h.step(1);
   assert.throws(() => replay(game, { ...h.tape(), hz: 30 }), /replay: tape hz differs/);
 });
+
+import { defineGame, actions, button } from '../src/index.sim.js';
+const hg = defineGame({ id: 'hold', start: 's', actions: actions({ gear: button() }), scenes: { s: {
+  enter(e, ctx) { ctx.state.fired = 0; ctx.state.on = true; },
+  ui(u) {
+    u.hold({ id: 'wake', label: 'Wake up', seconds: 0.5, action: e => e.scene.state.fired++, when: e => e.scene.state.on });
+    u.hold({ id: 'gear', label: 'Gear', seconds: 0.25, action: 'gear' });
+  },
+} } });
+test('2d: hold presses are recorded and replayed', () => {
+  const h = headless(hg, { record: true }); h.press('s.wake').step(40); h.unpress('s.wake'); h.step(20);
+  assert.equal(h.scene.state.fired, 1); assert.equal(replay(hg, h.tape()).scene.state.fired, 1);
+  assert.deepEqual(h.tape().log[0].ops, [['press', 's.wake']]);
+});

@@ -52,3 +52,12 @@ test('2d: game.command issues the command in the page', async () => {
   let got; const g = fake(async (fn, a) => { got = a; });
   await g.command('tap', { x: 1 }); assert.deepEqual(got, ['tap', { x: 1 }]);
 });
+
+test('2d: game.press/unpress hold the mouse on the control (desktop)', async () => {
+  const calls = [];
+  const page = { evaluate: async () => {}, locator: () => ({ first() { return this; }, waitFor: async () => {}, boundingBox: async () => ({ x: 10, y: 20, width: 40, height: 40 }) }),
+    mouse: { move: async (x, y) => calls.push(['move', x, y]), down: async () => calls.push(['down']), up: async () => calls.push(['up']) } };
+  const g = gameDriver({ page, context: {}, preset: presets.desktop, presetName: 'desktop' });
+  await g.press('s.wake'); await g.unpress('s.wake');
+  assert.deepEqual(calls, [['move', 30, 40], ['down'], ['up']]);
+});

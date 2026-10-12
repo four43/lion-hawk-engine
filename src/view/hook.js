@@ -38,7 +38,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
       return !d.querySelector('[data-lh-state="opening"],[data-lh-state="closing"]');
     },
     isOpen: (n, o) => engine.isOpen(n, o), // #36
-    ui: { tree: () => engine.ui.tree(), enabled: id => engine.ui.enabled(id), tryTap: id => { try { return engine.ui.tryTap(id); } finally { after(); } }, tap: id => { engine.ui.tap(id); after(); }, fill: (id, t) => { engine.ui.fill(id, t); after(); } },
+    ui: { tree: () => engine.ui.tree(), enabled: id => engine.ui.enabled(id), tryTap: id => { try { return engine.ui.tryTap(id); } finally { after(); } }, tap: id => { engine.ui.tap(id); after(); }, press: id => { engine.ui.press(id); after(); }, release: id => { engine.ui.release(id); after(); }, fill: (id, t) => { engine.ui.fill(id, t); after(); } },
     view: { get project() { return view?.project; } }, // T-17: world targets call the game view's projection
     rng: n => engine.rng(n),
     get debug() { return engine.game.debug?.(engine) ?? {}; },

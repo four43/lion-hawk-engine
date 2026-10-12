@@ -55,3 +55,25 @@ test('2c: field shows its value, fills with text, cannot be tapped (#18)', () =>
   ctx.open = false; assert.throws(() => ui.fill('title.seed', 'q', ctx), /is disabled/);
   assert.throws(() => ui.fill('title.nope', 'q', ctx), /no control 'title.nope'/);
 });
+
+import { createEngine, defineGame, actions, button } from '../src/index.sim.js';
+const hg = defineGame({ id: 'hold', start: 's', actions: actions({ gear: button() }), scenes: { s: {
+  enter(e, ctx) { ctx.state.fired = 0; ctx.state.on = true; },
+  ui(u) {
+    u.hold({ id: 'wake', label: 'Wake up', seconds: 0.5, action: e => e.scene.state.fired++, when: e => e.scene.state.on });
+    u.hold({ id: 'gear', label: 'Gear', seconds: 0.25, action: 'gear' });
+  },
+} } });
+const prog = (e, id) => e.ui.tree().find(c => c.id === id);
+test('2d: ui.hold fires once after its seconds of engine time; letting go early cancels (#9)', () => {
+  const e = createEngine(hg);
+  e.ui.press('s.wake'); e.stepN(29); assert.equal(e.scene.state.fired, 0);
+  assert.ok(Math.abs(prog(e, 's.wake').progress - 29 / 30) < 1e-9); assert.equal(prog(e, 's.wake').pressed, true);
+  e.stepN(1); assert.equal(e.scene.state.fired, 1); e.stepN(60); assert.equal(e.scene.state.fired, 1);
+  e.ui.release('s.wake'); assert.equal(prog(e, 's.wake').progress, 0);
+  e.ui.press('s.wake'); e.stepN(10); e.ui.release('s.wake'); e.stepN(30); assert.equal(e.scene.state.fired, 1);
+  e.ui.press('s.wake'); e.stepN(10); e.scene.state.on = false; e.stepN(1); assert.equal(prog(e, 's.wake').pressed, false);
+  assert.throws(() => e.ui.press('s.wake'), /is disabled/); assert.throws(() => e.ui.tap('s.gear'), /is a hold: use press/);
+  e.ui.press('s.gear'); e.stepN(14); assert.equal(e.input.snapshot.gear.pressed, false);
+  e.stepN(1); assert.equal(e.input.snapshot.gear.pressed, true); // fired before lh.input: pressed in the same step
+});

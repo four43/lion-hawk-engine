@@ -64,6 +64,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     mark: () => engine.events.seq,
     events: log, since: m => log.since(m),
     tap(id) { engine.ui.tap(id); return h; },
+    press(id) { engine.ui.press(id); return h; }, unpress(id) { engine.ui.release(id); return h; }, // #9
     fill(id, t) { engine.ui.fill(id, t); return h; },
     enabled: id => engine.ui.enabled(id), tryTap: id => engine.ui.tryTap(id), // #45
     command(type, data) { if (!engine.commands.handles(type)) throw new Error(`headless: no handler for command '${type}'`); engine.command(type, data); return h; },

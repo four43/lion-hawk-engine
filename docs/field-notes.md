@@ -21,7 +21,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Tractor Pickup's radial pair merge, Pig Pens' scene-scoped stick and gamepad.mapping open |
-| 9 | UI controls need more than a text label | Tractor Pickup, Rally | done for Rally's needs (2c-rally E4); rest open |
+| 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
 | 10 | `onRender` is a single slot | all | open |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | open |
 | 12 | Tests borrowed tools from a parent folder | engine | done |
@@ -133,7 +133,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Rally's menus are rich HTML.
 - **Engine change:** custom content in controls (icon or render hook), a `ui.hold` control on engine time, and keyboard/gamepad focus and activation of UI buttons.
 - **2c-rally plan:** E4 adds `ui.choice`, `ui.field` and slot adoption (#18); adopted elements keep the game's own content, which covers icon buttons. Still open: `ui.hold`, focus and gamepad activation of UI buttons.
-- **Status:** Rally's needs done (2c-rally E4); the rest stays open.
+- **Status:** done (2c E4 adoption; 2d D6 `ui.hold`; custom content = adopted markup): `u.hold({ id, label, seconds, action, when })` on engine time, `engine.ui.press/release` (recorded, replayable), `--lh-progress` and `data-lh-down` on the DOM button, Space/Enter on a focused hold; Tractor Pickup's SVG horn and ring ride on slot adoption. Still open: gamepad activation and focus navigation of UI buttons.
 
 ### 10. `onRender` is a single slot: all
 - **What happened:** a game calling `engine.onRender` after `boot` silently disables view-half frames.

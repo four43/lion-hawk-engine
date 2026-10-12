@@ -263,6 +263,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       tree: () => ui.tree(engine),
       enabled: id => ui.enabled(id, engine), // #45
       tryTap(id) { if (!ui.enabled(id, engine)) return false; engine.ui.tap(id); return true; },
+      press: id => rec ? recorded(o => o.push('press', id), () => ui.press(id, engine)) : ui.press(id, engine), // #9
+      release: id => rec ? recorded(o => o.push('release', id), () => ui.release(id)) : ui.release(id),
       tap: id => rec ? recorded(o => o.push('tap', id), () => ui.tap(id, engine)) : ui.tap(id, engine),
       fill: (id, t) => rec ? recorded(o => o.push('fill', id, String(t)), () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),
     },
@@ -273,6 +275,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     },
     state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };
+  schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
   schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });

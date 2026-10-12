@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEngine, createUiDom, defineGame } from '../src/index.view.js';
+import { createEngine, createUiDom, defineGame, actions, button } from '../src/index.view.js';
 import { dom } from './helpers/dom.mjs';
 import game from './fixtures/countdown.js';
 
@@ -75,4 +75,30 @@ test('2c: a created field renders as an input and Enter commits it', () => {
   assert.equal(f.getAttribute('aria-label'), 'Seed'); assert.equal(f.value, 's1');
   f.focus(); f.value = 'qq'; f.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.equal(engine.scene.state.seed, 'qq');
+});
+
+const hg = defineGame({ id: 'hold', start: 's', actions: actions({ gear: button() }), scenes: { s: {
+  enter(e, ctx) { ctx.state.fired = 0; ctx.state.on = true; },
+  ui(u) {
+    u.hold({ id: 'wake', label: 'Wake up', seconds: 0.5, action: e => e.scene.state.fired++, when: e => e.scene.state.on });
+    u.hold({ id: 'gear', label: 'Gear', seconds: 0.25, action: 'gear' });
+  },
+} } });
+test('2d: a hold presses on pointerdown, shows --lh-progress and data-lh-down, releases on pointerup; a click is not a tap', () => {
+  const { window, document } = dom(), errors = [], engine = createEngine(hg);
+  const ui = createUiDom(engine, { root: document.body, doc: document, errors }); ui.sync();
+  const b = document.querySelector('[data-testid="s.wake"]'); assert.equal(b.tagName, 'BUTTON');
+  b.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 1, bubbles: true }));
+  engine.stepN(15); ui.sync();
+  assert.equal(b.style.getPropertyValue('--lh-progress'), '0.5'); assert.ok(b.hasAttribute('data-lh-down'));
+  b.dispatchEvent(new window.PointerEvent('pointerup', { pointerId: 1, bubbles: true })); ui.sync();
+  assert.equal(b.style.getPropertyValue('--lh-progress'), '0'); assert.equal(b.hasAttribute('data-lh-down'), false);
+  b.click(); assert.deepEqual(errors, []); assert.equal(engine.scene.state.fired, 0);
+});
+test('2d: Space on a focused hold presses and releases', () => {
+  const { window, document } = dom(), engine = createEngine(hg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
+  const b = document.querySelector('[data-testid="s.gear"]');
+  b.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true })); engine.stepN(5); ui.sync();
+  assert.ok(b.hasAttribute('data-lh-down'));
+  b.dispatchEvent(new window.KeyboardEvent('keyup', { key: ' ', bubbles: true })); ui.sync(); assert.equal(b.hasAttribute('data-lh-down'), false);
 });
