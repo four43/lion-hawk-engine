@@ -232,3 +232,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 35. A fixed engine seed gives every visitor the same first track: Rally
 - **What happened:** `boot` seeds the engine with `?seed` or 1. Once Rally draws new seeds from `engine.rng('seeds')` (#24), every first visit would get the same track; today it's `Math.random()`.
 - **Change (2c-rally R5):** the browser entry passes a random `seed` to `boot` (view code may use `Math.random`); `?seed=` and `?lh-test` still fix it.
+
+### 36. Can't ask "is this overlay open or pending?": Rally (phase 2c R2)
+- **What happened:** results can be requested from several places in one step. A second `overlay('results')` throws "already open" at request time, which is the F2 ruling.
+- **Workaround:** Rally's `openOnce` swallows only that error.
+- **Engine change:** add `engine.isOpen(name, { pending: true })`, or an `overlay(name, args, { ifClosed: true })` option. Status: open.
+
+### 37. Policies have no per-handle state or rate: Rally (phase 2c R2; see #26)
+- **What happened:** Rally's autopilot runs at 60 Hz inside the 240 Hz sim and keeps controller state between calls.
+- **Workaround:** a per-engine WeakMap in Rally.
+- **Engine change:** `policy.every(n, fn)`, plus a per-handle scratch object passed as `fn(h, i, scratch)`. Status: open.
