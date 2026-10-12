@@ -293,5 +293,5 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Engine change:** a full-manual option, `driver.manual('all')` or `?lh-test=render`, that also stops automatic renders. Tests then call `render()` themselves. Status: open.
 
 ### 48. `expectTappable` only accepts test IDs: Rally (phase 2c R7)
-- **What happened:** Rally's pedals and HUD chips aren't registry controls (they're devices and plain DOM), so `mobile.mjs` keeps local box/hit checks for them. The research predicted `mobile.mjs` would shrink to about 80 lines; it is about 170.
+- **What happened:** Rally's pedals and HUD chips aren't registry controls (they're devices and plain DOM), so `mobile.mjs` keeps local box/hit checks for them. The research predicted `mobile.mjs` would shrink to about 80 lines; measured, it stayed at 197 lines (727 → 797 checks).
 - **Engine change:** `expectTappable`, `expectFitsSafeArea` and `expectNoOverlap` accept any selector or locator. Status: open.
