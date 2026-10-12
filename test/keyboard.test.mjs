@@ -59,11 +59,41 @@ test('F4: ctrl/meta/alt chords are ignored and not prevented', () => {
     assert.equal(ev.defaultPrevented, false); assert.equal(last().throttle, 0);
   }
 });
-test('F4: Enter and Space on a button are not prevented', () => {
-  const { window, document } = dom(); const engine = { input: { device() {}, clearDevice() {} } };
-  bindKeyboard(engine, { enter: 'ok', ' ': 'jump', w: ['t', 1] }, { target: window, doc: document });
+test('2c: a function ramp gets value, target, dt and one scratch object per axis (#14)', () => {
+  const seen = [];
+  const { kb, key, last } = setup({ ramps: { steer: (v, t, dt, st) => { seen.push(st); st.n = (st.n ?? 0) + 1; return v + t * dt; } } });
+  key('keydown', 'd'); kb.update(0.5); assert.equal(last().steer, 0.5);
+  kb.update(0.25); assert.equal(last().steer, 0.75);
+  key('keyup', 'd'); kb.update(0.1); assert.equal(last().steer, 0.75); // still called with target 0
+  assert.equal(seen.length, 3); assert.equal(seen[0], seen[2]); assert.equal(seen[2].n, 3);
+});
+test('2c: shift+<key> wins while Shift is held; keyup by code releases it (#14)', () => {
+  const { window, document } = dom(); const calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const kb = bindKeyboard(engine, { r: 'reset', 'shift+r': 'resetAll', '`': 'debug' }, { target: window, doc: document });
+  const ev = (type, o) => document.body.dispatchEvent(new window.KeyboardEvent(type, { bubbles: true, cancelable: true, ...o }));
+  ev('keydown', { key: 'R', code: 'KeyR', shiftKey: true }); kb.update(0.016);
+  assert.deepEqual(calls.at(-1), { reset: false, resetAll: true, debug: false });
+  ev('keyup', { key: 'r', code: 'KeyR' }); kb.update(0.016);
+  assert.deepEqual(calls.at(-1), { reset: false, resetAll: false, debug: false });
+  ev('keydown', { key: 'r', code: 'KeyR' }); kb.update(0.016); assert.equal(calls.at(-1).reset, true);
+  ev('keyup', { key: 'r', code: 'KeyR' });
+  ev('keydown', { key: '`', code: 'Backquote' }); kb.update(0.016); assert.equal(calls.at(-1).debug, true);
+  ev('keyup', { key: '~', code: 'Backquote', shiftKey: true }); kb.update(0.016); assert.equal(calls.at(-1).debug, false);
+});
+test('2c: a key tapped between two updates counts for one update (#13)', () => {
+  const { kb, key, last } = setup();
+  key('keydown', 'h'); key('keyup', 'h'); kb.update(0.016); assert.equal(last().horn, true);
+  kb.update(0.016); assert.equal(last().horn, false);
+});
+test('2c (changed F4): Enter and Space on a focused button are left to the button (#15)', () => {
+  const { window, document } = dom(); const calls = [];
+  const engine = { input: { device: p => calls.push({ ...p }), clearDevice() {} } };
+  const kb = bindKeyboard(engine, { enter: 'ok', ' ': 'jump', w: ['t', 1] }, { target: window, doc: document });
   const b = document.createElement('button'); document.body.appendChild(b);
   const fire = (el, key) => { const ev = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; };
   assert.equal(fire(b, 'Enter'), false); assert.equal(fire(b, ' '), false);
-  assert.equal(fire(document.body, 'Enter'), true); assert.equal(fire(document.body, ' '), true); assert.equal(fire(b, 'w'), true);
+  kb.update(0.016); assert.equal(calls.at(-1).ok, false); assert.equal(calls.at(-1).jump, false);
+  assert.equal(fire(document.body, 'Enter'), true); assert.equal(fire(b, 'w'), true);
+  kb.update(0.016); assert.equal(calls.at(-1).ok, true); assert.equal(calls.at(-1).t, 1);
 });

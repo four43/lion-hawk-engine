@@ -54,3 +54,14 @@ test('device sources merge: largest |axis| wins, buttons OR, clearDevice drops a
   inp.clearDevice('keyboard'); inp.clearDevice('touch'); s = inp.apply(); assert.equal(s.steer, 0.4); assert.equal(s.horn.down, false);
   inp.set({ steer: 0 }); assert.equal(inp.apply().steer, 0);
 });
+
+test('2c: a button set and cleared between two applies is latched for one step (#13)', () => {
+  const inp = createInput(schema);
+  inp.device({ horn: true }, 'keyboard'); inp.device({ horn: false }, 'keyboard');
+  let s = inp.apply(); assert.equal(s.horn.pressed, true); assert.equal(s.horn.down, true);
+  s = inp.apply(); assert.equal(s.horn.released, true); assert.equal(s.horn.down, false);
+  inp.device({ horn: true }, 'pad'); inp.device({ horn: false }, 'pad'); inp.hold({ horn: false });
+  assert.equal(inp.apply().horn.down, false); // hold wins over the latch
+  inp.release(); inp.device({ horn: true }, 'pad'); inp.device({ horn: false }, 'pad'); inp.set({ horn: false });
+  assert.equal(inp.apply().horn.down, false); // so does set
+});

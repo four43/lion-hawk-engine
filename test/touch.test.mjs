@@ -53,10 +53,10 @@ test('hold button is true while pressed, false after lostpointercapture', () => 
   const h = bindHold(s.engine, el, 'horn');
   s.ev(el, 'pointerdown', 5); assert.equal(s.v().horn.down, true); assert.equal(cap, 5);
   s.ev(el, 'lostpointercapture', 5); assert.equal(s.v().horn.down, false);
-  s.ev(el, 'pointerdown', 5); s.ev(el, 'pointercancel', 5); assert.equal(s.v().horn.down, false);
-  s.ev(el, 'pointerdown', 5); s.ev(el, 'pointerup', 5); assert.equal(s.v().horn.down, false);
+  s.ev(el, 'pointerdown', 5); s.v(); s.ev(el, 'pointercancel', 5); assert.equal(s.v().horn.down, false);
+  s.ev(el, 'pointerdown', 5); s.v(); s.ev(el, 'pointerup', 5); assert.equal(s.v().horn.down, false);
   const cm = new s.window.Event('contextmenu', { cancelable: true }); el.dispatchEvent(cm); assert.equal(cm.defaultPrevented, true);
-  s.ev(el, 'pointerdown', 5); h.dispose(); assert.equal(s.v().horn.down, false);
+  s.ev(el, 'pointerdown', 5); s.v(); h.dispose(); assert.equal(s.v().horn.down, false);
 });
 test('hidden visibility and pagehide release both', () => {
   const s = setup(); stick(s); const el = s.document.createElement('div'); s.document.body.appendChild(el); bindHold(s.engine, el, 'horn');
@@ -87,7 +87,7 @@ test('a div hold inside root presses and does not start the stick', () => {
 });
 test('hold ignores a second pointer', () => {
   const s = setup(); const el = s.document.createElement('div'); s.document.body.appendChild(el); bindHold(s.engine, el, 'horn');
-  s.ev(el, 'pointerdown', 4); s.ev(el, 'pointerdown', 5); s.ev(el, 'pointerup', 4); assert.equal(s.v().horn.down, false);
+  s.ev(el, 'pointerdown', 4); s.ev(el, 'pointerdown', 5); s.v(); s.ev(el, 'pointerup', 4); assert.equal(s.v().horn.down, false);
 });
 
 test('F2: bindHold on an axis action writes 1 while held, 0 after; value overrides', () => {
