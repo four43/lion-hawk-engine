@@ -59,6 +59,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [] } = {}) 
     events: log, since: m => log.since(m),
     tap(id) { engine.ui.tap(id); return h; },
     fill(id, t) { engine.ui.fill(id, t); return h; },
+    command(type, data) { if (!engine.commands.handles(type)) throw new Error(`headless: no handler for command '${type}'`); engine.command(type, data); return h; },
     go(n, a) { engine.go(n, a); return h; },
     overlay(n, a) { engine.overlay(n, a); return h; },
     close(n) { engine.close(n); return h; },

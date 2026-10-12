@@ -101,6 +101,7 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     scene: () => ev(() => { const s = window.engine.scene; return { name: s.name, args: s.args, overlays: [...s.overlays] }; }),
     go: (name, args) => ev(([n, a]) => window.engine.go(n, a), [name, args]),
     jump: (scene, preset, opts, args) => ev(a => window.engine.jump(...a), [scene, preset, opts, args]),
+    command: (type, data) => ev(([t, d]) => { window.engine.command(t, d); window.engine.render(0); }, [type, data]), // #5
     input: {
       hold: p => ev(p => window.engine.input.hold(p), p),
       release: (...n) => ev(n => window.engine.input.release(...n), n),

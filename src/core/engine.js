@@ -15,10 +15,11 @@ export function defineGame(spec) {
   if (!spec.scenes || !Object.keys(spec.scenes).length) fail('scenes must not be empty');
   if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
+  for (const [k, f] of Object.entries(spec.commands ?? {})) if (typeof f !== 'function') fail(`commands.${k} must be a function`);
   for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
-  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {} });
+  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands: spec.commands ?? {} });
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args } = {}) {
@@ -39,8 +40,14 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
   const enter = (name, a) => {
-    const s = def(name), scoped = [], ctx = { name, id: nextId++, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
-    const entry = { s, ctx, scoped };
+    const s = def(name), scoped = [], cmds = new Map(), ctx = { name, id: nextId++, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
+    // #5: scene-scoped command handlers live on the stack entry, so they leave with the scene (exit or a rolled-back enter)
+    ctx.command = (type, fn) => {
+      if (typeof fn !== 'function') throw new Error(`engine: command '${type}' handler must be a function`);
+      let list = cmds.get(type); if (!list) cmds.set(type, list = []); list.push(fn);
+      return () => { const i = list.indexOf(fn); if (i !== -1) list.splice(i, 1); };
+    };
+    const entry = { s, ctx, scoped, cmds };
     stack.push(entry); sync();
     try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }
     catch (err) { const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
@@ -67,6 +74,29 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
       }
     } catch (err) { queue.length = 0; throw err; } finally { draining = false; }
   };
+  // #5: commands, the third input layer. Queued in FIFO order, delivered by lh.commands at the next step's input.apply:
+  // the game's handler first (never paused), then each open scene bottom-up that handles the type and is not covered by a
+  // pausing overlay. Only the commands queued before delivery starts are delivered (a handler's command waits a step).
+  const cmds = []; let dropped = 0;
+  const handles = type => Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.length > 0);
+  const deliver = c => {
+    let ran = false; const gf = Object.hasOwn(game.commands, c.type) ? game.commands[c.type] : undefined;
+    if (gf) { ran = true; gf(engine, c.data); }
+    const p = pausedFrom();
+    for (let i = 0; i < stack.length; i++) {
+      if (p > 0 && i < p) continue;
+      const list = stack[i].cmds.get(c.type); if (!list) continue;
+      for (let j = 0; j < list.length; j++) { ran = true; list[j](engine, c.data, stack[i].ctx); }
+    }
+    if (!ran) dropped++;
+  };
+  const deliverAll = () => {
+    const n = cmds.length; if (!n) return;
+    let k = 0;
+    try { while (k < n) deliver(cmds[k++]); } // a throwing handler's command counts as delivered; the rest stay queued
+    finally { cmds.copyWithin(0, k); cmds.length -= k; }
+  };
+  const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
     inStep = true; let failure = null;
@@ -97,7 +127,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
   const doOverlay = (name, a) => { def(name); if (isOpen(name)) alreadyOpen(name); enter(name, a); events.emit('overlay', { name, open: true }); };
   const doClose = name => { const i = stack.findIndex((o, k) => k > 0 && o.ctx.name === name); if (i > 0) { exit(i); events.emit('overlay', { name, open: false }); } };
   const engine = {
-    game, seed: base.seed, events, input, loop,
+    game, seed: base.seed, events, input, loop, commands,
     time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
@@ -114,6 +144,10 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
       if (!p) throw new Error(`engine: no preset '${preset}' in '${name}'`);
       request({ go: true, name, run: () => { doGo(name, a); p(engine, opts, stack[0].ctx); } }); return engine;
     },
+    command(type, data = {}) {
+      if (typeof type !== 'string' || !type) throw new Error('engine: command type must be a non-empty string');
+      cmds.push({ type, data }); return engine;
+    },
     stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
     onRender(fn) { render = fn; },
     render(alpha) { render(alpha); },
@@ -121,6 +155,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args } = {}) 
     state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };
   schedule.add('lh.input', () => input.apply(), { stage: 'input.apply' });
+  schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   sync(); syncTime();

@@ -17,7 +17,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
 | 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Tractor Pickup, Pig Pens open |
-| 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | open |
+| 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | open (sim half done in 2d D1; pointer helper in D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done for Rally (2c-rally R2, R5; S-6 stays open) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs (2c-rally E1–E3); rest open |
@@ -98,6 +98,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - In Pig Pens, tapping a pig, drags, hose aim, toss and gate taps all carry world x/z.
   - In Tractor Pickup, network claims and host answers are messages, not axes or buttons.
 - **Engine change:** a recorded command channel (`engine.command(type, data)`), applied at the step boundary and included in replays (T-9).
+- **Status:** open (sim half done in 2d D1; pointer helper in D3).
 
 ### 6. Async loading vs synchronous scene `enter`: Rally, Tractor Pickup
 - **What happened:** `RAPIER.init()` and Rally's `await loadTrack()` are async, while scene `enter` is synchronous.

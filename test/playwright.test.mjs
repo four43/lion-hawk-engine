@@ -48,3 +48,7 @@ test('2c: game.fill types into the control and commits with Enter', async () => 
   await g.fill('title.seed', 'abc');
   assert.deepEqual(calls, [['locator', '[data-testid="title.seed"]'], ['fill', 'abc'], ['press', 'Enter']]);
 });
+test('2d: game.command issues the command in the page', async () => {
+  let got; const g = fake(async (fn, a) => { got = a; });
+  await g.command('tap', { x: 1 }); assert.deepEqual(got, ['tap', { x: 1 }]);
+});
