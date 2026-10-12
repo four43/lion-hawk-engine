@@ -32,6 +32,28 @@ As 2f's Global Constraints (paths, branches, commits with no attribution, explic
 
 ---
 
+## Deltas from phase 2f (binding; from the 2f final review)
+
+These override any task text below that disagrees. Source: `docs/plans/2026-10-12-phase-2f-notes.md`.
+
+- **G1 devices:**
+  - `bindGamepad(engine, bindings, { getGamepads, source, map })`. `map` is an option on all three devices, not a key of the bindings object.
+  - Use `deadZone: 0` with `map.radial: 0.15` on the pad. The stick's `deadZone: 0.1` is already radial.
+  - Tractor's map `to` uses `PILOT.revCone` for `goBack`.
+- **G1 others3d:** draw the other tractors at `time.wall + alpha · 1000 / hz` (or the rAF time), not at `time.wall` alone, which is the last step's stamp.
+- **G2 slot bar:** rebuild it from state on enter, on `built`, and on a scene-id change. This is required, not a judgment call, because the `riders` and `barn` presets emit no `land` events.
+- **G3:**
+  - `show.done` must always carry the `gen` from the `show` event; an ack without `gen` skips the stale-farm check.
+  - `stickers.clear` also closes the parent half.
+- **G4:** the hold durations are already `ui.hold({ wall: true })` in the sim; the view only adopts the markup.
+- **G5:**
+  - Bind the port only after the room is joined and the farm is the main scene; otherwise `net.open` is warned and dropped.
+  - The sync exists only after the next step, so the panel's getter tolerates `null`.
+  - `stopHosting()` must not leave the room before the step that drains `net.close`'s leave; call `port.close()` after that step or on `closed`.
+  - The G5 test gives the guest different args from the host, so the `seed === 21` assertion proves something.
+- **Until G7:** any old-path change in `main.js` (trip cues, reward, bedtime, `stepSounds`, build) is mirrored in `game/flow.js` and `game/farm.js`.
+- **Tapes:** no assertions on browser-recorded tapes. The sim reads `time.wall`, so only headless and `mp()` tapes replay exactly (field notes #92, #98).
+
 ## File structure
 
 **Engine**
