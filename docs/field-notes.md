@@ -250,3 +250,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 39. A control can't both trigger an action and be gated: Rally (phase 2c R2)
 - **What happened:** the Pause chip opens the overlay directly. A pause key and a chip tap in the same frame then open and close pause. Routing the chip through the `pause` action conflicts with the `when` gate on overlay state.
 - **Engine change:** let `u.button({ action: 'pause', when })` press the action with the gate evaluated at tap time, and document "controls press actions; scenes own transitions". Status: open.
+
+### 40. Determinism makes some comparisons meaningless: Rally (phase 2c R4)
+- **What happened:** with the engine's step-exact policies, both runs of the "best kept only if faster" test finish in exactly 167.400 s. That check can no longer tell `min(a, b)` from `a`.
+  - Before the port, the old harness's 60 Hz autopilot phase happened to differ between the two runs: 167.72 s vs 167.633 s.
+  - The old harness was also phase-sensitive: shifting the phase gave 167.49–168.41 s.
+- **Engine change:**
+  - `policy.every(n, fn, { phase })` (see #37), so tests can vary phase explicitly.
+  - Guidance: when a test compares two runs, perturb one of them on purpose.
+- **Game change:** final-pass fix to Rally `test/game.mjs`: start run 2 at a different autopilot phase. Status: open.
