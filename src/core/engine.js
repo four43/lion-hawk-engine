@@ -22,12 +22,13 @@ export function defineGame(spec) {
   return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands: spec.commands ?? {} });
 }
 
-export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false } = {}) {
+export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0 } = {}) {
+  if (typeof wall0 !== 'number' || !Number.isFinite(wall0)) throw new Error('engine: wall0 must be a finite number');
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
-  let step = 0, renderFns = []; // [R-7] additive render slots, copy-on-write (#10)
-  const streams = new Map(), time = { step: 0, sim: 0, frames: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
+  let step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
+  const streams = new Map(), time = { step: 0, sim: 0, frames: 0, wall: wall0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
   let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
   // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
   // so `engine.scene.overlays` stays the same array across steps.
@@ -199,8 +200,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };
   const request = item => { queue.push(item); if (!inStep && !draining && !booting) drain(); };
-  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: rendered, step(dt) {
+  const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: rendered, step(dt, stamp) {
     inStep = stepping = true; let failure = null;
+    time.wall = stamp === undefined ? time.wall + 1000 / game.sim.hz : stamp; // N-4, M-69: the injected clock; virtual when stepped by hand
     try {
       if (acks === 'steps') present(); // [S-6] every step is a presented frame
       schedule.run('input.apply', engine, dt);
@@ -213,6 +215,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     try { drain(); } catch (err) { failure ??= err; }
     try { schedule.run('events.flush', engine, dt); } catch (err) { failure ??= err; }
     stepping = false; step++; syncTime();
+    try { const l = stepFns; for (let i = 0; i < l.length; i++) l[i](engine); } catch (err) { failure ??= err; } // N-4: after the flush and the counter
     if (failure) throw failure;
   } });
   // would `name` still be open once everything queued so far has applied? (replays the pending requests over the stack)
@@ -275,7 +278,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     command: (type, data = {}) => rec ? recorded(o => o.push('command', type, json(data, 'command data')), o => issue(type, o ? copy(o[2]) : data)) : issue(type, json(data, 'command data')),
     // #36: `pending` projects over queued requests (what the duplicate check sees); an unknown scene throws
     isOpen: (name, { pending = false } = {}) => { def(name); return pending ? projectedOpen(name) : isOpen(name); },
-    stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: s => loop.frame(s),
+    stepN: n => loop.stepN(n), advance: s => loop.advance(s), frame: (s, now) => loop.frame(s, now),
+    onStep(fn) { stepFns = [...stepFns, fn]; return () => { stepFns = stepFns.filter(f => f !== fn); }; }, // N-4
     onRender(fn) { renderFns = [...renderFns, fn]; return () => { renderFns = renderFns.filter(f => f !== fn); }; },
     render(alpha) { rendered(alpha); },
     ui: {
@@ -290,7 +294,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     // [T-9] the recorded tape: start options plus, per step, the external ops and input changes (a deep copy)
     tape() {
       if (!rec) throw new Error('engine: not recording');
-      return copy({ v: 1, game: game.id, seed: base.seed, scene, args, hz: game.sim.hz, log: rec.log });
+      return copy({ v: 1, game: game.id, seed: base.seed, scene, args, hz: game.sim.hz, wall0, log: rec.log });
     },
     state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
   };

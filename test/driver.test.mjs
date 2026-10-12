@@ -103,3 +103,8 @@ test('2d: manual("all") stops renders and steps; devices still update (#47)', ()
   engine.onRender(() => order.push('render')); driver.manual('all'); driver.start(); const s0 = engine.time.step;
   tick(0); tick(100); assert.deepEqual(order, ['dev', 'dev']); assert.equal(engine.time.step, s0); assert.equal(driver.manual(), 'all');
 });
+
+test('2f: the driver stamps steps with the rAF timestamp (N-4)', () => {
+  const { tick, engine, driver } = setup(); driver.start(); tick(5000);
+  tick(5000 + 1000 / 60 * 2 + 1e-6); assert.ok(Math.abs(engine.time.wall - (5000 + 1000 / 60 * 2 + 1e-6)) < 1e-3);
+});

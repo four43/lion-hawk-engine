@@ -37,3 +37,9 @@ test('reset clears the accumulator', () => {
   const { loop } = make();
   loop.frame(1 / 120); loop.reset(); assert.equal(loop.alpha, 0);
 });
+
+test('2f: frame(seconds, now) stamps each step; without now the step gets no stamp (N-4)', () => {
+  const stamps = []; const loop = createLoop({ step: (dt, s) => stamps.push(s) });
+  loop.frame(2 / 60, 1000); assert.deepEqual(stamps.map(x => +x.toFixed(3)), [983.333, 1000]);
+  loop.frame(1 / 60); loop.stepN(1); assert.deepEqual(stamps.slice(2), [undefined, undefined]);
+});

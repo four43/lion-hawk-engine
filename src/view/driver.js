@@ -18,7 +18,7 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
       const ddt = Math.min(dt, engine.game.sim.maxFrame); // #44: a device never sees more than the loop will step
       for (const d of devices) d.update?.(ddt);
       if (manual === 'all') return; // no step, no render, so no frame ack
-      if (manual) engine.render(engine.loop.alpha); else engine.frame(dt);
+      if (manual) engine.render(engine.loop.alpha); else engine.frame(dt, ts);
       rendered = true;
     } catch (err) {
       if (onError) { try { onError(err); } catch { /* the reporter must not kill the loop either */ } } else console.error(err);

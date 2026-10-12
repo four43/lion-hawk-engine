@@ -16,8 +16,8 @@ export function eventList(arr) {
   });
 }
 
-export function headless(game, { seed = 1, scene, args, invariants = [], record = false } = {}) {
-  const engine = createEngine(game, { seed, scene, args, record }), hz = game.sim.hz;
+export function headless(game, { seed = 1, scene, args, invariants = [], record = false, wall0 = 0 } = {}) {
+  const engine = createEngine(game, { seed, scene, args, record, wall0 }), hz = game.sim.hz;
   const scratch = new Map(); // [T-2] one persistent object per (handle, policy function) (#37)
   const sc = f => { let o = scratch.get(f); if (!o) scratch.set(f, o = {}); return o; };
   let dbg; // h.debug, lazily

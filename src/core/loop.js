@@ -4,13 +4,14 @@ const EPS = 1e-9;
 export function createLoop({ hz = 60, maxCatchUp = 3, maxFrame = 0.25, step, render = () => {} }) {
   const dt = 1 / hz, stats = { frames: 0, steps: 0, clamped: 0, lastSteps: 0 };
   let acc = 0;
-  const run = cap => { let n = 0; while (acc >= dt - EPS && n < cap) { step(dt); acc -= dt; n++; } if (acc < 0) acc = 0; stats.steps += n; return n; };
+  const run = (cap, now) => { let n = 0; while (acc >= dt - EPS && n < cap) { step(dt, now === undefined ? undefined : now - (acc - dt) * 1000); acc -= dt; n++; } if (acc < 0) acc = 0; stats.steps += n; return n; };
   return {
     dt, stats,
     get alpha() { return acc / dt; },
-    frame(seconds) {
+    // N-4, M-69: with `now` (ms) each step is stamped now - (acc - dt)*1000, steps exactly 1000/hz apart; without it the step gets no stamp
+    frame(seconds, now) {
       acc += Math.min(Math.max(seconds, 0), maxFrame);
-      const n = run(maxCatchUp);
+      const n = run(maxCatchUp, now);
       if (acc >= dt - EPS) { stats.clamped++; acc %= dt; } // R-2: drop what the cap could not run
       stats.frames++; stats.lastSteps = n; render(acc / dt);
       return n;

@@ -6,7 +6,7 @@ export function replay(game, tape, { invariants } = {}) {
   if (tape?.v !== 1) throw new Error('replay: unknown tape version');
   if (tape.game !== game.id) throw new Error(`replay: tape is for '${tape.game}'`);
   if (tape.hz !== game.sim.hz) throw new Error(`replay: tape hz differs (tape ${tape.hz}, game ${game.sim.hz})`);
-  const h = headless(game, { seed: tape.seed, scene: tape.scene, args: tape.args, invariants }), e = h.engine;
+  const h = headless(game, { seed: tape.seed, scene: tape.scene, args: tape.args, invariants, wall0: tape.wall0 ?? 0 }), e = h.engine;
   const at = new Map(tape.log.map(x => [x.step, x])), sums = new Map(tape.sums ?? []);
   const end = tape.end ?? (tape.log.length ? tape.log[tape.log.length - 1].step : 0);
   const und = x => x ?? undefined; // the tape stores a missing args/opts as null

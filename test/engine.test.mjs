@@ -27,7 +27,7 @@ test('countdown emits on whole seconds; events carry their step; time advances',
   const e = createEngine(game, { scene: 'race' });
   e.advance(3);
   assert.deepEqual(e.events.since(0).map(x => `${x.type}${x.n ?? ''}@${x.step}`), ['count2@59', 'count1@119', 'count0@179', 'go@179']);
-  assert.deepEqual(e.time, { step: 180, sim: 3, frames: 180 });
+  assert.ok(Math.abs(e.time.wall - 3000) < 1e-6); assert.deepEqual({ ...e.time, wall: 0 }, { step: 180, sim: 3, frames: 180, wall: 0 });
 });
 test('a pausing overlay freezes the main scene; string actions press for one step', () => {
   const e = createEngine(game, { scene: 'race' });
@@ -74,7 +74,7 @@ test('scene and time are persistent live views', () => {
   assert.equal(e.scene, sc); assert.equal(e.time, tm);
   e.go('race'); assert.equal(sc.name, 'race'); assert.equal(sc.state, e.scene.state);
   e.overlay('pause'); assert.deepEqual(sc.overlays, ['pause']);
-  e.stepN(60); assert.deepEqual(tm, { step: 60, sim: 1, frames: 60 });
+  e.stepN(60); assert.ok(Math.abs(tm.wall - 1000) < 1e-6); assert.deepEqual({ ...tm, wall: 0 }, { step: 60, sim: 1, frames: 60, wall: 0 });
   e.close('pause'); assert.deepEqual(sc.overlays, []);
 });
 
@@ -322,4 +322,21 @@ test('2d: onRender is additive and returns an unsubscribe (#10)', () => {
   const a = e.onRender(x => got.push(['a', x])); e.onRender(x => got.push(['b', x]));
   e.render(0.5); a(); a(); e.render(0.25);
   assert.deepEqual(got, [['a', 0.5], ['b', 0.5], ['b', 0.25]]);
+});
+
+test('2f: time.wall stamps each step: virtual when stepped by hand, from the frame time in a frame (N-4, M-69)', () => {
+  const g = defineGame({ id: 'clk', start: 's', scenes: { s: {} } }), seen = [];
+  const e = createEngine(g, { wall0: 1000 }); e.system('rec', en => seen.push(en.time.wall), { stage: 'input.apply' });
+  e.stepN(3); assert.deepEqual(seen.map(x => +x.toFixed(3)), [1016.667, 1033.333, 1050]);
+  const f = createEngine(g, { acks: 'frames' }), w = []; f.system('rec', en => w.push(en.time.wall), { stage: 'input.apply' });
+  f.frame(2.5 / 60, 5000); // two steps fit; half a step is still owed after them
+  assert.deepEqual(w.map(x => +x.toFixed(3)), [4975, 4991.667]);
+  f.frame(1 / 60, 5000 + 50 / 3); assert.equal(+w[2].toFixed(3), 5008.333); // exactly one step after the last
+  f.stepN(1); assert.equal(+w[3].toFixed(3), 5025);
+});
+test('2f: onStep runs after each step, once events are flushed; it unsubscribes', () => {
+  const g = defineGame({ id: 'os', start: 's', scenes: { s: { step(e) { e.emit('tick'); } } } }), e = createEngine(g), seen = [];
+  e.events.on(x => seen.push(x.type));
+  const off = e.onStep(en => seen.push(`after:${en.time.step}`)); e.stepN(2); off(); e.stepN(1);
+  assert.deepEqual(seen, ['tick', 'after:1', 'tick', 'after:2', 'tick']);
 });

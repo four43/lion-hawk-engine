@@ -67,3 +67,10 @@ test('2d: hold presses are recorded and replayed', () => {
   assert.equal(h.scene.state.fired, 1); assert.equal(replay(hg, h.tape()).scene.state.fired, 1);
   assert.deepEqual(h.tape().log[0].ops, [['press', 's.wake']]);
 });
+
+test('2f: a tape keeps wall0 and the replay starts from it', () => {
+  const g = defineGame({ id: 'w0', start: 's', scenes: { s: { step(e, dt, c) { c.state.t = e.time.wall; } } }, state: e => ({ t: e.scene.state.t ?? 0 }) });
+  const h = headless(g, { record: true, wall0: 5000 }); h.step(120);
+  const tape = h.tape(); assert.equal(tape.wall0, 5000);
+  assert.equal(replay(g, tape).state().t, h.state().t);
+});

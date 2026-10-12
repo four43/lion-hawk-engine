@@ -88,7 +88,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 73 | view.project returns no depth / on-screen flag | Pig Pens | planned (2f T-E10) |
 | 74 | openGame has no init-script hook | Pig Pens | planned (2f T-E10) |
 | 75 | Network messages are handled on arrival, between frames | Tractor Pickup | planned (2f T-E6, T6, T7) |
-| 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | planned (2f T-E3) |
+| 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
 | 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | planned (2f T-E5, T6) |
 | 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | planned (2f T-E4, T-E6, T8) |
 | 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | planned (2f T4, 2g G3) |
@@ -508,7 +508,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 76. Two clocks in the net code: wall time and the frame's step stamp: Tractor Pickup (phase 2f plan)
 - **What happened:** the syncs read `clock()` (`performance.now`) for rate limits, the silence watchdog, horn and regrow limits, trust following and the barn hold, and take `now` (the frame time less the time still owed, M-69) for sending and interpolation. The engine had neither: its `time.sim` stops while the tab is hidden, which would make a returning host's stamps lag its guests' by the hidden time and freeze their interpolation for tens of seconds.
 - **Change:** `engine.time.wall`, the stamp of each step on an injected clock (N-4): the browser driver passes the rAF timestamp and each step is stamped as M-69 does; headless steps are `1000/hz` apart from `wall0`. Messages carry their arrival time as `at`; the syncs' clock is `at` while a message is handled and `time.wall` otherwise.
-- **Status:** planned (2f T-E3).
+- **Status:** done (2f T-E3).
 
 ### 77. The player number is game state; the transport knows only peer ids: Tractor Pickup (phase 2f plan)
 - **What happened:** the reserved source key on a network command can only be the transport's peer id: the host assigns player numbers (`byPeer`), and a guest's frame names its own sender, which the host overwrites before decoding (`setUint8(1, n)`, M-50).
