@@ -126,3 +126,25 @@ test('2d: a released adopted choice loses aria-pressed (E4 minor)', () => {
   assert.equal(slot.getAttribute('aria-pressed'), 'true');
   engine.go('t'); ui.sync(); assert.equal(slot.hasAttribute('aria-pressed'), false); assert.equal(slot.disabled, true);
 });
+
+const dn = (window, el, id, extra = {}) => el.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: id, bubbles: true, ...extra }));
+const up = (window, el, id) => el.dispatchEvent(new window.PointerEvent('pointerup', { pointerId: id, bubbles: true }));
+test('2d: holds release on blur, pagehide and a hidden tab (D5-D6 minor)', () => {
+  const { window, document } = dom(), engine = createEngine(hg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
+  const b = document.querySelector('[data-testid="s.wake"]'), pressed = () => engine.ui.tree().find(c => c.id === 's.wake').pressed;
+  dn(window, b, 1); assert.equal(pressed(), true); window.dispatchEvent(new window.Event('blur')); assert.equal(pressed(), false);
+  dn(window, b, 2); window.dispatchEvent(new window.Event('pagehide')); assert.equal(pressed(), false);
+  b.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true })); assert.equal(pressed(), true);
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  document.dispatchEvent(new window.Event('visibilitychange')); assert.equal(pressed(), false);
+  b.dispatchEvent(new window.KeyboardEvent('keyup', { key: ' ', bubbles: true })); assert.equal(pressed(), false); // the stale keyup is nothing
+});
+test('2d: a hold is released only by its own key, only by the primary button, and by the last pointer (D5-D6 minors)', () => {
+  const { window, document } = dom(), engine = createEngine(hg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
+  const b = document.querySelector('[data-testid="s.wake"]'), pressed = () => engine.ui.tree().find(c => c.id === 's.wake').pressed;
+  const key = (type, k) => b.dispatchEvent(new window.KeyboardEvent(type, { key: k, bubbles: true }));
+  key('keydown', ' '); key('keyup', 'Enter'); assert.equal(pressed(), true); key('keyup', ' '); assert.equal(pressed(), false);
+  dn(window, b, 1, { button: 2 }); assert.equal(pressed(), false); // right button: not a press
+  dn(window, b, 2, { button: 0 }); dn(window, b, 3, { button: 0 }); up(window, b, 2); assert.equal(pressed(), true); up(window, b, 3); assert.equal(pressed(), false);
+  dn(window, b, 4); key('keydown', ' '); key('keyup', ' '); assert.equal(pressed(), true); up(window, b, 4); assert.equal(pressed(), false);
+});

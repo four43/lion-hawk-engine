@@ -148,3 +148,15 @@ test('2d fix: a view half that waits in reaction to a build delays `then` until 
     app.dispose();
   }
 });
+
+test('2d: a pending view.focus is dropped on a scene change or after a few renders (D5 minor)', () => {
+  const halves = defineView({ scenes: { title: { enter(e, v) { v.focus('race.pause'); } } } });
+  const { app, document } = run('?lh-test', halves);
+  app.hook.go('race'); app.engine.scene.state.running = true; app.hook.render(0); // the scene changed before the control was enabled
+  assert.notEqual(document.activeElement?.getAttribute('data-testid'), 'race.pause');
+  const h2 = defineView({ scenes: { race: { enter(e, v) { v.focus('race.pause'); } } } });
+  const r = run('?lh-test', h2); r.app.hook.go('race');
+  for (let i = 0; i < 8; i++) r.app.hook.render(0);
+  r.app.engine.scene.state.running = true; r.app.hook.render(0);
+  assert.notEqual(r.document.activeElement?.getAttribute('data-testid'), 'race.pause'); // gave up after a few renders
+});

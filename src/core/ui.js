@@ -1,7 +1,7 @@
 // U-1: scenes declare their controls; the browser renders them as real buttons with data-testid="<scene>.<id>",
 // and headless tests tap them through this registry (T-5).
-export function createUi({ onAction, coveredBy = () => undefined }) {
-  const controls = new Map(), active = []; // active: the pressed holds (an array, so advancing allocates nothing)
+export function createUi({ onAction, coveredBy = () => undefined, isAction = () => true }) {
+  const controls = new Map(), active = [], snap = []; // active: the pressed holds; snap: advance()'s reused copy (no per-step allocation)
   const add = (scene, role, spec) => {
     const id = `${scene}.${spec.id}`;
     if (controls.has(id)) throw new Error(`ui: duplicate control '${id}'`);
@@ -22,7 +22,11 @@ export function createUi({ onAction, coveredBy = () => undefined }) {
       choice: spec => { for (const o of spec.options) add(scene, 'choice', { id: `${spec.id}.${String(o.value)}`, label: o.label, value: o.value, group: `${scene}.${spec.id}`, get: spec.get, set: spec.set, when: spec.when }); },
       field: spec => add(scene, 'textbox', spec),
       // #9: hold-to-fire on engine time; `action` is an action name (pressed that step) or fn(ctx)
-      hold: spec => { if (!(spec.seconds > 0)) throw new Error(`ui: hold '${spec.id}' needs seconds > 0`); add(scene, 'hold', spec); },
+      hold: spec => {
+        if (!(spec.seconds > 0)) throw new Error(`ui: hold '${spec.id}' needs seconds > 0`);
+        if (typeof spec.action !== 'function' && !isAction(spec.action)) throw new Error(`ui: hold '${spec.id}' action must be a function or a known action name`);
+        add(scene, 'hold', spec);
+      },
     }),
     clear(scene) {
       for (const [id, c] of controls) if (c.scene === scene) { controls.delete(id); if (c.pressed) { c.pressed = false; active.splice(active.indexOf(c), 1); } }
@@ -55,10 +59,12 @@ export function createUi({ onAction, coveredBy = () => undefined }) {
       c.pressed = false; c.held = 0; c.fired = false; active.splice(active.indexOf(c), 1);
     },
     // each step (lh.ui): pressed holds gain dt and fire once; one that vanished, got covered or disabled is cancelled
+    // Iterates a snapshot: an action may release or clear other holds (splicing `active`) without a hold being advanced twice or skipped.
     advance(dt, ctx) {
-      for (let i = active.length - 1; i >= 0; i--) {
-        const c = active[i]; if (!c || !c.pressed) continue;
-        if (controls.get(c.id) !== c || coveredBy(c.scene) || (c.when && !c.when(ctx))) { c.pressed = false; c.held = 0; c.fired = false; active.splice(i, 1); continue; }
+      snap.length = 0; for (let i = 0; i < active.length; i++) snap.push(active[i]);
+      for (let i = snap.length - 1; i >= 0; i--) {
+        const c = snap[i]; if (!c.pressed) continue;
+        if (controls.get(c.id) !== c || coveredBy(c.scene) || (c.when && !c.when(ctx))) { c.pressed = false; c.held = 0; c.fired = false; const k = active.indexOf(c); if (k >= 0) active.splice(k, 1); continue; }
         c.held += dt;
         if (!c.fired && c.held >= c.seconds - 1e-9) { c.fired = true; if (typeof c.action === 'function') c.action(ctx); else onAction(c.action); }
       }

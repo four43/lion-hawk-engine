@@ -40,7 +40,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
-  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
+  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
   // engine.presented() (the browser driver acks a rendered frame at the start of the next tick). Listeners are
   // copy-on-write, so presenting allocates nothing. Listener timing: with 'steps' they run at the start of a step, so

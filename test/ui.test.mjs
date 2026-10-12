@@ -77,3 +77,23 @@ test('2d: ui.hold fires once after its seconds of engine time; letting go early 
   e.ui.press('s.gear'); e.stepN(14); assert.equal(e.input.snapshot.gear.pressed, false);
   e.stepN(1); assert.equal(e.input.snapshot.gear.pressed, true); // fired before lh.input: pressed in the same step
 });
+
+test('2d: ui.hold validates its action at build time (D6 minor)', () => {
+  const bad = a => defineGame({ id: 'v', start: 's', actions: actions({ gear: button() }), scenes: { s: { ui(u) { u.hold({ id: 'h', label: 'H', seconds: 1, action: a }); } } } });
+  assert.throws(() => createEngine(bad('nope')), /hold 'h' action must be a function or a known action name/);
+  assert.throws(() => createEngine(bad(undefined)), /action must be a function/);
+  createEngine(bad('gear')); createEngine(bad(() => {}));
+});
+test('2d: an action that releases another hold does not skip or double-advance it (D6 minor)', () => {
+  const g = defineGame({ id: 'a', start: 's', scenes: { s: {
+    enter(e, c) { c.state.log = []; },
+    ui(u) {
+      u.hold({ id: 'a', label: 'A', seconds: 0.5, action: e => e.scene.state.log.push('a') });
+      u.hold({ id: 'b', label: 'B', seconds: 0.25, action: e => { e.scene.state.log.push('b'); e.ui.release('s.a'); } });
+      u.hold({ id: 'c', label: 'C', seconds: 2, action: () => {} });
+    } } } });
+  const e = createEngine(g); for (const id of ['s.a', 's.b', 's.c']) e.ui.press(id);
+  e.stepN(15); const t = id => e.ui.tree().find(c => c.id === id);
+  assert.deepEqual(e.scene.state.log, ['b']); assert.equal(t('s.a').pressed, false);
+  assert.ok(Math.abs(t('s.c').progress - 15 / 120) < 1e-9); // advanced once per step, never twice
+});

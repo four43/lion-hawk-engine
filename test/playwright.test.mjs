@@ -61,3 +61,14 @@ test('2d: game.press/unpress hold the mouse on the control (desktop)', async () 
   await g.press('s.wake'); await g.unpress('s.wake');
   assert.deepEqual(calls, [['move', 30, 40], ['down'], ['up']]);
 });
+
+test('2d: game.press on a touch preset keeps the active touches down and is tracked in active', async () => {
+  const sent = [], page = { evaluate: async () => {}, locator: () => ({ first() { return this; }, waitFor: async () => {}, boundingBox: async () => ({ x: 10, y: 20, width: 40, height: 40 }) }) };
+  const context = { newCDPSession: async () => ({ send: async (m, p) => sent.push([p.type, p.touchPoints.map(t => t.id)]) }) };
+  const g = gameDriver({ page, context, preset: presets['iPhone SE'], presetName: 'iPhone SE' });
+  await g.touch.start(1, { x: 5, y: 5 });
+  await g.press('s.wake'); await g.unpress('s.wake');
+  assert.deepEqual(sent, [['touchStart', [1]], ['touchStart', [1, 90]], ['touchEnd', [90]]]);
+  await g.press('s.a'); await g.press('s.b'); assert.deepEqual(sent.at(-1), ['touchStart', [1, 90, 91]]);
+  await g.touch.end(1); assert.deepEqual(sent.at(-1), ['touchEnd', [1]]); // lifting the stick finger leaves the holds down
+});

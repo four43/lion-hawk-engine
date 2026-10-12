@@ -37,9 +37,10 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   // on when 'scene'/'overlay' events flush.
   // #46: view.focus(testid) focuses the control once it exists and is enabled, unless the player moved focus first
   let want = null;
-  const focus = id => { want = { id, before: doc.activeElement ?? null }; };
+  const focus = id => { want = { id, before: doc.activeElement ?? null, scene: engine.scene.id, tries: 0 }; };
   const applyFocus = () => {
     if (!want) return;
+    if (want.scene !== engine.scene.id || ++want.tries > 5) { want = null; return; } // a scene change or a few renders without the control: give up
     const a = doc.activeElement; if (a && a !== want.before && a !== doc.body) { want = null; return; }
     const el = doc.querySelector(`[data-testid="${String(want.id).replace(/["\\]/g, '\\$&')}"]`);
     if (el && !el.disabled) { want = null; el.focus?.({ preventScroll: true }); }

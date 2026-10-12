@@ -122,17 +122,20 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       await loc.fill(text); await loc.press('Enter');
       await ev(() => window.engine.render(0));
     },
-    // #9: hold a control down (CDP touch id 90 on touch presets, the mouse on desktop); render after each so the DOM shows it
+    // #9: hold a control down (a CDP touch with id 90+ on touch presets, beside the active touches, the mouse on desktop); render after each so the DOM shows it
     async press(testid) {
       const loc = page.locator(`[data-testid="${testid}"]`).first();
       await loc.waitFor({ state: 'visible' });
       const b = await loc.boundingBox(), c = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-      if (preset.hasTouch) { pressed.set(testid, c); await send('touchStart', [{ ...c, id: 90 }]); }
+      if (preset.hasTouch) { // CDP touchStart lists every point that is down: keep the active touches (stick fingers) in it, tracked in `active`
+        let id = 90; while (active.has(id)) id++;
+        const p = { ...c, id }; pressed.set(testid, id); active.set(id, p); await send('touchStart', [...active.values()]);
+      }
       else { await page.mouse.move(c.x, c.y); await page.mouse.down(); }
       await ev(() => window.engine.render(0));
     },
     async unpress(testid) {
-      if (preset.hasTouch) { const c = pressed.get(testid); pressed.delete(testid); if (c) await send('touchEnd', [{ ...c, id: 90 }]); }
+      if (preset.hasTouch) { const id = pressed.get(testid); pressed.delete(testid); if (id !== undefined) { const p = active.get(id); active.delete(id); if (p) await send('touchEnd', [p]); } }
       else await page.mouse.up();
       await ev(() => window.engine.render(0));
     },

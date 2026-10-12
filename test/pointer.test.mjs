@@ -52,3 +52,28 @@ test('2d: argument checks, cancel on blur, edge', () => {
   assert.deepEqual(s.phases(), ['down', 'cancel']);
   const e = setup({ edge: 30 }); e.ev(e.el, 'pointerdown', 1, 10, 50); assert.deepEqual(e.phases(), []);
 });
+
+test('2d: pointercancel, lostpointercapture, pagehide and a hidden tab each cancel the press (D3 minors)', () => {
+  const s = setup();
+  s.ev(s.el, 'pointerdown', 1, 50, 50); s.ev(s.window, 'pointercancel', 1, 50, 50); assert.deepEqual(s.phases(), ['down', 'cancel']);
+  s.ev(s.el, 'pointerdown', 2, 50, 50); s.ev(s.el, 'lostpointercapture', 2, 50, 50); assert.deepEqual(s.phases(), ['down', 'cancel']);
+  s.ev(s.window, 'pointerup', 2, 50, 50); assert.deepEqual(s.phases(), []); // already cancelled: the late up is nothing
+  s.ev(s.el, 'pointerdown', 3, 50, 50); s.window.dispatchEvent(new s.window.Event('pagehide')); assert.deepEqual(s.phases(), ['down', 'cancel']);
+  Object.defineProperty(s.document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  s.ev(s.el, 'pointerdown', 4, 50, 50); s.document.dispatchEvent(new s.window.Event('visibilitychange')); assert.deepEqual(s.phases(), ['down', 'cancel']);
+});
+test('2d: a second finger cancels, and lifting one of two does not start a new press until all lift (D3 minor)', () => {
+  const s = setup();
+  s.ev(s.el, 'pointerdown', 1, 50, 50); s.ev(s.el, 'pointerdown', 2, 60, 50); s.ev(s.window, 'pointerup', 2, 60, 50);
+  s.ev(s.el, 'pointerdown', 3, 70, 50); assert.deepEqual(s.phases(), ['down', 'cancel']); // 1 is still down: 3 is blocked
+  s.ev(s.window, 'pointerup', 3, 70, 50); s.ev(s.window, 'pointerup', 1, 50, 50); assert.deepEqual(s.phases(), []);
+  s.ev(s.el, 'pointerdown', 4, 50, 50); assert.deepEqual(s.phases(), ['down']);
+});
+test('2d: at() cannot override reserved keys; a null at() skips move and press but not up; a far up is no tap (D3 minors)', () => {
+  const s = setup({ at: x => (x > 500 ? null : { phase: 'x', pointer: 99, button: 9, kind: 'k', x }), press: 0.1 });
+  s.ev(s.el, 'pointerdown', 1, 50, 50); s.p.update(0.016); s.engine.stepN(1);
+  assert.deepEqual([s.got[0].phase, s.got[0].pointer, s.got[0].button, s.got[0].kind, s.got[0].x], ['down', 1, 0, 'touch', 50]); s.got.length = 0;
+  s.ev(s.window, 'pointermove', 1, 600, 50); s.p.update(0.5); // moves onto null ground and holds: no move, no press
+  s.ev(s.window, 'pointerup', 1, 600, 50); assert.deepEqual(s.phases(), ['up']);
+  const t = setup(); t.ev(t.el, 'pointerdown', 1, 50, 50); t.ev(t.window, 'pointerup', 1, 200, 50); assert.deepEqual(t.phases(), ['down', 'up']); // up 150 px away, no move between
+});
