@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { createMemoryHub } from '../src/index.net.js';
+import { rng } from '../src/core/rng.js';
 
 const NOTCH_L = { top: 0, right: 59, bottom: 21, left: 59 }, NOTCH_P = { top: 59, right: 0, bottom: 34, left: 0 };
 const NONE = { top: 0, right: 0, bottom: 0, left: 0 }, IPAD = { top: 24, right: 0, bottom: 20, left: 0 };
@@ -118,6 +120,21 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     }
   };
 
+  // s seconds of engine time through engine.advance, one step's worth at a time, pausing (as above) while a load's settle
+  // is blocked; the chunks add up to s, so the accumulator keeps the same remainder; returns the step counter
+  const seconds = async (s, input, timeout = 30000) => {
+    const t0 = Date.now(); let left = Math.max(s, 0);
+    for (;;) {
+      const r = await ev(({ left, input, stalled }) => {
+        const e = window.engine, blocked = new Function('e', `return ${stalled}`), dt = 1 / e.hz; if (input) e.input.hold(input);
+        try { while (left > 0 && !blocked(e)) { const c = Math.min(left, dt); e.advance(c); left -= c; } e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); }
+        return { left, step: e.state().step };
+      }, { left, input, stalled });
+      if (r.left <= 0) return r.step;
+      left = r.left; await unblocked('seconds', t0, timeout);
+    }
+  };
+
   const point = async target => {
     if (typeof target === 'string') {
       const b = await page.locator(target).first().boundingBox();
@@ -142,7 +159,7 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     page, preset, presetName,
     point, // #65: selector | { x, y } | { world } -> client { x, y }, for page.mouse gestures on world points
     step: (n, input) => stepN(n, input),
-    seconds: (s, input) => ev(({ s, input }) => { const e = window.engine; if (input) e.input.hold(input); try { e.advance(s); e.render(0); } finally { if (input) e.input.release(...Object.keys(input)); } return e.state().step; }, { s, input }),
+    seconds: (s, input, timeout) => seconds(s, input, timeout),
     until: (fn, opts) => run('until', { pred: fnSource(fn) }, opts),
     untilEvent: (type, opts) => run(`untilEvent(${type})`, { type }, opts),
     untilLoaded, // #50: { maxSteps = 1200, timeout = 30000 }
@@ -222,7 +239,9 @@ export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } 
 }
 
 // #74: initScript (a function or { content }) runs in the page before any of its scripts, e.g. to stub WebGL.
-export async function openGame(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript } = {}) {
+export function openGame(browser, url, opts) { return open(browser, url, opts); }
+// `prepare(context, page)` runs before navigation (peers() exposes the bridge there)
+async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript } = {}, prepare) {
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
   const { safeArea, ...ctxOpts } = p;
@@ -231,6 +250,7 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   const errors = [];
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: String(e) }));
   if (initScript) await context.addInitScript(initScript); // #74: on the context, so popups and new tabs (a join link) get it too
+  if (prepare) await prepare(context, page);
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);
   const goto = testUrl(url, { seed, scene, args, query, render });
   await page.goto(goto);
@@ -239,6 +259,71 @@ export async function openGame(browser, url, { preset = 'desktop', seed, scene, 
   await page.evaluate(() => window.engine.ready);
   await page.waitForFunction(() => window.engine.settled(), null, { timeout: 30000 });
   return gameDriver({ page, context, preset: p, presetName: name, errors });
+}
+
+// [T-20] n pages joined through one Node in-memory hub (lion-hawk/net's bridgeTransport on the page side, N-2). Page i opens
+// with ?lh-test&lh-bridge=host|guest (page 0 is the host) and argsOf(i, name) ?? args; the game binds its port to
+// bridgeTransport() when it sees ?lh-bridge. room.step(n) does, n times, what mp() does: advance the hub clock by 1000 / hz,
+// tick the hub, deliver each page's hub events in order, then step every open page once (manual mode: deterministic), waiting
+// after each page's step until Node has every send it made. Closing a page's driver leaves the hub for it.
+const BRIDGE_EVENTS = ['peer', 'peerLeft', 'peerAway', 'peerBack', 'hostAway', 'hostBack', 'closed'];
+export async function peers(browser, url, n, { link = {}, preset = 'desktop', seed = 1, args, argsOf, query = {}, timeout = 10000, ...rest } = {}) {
+  if (!Number.isInteger(n) || n < 1) throw new Error('peers: n must be a positive integer');
+  const hub = createMemoryHub({ rng: rng(seed).fork('peers.link').next, ...link }), list = [];
+  let k = 0, hz = null;
+  const flush = async p => { // the hub's events and messages for this page, in order, in one evaluate
+    if (!p.inbox.length) return;
+    const batch = p.inbox.splice(0);
+    await p.game.page.evaluate(b => { const f = window.__lhBridgeIn; for (const a of b) f(...a); }, batch);
+  };
+  const caught = async p => { // waits until every call the page has made (info.sent) reached Node
+    const sent = await p.game.page.evaluate(() => window.__lhBridgeInfo.sent);
+    if (p.next >= sent) return;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`peers: page ${p.index} made ${sent} bridge calls, only ${p.next} arrived in ${timeout} ms`)), timeout);
+      p.wake = () => { if (p.next >= sent) { clearTimeout(timer); p.wake = null; resolve(); } };
+    });
+  };
+  for (let i = 0; i < n; i++) {
+    const role = i ? 'guest' : 'host', name = i ? `guest${i}` : 'host';
+    const net = i ? hub.join() : hub.host();
+    const p = { index: i, name, role, net, inbox: [], next: 0, held: new Map(), wake: null, closed: false, game: null };
+    for (const e of BRIDGE_EVENTS) net.on(e, (...a) => p.inbox.push([e, ...a]));
+    net.on('message', (from, d, reliable) => p.inbox.push(d instanceof ArrayBuffer ? ['message', from, [...new Uint8Array(d)], reliable, true] : ['message', from, d, reliable, false]));
+    const apply = (op, to, data, reliable, bytes) => {
+      if (op === 'leave') return net.leave();
+      net.send(to, bytes ? new Uint8Array(data).buffer : data, reliable); // the hub copies, as between two Node peers
+    };
+    const prepare = async (context, page) => {
+      await page.exposeBinding('__lhBridge', (src, seq, ...a) => { // calls resolve asynchronously: apply them in the page's order
+        p.held.set(seq, a);
+        while (p.held.has(p.next)) { const c = p.held.get(p.next); p.held.delete(p.next); p.next++; if (!p.closed) apply(...c); }
+        p.wake?.();
+      });
+      await page.addInitScript(info => {
+        window.__lhBridgeInfo = info;
+        const queue = [], early = (...a) => { queue.push(a); }; early.queue = queue; window.__lhBridgeIn = early; // until bridgeTransport() takes over
+      }, { isHost: !i, id: net.id, hostId: net.hostId, sent: 0 });
+    };
+    const a = argsOf ? argsOf(i, name) : args;
+    p.game = await open(browser, url, { ...rest, preset, seed, args: a, query: { ...query, 'lh-bridge': role } }, prepare);
+    const close = p.game.close;
+    p.game.close = async () => { if (p.closed) return; p.closed = true; hub.leave(net.id, 'left'); await close(); };
+    list.push(p);
+  }
+  hz = await list[0].game.page.evaluate(() => window.engine.hz);
+  const room = {
+    hub, games: list.map(p => p.game), get now() { return hub.now; },
+    async step(count = 1) {
+      for (let s = 0; s < count; s++) {
+        k++; hub.tick(k * 1000 / hz);
+        for (const p of list) if (!p.closed) { await flush(p); await p.game.step(1); await caught(p); }
+      }
+      return room;
+    },
+    async close() { for (const p of list) await p.game.close(); },
+  };
+  return room;
 }
 
 // ---- assertions ----

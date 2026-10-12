@@ -47,6 +47,11 @@ test('#50: until waits out a load whose settle is held by view.wait; untilLoaded
     // step(n) also waits: the load finishes inside the n steps
     await game.command('reload'); await game.step(30);
     assert.deepEqual(pick(await game.state()), { x: 0, builds: 3, done: 3, phase: '' });
+    // seconds(s) also waits (the 2d carry-over): 0.5 s of engine time takes the load through its 300 ms wait
+    await game.command('reload'); const before = (await game.state()).step;
+    assert.equal(await game.seconds(0.5), before + 30);
+    assert.equal(await game.page.evaluate(() => window.waits), 4);
+    assert.deepEqual(pick(await game.state()), { x: 0, builds: 4, done: 4, phase: '' });
     // a wait that outlives the timeout fails with a message naming the blocks
     await game.page.evaluate(() => { window.waitMs = 5000; });
     await game.command('reload'); await game.step(1);

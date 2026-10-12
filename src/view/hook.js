@@ -23,6 +23,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
   const api = {
     ready, seed: engine.seed, errors,
     manual: on => driver.manual(on),
+    hz: engine.game.sim.hz, // G-E1: peers() steps the hub clock by 1000 / hz
     stepN: n => note(engine.stepN(n)), advance: s => note(engine.advance(s)), render: a => { engine.render(a); after(); },
     get time() { return engine.time; }, get scene() { return engine.scene; }, get loading() { return engine.loading; }, // [S-6]
     go: (n, a) => { engine.go(n, a); after(); }, overlay: (n, a) => { engine.overlay(n, a); after(); },

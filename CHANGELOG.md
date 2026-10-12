@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 — 2026-10-12
+
+Phase 2g G-E1: two real browser pages as host and guest.
+
+- `lion-hawk/net` (N-2): `bridgeTransport({ binding = '__lhBridge' })`, the page side of a Node bridge: a transport whose `send` and `leave` call the exposed binding (in order, sequence-numbered) and whose events arrive through `window.__lhBridgeIn(event, ...args)`. The hub's copy semantics hold across the page boundary: JSON is copied, an `ArrayBuffer` crosses as a byte array and is rebuilt as an `ArrayBuffer`. Events that reach the page before the transport exists are replayed, in order, just after it is made.
+- Playwright (T-20): `peers(browser, url, n, { link, preset, seed, args, argsOf, query })` opens `n` pages (host first) with `?lh-test&lh-bridge=host|guest` over one Node `createMemoryHub(link)` and returns `{ games, hub, now, step(n = 1), close() }`. `argsOf(i, name)` gives each page its own args and overrides `args`. `room.step` advances the hub clock by `1000 / hz`, ticks it, delivers each page's events, then steps every open page once, waiting until Node has each page's sends, so a run is deterministic as with `mp()`. Closing a page's driver leaves the hub for it (its host hears `peerLeft`; a closed host closes the room).
+- Playwright (#50, the 2d carry-over): `game.seconds(s, input, timeout)` also hands back to Node while a load's settle is blocked, then continues; the engine time it advances is unchanged.
+- `window.engine.hz` (D-4): the game's step rate.
+
 ## 0.7.0 — 2026-10-12
 
 Phase 2f, the network command round Tractor Pickup needs.
