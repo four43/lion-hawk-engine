@@ -282,3 +282,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 45. No query for "is this control enabled?": Rally (phase 2c R5 review)
 - **What happened:** Rally's hidden-page auto-pause tells expected tap failures apart by matching the error text (`/is disabled|is covered|no control/`), which is brittle.
 - **Engine change:** `engine.ui.enabled(id)`, or a `tryTap(id) → boolean`. Status: open.
+
+### 46. An overlay view half's `enter` runs before `ui.sync()`: Rally (phase 2c R6)
+- **What happened:** when an overlay's view `enter` runs, its buttons are still disabled, so it can't focus the default button.
+- **Workaround:** Rally retries focus every frame.
+- **Engine change:** `boot`'s refresh should sync the UI before calling view-half `enter`, or add `view.focus(testid)`, applied after the next sync. Status: open.
+
+### 47. Under `?lh-test` the driver still renders every frame: Rally (phase 2c R6)
+- **What happened:** a test can't observe what `exit` left in the DOM across page calls, because the next automatic render changes it.
+- **Engine change:** a full-manual option, `driver.manual('all')` or `?lh-test=render`, that also stops automatic renders. Tests then call `render()` themselves. Status: open.
