@@ -5,7 +5,7 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
   const add = (scene, role, spec) => {
     const id = `${scene}.${spec.id}`;
     if (controls.has(id)) throw new Error(`ui: duplicate control '${id}'`);
-    const c = { ...spec, id, scene, role }; if (role === 'hold') Object.assign(c, { held: 0, pressed: false, fired: false });
+    const c = { ...spec, id, scene, role }; if (role === 'hold') Object.assign(c, { held: 0, pressed: false, fired: false, t0: 0 });
     controls.set(id, c);
   };
   const usable = (id, ctx) => {
@@ -22,6 +22,7 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
       choice: spec => { for (const o of spec.options) add(scene, 'choice', { id: `${spec.id}.${String(o.value)}`, label: o.label, value: o.value, group: `${scene}.${spec.id}`, get: spec.get, set: spec.set, when: spec.when }); },
       field: spec => add(scene, 'textbox', spec),
       // #9: hold-to-fire on engine time; `action` is an action name (pressed that step) or fn(engine, ctx)
+      // #83: wall: true counts engine.time.wall from the press instead (slow frames that maxCatchUp caps do not stretch it)
       hold: spec => {
         if (!(spec.seconds > 0)) throw new Error(`ui: hold '${spec.id}' needs seconds > 0`);
         if (typeof spec.action !== 'function' && !isAction(spec.action)) throw new Error(`ui: hold '${spec.id}' action must be a function or a known action name`);
@@ -52,7 +53,7 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
       const c = usable(id, ctx);
       if (c.role !== 'hold') throw new Error(`ui: control '${id}' is not a hold`);
       if (c.pressed) return;
-      c.pressed = true; c.held = 0; c.fired = false; active.push(c);
+      c.pressed = true; c.held = 0; c.fired = false; if (c.wall) c.t0 = ctx.time.wall; active.push(c);
     },
     release(id) {
       const c = controls.get(id); if (!c?.pressed) return;
@@ -65,7 +66,7 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
       for (let i = snap.length - 1; i >= 0; i--) {
         const c = snap[i]; if (!c.pressed) continue;
         if (controls.get(c.id) !== c || coveredBy(c.scene) || (c.when && !c.when(ctx, ctxOf(c.scene)))) { c.pressed = false; c.held = 0; c.fired = false; const k = active.indexOf(c); if (k >= 0) active.splice(k, 1); continue; }
-        c.held += dt;
+        if (c.wall) c.held = (ctx.time.wall - c.t0) / 1000; else c.held += dt;
         if (!c.fired && c.held >= c.seconds - 1e-9) { c.fired = true; if (typeof c.action === 'function') c.action(ctx, ctxOf(c.scene)); else onAction(c.action); }
       }
     },

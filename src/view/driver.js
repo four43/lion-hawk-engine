@@ -16,7 +16,7 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
       if (rendered) { rendered = false; if (engine.acks === 'frames') engine.presented(); }
       const dt = last === null ? 0 : (ts - last) / 1000; last = ts;
       const ddt = Math.min(dt, engine.game.sim.maxFrame); // #44: a device never sees more than the loop will step
-      for (const d of devices) d.update?.(ddt);
+      for (const d of devices) d.update?.(ddt, dt); // #56: and the uncapped frame time, for presses that must not slow down
       if (manual === 'all') return; // no step, no render, so no frame ack
       if (manual) engine.render(engine.loop.alpha); else engine.frame(dt, ts);
       rendered = true;

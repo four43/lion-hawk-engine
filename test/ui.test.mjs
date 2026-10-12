@@ -114,3 +114,20 @@ test('2f: when/get/set and function actions get (engine, ctx) of their own scene
   assert.deepEqual(seen, [['action', 'menu', 'main'], ['hold', 'menu']]);
   assert.equal(h.enabled('menu.b'), true);
 });
+
+test('2f: ui.hold({ wall: true }) counts wall time between steps, not capped engine time (#56, #83)', () => {
+  const g = defineGame({ id: 'wake', start: 's', scenes: { s: { ui(u) { u.hold({ id: 'wake', label: 'Wake', seconds: 5, wall: true, action: e => e.emit('woke') }); } } } });
+  const e = createEngine(g, { acks: 'frames' }); let fired = 0; e.events.on(x => { if (x.type === 'woke') fired++; });
+  e.frame(1 / 60, 1000); e.ui.press('s.wake');
+  for (const now of [1700, 2400, 3100, 3800, 4500, 5200, 5900]) e.frame(0.7, now); // slow frames: 3 capped steps (0.05 s) each
+  assert.equal(fired, 0); assert.ok(e.ui.tree()[0].progress > 0.9);
+  e.frame(0.7, 6600); assert.equal(fired, 1);
+});
+test('2f: a wall hold is virtual and exact headless, restarts on a new press, and an engine-time hold is unchanged (#83)', () => {
+  const g = defineGame({ id: 'wake2', start: 's', scenes: { s: { ui(u) {
+    u.hold({ id: 'w', label: 'W', seconds: 0.5, wall: true, action: e => e.emit('w') }); u.hold({ id: 'e', label: 'E', seconds: 0.5, action: e => e.emit('e') }); } } } });
+  const e = createEngine(g, { wall0: 1000 }), got = []; e.events.on(x => { if (x.type === 'w' || x.type === 'e') got.push([x.type, e.time.step]); });
+  e.ui.press('s.w'); e.ui.press('s.e'); e.stepN(29); assert.deepEqual(got, []);
+  e.stepN(1); assert.deepEqual(got.map(x => x[0]).sort(), ['e', 'w']); // 30 steps at 60 Hz: 500 ms of virtual wall and 0.5 s of engine time
+  e.ui.release('s.w'); e.stepN(10); e.ui.press('s.w'); e.stepN(1); assert.ok(Math.abs(e.ui.tree().find(c => c.id === 's.w').progress - 1 / 30) < 1e-9);
+});

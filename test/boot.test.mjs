@@ -99,6 +99,13 @@ test('2c: view.dt is the driver frame time in frame(), 0 for hook renders; view.
   assert.match(target.engine.errors.at(-1).message, /no track view/); assert.equal(app.hook.settled(), true);
   app.dispose();
 });
+test('2f: view.rawDt is the uncapped driver frame time beside the capped view.dt; both 0 for hook renders (#56)', () => {
+  const { document } = dom(); let tick; const seen = [];
+  const view = defineView({ scenes: { title: { frame: (e, a, v) => seen.push([+v.dt.toFixed(3), +v.rawDt.toFixed(3)]) } } });
+  const app = boot(game, view, { doc: document, target: { document, addEventListener() {}, removeEventListener() {} }, raf: f => { tick = f; return 1; }, caf() {}, flags: parseFlags('') });
+  tick(1000); tick(1400); app.hook.render(0);
+  assert.deepEqual(seen, [[0, 0], [0.25, 0.4], [0, 0]]); app.dispose();
+});
 test('2d: view.wait blocks loads; settled() is false while a load is active', async () => {
   const g = defineGame({ id: 'bl', start: 's', scenes: { s: { enter(e, ctx) { ctx.state.ctx = ctx; } } } });
   const { document } = dom();

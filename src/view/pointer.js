@@ -1,8 +1,9 @@
 // #5/#8: bindPointer owns the gesture (filters, capture, window routing, move coalescing, tap/press, second-finger cancel);
 // the game's at(clientX, clientY, event, phase) supplies the payload, so the sim does the picking and a replay reproduces it.
 // `phase` is the command phase being built (#52), so at() can silence moves but keep the press. `event` is optional in at(): it is
-// the pointer event for down/up, and undefined for the move and press that update(dt) sends and for cancels. Long-press time counts only update(dt) (engine/frame time), never wall-clock timers, so a paused game never presses.
-export function bindPointer(engine, { surface, type, at, filter = {}, ignore = 'button, input, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *', edge = 0, tap = {}, press = 0, doc } = {}) {
+// the pointer event for down/up, and undefined for the move and press that update(dt) sends and for cancels. Long-press time counts only update(dt, raw) (capped frame time,
+// or the driver's uncapped raw time with uncapped: true, #56), never wall-clock timers, so a paused game never presses.
+export function bindPointer(engine, { surface, type, at, filter = {}, ignore = 'button, input, [data-lh-ui] *, [data-lh-hold], [data-lh-hold] *', edge = 0, tap = {}, press = 0, uncapped = false, doc } = {}) {
   if (!type) throw new Error('bindPointer: type required');
   if (typeof at !== 'function') throw new Error('bindPointer: at must be a function');
   const tapMove = tap.move ?? 12, tapSeconds = tap.seconds ?? 0.45;
@@ -53,9 +54,9 @@ export function bindPointer(engine, { surface, type, at, filter = {}, ignore = '
   win.addEventListener('pointermove', onMove); win.addEventListener('pointerup', onUp); win.addEventListener('pointercancel', onCancel);
   win.addEventListener('blur', cancelAll); win.addEventListener('pagehide', cancelAll); doc.addEventListener('visibilitychange', onVis);
   return {
-    update(dt) {
+    update(dt, raw = dt) {
       if (!a || a.silent) return;
-      a.held += dt;
+      a.held += uncapped ? raw : dt;
       if (a.x !== a.lx || a.y !== a.ly) { a.lx = a.x; a.ly = a.y; send('move', a.x, a.y); }
       if (press > 0 && !a.pressed && !a.far && a.held >= press) { a.pressed = true; send('press', a.x, a.y); }
     },

@@ -22,8 +22,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   }
   // [S-6] ?lh-test counts every step as a presented frame (deterministic; game.until never waits for a rAF)
   const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames' });
-  const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, wait: p => wait(p), focus: id => focus(id) }; // #19: dt is the driver frame time; 0 for renders the driver didn't start
-  const frameDt = { update(dt) { view.dt = dt; } }; // first device: later devices and the frame see this frame's dt
+  const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id) }; // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
+  const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
   const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine))], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
@@ -96,7 +96,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     if (disposed) return;
     reconcile();
     for (const e of active.slice()) if (active.some(a => same(a, e))) caught(() => views[e.name]?.frame?.(engine, alpha, view)); // snapshot; skip halves a previous frame exited
-    view.dt = 0; refresh();
+    view.dt = view.rawDt = 0; refresh();
   });
   const hook = installEngine(engine, { driver, target, errors, after: refresh, busy: () => pending > 0, view });
   refresh();

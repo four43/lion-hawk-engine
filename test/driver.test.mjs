@@ -108,3 +108,9 @@ test('2f: the driver stamps steps with the rAF timestamp (N-4)', () => {
   const { tick, engine, driver } = setup(); driver.start(); tick(5000);
   tick(5000 + 1000 / 60 * 2 + 1e-6); assert.ok(Math.abs(engine.time.wall - (5000 + 1000 / 60 * 2 + 1e-6)) < 1e-3);
 });
+
+test('2f: the driver gives devices (capped, raw) frame time (#56)', () => {
+  const seen = [], device = { update: (dt, raw) => seen.push([dt, raw]) };
+  const { tick, driver } = setup({ devices: [device] }); driver.start(); tick(0); tick(400);
+  assert.deepEqual(seen[1].map(x => +x.toFixed(3)), [0.25, 0.4]); // countdown's maxFrame is the default 0.25
+});

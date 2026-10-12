@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>hold</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #123; color: #fff; font: 16px sans-serif; user-select: none; }
+  #x { position: fixed; top: calc(var(--lh-sa-top, 0px) + 8px); left: calc(var(--lh-sa-left, 0px) + 8px); font-size: 32px; }
+  [data-lh-ui-root] { position: fixed; inset: var(--lh-sa-top, 0px) var(--lh-sa-right, 0px) var(--lh-sa-bottom, 0px) var(--lh-sa-left, 0px); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  [data-lh-ui] { display: flex; gap: 12px; }
+  [data-lh-ui] button { pointer-events: auto; min-width: 96px; min-height: 56px; font-size: 20px; }
+  .lh-stick { position: fixed; width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%; background: #fff3; pointer-events: none; }
+  .lh-knob { width: 40px; height: 40px; margin: 50px; border-radius: 50%; background: #fff8; }
+</style>
+</head>
+<body>
+<button data-lh-slot="s.wake">Wake</button>
+<script src="hold.bundle.js"></script>
+</body>
+</html>

@@ -90,3 +90,16 @@ test('2e: at() gets the phase as its fourth argument, so a game can silence move
   seen.length = 0; s.ev(s.el, 'pointerdown', 3, 50, 50); s.window.dispatchEvent(new s.window.Event('blur'));
   assert.deepEqual(s.phases(), ['down', 'cancel']); assert.deepEqual(seen, [['down', false], ['cancel', true]]);
 });
+
+test('2f: bindPointer({ uncapped: true }) counts the long press on raw frame time (#56)', () => {
+  const s = setup({ press: 0.75, uncapped: true, at: () => ({}) });
+  s.ev(s.el, 'pointerdown', 1, 50, 50);
+  for (let i = 0; i < 4; i++) s.p.update(0.1, 0.2); // the driver passes (capped, raw)
+  assert.deepEqual(s.phases(), ['down', 'press']);
+});
+test('2f: without uncapped the long press still counts capped time (#56)', () => {
+  const s = setup({ press: 0.75, at: () => ({}) });
+  s.ev(s.el, 'pointerdown', 1, 50, 50);
+  for (let i = 0; i < 4; i++) s.p.update(0.1, 0.2);
+  assert.deepEqual(s.phases(), ['down']);
+});
