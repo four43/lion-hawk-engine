@@ -53,10 +53,10 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | done (2d D4: frame acks, engine.onPresent) |
 | 39 | A control can't both trigger an action and be gated | Rally | done (2d D5) |
 | 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance open |
-| 41 | The input latch drops a second tap if no step sees the key go up | Rally | open (worked around in 2c-rally R5) |
-| 42 | `bindHold` lets the button take focus | Rally | open (worked around in 2c-rally R5) |
+| 41 | The input latch drops a second tap if no step sees the key go up | Rally | done (2d D7) |
+| 42 | `bindHold` lets the button take focus | Rally | done (2d D8) |
 | 43 | Playwright `touch.end(id)` lifted the wrong finger | engine test helper | done |
-| 44 | Device ramps use uncapped frame time | Rally | open (worked around in 2c-rally R6) |
+| 44 | Device ramps use uncapped frame time | Rally | done (2d D7) |
 | 45 | No query for "is this control enabled?" | Rally | done (2d D5) |
 | 46 | An overlay view half's `enter` runs before `ui.sync()` | Rally | done (2d D5) |
 | 47 | Under `?lh-test` the driver still renders every frame | Rally | open |
@@ -153,7 +153,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 13. Short presses fall between steps: Rally
 - **What happened:** Rally queues key and pad presses as events (`controls.events`) and handles every one, however short. In the engine, devices write a level once per frame and `apply()` turns levels into edges once per step. A key pressed and released between two device updates, or a `bindHold` tap that starts and ends between two steps, is never seen. On a 120 Hz iPad with a 60 Hz sim this loses taps; Rally's shift buttons fire on `pointerdown` and are tapped fast.
 - **Engine change (2c-rally E1):** `createInput` latches a button that any `device()` call set true since the last `apply()`, so it is down for that step even if it was released again. `bindKeyboard` reports a key tapped between two updates as held for one update. `hold`/`set` still override the latch.
-- **Status:** done (2c-rally).
+- **Status:** done (2c-rally). 2d D7: several taps between steps each count (#41).
 
 ### 14. Keyboard feel needs stateful ramps, chords and release by key code: Rally
 - **What happened:**
@@ -298,12 +298,12 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 41. The input latch drops a second tap if no step sees the key go up: Rally (phase 2c R5)
 - **What happened:** under manual stepping, two Esc taps with no step between them collapse into one press. A double tap faster than one sim step could do the same.
 - **Workaround:** the Rally test steps once between the taps.
-- **Engine change:** the latch queues a forced release for the next apply, so press → release → press within one step yields two pressed edges across two steps. Status: open.
+- **Engine change:** the latch queues a forced release for the next apply, so press → release → press within one step yields two pressed edges across two steps. Status: done (2d D7): each source counts its rising edges and every one is owed as a press (cap 3).
 
 ### 42. `bindHold` lets the button take focus: Rally (phase 2c R5; see #15)
 - **What happened:** after tapping a held pedal, Space and Enter belong to that button.
 - **Workaround:** Rally prevents focus locally.
-- **Engine change:** `bindHold(..., { focus: false })`, default false for pedals: `preventDefault` on `pointerdown`, or `tabindex=-1`. Status: open.
+- **Engine change:** `bindHold(..., { focus: false })`, default false for pedals: `preventDefault` on `pointerdown`, or `tabindex=-1`. Status: done (2d D8): `focus: false` by default prevents `pointerdown` and `mousedown` on the button.
 
 ### 43. Playwright `touch.end(id)` lifted the wrong finger: engine test helper (phase 2c R5; confirms #32)
 - **What happened:** `game.touch.end(2)` lifted the steering touch instead of the gas touch.
@@ -312,7 +312,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 44. Device ramps use uncapped frame time: Rally (phase 2c R5 review)
 - **What happened:** Rally's old controls ramped with `min(0.1, dt)`. The engine's `bindKeyboard` `{rise, fall}` ramps take the driver's raw dt, so a 0.3 s hitch snaps the throttle from 0.58 to 1.0.
 - **Workaround:** Rally uses function ramps that cap dt (R6).
-- **Engine change:** the driver passes devices a dt clamped like the loop's `maxFrame` (or 0.1 s), or `bindKeyboard` caps dt itself. Status: open.
+- **Engine change:** the driver passes devices a dt clamped like the loop's `maxFrame` (or 0.1 s), or `bindKeyboard` caps dt itself. Status: done (2d D7): the driver passes devices `min(dt, sim.maxFrame)`.
 
 ### 45. No query for "is this control enabled?": Rally (phase 2c R5 review)
 - **What happened:** Rally's hidden-page auto-pause tells expected tap failures apart by matching the error text (`/is disabled|is covered|no control/`), which is brittle.

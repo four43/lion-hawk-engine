@@ -15,7 +15,8 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
       // [S-6] #38: the previous tick's render was drawn in that rAF, so it has been presented by now
       if (rendered) { rendered = false; if (engine.acks === 'frames') engine.presented(); }
       const dt = last === null ? 0 : (ts - last) / 1000; last = ts;
-      for (const d of devices) d.update?.(dt);
+      const ddt = Math.min(dt, engine.game.sim.maxFrame); // #44: a device never sees more than the loop will step
+      for (const d of devices) d.update?.(ddt);
       if (manual) engine.render(engine.loop.alpha); else engine.frame(dt);
       rendered = true;
     } catch (err) {

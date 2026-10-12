@@ -92,3 +92,8 @@ test('2d fix: the driver drops a pending ack on start() and on hidden ticks', ()
   setVis('visible'); tick(48); assert.equal(acks, 1); // the frame drawn before hiding is not acked
   tick(64); assert.equal(acks, 2);
 });
+
+test('2d: devices (and view.dt) get dt capped at sim.maxFrame (#44)', () => {
+  const seen = []; const { tick, driver } = setup({ devices: [{ update: dt => seen.push(dt) }] });
+  driver.start(); tick(0); tick(1000); assert.deepEqual(seen, [0, 0.25]);
+});

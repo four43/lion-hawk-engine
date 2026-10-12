@@ -65,3 +65,24 @@ test('2c: a button set and cleared between two applies is latched for one step (
   inp.release(); inp.device({ horn: true }, 'pad'); inp.device({ horn: false }, 'pad'); inp.set({ horn: false });
   assert.equal(inp.apply().horn.down, false); // so does set
 });
+
+const seq = inp => { const b = inp.apply().horn; return [b.down, b.pressed, b.released]; };
+test('2d: two taps between applies give pressed, released, pressed (#41)', () => {
+  const inp = createInput(schema);
+  for (const v of [true, false, true, false]) inp.device({ horn: v }, 'keyboard');
+  assert.deepEqual(seq(inp), [true, true, false]); assert.deepEqual(seq(inp), [false, false, true]);
+  assert.deepEqual(seq(inp), [true, true, false]); assert.deepEqual(seq(inp), [false, false, true]);
+  assert.deepEqual(seq(inp), [false, false, false]);
+});
+test('2d: a release and re-press while held shows released, then pressed', () => {
+  const inp = createInput(schema); inp.device({ horn: true }, 'k'); inp.apply();
+  inp.device({ horn: false }, 'k'); inp.device({ horn: true }, 'k');
+  assert.deepEqual(seq(inp), [false, false, true]); assert.deepEqual(seq(inp), [true, true, false]); assert.deepEqual(seq(inp), [true, false, false]);
+});
+test('2d: clearDevice drops that source\'s unapplied taps; hold still wins (E1 minors)', () => {
+  const inp = createInput(schema); inp.device({ horn: true }, 'pad'); inp.device({ horn: false }, 'pad'); inp.clearDevice('pad');
+  assert.deepEqual(seq(inp), [false, false, false]);
+  inp.device({ horn: true }, 'k'); inp.device({ horn: false }, 'k'); inp.device({ horn: true }, 'k'); inp.hold({ horn: false });
+  assert.deepEqual(seq(inp), [false, false, false]); inp.release(); inp.device({ horn: false }, 'k');
+  assert.deepEqual(seq(inp), [false, false, false]); // the hold consumed the owed presses
+});
