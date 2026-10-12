@@ -434,7 +434,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 63. Safe areas read `env()` directly: Pig Pens (phase 2e plan; like #31)
 - **What happened:** `template.html` uses `env(safe-area-inset-*)`, which Chromium can't emulate, so the Playwright presets' `--lh-sa-*` variables don't apply.
-- **Change:** `var(--lh-sa-X, env(safe-area-inset-X, 0px))` everywhere. P8 also measures the Get out button, which its CSS makes about 43 px tall (under the 44 px guideline); no restyling in 2e: measured 101.7 × 42 px (2e P8). Known gap: the e2e asserts `{ min: 40 }` only, and the restyle is planned in the final pass. Status: done (2e P6, P8); Get out restyle open.
+- **Change:** `var(--lh-sa-X, env(safe-area-inset-X, 0px))` everywhere. P8 also measures the Get out button, which its CSS makes (earlier estimate superseded) tall (under the 44 px guideline); no restyling in 2e: measured 101.7 × 42 px (2e P8). Known gap: the e2e asserts `{ min: 40 }` only, and the restyle is planned in the final pass. Status: done (2e P6, P8); Get out restyle open.
 
 ### 64. No finite invariant before the World: engine, Pig Pens (phase 2e plan)
 - **What happened:** [T-1] says a `finite()` invariant over every `xf` and body is always on, but there is no `World` yet (phase 4), so nothing checks. `nan.mjs` checks the birds' positions by hand.
