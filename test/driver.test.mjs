@@ -66,3 +66,10 @@ test('F1: start() resets the engine loop', () => {
   const { engine, driver } = setup(); let reset = 0; const r = engine.loop.reset; engine.loop.reset = () => { reset++; return r.call(engine.loop); };
   driver.start(); assert.equal(reset, 1);
 });
+test('2d: the driver acks a rendered frame at the start of the next tick (#38)', () => {
+  const q = []; const raf = f => q.push(f), tick = ts => q.shift()(ts);
+  const { document } = dom(); const engine = createEngine(game, { scene: 'race', acks: 'frames' });
+  let acks = 0; engine.onPresent(() => acks++);
+  const driver = createDriver(engine, { raf, caf() {}, doc: document });
+  driver.start(); tick(0); assert.equal(acks, 0); tick(16); assert.equal(acks, 1); tick(32); assert.equal(acks, 2);
+});

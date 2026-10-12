@@ -59,6 +59,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
       h.until(() => (found = log.find(e => e.seq > mark && f(e))) !== undefined, { message: `untilEvent(${typeof m === 'string' ? m : 'fn'})`, ...opts });
       return found;
     },
+    untilLoaded(opts = {}) { return h.until(x => !x.engine.loading.active, { message: 'untilLoaded', ...opts }); }, // [S-6]
     untilScene(name, opts = {}) { return h.until(x => x.scene.name === name || x.scene.overlays.includes(name), { message: `untilScene(${name})`, ...opts }); },
     mark: () => engine.events.seq,
     events: log, since: m => log.since(m),

@@ -18,7 +18,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 3 | One-sided range checks hide regressions | Rally | open |
 | 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3); Tractor Pickup, Pig Pens open |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
-| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done for Rally (2c-rally R2, R5; S-6 stays open) |
+| 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Tractor Pickup's radial pair merge, Pig Pens' scene-scoped stick and gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done for Rally's needs (2c-rally E4); rest open |
@@ -33,7 +33,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 18 | Rich menus vs. a registry of plain buttons | Rally | done (2c-rally) |
 | 19 | View halves need the frame time | Rally | done (2c-rally) |
 | 20 | Async view loads and `settled()` | Rally | done (2c-rally) |
-| 21 | A loading toast needs a paint before a synchronous build | Rally | done (2c-rally) |
+| 21 | A loading toast needs a paint before a synchronous build | Rally | done (2c-rally; engine 2d D4: ctx.load hold) |
 | 22 | Flow and HUD timers on `setTimeout` | Rally | done (2c-rally) |
 | 23 | Pause was a state of the game's own state machine | Rally | done (2c-rally) |
 | 24 | Browser-only defaults inside sim modules | Rally | done (2c-rally) |
@@ -50,7 +50,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 35 | A fixed engine seed gives every visitor the same first track | Rally | done (2c-rally) |
 | 36 | Can't ask "is this overlay open or pending?" | Rally | open (worked around in 2c-rally R2) |
 | 37 | Policies have no per-handle state or rate | Rally | open (worked around in 2c-rally R2) |
-| 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | open |
+| 38 | No "a frame has been drawn" signal for deferring heavy sim work | Rally | done (2d D4: frame acks, engine.onPresent) |
 | 39 | A control can't both trigger an action and be gated | Rally | open |
 | 40 | Determinism makes some comparisons meaningless | Rally | done for Rally (final-fix: run 2 perturbed); engine guidance open |
 | 41 | The input latch drops a second tap if no step sees the key go up | Rally | open (worked around in 2c-rally R5) |
@@ -104,7 +104,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** `RAPIER.init()` and Rally's `await loadTrack()` are async, while scene `enter` is synchronous.
 - **Engine change:** async init in `boot` before `createEngine`, plus a loading protocol (S-6) that has a synchronous headless path.
 - **2c-rally plan:** Rally's entry awaits `RAPIER.init()` before calling `boot` (no engine option: one `await` in the entry is all it needs). Track generation and the Rapier build are already synchronous, so the stage builds in `enter` and during a sim-side `loading` hold (#21). The async part that remains is the three.js track view (a dynamic import), which goes through `view.wait` (#20). S-6 itself stays open.
-- **Status:** Rally part done (2c-rally R2, R5, R8); S-6 stays open.
+- **Status:** done (Rally 2c; S-6 protocol 2d D4): `ctx.load({ build, then, hold, frames, settle })` suspends the scene's step and builds in its slot; headless and `?lh-test` count every step as a presented frame, so the path stays synchronous; `settle` waits for `view.wait` (`engine.block`).
 
 ### 7. The world must survive menu screens: Rally
 - **What happened:** Rally's title is "the menu over the live scene". If title were its own scene, `go()` would dispose the world (S-3).
@@ -201,7 +201,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** Rally shows "Building the track…", awaits one `requestAnimationFrame` so the toast paints, then generates the track (0.07–0.23 s) and builds the Rapier world synchronously. Inside the engine the build happens in a step, and all of a frame's steps run before the frame renders, so a toast set in the same step never paints.
 - **Workaround (2c-rally R2):** a title change puts the stage in `loading` and the build runs once 0.05 s of engine time has passed (12 steps at 240 Hz). In the browser that spans a few frames, so the toast paints; headless it is just 12 steps. The first build (in `enter`) is immediate, behind the page's own loading screen.
 - **Engine change:** S-6's loading protocol should offer "hold N seconds of engine time, then build" as its synchronous path.
-- **Status:** done (2c-rally).
+- **Status:** done (2c-rally); engine change done (2d D4: ctx.load hold; builds in the same step as Rally's LOAD_HOLD counter).
 
 ### 22. Flow and HUD timers on `setTimeout`: Rally
 - **What happened:** the results card opens 1.5 s after the finish by `setTimeout` in `main.js`; `GameHud` hides banners, the split pill and the countdown lights with `setTimeout`; the toast too. These break U-5 and can't run headless or under `?lh-test`.
@@ -280,7 +280,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 38. No "a frame has been drawn" signal for deferring heavy sim work: Rally (phase 2c R2; see #21, S-6)
 - **What happened:** Rally shows a "Building the track…" toast, waits LOAD_HOLD (12 steps), then builds. With maxCatchUp 12, all 12 steps can run in a single rAF frame, so the toast never paints.
-- **Engine change:** a render-ack, either `engine.afterRender(fn)` or a view-side "frame presented" event that the loading protocol can wait on; headless runs treat every step as a frame. Status: open.
+- **Engine change:** a render-ack, either `engine.afterRender(fn)` or a view-side "frame presented" event that the loading protocol can wait on; headless runs treat every step as a frame. Status: done (2d D4: frame acks, engine.onPresent): `engine.time.frames`, `engine.presented()` (the browser driver acks a rendered frame at the start of the next tick), `ctx.load({ frames })`.
 
 ### 39. A control can't both trigger an action and be gated: Rally (phase 2c R2)
 - **What happened:** the Pause chip opens the overlay directly. A pause key and a chip tap in the same frame then open and close pause. Routing the chip through the `pause` action conflicts with the `when` gate on overlay state.

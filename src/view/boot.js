@@ -20,7 +20,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     const s = flags.extra?.scene; if (s) scene = s;
     const a = flags.extra?.args; if (a) { try { args = JSON.parse(a); } catch { /* ignore a malformed ?args */ } }
   }
-  const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args });
+  // [S-6] ?lh-test counts every step as a presented frame (deterministic; game.until never waits for a rAF)
+  const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames' });
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, wait: p => wait(p) }; // #19: dt is the driver frame time; 0 for renders the driver didn't start
   const frameDt = { update(dt) { view.dt = dt; } }; // first device: later devices and the frame see this frame's dt
   const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine))], onError: report });
@@ -59,9 +60,9 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     reconcile(); ui.sync();
     const s = hook.settled() ? '1' : '0'; if (s !== settledAttr) { settledAttr = s; doc.documentElement.setAttribute('data-lh-settled', s); }
   };
-  function wait(p) { // #20: until p settles, settled() is false; a rejection lands in errors
-    pending++; refresh();
-    const done = () => { pending--; refresh(); };
+  function wait(p) { // #20: until p settles, settled() is false; a rejection lands in errors. [S-6] it also blocks a settling load
+    pending++; const release = engine.block('view.wait'); refresh();
+    const done = () => { pending--; release(); refresh(); };
     Promise.resolve(p).then(done, err => { report(err); done(); });
     return p;
   }

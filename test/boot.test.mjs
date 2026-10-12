@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, defineView, parseFlags } from '../src/index.view.js';
+import { defineGame } from '../src/index.sim.js';
 import { dom } from './helpers/dom.mjs';
 const raf = () => 0, caf = () => {};
 import game from './fixtures/countdown.js';
@@ -96,5 +97,17 @@ test('2c: view.dt is the driver frame time in frame(), 0 for hook renders; view.
   assert.equal(app.hook.settled(), true); assert.equal(document.documentElement.getAttribute('data-lh-settled'), '1');
   app.view.wait(Promise.reject(new Error('no track view'))); await new Promise(r => setTimeout(r, 0));
   assert.match(target.engine.errors.at(-1).message, /no track view/); assert.equal(app.hook.settled(), true);
+  app.dispose();
+});
+test('2d: view.wait blocks loads; settled() is false while a load is active', async () => {
+  const g = defineGame({ id: 'bl', start: 's', scenes: { s: { enter(e, ctx) { ctx.state.ctx = ctx; } } } });
+  const { document } = dom();
+  const app = boot(g, defineView({ scenes: {} }), { doc: document, target: { document }, raf, caf, flags: parseFlags('?lh-test') });
+  assert.equal(app.engine.acks, 'steps');
+  let resolve; app.view.wait(new Promise(r => { resolve = r; })); assert.equal(app.engine.blocked, 1);
+  app.engine.scene.state.ctx.load({ build() {}, settle: true }); assert.equal(app.hook.settled(), false);
+  app.hook.stepN(1); assert.equal(app.engine.loading.phase, 'settle');
+  resolve(); await new Promise(r => setTimeout(r, 0)); assert.equal(app.engine.blocked, 0);
+  app.hook.stepN(1); assert.equal(app.engine.loading.active, false); assert.equal(app.hook.settled(), true);
   app.dispose();
 });

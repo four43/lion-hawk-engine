@@ -24,7 +24,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     ready, seed: engine.seed, errors,
     manual: on => driver.manual(on),
     stepN: n => note(engine.stepN(n)), advance: s => note(engine.advance(s)), render: a => { engine.render(a); after(); },
-    get time() { return engine.time; }, get scene() { return engine.scene; },
+    get time() { return engine.time; }, get scene() { return engine.scene; }, get loading() { return engine.loading; }, // [S-6]
     go: (n, a) => { engine.go(n, a); after(); }, overlay: (n, a) => { engine.overlay(n, a); after(); },
     close: n => { engine.close(n); after(); }, jump: (n, p, o, a) => { engine.jump(n, p, o, a); after(); },
     command: (type, data) => { engine.command(type, data); after(); }, // #5
@@ -33,7 +33,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     state: () => engine.state(),
     input: { set: p => engine.input.set(p), hold: p => engine.input.hold(p), release: (...n) => engine.input.release(...n), read: () => engine.input.values() },
     settled() {
-      if (busy()) return false; // #20: view.wait promises pending
+      if (busy() || engine.loading.active) return false; // #20: view.wait promises pending; [S-6] a scene loading
       const d = target.document; if (!d?.querySelector) return true;
       return !d.querySelector('[data-lh-state="opening"],[data-lh-state="closing"]');
     },

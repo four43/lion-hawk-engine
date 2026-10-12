@@ -23,10 +23,11 @@ export function defineGame(spec) {
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false } = {}) {
+  if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   let step = 0, render = () => {};
-  const streams = new Map(), time = { step: 0, sim: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
+  const streams = new Map(), time = { step: 0, sim: 0, frames: 0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
   let nextId = 1; // every entered scene instance gets a monotonic id (view halves key on it)
   // R-8: `time` is updated in place every step; the scene view (name/args/state/overlays) only when a transition happens,
   // so `engine.scene.overlays` stays the same array across steps.
@@ -40,6 +41,44 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s) });
+  // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
+  // engine.presented() (the browser driver acks a rendered frame at the start of the next tick). Listeners are
+  // copy-on-write, so presenting allocates nothing.
+  let presentFns = [], blocked = 0;
+  const present = () => { time.frames++; const l = presentFns; for (let i = 0; i < l.length; i++) l[i](engine); };
+  // [S-6] loading is a scene state (#21, #38): a scene with a load has its step hook suspended; in that slot the load
+  // ticks, builds after `hold` seconds of engine time and `frames` presented frames, then (with `settle`) waits for a
+  // presented frame after the build and no engine.block() before `then`. One load in the engine at a time.
+  const loading = { active: false, scene: undefined, label: '', phase: '' };
+  let loader = null; // the stack entry that is loading
+  const setLoading = entry => {
+    const l = entry?.load; loader = l ? entry : null;
+    loading.active = !!l; loading.scene = l ? entry.ctx.name : undefined; loading.label = l ? l.pub.label : ''; loading.phase = l ? l.phase : '';
+  };
+  const dropLoad = entry => { if (entry.load) { entry.load = null; if (loader === entry) setLoading(null); } };
+  const load = (entry, { build, then, hold = 0, frames = 1, settle = false, label = '' } = {}) => {
+    if (typeof build !== 'function') throw new Error('engine: load needs a build function');
+    if (!stack.includes(entry)) throw new Error(`engine: scene '${entry.ctx.name}' is not open`);
+    if (loader && loader !== entry) throw new Error(`engine: scene '${loader.ctx.name}' is already loading`);
+    const pub = { label: String(label), then }; // `then` may be reassigned until it runs
+    entry.load = { pub, build, hold, frames, settle, ticks: 0, f0: time.frames, fb: 0, phase: 'hold' };
+    setLoading(entry); return pub;
+  };
+  const finishLoad = (entry, l) => { dropLoad(entry); l.pub.then?.(engine, entry.ctx); };
+  const loadTick = (entry, dt) => {
+    const l = entry.load;
+    try {
+      if (l.phase === 'hold') {
+        l.ticks++;
+        if (l.ticks * dt < l.hold - 1e-9 || time.frames - l.f0 < l.frames) return;
+        l.build(engine, entry.ctx);
+        if (entry.load !== l) return; // the build replaced or dropped its load
+        if (!l.settle) return finishLoad(entry, l);
+        l.fb = time.frames; l.phase = loading.phase = 'settle';
+      }
+      if (blocked === 0 && (acks === 'steps' || time.frames > l.fb)) finishLoad(entry, l);
+    } catch (err) { if (entry.load === l) dropLoad(entry); throw err; }
+  };
   const enter = (name, a) => {
     const s = def(name), scoped = [], cmds = new Map(), ctx = { name, id: nextId++, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
     // #5: scene-scoped command handlers live on the stack entry, so they leave with the scene (exit or a rolled-back enter)
@@ -51,19 +90,20 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
         if (delivering) { list[i] = null; holes.push(list); } else list.splice(i, 1);
       };
     };
-    const entry = { s, ctx, scoped, cmds };
+    const entry = { s, ctx, scoped, cmds, load: null };
+    ctx.load = o => load(entry, o);
     stack.push(entry); sync();
     try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }
-    catch (err) { const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
+    catch (err) { dropLoad(entry); const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
     return ctx;
   };
   const isOpen = name => stack.some(o => o.ctx.name === name);
-  const exit = i => { const [{ s, ctx, scoped }] = stack.splice(i, 1); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
+  const exit = i => { const [entry] = stack.splice(i, 1), { s, ctx, scoped } = entry; dropLoad(entry); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
   // Pausing: while any open overlay has `pauses`, every stage stays frozen and only the overlays at or above the TOPMOST
   // pausing overlay run their step hooks (the main scene and anything beneath that overlay wait).
   const pausedFrom = () => { for (let i = stack.length - 1; i >= 1; i--) if (stack[i].s.pauses) return i; return -1; };
   const coveredBy = scene => { const p = pausedFrom(); if (p < 0) return undefined; const i = stack.findIndex(o => o.ctx.name === scene); return i >= 0 && i < p ? stack[p].ctx.name : undefined; };
-  const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) stack[i].s.step?.(engine, dt, stack[i].ctx); };
+  const stepScenes = (dt, from) => { for (let i = from; i < stack.length; i++) { const x = stack[i]; if (x.load) loadTick(x, dt); else x.s.step?.(engine, dt, x.ctx); } };
   // Transitions (go/overlay/close/jump) never run re-entrantly: requested while a step or another transition is busy,
   // they queue; the outermost transition (or the end of the step) drains the queue until it is empty. Only the last
   // queued go (and the requests after it) apply: requests before it are dropped, they would be torn down at once.
@@ -149,6 +189,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const loop = createLoop({ hz: game.sim.hz, maxCatchUp: game.sim.maxCatchUp, maxFrame: game.sim.maxFrame, render: a => render(a), step(dt) {
     inStep = stepping = true; let failure = null;
     try {
+      if (acks === 'steps') present(); // [S-6] every step is a presented frame
       schedule.run('input.apply', engine, dt);
       const p = pausedFrom();
       if (p > 0) stepScenes(dt, p);
@@ -190,7 +231,16 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     cmds.push({ type, data }); return engine;
   };
   const engine = {
-    game, seed: base.seed, events, input, loop, commands,
+    game, seed: base.seed, events, input, loop, commands, loading,
+    get acks() { return acks; }, get blocked() { return blocked; },
+    presented() { if (acks !== 'frames') throw new Error("engine: presented() needs acks: 'frames'"); present(); },
+    onPresent(fn) {
+      if (typeof fn !== 'function') throw new Error('engine: onPresent needs a function');
+      presentFns = [...presentFns, fn]; return () => { presentFns = presentFns.filter(f => f !== fn); };
+    },
+    block(label = '') { // [S-6] e.g. view.wait: a settling load waits until every block is released
+      void label; let on = true; blocked++; return () => { if (on) { on = false; blocked--; } };
+    },
     time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
