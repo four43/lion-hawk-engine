@@ -115,6 +115,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | open (the command waits for the next step; option: `untilLoaded` also waits while `engine.commands.pending` > 0) |
 | 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.lh-stick` translate −50%) |
 | 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | open (2g G1 kept the move; G5 must fix: `drawAt` also advances the forecast state the sim's `before` reads, so the host sim depends on frame timing) |
+| 103 | A failing `assert.equal` on a DOM node can use gigabytes | engine, all games | fixed (2g G-E2: `same()` identity helper, guard test; `--test-concurrency=4` in every unit script) |
+| 104 | Late game markup needs re-adoption (`menus.js` builds screens on open) | engine, Tractor Pickup | done (0.7.2: late adoption on sync and `ui.adopt()`) |
 
 ## Entries
 
@@ -655,3 +657,19 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** `players.drawAt(now, herd)` places other players' carried animals in `game.herd` every frame (M-65). It moved unchanged into the farm view's `frame`, which breaks "view halves never write the sim". A tape recorded in a room could depend on frame timing.
 - **Decision:** kept in G1, which moved code without rewriting it (no room is bound in G1, so it never runs). The G1 review found it is wider: `players.sample(now)` also advances the forecast state (`last`, the error fade, the `next` record) that the sim's `before` reads. G5 must give the view a read-only `players.poseAt(now, out)` and draw carried riders from a view pose-override map (as #79).
 - **Status:** open.
+
+### 103. A failing `assert.equal` on a DOM node can use gigabytes: engine, all games (phase 2g G-E2)
+- **What happened:**
+  - A half-finished G-E2 test file grew to 16 GB in about 10 seconds, and the user's machine ran out of memory.
+  - When `assert.equal` fails on a happy-dom node, Node inspects the node's whole window (about 2.2 MB of text). Its diff then takes memory quadratic in the line count.
+  - On a 32-core machine, `node --test` ran about 31 files at once, so several such failures together exhausted memory.
+- **Decision:**
+  - DOM nodes are compared by identity through `same()` in `test/helpers/dom.mjs`. A guard test rejects `assert.equal`/`deepEqual` on node expressions (it catches common shapes, not plain variables).
+  - Every unit test script runs `--test-concurrency=4`.
+  - Agents run suites in a capped scope with a node heap limit below the cap, so a runaway dies inside node and the user gets no KDE low-memory notice.
+- **Status:** fixed.
+
+### 104. Late game markup needs re-adoption: engine, Tractor Pickup (phase 2g G2)
+- **What happened:** uiDom adopted `data-lh-slot` markup only when a control first appeared. Tractor's `menus.js` builds each screen after its overlay registers its controls, and removes the screen on close. So pre-made markup would be destroyed, and late markup was never used.
+- **Decision:** in 0.7.2, a sync swaps an engine-made control onto a slot element that appears later, and re-adopts or falls back when an adopted element leaves the document. `ui.adopt()` forces the swap at once. Without a `MutationObserver`, late adoption happens only through `adopt()`.
+- **Status:** done.
