@@ -52,6 +52,8 @@ These override any task text below that disagrees. Source: `docs/plans/2026-10-1
   - `stopHosting()` must not leave the room before the step that drains `net.close`'s leave; call `port.close()` after that step or on `closed`.
   - The G5 test gives the guest different args from the host, so the `seed === 21` assertion proves something.
 - **Until G7:** any old-path change in `main.js` (trip cues, reward, bedtime, `stepSounds`, build) is mirrored in `game/flow.js` and `game/farm.js`.
+- **G7 and `ui/hold.js` (G3 review ruling):** delete `menus.js`'s built-in gear branch and its `hold.js` import together with `main.js`. Keep `ui/hold.js`: `show.js`'s default skip path (still covered by `show.test.mjs`) uses it, so add a header note saying so.
+- **G3 additions:** the show runs on `view.rawDt` (opt-in `clock: 'update'`), the cheer fires on pointerdown through a plain view listener, `bindGesture` handles only the 1 s hurry hold, and adopted go/close buttons live inside their screens through `view.ui.adopt()` (engine 0.7.2).
 - **Tapes:** no assertions on browser-recorded tapes. The sim reads `time.wall`, so only headless and `mp()` tapes replay exactly (field notes #92, #98).
 
 ## File structure
