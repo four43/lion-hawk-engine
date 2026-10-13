@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bindStick, bindHold, createEngine, defineGame, actions, axis, button } from '../src/index.view.js';
-import { dom } from './helpers/dom.mjs';
+import { dom, same } from './helpers/dom.mjs';
 
 const setupWith = schema => {
   const { window, document } = dom();
@@ -45,7 +45,7 @@ test('stick renders, shows at pointer and hides on release; dispose cleans up', 
   s.ev(s.root, 'pointerdown', 1, 200, 300); assert.equal(el.hidden, false);
   s.ev(s.window, 'pointerup', 1); assert.equal(el.hidden, true);
   s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 270, 300);
-  st.dispose(); assert.equal(s.v().steer, 0); assert.equal(s.document.body.querySelector('.lh-stick'), null);
+  st.dispose(); assert.equal(s.v().steer, 0); same(s.document.body.querySelector('.lh-stick'), null);
   s.ev(s.root, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 270, 300); assert.equal(s.v().steer, 0);
 });
 test('hold button is true while pressed, false after lostpointercapture', () => {
@@ -111,9 +111,9 @@ test('F3: a canvas surface mounts the base under body, with fixed position', () 
   const s = setup(); const canvas = s.document.createElement('canvas'); s.document.body.appendChild(canvas);
   const st = bindStick(s.engine, { surface: canvas, y: ['throttle', 1], doc: s.document });
   const base = s.document.querySelector('.lh-stick');
-  assert.equal(base.parentNode, s.document.body); assert.equal(base.style.position, 'fixed'); assert.equal(canvas.style.touchAction, 'none');
+  same(base.parentNode, s.document.body); assert.equal(base.style.position, 'fixed'); assert.equal(canvas.style.touchAction, 'none');
   s.ev(canvas, 'pointerdown', 1, 200, 300); s.ev(s.window, 'pointermove', 1, 200, 230); assert.equal(s.v().throttle, 1);
-  st.dispose(); assert.equal(s.document.querySelector('.lh-stick'), null);
+  st.dispose(); same(s.document.querySelector('.lh-stick'), null);
 });
 
 test('2c slider: x only, vertical ignored, per-axis clamp, function radius per gesture, adopted base/knob (#17)', () => {
@@ -131,7 +131,7 @@ test('2c slider: x only, vertical ignored, per-axis clamp, function radius per g
   s.ev(s.window, 'pointermove', 1, 100, 300); assert.equal(s.v().steer, 1); // clamped on x alone
   s.ev(s.window, 'pointerup', 1);
   assert.equal(s.v().steer, 0); assert.equal(base.hidden, true); assert.equal(s.root.hasAttribute('data-lh-active'), false);
-  h.dispose(); assert.equal(base.isConnected, true); assert.equal(s.document.querySelector('.lh-stick'), null);
+  h.dispose(); assert.equal(base.isConnected, true); same(s.document.querySelector('.lh-stick'), null);
 });
 test('2c: bindHold marks its element with data-lh-down while pressed (#17)', () => {
   const s = setup(); const h = bindHold(s.engine, s.btn, 'throttle');

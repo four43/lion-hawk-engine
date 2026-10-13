@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.2 — 2026-10-13
+
+Phase 2g G-E2: late adoption of game markup.
+
+- UI DOM ([U-1]): a `data-lh-slot` element that appears after its control already has an engine-made element is adopted on the next sync, and the engine-made one is removed. The adopted element gets everything adoption gives (`data-testid`, `disabled`, `aria-pressed`, taps, holds with `--lh-progress` and `data-lh-down`). An adopted element that leaves the document while its control lives is replaced on the next sync by a new slot element, or else by an engine-made control. Removing a control still never deletes an adopted element.
+- `view.ui.adopt()` (also on what `createUiDom` returns) runs that swap at once, for a view half that has just built a screen. A sync looks for slots only after a mutation that adds a `data-lh-slot` element or changes that attribute (a `MutationObserver`, read with `takeRecords()` so markup built earlier in the same task counts), so an unchanged frame does no querying.
+- Tests: `same(actual, expected)` in `test/helpers/dom.mjs` compares DOM nodes. A failing `assert.equal` on a happy-dom node diffs the inspected window and needs gigabytes; a guard test rejects such assertions in the DOM tests.
+
 ## 0.7.1 — 2026-10-12
 
 Phase 2g G-E1: two real browser pages as host and guest.

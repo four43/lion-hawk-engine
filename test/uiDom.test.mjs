@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine, createUiDom, defineGame, actions, button } from '../src/index.view.js';
-import { dom } from './helpers/dom.mjs';
+import { dom, same } from './helpers/dom.mjs';
 import game from './fixtures/countdown.js';
 
 const setup = () => {
@@ -14,7 +14,7 @@ test('title Play renders and a click moves the engine to race', () => {
   const { document, engine } = setup(); const b = q(document, 'title.play');
   assert.equal(b.textContent, 'Play'); assert.equal(b.tagName, 'BUTTON');
   b.click(); assert.equal(engine.scene.name, 'race');
-  assert.equal(q(document, 'title.play'), null); // synced right after the click
+  same(q(document, 'title.play'), null); // synced right after the click
   assert.equal(document.documentElement.getAttribute('data-lh-scene'), 'race');
 });
 test('race Pause is disabled until running; overlay gets its own container', () => {
@@ -28,7 +28,7 @@ test('race Pause is disabled until running; overlay gets its own container', () 
   engine.overlay('results'); ui.sync();
   assert.equal(document.documentElement.getAttribute('data-lh-overlays'), 'pause results');
   engine.close('results'); ui.sync();
-  q(document, 'pause.resume').click(); assert.equal(document.querySelector('[data-lh-overlay="pause"]'), null);
+  q(document, 'pause.resume').click(); same(document.querySelector('[data-lh-overlay="pause"]'), null);
 });
 test('clicking a covered/disabled control is swallowed', () => {
   const { document, engine, ui } = setup(); engine.go('race'); ui.sync();
@@ -59,7 +59,7 @@ test('2c: [data-lh-slot] elements are adopted; content stays the game\'s (#18)',
   assert.ok(go); assert.equal(go.textContent, '🏁 Go');
   go.click(); assert.equal(engine.scene.state.went, 1);
   const a = document.querySelector('[data-testid="t.mode.a"]'); // a <span> slot can't be a button: created in the scene box
-  assert.equal(a.tagName, 'BUTTON'); assert.equal(a.closest('#menu'), null); assert.equal(a.getAttribute('aria-pressed'), 'true');
+  assert.equal(a.tagName, 'BUTTON'); same(a.closest('#menu'), null); assert.equal(a.getAttribute('aria-pressed'), 'true');
   const b = document.querySelector('#menu [data-testid="t.mode.b"]'); assert.equal(b.textContent, 'B!'); assert.equal(b.getAttribute('aria-pressed'), 'false');
   b.click(); assert.equal(engine.scene.state.mode, 'b'); assert.equal(b.getAttribute('aria-pressed'), 'true');
   const seed = document.querySelector('#menu input[data-testid="t.seed"]'); assert.equal(seed.value, 's1');
@@ -148,3 +148,55 @@ test('2d: a hold is released only by its own key, only by the primary button, an
   dn(window, b, 2, { button: 0 }); dn(window, b, 3, { button: 0 }); up(window, b, 2); assert.equal(pressed(), true); up(window, b, 3); assert.equal(pressed(), false);
   dn(window, b, 4); key('keydown', ' '); key('keyup', ' '); assert.equal(pressed(), true); up(window, b, 4); assert.equal(pressed(), false);
 });
+
+const slot = (document, id, tag = 'button', parent = document.body) => { const el = document.createElement(tag); el.setAttribute('data-lh-slot', id); parent.appendChild(el); return el; };
+test('G-E2: a slot element that appears after the control exists is adopted on the next sync; the fallback goes', () => {
+  const { document, engine, ui } = setup2(slotGame);
+  const fallback = q(document, 't.go'); assert.ok(fallback); assert.equal(fallback.hasAttribute('data-lh-slot'), false);
+  const el = slot(document, 't.go'); el.textContent = '🏁 Go'; ui.sync();
+  same(q(document, 't.go'), el); assert.equal(fallback.isConnected, false); assert.equal(el.textContent, '🏁 Go');
+  el.click(); assert.equal(engine.scene.state.went, 1);
+  fallback.click(); assert.equal(engine.scene.state.went, 1); // the removed fallback no longer taps
+});
+test('G-E2: adopt() swaps at once, with no sync needed; a no-change adopt() writes nothing', async () => {
+  const { window, document, ui } = setup2(slotGame);
+  const el = slot(document, 't.seed', 'input'); ui.adopt();
+  same(q(document, 't.seed'), el); assert.equal(el.value, 's1'); assert.equal(document.querySelectorAll('[data-testid="t.seed"]').length, 1);
+  let n = 0; const mo = new window.MutationObserver(r => { n += r.length; }); mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  ui.sync(); ui.adopt(); await new Promise(r => setTimeout(r, 10)); assert.equal(n, 0); mo.disconnect();
+});
+test('G-E2: an adopted element that leaves the document is re-adopted onto a new slot element, or falls back', () => {
+  const { document, engine, ui } = setup2(slotGame);
+  const a = slot(document, 't.go'); ui.sync(); same(q(document, 't.go'), a);
+  a.remove(); const b = slot(document, 't.go'); ui.sync();
+  same(q(document, 't.go'), b); assert.equal(document.querySelectorAll('[data-testid="t.go"]').length, 1);
+  b.click(); assert.equal(engine.scene.state.went, 1);
+  b.remove(); ui.sync(); const f = q(document, 't.go'); assert.ok(f); assert.equal(f.textContent, 'Go'); assert.equal(f.isConnected, true);
+  f.click(); assert.equal(engine.scene.state.went, 2);
+  const c = slot(document, 't.go'); ui.adopt(); same(q(document, 't.go'), c); assert.equal(f.isConnected, false);
+});
+test('G-E2: a re-adopted hold shows --lh-progress and data-lh-down on the new element', () => {
+  const { window, document, engine, ui } = setup2(hg);
+  const a = slot(document, 's.wake'); ui.sync(); a.remove(); const b = slot(document, 's.wake'); ui.sync();
+  b.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 1, bubbles: true })); engine.stepN(15); ui.sync();
+  assert.equal(b.style.getPropertyValue('--lh-progress'), '0.5'); assert.ok(b.hasAttribute('data-lh-down'));
+  b.dispatchEvent(new window.PointerEvent('pointerup', { pointerId: 1, bubbles: true })); ui.sync();
+  assert.equal(b.style.getPropertyValue('--lh-progress'), '0'); assert.equal(b.hasAttribute('data-lh-down'), false);
+});
+test('G-E2: removing the control keeps a late-adopted game element; the fallback is gone', () => {
+  const { document, engine, ui } = setup2(slotGame);
+  const fallback = q(document, 't.go'), el = slot(document, 't.go'); ui.sync(); same(q(document, 't.go'), el);
+  engine.go('u'); ui.sync();
+  assert.equal(el.isConnected, true); assert.equal(el.hasAttribute('data-testid'), false); assert.equal(el.disabled, true);
+  assert.equal(fallback.isConnected, false); assert.equal(document.querySelectorAll('[data-testid^="t."]').length, 0);
+});
+test('G-E2: a sync looks for slots only after a slot-relevant mutation (no per-frame scan)', () => {
+  const { document, ui } = setup2(slotGame); let n = 0; const qsa = document.querySelectorAll.bind(document);
+  document.querySelectorAll = s => { n++; return qsa(s); };
+  ui.sync(); ui.sync(); assert.equal(n, 0); // nothing changed
+  const hud = document.createElement('div'); hud.textContent = 'speed 1'; document.body.appendChild(hud); ui.sync(); hud.textContent = 'speed 2'; ui.sync();
+  assert.equal(n, 0); // markup without a data-lh-slot is not a reason to look
+  const el = slot(document, 't.go'); ui.sync(); assert.ok(n > 0); same(q(document, 't.go'), el);
+  n = 0; ui.sync(); assert.equal(n, 0);
+});
+function setup2(g) { const { window, document } = dom(), engine = createEngine(g), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync(); return { window, document, engine, ui }; }

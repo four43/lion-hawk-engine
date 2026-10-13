@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, defineView, parseFlags } from '../src/index.view.js';
 import { defineGame } from '../src/index.sim.js';
-import { dom } from './helpers/dom.mjs';
+import { dom, same } from './helpers/dom.mjs';
 const raf = () => 0, caf = () => {};
 import game from './fixtures/countdown.js';
 
@@ -54,7 +54,7 @@ test('a throwing action is captured; ui sits in its own root after existing chil
   const g = { ...game, scenes: { ...game.scenes, title: { ui(u) { u.button({ id: 'bad', label: 'x', action: () => { throw new Error('game bug'); } }); } } } };
   const { window, document } = dom(); const canvas = document.createElement('canvas'); document.body.appendChild(canvas);
   const app = boot(g, defineView({ scenes: {} }), { doc: document, target: { document }, raf, caf, flags: parseFlags('?lh-test') });
-  assert.equal(document.body.children[0], canvas); const r = document.body.children[1]; assert.ok(r.hasAttribute('data-lh-ui-root'));
+  same(document.body.children[0], canvas); const r = document.body.children[1]; assert.ok(r.hasAttribute('data-lh-ui-root'));
   assert.ok(r.querySelector('[data-lh-ui="title"]'));
   document.querySelector('[data-testid="title.bad"]').click();
   assert.equal(app.hook.errors[0].message, 'game bug');
@@ -65,7 +65,7 @@ test('dispose stops the driver, detaches listeners, clears html attributes', () 
   assert.equal(document.documentElement.getAttribute('data-lh-scene'), 'title');
   app.dispose(); assert.equal(app.driver.running, false); assert.deepEqual(ls, {});
   for (const a of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) assert.equal(document.documentElement.hasAttribute(a), false);
-  assert.equal(document.querySelector('[data-lh-ui-root]'), null);
+  same(document.querySelector('[data-lh-ui-root]'), null);
 });
 
 test('F5: safe-area style is injected once and removed on dispose', () => {
@@ -136,7 +136,7 @@ test('2d: view.focus is dropped when the player moves focus first', () => {
   const halves = defineView({ scenes: { race: { enter(e, v) { v.focus('race.pause'); } } } });
   const { app, document } = run('?lh-test', halves);
   app.hook.go('race'); const other = document.createElement('button'); document.body.appendChild(other); other.focus();
-  app.engine.scene.state.running = true; app.hook.render(0); assert.equal(document.activeElement, other);
+  app.engine.scene.state.running = true; app.hook.render(0); same(document.activeElement, other);
 });
 test('2d fix: a view half that waits in reaction to a build delays `then` until the wait settles, in both ack modes', async () => {
   for (const q of ['?lh-test', '']) {
@@ -188,4 +188,14 @@ test('final review: a view.focus that gives up after its retries warns once unde
   assert.equal(warns.length, 1); assert.match(warns[0], /view\.focus\('race\.pause'\) gave up/);
   loud.app.hook.go('title'); loud.app.hook.go('race'); loud.app.hook.go('title'); // a scene change is not a give-up
   assert.equal(warns.length, 1); loud.app.dispose();
+});
+test('G-E2: a view half that builds a screen after the sync gets its slot adopted by view.ui.adopt()', () => {
+  let swapped;
+  const halves = defineView({ scenes: { pause: { enter(e, v) {
+    const b = v.doc.createElement('button'); b.setAttribute('data-lh-slot', 'pause.resume'); v.doc.body.appendChild(b);
+    v.ui.adopt(); swapped = b.getAttribute('data-testid') === 'pause.resume' && v.doc.querySelectorAll('[data-testid="pause.resume"]').length === 1;
+  } } } });
+  const { app, document } = run('?lh-test', halves);
+  app.hook.go('race'); app.hook.overlay('pause'); assert.equal(swapped, true);
+  document.querySelector('[data-testid="pause.resume"]').click(); assert.equal(app.engine.scene.overlays.length, 0);
 });

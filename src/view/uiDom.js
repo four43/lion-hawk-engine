@@ -58,8 +58,22 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     for (const el of document.querySelectorAll(`[data-lh-slot="${id.replace(/["\\]/g, '\\$&')}"]`)) if (el.tagName === tag && !owned.has(el)) return el;
   };
   const release = (id, b) => { owned.delete(b.el); if (b.adopted) { b.el.removeAttribute('data-testid'); b.el.removeAttribute('aria-pressed'); b.el.disabled = true; } else b.el.remove(); };
+  // G-E2 late adoption: a sync looks for slots for its engine-made controls only after a mutation that could have added
+  // one (an element that is or holds a [data-lh-slot], or that attribute changing), or after adopt(). takeRecords() makes
+  // markup built earlier in the same task count; with nothing changed a sync does no querying at all.
+  const slotted = rs => {
+    for (const r of rs) {
+      if (r.type === 'attributes') return true;
+      for (const n of r.addedNodes) if (n.nodeType === 1 && (n.hasAttribute('data-lh-slot') || n.querySelector('[data-lh-slot]'))) return true;
+    }
+    return false;
+  };
+  let dirty = false;
+  const mo = win?.MutationObserver ? new win.MutationObserver(rs => { if (slotted(rs)) dirty = true; }) : null;
+  mo?.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-lh-slot'] });
 
   function sync() {
+    const scan = dirty || (mo !== null && slotted(mo.takeRecords())); dirty = false;
     const stack = [engine.scene.name, ...engine.scene.overlays].filter(n => n !== undefined);
     const tree = engine.ui.tree(), byScene = new Map(stack.map(n => [n, []]));
     for (const c of tree) { if (!byScene.has(c.scene)) byScene.set(c.scene, []); byScene.get(c.scene).push(c); }
@@ -75,9 +89,12 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
       place(root_, box.el, si);
       const list = byScene.get(name);
       for (let i = 0; i < list.length; i++) {
-        const c = list[i]; let b = buttons.get(c.id);
+        const c = list[i]; let b = buttons.get(c.id), el;
+        // G-E2: an engine-made control moves onto a slot that has since appeared; an adopted element that left the
+        // document is replaced by a new slot or, failing that, an engine-made control (a control never goes without one)
+        if (b && (b.adopted ? !b.el.isConnected : scan && (el = slotFor(c.id, c.role)))) { release(c.id, b); b = undefined; }
         if (!b) {
-          let el = slotFor(c.id, c.role); const adopted = !!el;
+          el ??= slotFor(c.id, c.role); const adopted = !!el;
           if (!el) { el = document.createElement(c.role === 'textbox' ? 'input' : 'button'); el.setAttribute('type', c.role === 'textbox' ? 'text' : 'button'); }
           el.setAttribute('data-testid', c.id); owned.set(el, c.id);
           buttons.set(c.id, b = { el, adopted, hold: c.role === 'hold', prog: undefined, down: undefined, label: undefined, enabled: undefined, pressed: undefined, value: undefined, last: undefined });
@@ -99,5 +116,5 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
     setHtml('data-lh-scene', stack[0] ?? '');
     setHtml('data-lh-overlays', stack.slice(1).join(' '));
   }
-  return { sync, dispose() { document.removeEventListener('click', onClick); document.removeEventListener('change', onChange); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.removeEventListener('pointerdown', onDown); document.removeEventListener('contextmenu', onMenu); for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) document.removeEventListener(n, onUp); win?.removeEventListener('blur', releaseAll); win?.removeEventListener('pagehide', releaseAll); document.removeEventListener('visibilitychange', onHide); for (const [id, b] of buttons) release(id, b); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
+  return { sync, adopt() { dirty = true; sync(); }, dispose() { mo?.disconnect(); document.removeEventListener('click', onClick); document.removeEventListener('change', onChange); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.removeEventListener('pointerdown', onDown); document.removeEventListener('contextmenu', onMenu); for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) document.removeEventListener(n, onUp); win?.removeEventListener('blur', releaseAll); win?.removeEventListener('pagehide', releaseAll); document.removeEventListener('visibilitychange', onHide); for (const [id, b] of buttons) release(id, b); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
 }
