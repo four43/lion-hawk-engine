@@ -25,7 +25,7 @@
     "three": "^0.186.0"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test --test-concurrency=4 test/"
   },
   "license": "UNLICENSED"
 }
