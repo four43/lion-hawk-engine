@@ -33,6 +33,17 @@ export function createInterp({ size = 32 } = {}) {
       for (let i = buf.length - 1; i > 0; i--) if (buf[i - 1].t <= at) { const A = buf[i - 1], B = buf[i]; if (at >= B.t) return { a: B.frame, b: B.frame, k: 0, at }; return { a: A.frame, b: B.frame, k: (at - A.t) / (B.t - A.t), at }; }
       return { a: buf.at(-1).frame, b: buf.at(-1).frame, k: 0, at };
     },
+    sampleInto(now, out) { // 3i: sample() without the allocation; out = { a, b, k, at } is reused; false while empty
+      if (!buf.length) return false;
+      const at = now - offset - this.delay; out.at = at;
+      if (at <= buf[0].t) { out.a = out.b = buf[0].frame; out.k = 0; return true; }
+      for (let i = buf.length - 1; i > 0; i--) if (buf[i - 1].t <= at) {
+        const A = buf[i - 1], B = buf[i];
+        if (at >= B.t) { out.a = out.b = B.frame; out.k = 0; } else { out.a = A.frame; out.b = B.frame; out.k = (at - A.t) / (B.t - A.t); }
+        return true;
+      }
+      out.a = out.b = buf.at(-1).frame; out.k = 0; return true;
+    },
     reset() { buf = []; offset = null; jitter = 0; lastT = -Infinity; },
   };
 }
