@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — 2026-10-14
+
+Phase 3 Wave B complete (3e + 3f + 3g + 3h).
+
+- View sync (3g): `createViewSync(engine, { gfx, assets, compiler, view, root })` draws World entities (`assets.clone` or `draw: 'instanced'` groups with paint and `instanceCoverage`), interpolates `xf`/`xfPrev` and part poses (`partXf`), smooths `e.netFix` (N-15, `smoothMs` per kind), advances `mc.time`, and runs `sync.on(selector, { create, frame, remove })` hooks.
+- Cameras, instancing and audio (3g): `createChaseRig`, `createOrbitRig`, `createMountRig`, `makeProject`, `createInstances`, `createCrowd`, `createAudio`. All 3e stubs are gone.
+
 ## 0.8.2 — 2026-10-14
 
 - Assets and material compiler (3f): `createAssets` (manifest `preload` with one fetch per URL and `gfx.warm()`, `has`, `get`, `clone(key, { paint, instanced })`, sockets, skinned clones), `createMaterialCompiler` (tiers, `get`, `paint`, `coverage`, `extend`, `apply`, `repaint`, `PAINT`/hue paint, `time`), `furGeometry`, `sampleAnimTable`, `blendAnimTable`, `decodeAnimTable`. These replace 3e's stubs; `render.paint = { base, shade }` reaches the compiler.

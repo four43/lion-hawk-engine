@@ -44,7 +44,7 @@ test('render.paint reaches the compiler as paint (3f C11); the source passes it'
 });
 test('lights: false builds no rig, background or fog; shading defaults to physical', () => {
   const s = setup({ lights: false }), pipe = s.make();
-  assert.ok(s.view.gfx.lights === null, 'no lights'); assert.equal(s.view.gfx.scene.children.length, 0); assert.equal(s.view.materials.shading, 'physical');
+  assert.ok(s.view.gfx.lights === null, 'no lights'); assert.deepEqual(s.view.gfx.scene.children.map(o => o.name), ['lh.sync'], 'only the sync root'); assert.equal(s.view.materials.shading, 'physical');
   assert.ok(s.view.gfx.scene.background === null && s.view.gfx.scene.fog === null, 'no background or fog');
   pipe.dispose();
 });
@@ -83,7 +83,7 @@ test('dispose frees everything once, in reverse, and stops drawing', () => {
   s.view.materials.dispose = () => order.push('materials'); s.view.audio.dispose = () => order.push('audio');
   pipe.dispose(); pipe.dispose();
   assert.deepEqual(order, ['sync', 'assets', 'materials', 'audio']);
-  assert.equal(s.renderer.disposed, true); assert.equal(scene.children.length, 0, 'lights removed'); assert.equal(s.engine.assets, undefined);
+  assert.equal(s.renderer.disposed, true); assert.deepEqual(scene.children.map(o => o.name), ['lh.sync'], 'lights removed (sync.dispose is faked here)'); assert.equal(s.engine.assets, undefined);
   pipe.draw(); assert.equal(s.renderer.log.filter(l => l[0] === 'render').length, 0);
 });
 test('checkRender names the field', () => {

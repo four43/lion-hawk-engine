@@ -79,3 +79,9 @@ test('3g: each frame advances the compiler\'s shared clock by view.dt, World or 
   const s = syncSetup(); s.view.dt = 0.25; s.sync.frame(1); s.sync.frame(1); assert.equal(s.compiler.time.value, 0.5);
   s.engine.world = undefined; s.view.dt = 0; s.sync.frame(1); s.view.dt = 0.5; s.sync.frame(1); assert.equal(s.compiler.time.value, 1);
 });
+test('3g: createViewSync({ root }) parents the sync group under the given object instead of gfx.scene', () => {
+  const gfx = { scene: new THREE.Scene() }, holder = new THREE.Group();
+  const sync = createViewSync({ world: null }, { gfx, root: holder, view: { dt: 0 } });
+  assert.equal(sync.root.parent, holder); assert.equal(gfx.scene.children.length, 0);
+  sync.dispose(); assert.equal(holder.children.length, 0);
+});

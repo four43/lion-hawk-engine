@@ -36,10 +36,10 @@ function matcher(m) {
   throw new Error(`sync: bad match ${typeof m === 'string' ? `'${m}'` : String(m)} (use '#tag', 'model:<key>', 'net:<kind>' or a function)`);
 }
 
-export function createViewSync(engine, { gfx, assets = null, compiler = null, view = { dt: 0 } } = {}) {
+export function createViewSync(engine, { gfx, assets = null, compiler = null, view = { dt: 0 }, root: parent = null } = {}) {
   if (!engine) throw new Error('createViewSync: engine required');
   if (!gfx?.scene?.isObject3D) throw new Error('createViewSync: gfx.scene required');
-  const root = new THREE.Group(); root.name = 'lh.sync'; gfx.scene.add(root);
+  const root = new THREE.Group(); root.name = 'lh.sync'; (parent ?? gfx.scene).add(root); // `root`: an optional parent instead of gfx.scene
   const recs = [], byId = new Map(), hooks = [], models = new Map(), groups = [];
   let world, serial = -1, frame = 0, hookVer = 0, disposed = false;
 
