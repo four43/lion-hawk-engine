@@ -24,12 +24,12 @@ export const SURFACE = [
   ['0.8.0', 'lion-hawk/build', ['dedupe', 'build']],
   ['0.9.0', 'lion-hawk/view', ['createAssets', 'createMaterialCompiler', 'furGeometry', 'sampleAnimTable', 'blendAnimTable', 'decodeAnimTable']],
   ['0.9.0', 'lion-hawk/view', ['createViewSync', 'createChaseRig', 'createOrbitRig', 'createMountRig', 'makeProject', 'createInstances', 'createCrowd', 'createAudio']],
-  ['0.9.0', 'lion-hawk/kits/terrain', ['createTerrain']],
-  ['0.9.0', 'lion-hawk/kits/terrain/view', ['createTerrainMesh']],
-  ['0.9.0', 'lion-hawk/kits/vehicle', ['createVehicle']],
-  ['0.9.0', 'lion-hawk/kits/coverage', ['coverageKit']],
-  ['0.9.0', 'lion-hawk/kits/coverage/view', ['coverageView']],
-  ['0.9.0', 'lion-hawk/kits/fx/view', ['createParticles', 'createMarks']],
+  ['0.8.1', 'lion-hawk/kits/terrain', ['createTerrain']],
+  ['0.8.1', 'lion-hawk/kits/terrain/view', ['createTerrainMesh', 'chunkIndex']],
+  ['0.8.1', 'lion-hawk/kits/vehicle', ['VEHICLE_SYSTEM', 'createVehicle']],
+  ['0.8.1', 'lion-hawk/kits/coverage', ['coverageKit', 'coverageLayer', 'COVERAGE_SYSTEM']],
+  ['0.8.1', 'lion-hawk/kits/coverage/view', ['coverageView']],
+  ['0.8.1', 'lion-hawk/kits/fx/view', ['createParticles', 'createMarks']],
 ];
 for (const [v, spec, names] of SURFACE) {
   test(`${spec} exports ${names.join(', ')} from ${v}`, { skip: skip(v) }, async () => {
@@ -45,7 +45,7 @@ test('F.body exists from 0.10.0 (N-8, 3i)', { skip: skip('0.10.0') }, async () =
   const { F } = await import('lion-hawk/sim');
   assert.equal(typeof F.body, 'function');
 });
-test('lion-hawk/kits/<kit> resolves to the sim half and lion-hawk/kits/<kit>/view to the view half', { skip: skip('0.9.0') }, () => {
+test('lion-hawk/kits/<kit> resolves to the sim half and lion-hawk/kits/<kit>/view to the view half', { skip: skip('0.8.1') }, () => {
   assert.ok(import.meta.resolve('lion-hawk/kits/terrain').endsWith('/src/kits/terrain/sim.js'));
   assert.ok(import.meta.resolve('lion-hawk/kits/terrain/view').endsWith('/src/kits/terrain/view.js'));
   assert.ok(import.meta.resolve('lion-hawk/kits/fx/view').endsWith('/src/kits/fx/view.js'));

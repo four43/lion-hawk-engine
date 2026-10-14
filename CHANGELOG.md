@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — 2026-10-14
+
+- Kits (3h): `lion-hawk/kits/terrain` (`createTerrain`) and `/view` (`createTerrainMesh`), `lion-hawk/kits/vehicle` (`VEHICLE_SYSTEM`, `createVehicle`, part poses for wheels), `lion-hawk/kits/coverage` (`coverageKit`) and `/view` (`coverageView`), `lion-hawk/kits/fx/view` (`createParticles`, `createMarks`).
+
 ## 0.8.0 — 2026-10-14
 
 Phase 3 Wave A: materials, the World and the bake.
