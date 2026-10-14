@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>render</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  [data-lh-ui-root] { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  [data-lh-ui] button { pointer-events: auto; min-width: 96px; min-height: 56px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="render.bundle.js"></script>
+</body>
+</html>

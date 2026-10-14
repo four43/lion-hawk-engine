@@ -16,12 +16,12 @@ const skip = v => !since(v) && `engine ${ENGINE_VERSION} < ${v}`;
 export const SURFACE = [
   ['0.7.4', 'lion-hawk/sim', ['defineMaterials', 'BASE_MATERIALS', 'SIDECAR_VERSION', 'validateSidecar', 'validatePhys']],
   ['0.7.4', 'lion-hawk/view', ['defineMaterials']],
+  ['0.7.5', 'lion-hawk/view', ['createRenderer', 'createLightRig', 'warm', 'instancedShadows', 'disposeTree', 'programCount', 'snapshot', 'createTiltShift']],
   ['0.8.0', 'lion-hawk/sim', ['createWorld', 'heightfieldDesc']],
   ['0.8.0', 'lion-hawk/view', ['createWorld']],
   ['0.8.0', 'lion-hawk/test', ['checks']],
   ['0.8.0', 'lion-hawk/bake', ['bake', 'loadConfig']],
   ['0.8.0', 'lion-hawk/build', ['dedupe', 'build']],
-  ['0.9.0', 'lion-hawk/view', ['createRenderer', 'createLightRig', 'warm', 'instancedShadows', 'disposeTree', 'programCount', 'snapshot', 'createTiltShift']],
   ['0.9.0', 'lion-hawk/view', ['createAssets', 'createMaterialCompiler', 'furGeometry', 'sampleAnimTable', 'blendAnimTable', 'decodeAnimTable']],
   ['0.9.0', 'lion-hawk/view', ['createViewSync', 'createChaseRig', 'createOrbitRig', 'createMountRig', 'makeProject', 'createInstances', 'createCrowd', 'createAudio']],
   ['0.9.0', 'lion-hawk/kits/terrain', ['createTerrain']],

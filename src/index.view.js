@@ -10,3 +10,8 @@ export { bindGesture } from './view/gesture.js';
 export { createUiDom } from './view/uiDom.js';
 export { installEngine } from './view/hook.js';
 export { defineView, boot } from './view/boot.js';
+export { createRenderer } from './view/render/renderer.js';
+export { createLightRig } from './view/render/lights.js';
+export { warm, instancedShadows, disposeTree, programCount } from './view/render/hygiene.js';
+export { snapshot } from './view/render/snapshot.js';
+export { createTiltShift } from './view/render/tiltShift.js';
