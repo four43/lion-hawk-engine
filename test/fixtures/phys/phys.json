@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "engine": "0.8.0",
+  "materials": "5ca1ab1e",
+  "models": {
+    "crate": {
+      "v": 1,
+      "source": { "file": "test/fixtures/phys/crate", "sha256": "0" },
+      "parts": ["body"],
+      "colliders": [
+        { "shape": "box", "half": [0.5, 0.5, 0.5], "p": [0, 0.5, 0], "q": [0, 0, 0, 1], "part": "body", "material": "wood" }
+      ],
+      "mass": { "mass": 600, "com": [0, 0.5, 0], "inertia": [100, 100, 100], "frame": [0, 0, 0, 1] },
+      "sockets": {},
+      "bounds": { "min": [-0.5, 0, -0.5], "max": [0.5, 1, 0.5] }
+    },
+    "cart": {
+      "v": 1,
+      "source": { "file": "test/fixtures/phys/cart", "sha256": "0" },
+      "parts": ["body", "wheel"],
+      "colliders": [
+        { "shape": "box", "half": [1, 0.25, 0.5], "p": [0, 0.5, 0], "q": [0, 0, 0, 1], "part": "body", "material": "shell" },
+        { "shape": "sphere", "r": 0.3, "p": [0.8, 0.3, 0], "q": [0, 0, 0, 1], "part": "wheel", "material": "rubber" }
+      ],
+      "mass": { "mass": 281.407, "com": [0.35367, 0.41158, 0], "inertia": [22.2693, 107.2803, 115.6563], "frame": [0.70583, -0.04242, 0.04242, -0.70583] },
+      "sockets": { "hat": { "p": [0, 0.75, 0], "q": [0, 0, 0, 1], "part": "body" } },
+      "bounds": { "min": [-1, 0, -0.5], "max": [1.1, 0.75, 0.5] }
+    }
+  }
+}
