@@ -47,6 +47,12 @@
     - `ui/hold.js`, for `show.js`'s default skip path, which `show.test.mjs` covers;
     - `ui/input.js`, for `HORN_SVG`, and `createInput`/`radial`, which `input.test.mjs` covers.
   - Spec 1.12 text: §7.3 engine devices, X-15 `window.engine` and the `tune` command, §13 how to run the tests, §14.8 the automated M-52/M-54 paths.
+- **Final fix wave (four43 `b74d85d`..`e03ed71`; engine docs only):** the eight findings of the whole-branch review.
+  - R-1 again: a screen half that fails to open hides its screen and taps its go or close control (`menus.view.test.mjs`).
+  - `bindPort` moved to `src/net/bind.js`, its close chain, fallback and deferred bind tested on the memory hub (`bind.test.mjs`).
+  - A new farm closes `paint` and `book` too, and stops the voice again.
+  - `?fps`: the sim times its own Rapier step with the entry's timer (`phys.worldMs`); the view only reads it (#106 updated).
+  - Spec M-54 and test counts (783 unit), the [U-1] and 0.7.2 late-adoption text (needs a `MutationObserver` or `adopt()`), and two stale comments.
 
 ## Measured
 - **Tests at G7:**
@@ -132,14 +138,14 @@
   - `ui/menus.js` gained behaviour beyond the brief's file list (`onParentDone`, `closeParent`, the new farm in slots mode);
   - `entry.js` (now `main.js`) has two `visibilitychange` listeners.
 - **Tractor, G5:**
-  - `bindPort`'s close chain, deferred bind and 1 s fallback are untested;
+  - `bindPort`'s close chain, deferred bind and 1 s fallback are untested (fixed in the final wave: `bind.test.mjs`);
   - the 1 s fallback can fire in manual-step tests (skip it under `?lh-test`?);
   - a quick re-host can overlap two ports for a step;
   - `poseAt` feeds only the newest record per frame, so the view's fade and velocity may differ from the sim's on bursts;
   - a Handshake event during a deferred bind is lost;
   - the `?r=` path has no browser test.
 - **Tractor, G4b:**
-  - `commands.js:3`'s header still says commands do nothing outside the farm (`tune` runs on the sandbox);
+  - `commands.js:3`'s header still says commands do nothing outside the farm (`tune` runs on the sandbox) (fixed in the final wave);
   - `tuneGet` is unguarded where `tuneSet` is guarded;
   - a guest keeps its solo tunes after joining;
   - the tuned power is not saved to settings.

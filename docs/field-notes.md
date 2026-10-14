@@ -689,8 +689,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 106. `?fps` times Rapier by wrapping the sim world's `step` from the view: engine, Tractor Pickup (phase 2g G4)
 - **What happened:** the X-4 hitch readout shows Rapier's share of each frame. The old `main.js` wrapped `world.step` for timing (B-1). The view half does the same under `?fps`. It only measures, but it replaces a method on a sim object from the view.
-- **Engine change:** a physics-timing hook, for example `engine.onStep` reporting each step's sim and physics milliseconds, or a `debug.timing` the sim fills.
-- **Status:** open.
+- **Workaround (2g final fix wave):** the view no longer wraps anything. Under `?fps` the entry passes `performance.now` as `tractorGame({ timer })`. The sim's physics step adds its own `World.step` time to `game.phys.worldMs`, a running total that is not in `state()` or a checksum. The view reads it each step.
+- **Engine change:** a physics-timing hook would replace the game-side timer, for example `engine.onStep` reporting each step's sim and physics milliseconds, or a `debug.timing` the sim fills.
+- **Status:** open (game-side workaround in place).
 
 ### 107. `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page: engine, Tractor Pickup (phase 2g G5)
 - **What happened:** with the default, each manual-stepping page still renders every rAF under SwiftShader. The guest took 13 s to reach WebGL init, and `waitForFunction(window.engine)` timed out at 30 s with about 12 cores busy. With `render: 'manual'` (`?lh-test=render`) both pages open in 2.8 s.
