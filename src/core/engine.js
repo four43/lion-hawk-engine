@@ -80,6 +80,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
+  // #105: the args an open overlay entered with (its ctx.args), for its view half; undefined when it is not an open overlay
+  sceneView.overlayArgs = name => { for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === name) return stack[i].ctx.args; return undefined; };
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds, ctxOf: name => stack.find(o => o.ctx.name === name)?.ctx });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
