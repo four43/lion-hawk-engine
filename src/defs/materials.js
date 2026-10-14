@@ -1,6 +1,7 @@
 // src/defs/materials.js
 // The material registry (M-1..M-3, M-7, M-8; overview §4.2, D4, D6). Plain data with no runtime dependencies: the sim,
 // the view's compiler and the Node bake all read the same frozen registry.
+import { fnv } from '../core/rng.js';
 import { BASE_MATERIALS } from './materials.base.js';
 
 export const PHYS_DEFAULTS = Object.freeze({ friction: 0.5, restitution: 0, sg: 1, fill: 1 }); // friction, restitution: Rapier's defaults
@@ -85,6 +86,16 @@ const merge = (base, over) => { // deep, per block, child wins; arrays and scala
   return out;
 };
 const deepFreeze = o => { for (const v of Object.values(o)) if (v && typeof v === 'object') deepFreeze(v); return Object.freeze(o); };
+
+// Canonical JSON: keys sorted at every level, so the hash does not depend on declaration order.
+export const canonicalJson = v => {
+  if (v === null || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
+  if (finite(v)) return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  if (isPlain(v)) return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+  throw new Error(`materials: cannot hash ${show(v)}`);
+};
+const hex8 = s => fnv(s).toString(16).padStart(8, '0');
 
 function parsePairs(pairs, has) {
   if (!isPlain(pairs)) throw new Error(`materials: pairs must be an object (got ${show(pairs)})`);
@@ -172,8 +183,22 @@ export function defineMaterials(entries = {}, options = {}) {
     return r;
   };
 
+  // 5. Hash (overview §4.2, ruling 6): only what sidecars and colliders depend on. Per material in index order (so ids
+  //    and their order count), the effective phys values collider()/density() read; per pair, its friction/restitution.
+  //    look, game, tire, dirtRate, coverage, aero, magnet, sound and fx are read live, so changing them needs no re-bake.
+  const contact = e => Object.fromEntries(['friction', 'restitution'].filter(k => e[k] !== undefined).map(k => [k, e[k]]));
+  const hash = hex8(canonicalJson({
+    materials: list.map(m => [m.id, {
+      friction: m.phys?.friction ?? PHYS_DEFAULTS.friction,
+      restitution: m.phys?.restitution ?? PHYS_DEFAULTS.restitution,
+      sg: sgOf(m), fill: m.phys?.fill ?? PHYS_DEFAULTS.fill,
+    }]),
+    pairs: Object.fromEntries([...table].map(([norm, { entry }]) => [norm, contact(entry)]).filter(([, c]) => Object.keys(c).length)),
+  }));
+
   return Object.freeze({
     ids,
+    hash,
     get: id => list[need(id)],
     has: id => at.has(id),
     index: need,
