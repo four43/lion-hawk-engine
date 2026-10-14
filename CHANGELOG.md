@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.5 — 2026-10-14
+
+Phase 3e: renderer, lights and boot render pipeline (early landing, ahead of Wave B).
+
+- view: `defineView({ render })`, `createRenderer`, `createLightRig`, `warm`, `instancedShadows`, `disposeTree`, `programCount`, `snapshot`, `createTiltShift`;
+- boot builds `view.gfx`/`materials`/`assets`/`sync`/`audio` and `engine.assets`;
+- a renderer that cannot start is reported as `render: …`.
+- **Behaviour changes:**
+  - `boot` builds `view.gfx`, `view.assets`, `view.materials`, `view.sync` and `view.audio` when `render` is declared, and is unchanged without it. Until 3f and 3g land (0.9.0), the asset loader, material compiler, view sync and audio are inert stubs with their final surface.
+  - Engine view modules now import three (D9), so game builds must go through `lion-hawk build` (dedupe); a `build.py`/esbuild-CLI build would bundle the engine's own copy of three.
+  - `boot(game, view, { timer, canvas, renderer })`: `timer` is passed to `createEngine` (3c, #106).
+
 ## 0.7.4 — 2026-10-14
 
 Phase 3b: material registry and sidecar schema (early landing, before Wave A closes).
