@@ -3,6 +3,7 @@
 Version 0.1 (2026-10-11). Status: draft for review.
 Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
+Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
 
 Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
 
@@ -103,6 +104,8 @@ Because the stack is fixed, the engine can join the five parts automatically.
 ### 2.4 Transforms and interpolation
 
 - **[E-10]** Each entity with `xf` has two transform slots, `prev` and `curr`, in a shared `Float64Array` pool. They are swapped after every sim step. No objects are allocated per step or per frame.
+  - *Clarification (phase 3, 0.8.0; 3c):* the swap copies `curr` into `prev` (it does not flip the halves), in `lh.world.swap` at the start of `input.apply`. `e.xf.slot` is the entity's read-only pool slot; `world.xf.pool` is re-read every frame because growth replaces the array.
+  - *Clarification (phase 3, 0.8.0; 3c Task 10b, 3g-R7):* part poses are swapped with the pose pool. An entity spawned with `partXf: [names]` has `e.partXf[name] = { p, q }` (written by the sim each step); `lh.world.swap` copies each part's `curr` to `prev` with the entity's `xf`, and `world.partXfPrev(e, name, out)` reads the previous pose. Part poses are not in the World digest.
 - **[E-11]** The view writes `lerp(prev, curr, alpha)` (slerp for rotations) into each `Object3D`. For remote entities, interpolation and smoothing come from §4.4 instead.
 
 ### 2.5 Systems
@@ -272,6 +275,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   step:  input.apply → systems.pre → physics.world → systems.post → events.flush
   ```
   Systems order themselves within a stage with `before` / `after`. `engine.schedule()` returns the resolved order.
+  - *Clarification (phase 3, 0.8.0; 3c):* the World adds built-in systems: `lh.world.swap` first in `input.apply` (before `lh.ui`), and `lh.physics.step`, `lh.physics.read`, `lh.physics.events` in `physics.world`.
   - `input.apply` runs `lh.ui` (hold-control progress on engine time, [U-1]), then `lh.input`, then `lh.commands` ([I-7]), then the game's systems. In `pre`, `lh.scene` steps the scenes (a loading scene's slot runs its load tick instead, [S-6]).
   - With step acks (`acks: 'steps'`, the default: headless and `?lh-test`), `engine.presented()` runs at the very start of each step, so every step counts as a presented frame. A browser boot uses frame acks ([S-6]).
   - `engine.onStep(fn)` calls `fn(engine)` after every step (after `events.flush` and the step counter) and returns an unsubscribe; listeners are copy-on-write (N-4: a port drains `engine.net` there).
@@ -286,6 +290,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - **View half** (browser): `{ enter(engine, view, args), exit(engine, view), frame(engine, alpha, view) }`. `args` is the scene's args: `engine.scene.args` for the main scene, `engine.scene.overlayArgs(name)` for an overlay, read when the half enters. Treat it as read-only (#105). It builds the HUD and other DOM, and sets up camera rigs. `view` also carries `dt` (driver frame time, capped at `maxFrame`), `rawDt` (the same frame uncapped, #56; both 0 for renders the driver did not start), `wait(promise)`, `focus(testid)` ([U-1]) and `project` (the game's world-to-client projection, set by its view half; exposed as `window.engine.view.project`). `project([x, y, z])` returns `{ x, y, z, onScreen }`: client coordinates, `z` the NDC depth, and `onScreen` false when the point is behind the camera or outside the viewport (#73). A view half may also define `built(engine, view)`, called right after a load's build ([S-6]). View halves enter after the UI sync, so their scene's controls already exist, are adopted and enabled.
 - **[S-2]** `engine.go(name, args)` replaces the main scene. `engine.overlay(name, args, { once })` stacks a scene on top, and `engine.close(name)` removes it. With `once: true`, the request is a no-op when the overlay is open or will be once the queued transitions apply (`isOpen(name, { pending: true })`), and a no-op is never recorded (#95). `engine.scene.overlayArgs(name)` returns the args an open overlay entered with (its `ctx.args`), or `undefined` (#105). An overlay may set `pauses: true` to freeze the sim below it while it is still drawn.
 - **[S-3]** Each main scene owns a `World` and a Rapier world. Leaving the scene disposes both, plus the scene's GPU resources.
+  - *Clarification (phase 3, 0.8.0; 3c, CI-16):* the World is made before the main scene's `enter` and disposed after its `exit`; overlays share the main scene's World (`ctx.world`, `engine.world`). While a scene loads (`engine.loading.active`, [S-6]) `lh.physics.step` skips the Rapier step and `read`/`events` skip with it; `lh.world.swap` still runs, so `prev` catches up. `engine.state()` carries `world` (the digest) only while the World has entities.
 - **[S-4]** **Flow state lives in scenes or the sim, never in the view.** A view animation that gates flow (a show, a reward card) either becomes a scene timer or ends by emitting an ack event that the sim scene waits for.
 - **[S-5]** Scenes export `presets`: named functions that put the scene in a known state (`race.nearFinish`, `farm.reward`). `engine.jump(scene, preset, opts)` enters the scene and applies the preset.
 - **[S-6] Loading is a scene state, not a scene.** `ctx.load({ build, then, hold = 0, frames = 1, settle = false, label = '' })` (#6, #21, #38) suspends that scene's `step` hook; in that slot the engine counts ticks and calls `build(engine, ctx)` once `hold` seconds of engine time have passed and `frames` frames have been presented since the request (a frame drawn before the request, such as one still waiting for its ack, does not count). Then `then(engine, ctx)` runs: at once, or with `settle: true` once a frame has been presented after the build and no `engine.block()` is outstanding. `load.then` may be reassigned while the load is pending. One load is active in the engine at a time; `ctx.load` on a scene that is already loading throws `engine: '<scene>' is already loading` (no silent restart of `hold`/`frames`; a load may be requested again from `then`); exiting the scene drops its load; a throwing build drops the load and rethrows. Only the scene's `step` hook is suspended: command handlers ([I-7]) still run while it loads (the game-wide handler always; the scene's own handlers unless a pausing overlay covers it), so a handler that would start a load checks `engine.loading` first.
@@ -354,6 +359,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 ### 6.1 Bake: `lion-hawk bake`
 
 - **[A-1]** Input is `assets/models/*.glb`. Output goes to the game's `baked/` directory, which is committed: optimised GLBs in `baked/models/`, optional `<model>.anim.json` tables beside them, one `baked/phys.json` holding every model's sidecar keyed by model id (the sim imports it as JSON), and `baked/manifest.json` (D1, D2).
+  - *Clarification (phase 3, 0.8.0; 3d C5, C8):* each model may map its own source `file`; output GLBs are self-contained. Re-bakes are byte-identical (sorted keys, 6-decimal rounding, no timestamps). `bake --check` reports stale sources, a changed registry hash or a changed engine major.minor; it does not see config-only changes.
 - **[A-2] Checks.** The bake fails, naming the model and node, if:
   - a material name is neither in the registry nor `paint-*`;
   - a `col-*` node has an unsupported shape;
@@ -375,9 +381,11 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - Nodes named `col-box`, `col-sphere`, `col-capsule`, `col-cylinder`, `col-hull` or `col-mesh` are colliders. They are hidden at runtime and take the material of their nearest ancestor part (its largest-area material); a node's `extras.material` overrides it (D2).
   - A model with no `col-*` nodes gets one convex hull per material part.
   - Models marked `static` in the game config default to `col-mesh`.
+  - *Clarification (phase 3, 0.8.0; 3d C1, C4, C7):* a capsule or cylinder's axis is the round cross-section's normal (ties go to the longest extent). The default hull is skipped, with a warning, for a flat (part, material) group; a model whose groups are all flat fails, and `colliders: false` per model turns colliders off. Hull and mesh points are in body space with identity `p`/`q`.
   - *Clarification (phase 3, 0.7.4; 3b contract issue 2):* baked and inline colliders share one entry shape. The shapes are `box`, `sphere`, `capsule`, `cylinder`, `hull`, `mesh`; `'ball'` throws `unknown shape (use 'sphere')`. Unknown fields and `paint-*` materials are errors.
   - *Clarification (phase 3, 0.7.4; 3b contract issue 8; 3c-R5):* a `box` may carry `round`, any finite number > 0 with no upper bound. It builds Rapier's roundCuboid, which adds the radius outside `half`. Other shapes reject `round`.
 - **[A-7]** Empty nodes named `sock-*` become named sockets.
+  - *Clarification (phase 3, 0.8.0; 3d C3, C6):* a socket with no ancestor part has `part: null`. Part and socket names are sanitised as `GLTFLoader` does (`.`, `:`, `/`, `[`, `]` dropped, spaces to `_`) and de-duplicated with `-2`, `-3` against every node and the scene, and the GLB node is renamed to match.
 - **[A-8]** The sim reads only sidecars. It never parses glTF.
 
 ### 6.3 Runtime loading (view)
@@ -405,6 +413,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 - **[B-3] Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page: the build writes the bundle at the template's bare `<!--APP-->` marker as an inline `<script type="module">` (D1).
 - **[B-4] Shared mode** (phase 9) serves the engine, three.js, Rapier and shared models from `/exp/lion-hawk/<version>/`.
 - **[B-5]** Every build stamps the game version, the engine version and a content hash into the page and the service worker.
+  - *Clarification (phase 3, 0.8.0; 3d C8):* the page gets a `lion-hawk-build` meta; the service worker's `__VERSION__` becomes `<gameVersion>+lh<engine>-<hash>` and its `__PRECACHE__` the file list. `--e2e` builds are unminified and write no `sw.js`. `build({ game, out, e2e })` from `lion-hawk/build` returns `{ out, version, hash, files, sizes }`. `lion-hawk dev` also takes `--host` (default `0.0.0.0`).
 
 ### 7.2 PWA
 
@@ -450,6 +459,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 These run under `node:test`.
 
 - **[T-1] Setup.** `headless(game, { seed, scene, args, clock: 'virtual', invariants, record: 'on-fail' })` returns a handle `h`. The `finite()` invariant (no NaN or Infinity in any `xf` or body) is always on. Until the `World` exists, `invariants.finite(select, label)` checks any selected value (#64).
+  - *Clarification (phase 3, 0.8.0; 3c):* the always-on `finite` check runs after every headless step over the pose pool and every body's linear and angular velocity. The handle gives World access: `h.world`, `h.find`, `h.one`, `h.get`, `h.spawn`, `h.despawn`, `h.place`.
 - **[T-2] Stepping and policies.**
   - Stepping: `h.step(n, input)`, `h.seconds(s, input)`, `h.hold(input)`, `h.release()`.
   - Policies: `policy.still`, `policy.const({...})`, `policy.seq([[steps, input]...])`, `policy.fn((h) => input)`, `policy.every(n, fn, { phase, key })`. `policy` is exported by `lion-hawk/sim` (games register policies in `game.sim.js`, which is bundled for the browser) and re-exported by `lion-hawk/test`.
