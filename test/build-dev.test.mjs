@@ -43,3 +43,11 @@ test('3d: a template edit rebuilds the page', async t => {
   writeFileSync(join(game, 'template.html'), readFileSync(join(game, 'template.html'), 'utf8').replace('<title>fixture</title>', '<title>edited</title>'));
   await until(async () => (await (await fetch(d.url)).text()).includes('<title>edited</title>'));
 });
+test('3d: a malformed URL gets 400 and a directory request 404, and the server keeps serving', async t => {
+  const game = copyFixture(), d = await dev({ game, port: 0, host: '127.0.0.1', log: () => {} });
+  t.after(() => d.close());
+  const get = path => new Promise((res, rej) => http.request({ host: '127.0.0.1', port: d.port, path }, r => { r.resume(); r.on('end', () => res(r.statusCode)); }).on('error', rej).end());
+  assert.equal(await get('/%'), 400);
+  assert.equal(await get('/assets/models/'), 404);
+  assert.equal(await get('/'), 200);
+});

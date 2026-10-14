@@ -3,7 +3,7 @@
 // is re-baked (that model only) and the page reloads. dev({ game, port, host, log }) → { url, port, close }.
 import { context } from 'esbuild';
 import http from 'node:http';
-import { existsSync, readFileSync, watch } from 'node:fs';
+import { existsSync, readFileSync, statSync, watch } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { dedupe } from '../dedupe.js';
 import { loadConfig, importFresh } from '../bake/config.js';
@@ -33,15 +33,17 @@ export async function dev({ game = '.', port = 8740, host = '0.0.0.0', log = con
     plugins: [dedupe({ root: cfg.dir }), { name: 'lh-dev-page', setup(b) {
       b.onEnd(async res => {
         if (res.errors.length) { log(`dev: build failed: ${res.errors[0].text}`); return; }
-        js = res.outputFiles[0].text; await render(); log('dev: rebuilt');
+        js = res.outputFiles[0].text;
+        try { await render(); log('dev: rebuilt'); } catch (e) { log(`dev: ${e.message}`); }
       });
     } }],
   });
   await ctx.watch();
+  let timer = null;
   const watchers = [watch(template, () => render().catch(e => log(`dev: ${e.message}`)))];
   const srcDir = resolve(cfg.dir, cfg.bake.src);
   if (cfg.bake.materials && existsSync(srcDir)) {
-    let timer = null; const pending = new Set();
+    const pending = new Set();
     watchers.push(watch(srcDir, (_, file) => {
       if (!file || !/\.(glb|gltf)$/.test(file)) return;
       pending.add(file); clearTimeout(timer);
@@ -56,11 +58,13 @@ export async function dev({ game = '.', port = 8740, host = '0.0.0.0', log = con
     }));
   }
   const serve = (res, file) => {
-    if (!existsSync(file)) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(readFileSync(file));
+    let body;
+    try { if (!statSync(file).isFile()) throw new Error('not a file'); body = readFileSync(file); } catch { res.writeHead(404).end(); return; }
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(body);
   };
   const server = http.createServer((req, res) => {
-    const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    let p;
+    try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
     if (p === '/lh-reload') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' }).write(': hi\n\n');
       clients.add(res); req.on('close', () => clients.delete(res)); return;
@@ -76,6 +80,7 @@ export async function dev({ game = '.', port = 8740, host = '0.0.0.0', log = con
   return {
     url, port: actual,
     async close() {
+      clearTimeout(timer);
       for (const w of watchers) w.close();
       for (const res of clients) res.end();
       await ctx.dispose();
