@@ -1,7 +1,7 @@
 // Temp game dirs for the 3d bake, build and CLI tests. copyFixture() copies test/fixtures/models/game (optionally without its
 // committed baked/) and stubs `three` in its node_modules, so a build proves dedupe resolves from the game root.
 // gameWith({ id: bytes }, bake) writes a one-off game with the fixture registry and the given bake config.
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,8 @@ export function stubThree(dir) {
   mkdirSync(join(dir, 'node_modules/three'), { recursive: true });
   writeFileSync(join(dir, 'node_modules/three/package.json'), '{"name":"three","type":"module","main":"index.js"}');
   writeFileSync(join(dir, 'node_modules/three/index.js'), 'export const REVISION = "game-copy";\n');
+  // engine-probe: a symlinked engine-side package whose own `three` import must be redirected by dedupe (like a file: install of lion-hawk)
+  symlinkSync(join(FIXTURE, '../engine-probe'), join(dir, 'node_modules/engine-probe'), 'dir');
 }
 
 export function copyFixture({ baked = true } = {}) {
