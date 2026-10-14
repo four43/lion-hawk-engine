@@ -142,16 +142,16 @@ src/sim/physics/rapier.js:39:  if (typeof R.World !== 'function') throw new Erro
 
 (Unnumbered; the integrator numbers these from #110.)
 
-- #1 closed: `PINNED_DEFAULTS` pins every Rapier 0.21 integration parameter; a bump fails physics-rapier "PINNED_DEFAULTS is Rapier 0.21.0's own defaults, …" and physics-fixtures' version pin.
-- #2 closed: `body: { sleep: true }` re-sleeps after the first step inside the World (the `sleepers` pass in `sys.read`; world-step "#2" tests, world-engine load test).
-- #28 closed: the World owns the Rapier world; view halves read `engine.world` (each main scene owns one, S-3).
-- #64 closed: the always-on `finite` over the pool and body velocities runs after every headless step (`worldFinite`, world-headless).
-- #106 closed: `createEngine(game, { timer })` fills `world.stats.stepMs`/`stepMsTotal`; never in `state()`.
-- Rapier collider handles are NaN-boxed float64s (handle 0 is valid and falsy): never test a handle for truthiness.
-- `setDensity` and `setAdditionalMassProperties` take effect at the next step unless `recomputeMassPropertiesFromColliders()` is called; the World always calls it.
-- Moving a fixed body needs `propagateModifiedBodyPositionsToColliders()` before queries see it.
-- A body can fall asleep at the end of the step that moved it: the World reads it once more.
-- Read-after-sleep mutation not observable in Rapier 0.21.0 (`!asleep || r.awake` → `!asleep` still passes); code and test kept.
-- `used_heap_size` excludes ArrayBuffer and WASM memory: `checks.zeroAlloc` is blind to growth there (Rapier's heap, typed arrays).
-- Rapier's `body.sleep()` zeroes the body's velocity: set a velocity after `sleep()`, with `wakeUp: false`, to keep it.
-- Despawning while iterating a live `with()` list skips the next entity (the list shrinks under the loop): iterate backwards.
+- #1 closed: `PINNED_DEFAULTS` pins every Rapier 0.21 integration parameter; a bump fails physics-rapier "PINNED_DEFAULTS is Rapier 0.21.0's own defaults, …" and physics-fixtures' version pin. → #1 done (0.8.0)
+- #2 closed: `body: { sleep: true }` re-sleeps after the first step inside the World (the `sleepers` pass in `sys.read`; world-step "#2" tests, world-engine load test). → #2 done (0.8.0)
+- #28 closed: the World owns the Rapier world; view halves read `engine.world` (each main scene owns one, S-3). → #28 done (0.8.0)
+- #64 closed: the always-on `finite` over the pool and body velocities runs after every headless step (`worldFinite`, world-headless). → #64 done (0.8.0)
+- #106 closed: `createEngine(game, { timer })` fills `world.stats.stepMs`/`stepMsTotal`; never in `state()`. → #106 done (0.8.0)
+- Rapier collider handles are NaN-boxed float64s (handle 0 is valid and falsy): never test a handle for truthiness. → #120
+- `setDensity` and `setAdditionalMassProperties` take effect at the next step unless `recomputeMassPropertiesFromColliders()` is called; the World always calls it. → #121
+- Moving a fixed body needs `propagateModifiedBodyPositionsToColliders()` before queries see it. → #122
+- A body can fall asleep at the end of the step that moved it: the World reads it once more. → #123
+- Read-after-sleep mutation not observable in Rapier 0.21.0 (`!asleep || r.awake` → `!asleep` still passes); code and test kept. → #124
+- `used_heap_size` excludes ArrayBuffer and WASM memory: `checks.zeroAlloc` is blind to growth there (Rapier's heap, typed arrays). → #125
+- Rapier's `body.sleep()` zeroes the body's velocity: set a velocity after `sleep()`, with `wakeUp: false`, to keep it. → #126
+- Despawning while iterating a live `with()` list skips the next entity (the list shrinks under the loop): iterate backwards. → #127

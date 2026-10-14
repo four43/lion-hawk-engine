@@ -13,8 +13,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 | # | Theme | Game | Status |
 |---|---|---|---|
-| 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
-| 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
+| 1 | Library upgrades change feel, and range checks don't notice | Rally | done (0.8.0, 3c): `PINNED_DEFAULTS` pins every Rapier 0.21 integration parameter per World; a Rapier bump fails `test/physics-rapier.test.mjs` and the version pin in `test/physics-fixtures.test.mjs` |
+| 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (0.8.0, 3c): `body: { sleep: true }` re-sleeps after the first step inside the World (the sleepers pass in `lh.physics.read`); Rally can drop `afterStep()` when it migrates |
 | 3 | One-sided range checks hide regressions | Rally | open |
 | 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done (Rally 2c-rally R2–R3; Pig Pens 2e P2–P4: farm scene 932f19a; Tractor Pickup 2f T4–T5 sim half, 2g G1–G6 view halves that only read state and events; the old `main.js` loop deleted in 2g G7) |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
@@ -23,7 +23,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge done (2f T-E8: `axis({ pair })` + device `map` hook; one `map` option on all devices); gamepad.mapping open |
 | 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
 | 10 | `onRender` is a single slot | all | done (2d D9) |
-| 11 | Engine code must not import three/Rapier until builds alias them | all | done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI) |
+| 11 | Engine code must not import three/Rapier until builds alias them | all | done (0.8.0, 3d): `lion-hawk build` bundles with esbuild and the `dedupe` plugin (pinned by an engine-side probe package); each game adopts it at its build step |
 | 12 | Tests borrowed tools from a parent folder | engine | done |
 | 13 | Short presses fall between steps | Rally | done (2c-rally) |
 | 14 | Keyboard feel needs stateful ramps, chords and release by key code | Rally | done (2c-rally) |
@@ -40,7 +40,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 25 | Presets can't step the engine to reach a state | Rally | open (worked around in 2c-rally R3) |
 | 26 | Policies that run slower than the sim | Rally | done (2d D10) |
 | 27 | Events are delivered after physics, not inside game logic | Rally | won't (documented; 2c-rally R4) |
-| 28 | Sim objects live in the scene's `state` | Rally, Pig Pens | open (Rally R2, Pig Pens P2 and Tractor T3 hold the game object in `state`; phase 4 World) |
+| 28 | Sim objects live in the scene's `state` | Rally, Pig Pens | done (0.8.0, 3c): each main scene owns a World holding the Rapier world (S-3) and view halves read `engine.world`; games move off `ctx.state` in their migration steps |
 | 29 | "Active touch overrides" vs. largest-value merge | Rally | won't (accepted; 2c-rally R5) |
 | 30 | First pad only vs. every pad merged | Rally | won't (accepted; 2c-rally R5) |
 | 31 | Two sets of safe-area variables | Rally | done (2c-rally) |
@@ -76,7 +76,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 61 | `pointercancel` counted as a lift (a cancelled touch could tap) | Pig Pens | done (2e P3 2dff968) |
 | 62 | Stale browser scripts and print-only tests | Pig Pens | done (2e P5, P9 c7af1cc) |
 | 63 | Safe areas read `env()` directly | Pig Pens | done (2e P6, P8); Get out restyle open (final pass) |
-| 64 | No finite invariant before the World | engine, Pig Pens | done (2e P-E3) |
+| 64 | No finite invariant before the World | engine, Pig Pens | done (0.8.0, 3c): the always-on `finite` check runs over the pose pool and every body's velocities after each headless step (`worldFinite`) |
 | 65 | No helper for mouse gestures on world points | engine, Pig Pens | done (2e P-E4) |
 | 66 | The old loop zeroed its remainder after a capped frame | Pig Pens | won't (invisible) |
 | 67 | Audio unlock needs a user-gesture hook | Pig Pens | open (audio service) |
@@ -118,7 +118,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 103 | A failing `assert.equal` on a DOM node can use gigabytes | engine, all games | fixed (2g G-E2: `same()` identity helper, guard test; `--test-concurrency=4` in every unit script); suites with four Rapier processes peak ~1.1–1.2 GB, so caps need 2 GB (2g G4) |
 | 104 | Late game markup needs re-adoption (`menus.js` builds screens on open) | engine, Tractor Pickup | done (0.7.2: late adoption on sync and `ui.adopt()`) |
 | 105 | A view half cannot read its overlay's open args | engine, Tractor Pickup | done (0.7.3, 3a): view halves enter as `enter(engine, view, args)`, and `engine.scene.overlayArgs(name)` returns an open overlay's args |
-| 106 | `?fps` times Rapier by wrapping the sim world's `step` from the view | engine, Tractor Pickup | open (2g G4; wants an engine physics-timing hook) |
+| 106 | `?fps` times Rapier by wrapping the sim world's `step` from the view | engine, Tractor Pickup | done (0.8.0, 3c): `createEngine(game, { timer })` and `boot(…, { timer })` fill `world.stats.stepMs`/`stepMsTotal`, never `state()` (`test/world-engine.test.mjs`, `test/render-timer.test.mjs`) |
 | 107 | `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page | engine, Tractor Pickup | done (0.7.3, 3a): `peers()` defaults to `render: 'manual'` (`render: 'auto'` opts out) |
 | 108 | Feel constants are module state: tapes replay exactly only from the shipped values | engine, Tractor Pickup | done (0.7.3, 3a): `defineGame({ reset })` runs first in every `createEngine`, so replays and `mp()` peers start from the shipped tunables; tunables stay per process and off the tape (tune after all peers exist) |
 | 109 | `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold | engine, Tractor Pickup | done (0.7.3, 3a): holds and taps are timed on the pointer events' clock (`event.timeStamp`, injectable `now`), not summed frame time; `uncapped` is ignored; a late-dispatched lift at frames of about 860 ms or more is #114 |
@@ -132,6 +132,24 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 117 | A renderer that cannot start is reported once as `render: …` and the page runs on | engine, all games | done (0.7.5, 3e): boot reports `render: <message>` into `engine.errors` and sets `view.gfx`, `view.materials`, `view.assets`, `view.sync` to `null`; a game e2e that stubs WebGL now sees one error |
 | 118 | Turning a post pass on compiles a render-target variant of each lit material | engine, Pig Pens | open (0.7.5, 3e): tilt-shift on adds 4 programs on SwiftShader (3 passes + 1 variant); `gfx.warm` never goes through post, so warm with the post pass on |
 | 119 | SwiftShader handles half-float MSAA (`samples: 4`) | engine | done (0.7.5, 3e): GL error 0 with tilt-shift on (`test/e2e-render.test.mjs`); sky pixel within 3 observed |
+| 120 | Rapier handles are NaN-boxed float64s, and handle 0 is valid | engine | documented (0.8.0, 3c) |
+| 121 | Rapier mass changes apply at the next step unless recomputed | engine | done (0.8.0, 3c) |
+| 122 | Moving a fixed body is invisible to queries until colliders are propagated | engine | done (0.8.0, 3c) |
+| 123 | A body can fall asleep at the end of the step that moved it | engine | done (0.8.0, 3c) |
+| 124 | The read-after-sleep guard cannot be proven by mutation in Rapier 0.21.0 | engine | open |
+| 125 | `used_heap_size` does not see ArrayBuffer or WASM memory | engine | open |
+| 126 | Rapier's `body.sleep()` zeroes the body's velocity | engine | documented (0.8.0, 3c) |
+| 127 | Despawning while iterating a live `with()` list skips entities | engine | documented (0.8.0, 3c) |
+| 128 | gltf-transform `quantize()` and `meshopt()` move mesh nodes | engine | documented (0.8.0, 3d) |
+| 129 | `GLTFLoader` sanitises node names, and Kenney models repeat them | engine, all | done (0.8.0, 3d) |
+| 130 | A multi-material part loads as a `Group` of meshes | engine | open |
+| 131 | Kenney decorations carry flat decal primitives | engine, Tractor Pickup | done (0.8.0, 3d) |
+| 132 | `bake --check` does not see config changes | engine | open |
+| 133 | Pet anim tables moved from nlerp to slerp | Tractor Pickup | documented (0.8.0, 3d) |
+| 134 | Rapier's f32 principal frame drifts on repeated principal inertia | engine | documented (0.8.0, 3d) |
+| 135 | gltf-transform `prune` drops single-colour textures | engine | done (0.8.0, 3d) |
+| 136 | `GLTFLoader` names every node and the scene in one namespace | engine | done (0.8.0, 3d) |
+| 137 | A dedupe test needs an engine-side importer of three | engine | done (0.8.0, 3d) |
 
 ## Entries
 
@@ -144,11 +162,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Engine change:**
   - The physics wrapper (phase 4) should pin integration parameters explicitly per game, so a library bump can't change feel silently.
   - Golden tests should record a "feel" sample set (stage times, bump speeds) alongside trajectories.
+- **Status:** done (0.8.0, 3c): `PINNED_DEFAULTS` pins every Rapier 0.21 integration parameter per World; a Rapier bump fails `test/physics-rapier.test.mjs` and the version pin in `test/physics-fixtures.test.mjs`.
 
 ### 2. Rapier 0.21 wakes sleeping bodies on their first step: Rally
 - **What happened:** marker posts created asleep woke up and fell over.
 - **Workaround:** `TrackWorld.afterStep()` puts untouched new posts back to sleep after their first step.
 - **Engine change:** `world.spawn({ body: { sleep: true } })` (E-5) must handle this itself.
+- **Status:** done (0.8.0, 3c): `body: { sleep: true }` re-sleeps after the first step inside the World (the sleepers pass in `lh.physics.read`); Rally can drop `afterStep()` when it migrates.
 
 ### 3. One-sided range checks hide regressions: Rally `verge.mjs`
 - **What happened:** the check `[-5, 55]` is effectively "speed must stay under 55 km/h". It can't detect a car that bogs down.
@@ -216,7 +236,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** the engine lives in its own repo with its own `node_modules`. A bare `import 'three'` in engine source would bundle a second copy of three.js.
 - **Workaround:** a workspace test asserts that engine source imports neither.
 - **Engine change:** the phase 3 CLI aliases three and Rapier to the game's copies.
-- **Status:** done (2d D9: lion-hawk/build dedupe; games adopt with the phase 3 CLI): `dedupe({ root })` is an esbuild plugin (`tools/dedupe.js`) that re-resolves three and Rapier from the game's root. Today's builds use the esbuild CLI, which takes no plugins; the workspace purity rule stays until then.
+- **Status:** done (0.8.0, 3d): `lion-hawk build` bundles with esbuild and the `dedupe` plugin (pinned by an engine-side probe package); each game adopts it at its build step.
 
 ### 12. Tests borrowed tools from a parent folder: engine
 - **What happened:** the e2e test used esbuild from the old games workspace. It broke once the engine moved to its own repo.
@@ -309,6 +329,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** view halves only see `engine.scene.state` (the main scene's `ctx.state`), so Rally keeps its `Sim`, Rapier world and track there, next to plain data.
 - **Workaround (2c-rally R2):** `ctx.state` holds them; `game.state()` returns a JSON-safe summary for tests and the hook.
 - **Engine change:** the phase 4 `World` (E-2) should own the Rapier world and be what view halves read.
+- **Status:** done (0.8.0, 3c): each main scene owns a World holding the Rapier world (S-3) and view halves read `engine.world`; games move off `ctx.state` in their migration steps.
 
 ### 29. "Active touch overrides" vs. largest-value merge: Rally
 - **What happened:** in Rally, an active touch steer (even at 0, thumb resting at the centre) overrode keyboard and pad steering. The engine merges sources by largest |value|.
@@ -483,7 +504,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 
 ### 64. No finite invariant before the World: engine, Pig Pens (phase 2e plan)
 - **What happened:** [T-1] says a `finite()` invariant over every `xf` and body is always on, but there is no `World` yet (phase 4), so nothing checks. `nan.mjs` checks the birds' positions by hand.
-- **Engine change:** `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step. Status: done (2e P-E3).
+- **Engine change:** `invariants.finite(select, label)` in `lion-hawk/test`, naming the path, seed and step. (2e P-E3)
+- **Status:** done (0.8.0, 3c): the always-on `finite` check runs over the pose pool and every body's velocities after each headless step (`worldFinite`).
 
 ### 65. No helper for mouse gestures on world points: engine, Pig Pens (phase 2e plan)
 - **What happened:** `game.touch.*` resolves `{ world }` targets through `view.project`, but desktop presets have no touch, and Pig Pens' tools need left clicks and drags on world points (and right-drags for the camera).
@@ -701,7 +723,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** the X-4 hitch readout shows Rapier's share of each frame. The old `main.js` wrapped `world.step` for timing (B-1). The view half does the same under `?fps`. It only measures, but it replaces a method on a sim object from the view.
 - **Workaround (2g final fix wave):** the view no longer wraps anything. Under `?fps` the entry passes `performance.now` as `tractorGame({ timer })`. The sim's physics step adds its own `World.step` time to `game.phys.worldMs`, a running total that is not in `state()` or a checksum. The view reads it each step.
 - **Engine change:** a physics-timing hook would replace the game-side timer, for example `engine.onStep` reporting each step's sim and physics milliseconds, or a `debug.timing` the sim fills.
-- **Status:** open (game-side workaround in place).
+- **Status:** done (0.8.0, 3c): `createEngine(game, { timer })` and `boot(…, { timer })` fill `world.stats.stepMs`/`stepMsTotal`, never `state()` (`test/world-engine.test.mjs`, `test/render-timer.test.mjs`).
 
 ### 107. `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page: engine, Tractor Pickup (phase 2g G5)
 - **What happened:** with the default, each manual-stepping page still renders every rAF under SwiftShader. The guest took 13 s to reach WebGL init, and `waitForFunction(window.engine)` timed out at 30 s with about 12 cores busy. With `render: 'manual'` (`?lh-test=render`) both pages open in 2.8 s.
@@ -780,3 +802,111 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Workaround:** none needed.
 - **Engine change:** none; `test/e2e-render.test.mjs` asserts GL error 0 with tilt-shift on (the sky pixel within 3 was observed in 3e's Task 10, not asserted).
 - **Status:** done (0.7.5, 3e): SwiftShader handled it with GL error 0, sky pixel within 3.
+
+### 120. Rapier handles are NaN-boxed float64s, and handle 0 is valid: engine (phase 3c)
+- **What happened:** Rapier 0.21 collider and body handles are float64 values that box an index and a generation. The first handle is 0, which is falsy.
+- **Workaround:** Never test a handle for truthiness; compare with `null`/`undefined`.
+- **Engine change:** The World keeps handles internally and checks them only against `null` (3c).
+- **Status:** documented (0.8.0, 3c).
+
+### 121. Rapier mass changes apply at the next step unless recomputed: engine (phase 3c)
+- **What happened:** `setDensity` and `setAdditionalMassProperties` take effect at the next step, so a mass read right after them is stale.
+- **Workaround:** Call `body.recomputeMassPropertiesFromColliders()` after the change.
+- **Engine change:** The World always recomputes after a collider, density or material change (`src/sim/world/world.js`), and `setMaterial` keeps a declared `body.mass`.
+- **Status:** done (0.8.0, 3c).
+
+### 122. Moving a fixed body is invisible to queries until colliders are propagated: engine (phase 3c)
+- **What happened:** After a fixed body is moved, scene queries still see its colliders at the old place until the next step.
+- **Workaround:** Call `propagateModifiedBodyPositionsToColliders()` after the move.
+- **Engine change:** `world.place` does it for fixed bodies (`src/sim/world/place.js`).
+- **Status:** done (0.8.0, 3c).
+
+### 123. A body can fall asleep at the end of the step that moved it: engine (phase 3c)
+- **What happened:** Reading only awake bodies missed the last move of a body that fell asleep in the same step, so its pose lagged Rapier's.
+- **Workaround:** Read a body once more after it falls asleep.
+- **Engine change:** `lh.physics.read` writes `curr` for bodies awake now or at the previous read (`test/world-step.test.mjs`).
+- **Status:** done (0.8.0, 3c).
+
+### 124. The read-after-sleep guard cannot be proven by mutation in Rapier 0.21.0: engine (phase 3c)
+- **What happened:** Dropping `|| r.awake` from the read (#123) still passes every test in Rapier 0.21.0, so no failing test guards that line.
+- **Workaround:** The code and its test are kept.
+- **Engine change:** None yet; a scene where the mutation is observable would pin it.
+- **Status:** open (0.8.0, 3c).
+
+### 125. `used_heap_size` does not see ArrayBuffer or WASM memory: engine (phase 3c)
+- **What happened:** `checks.zeroAlloc` measures V8's `used_heap_size`, which excludes ArrayBuffer backing stores and WASM memory, so growth in Rapier's heap or in typed arrays goes unseen.
+- **Workaround:** None; review typed-array and Rapier allocations by hand.
+- **Engine change:** None yet; a WASM-memory probe could extend `zeroAlloc`.
+- **Status:** open (0.8.0, 3c).
+
+### 126. Rapier's `body.sleep()` zeroes the body's velocity: engine (phase 3c)
+- **What happened:** A test that put a body to sleep and expected it to keep its velocity failed: `sleep()` zeroes it.
+- **Workaround:** Set the velocity after `sleep()` with `wakeUp: false` (`body.setLinvel(v, false)`).
+- **Engine change:** None; behaviour of Rapier.
+- **Status:** documented (0.8.0, 3c).
+
+### 127. Despawning while iterating a live `with()` list skips entities: engine (phase 3c)
+- **What happened:** `world.with(...)` returns a live list; despawning inside a forward loop shrinks it under the loop, so the next entity is skipped.
+- **Workaround:** Iterate backwards, or copy the list first.
+- **Engine change:** None; live lists are the contract (E-3).
+- **Status:** documented (0.8.0, 3c).
+
+### 128. gltf-transform `quantize()` and `meshopt()` move mesh nodes: engine (phase 3d)
+- **What happened:** `quantize()` and gltf-transform's `meshopt()` re-parent or re-transform mesh nodes to encode POSITION, which breaks engine parts (named nodes with their own matrices).
+- **Workaround:** None needed in games.
+- **Engine change:** The bake keeps POSITION unquantized and every named node, parent and world matrix; float positions cost some compression.
+- **Status:** documented (0.8.0, 3d).
+
+### 129. `GLTFLoader` sanitises node names, and Kenney models repeat them: engine, all (phase 3d)
+- **What happened:** `GLTFLoader` drops `.`, `:`, `/`, `[`, `]`, turns spaces into `_` and de-duplicates with `_n`, so runtime names differed from sidecar names. Kenney models repeat node names (corn).
+- **Workaround:** None needed.
+- **Engine change:** The bake pre-sanitises part and socket names and de-duplicates with `-2`, `-3` (`lamp.001` becomes `lamp001`).
+- **Status:** done (0.8.0, 3d).
+
+### 130. A multi-material part loads as a `Group` of meshes: engine (phase 3d)
+- **What happened:** A part node with several materials loads as a `Group` with child meshes `<name>_1`, `<name>_2`, not a single mesh.
+- **Workaround:** View code must treat the part node as the `Group`.
+- **Engine change:** None in the bake; 3f/3g handle the `Group`.
+- **Status:** open (0.8.0, 3d): for 3f/3g.
+
+### 131. Kenney decorations carry flat decal primitives: engine, Tractor Pickup (phase 3d)
+- **What happened:** Kenney models (rocks) have flat decal primitives, so the default one-hull-per-(part, material) rule produced degenerate hulls.
+- **Workaround:** Per-model `colliders: false`, or explicit `col-*` nodes.
+- **Engine change:** Flat groups are skipped with a warning; only an all-flat model fails (C4).
+- **Status:** done (0.8.0, 3d).
+
+### 132. `bake --check` does not see config changes: engine (phase 3d)
+- **What happened:** `bake --check` compares sources, the registry hash and the engine major.minor only. Renames, `static`, palette and other config edits do not make it stale, and a `.gltf` sha covers only the `.gltf` (not `.bin` or textures).
+- **Workaround:** Re-bake by hand after a config change.
+- **Engine change:** None yet; hash the effective per-model config into `phys.json`.
+- **Status:** open (0.8.0, 3d).
+
+### 133. Pet anim tables moved from nlerp to slerp: Tractor Pickup (phase 3d)
+- **What happened:** The bake samples anim tables with slerp; frames differ from the old `assets.json` tables (nlerp) by under 1e-3 at 30 fps.
+- **Workaround:** None needed.
+- **Engine change:** Slerp with a 12-float row layout (C2).
+- **Status:** documented (0.8.0, 3d).
+
+### 134. Rapier's f32 principal frame drifts on repeated principal inertia: engine (phase 3d)
+- **What happened:** A unit tetrahedron has a repeated principal inertia; Rapier's f32 principal frame drifted about 1.6%, over the bake test's 1% tolerance.
+- **Workaround:** Use a non-degenerate mesh fixture when comparing mass tensors.
+- **Engine change:** None; the bake's mass test uses a non-degenerate tetrahedron (R7).
+- **Status:** documented (0.8.0, 3d).
+
+### 135. gltf-transform `prune` drops single-colour textures: engine (phase 3d)
+- **What happened:** gltf-transform 4.5.1's `prune()` folds single-colour textures into the material factor, so a `keepTextures` model lost its texture.
+- **Workaround:** None needed.
+- **Engine change:** The bake passes `keepSolidTextures: true` (R8).
+- **Status:** done (0.8.0, 3d).
+
+### 136. `GLTFLoader` names every node and the scene in one namespace: engine (phase 3d)
+- **What happened:** A part named like an empty or the scene got `_1` at runtime (`Group` vs `Group_1`), so it no longer matched its sidecar name.
+- **Workaround:** None needed.
+- **Engine change:** Part names de-duplicate against every non-part node and the scene name (3d Task 6 fix).
+- **Status:** done (0.8.0, 3d).
+
+### 137. A dedupe test needs an engine-side importer of three: engine (phase 3d)
+- **What happened:** A build test whose entry sits in the game dir cannot fail without `dedupe`, because `three` resolves to the game's copy anyway.
+- **Workaround:** None needed.
+- **Engine change:** The build test links an engine-side probe package that imports `three` and asserts the bundle uses the game's copy (R9).
+- **Status:** done (0.8.0, 3d).

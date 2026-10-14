@@ -172,13 +172,13 @@ Scratch smoke bakes (done-when), bake from `<scratch>/smoke-<game>/game.config.j
 
 ## Field note candidates
 
-1. `quantize()` and gltf-transform's `meshopt()` re-parent or re-transform mesh nodes, so engine parts can't use them on POSITION. Float positions cost compression.
-2. `GLTFLoader` sanitises node names (`.`, `:`, `/`, `[`, `]` dropped, spaces to `_`) and de-duplicates them with `_n`. The bake now pre-sanitises, and Kenney models repeat node names (corn).
-3. A multi-material part loads as a `Group` with child meshes `<name>_1`, `<name>_2` (3f/3g must treat the part node as the Group).
-4. Kenney decorations carry flat decal primitives, so the "one hull per (part, material)" default needed a flat-group skip.
-5. `bake --check` doesn't see config changes (renames, `static`, palette); only sources, the registry and the engine.
-6. Pet anim tables moved from nlerp to slerp; frames differ from the old `assets.json` by under 1e-3 at 30 fps.
-7. Rapier's f32 principal frame drifts on repeated principal inertia (R7); use a non-degenerate mesh fixture when comparing mass tensors.
-8. gltf-transform `prune` drops single-colour textures unless `keepSolidTextures` is set (R8).
-9. `GLTFLoader` names nodes in one namespace across all nodes and the scene, with suffix `_N` (Task 6 fix), so part names must dedupe against non-part nodes too.
-10. A test whose entry sits in the game dir cannot pin dedupe, because `three` resolves there anyway (R9); the probe must be an engine-side package.
+1. `quantize()` and gltf-transform's `meshopt()` re-parent or re-transform mesh nodes, so engine parts can't use them on POSITION. Float positions cost compression. → #128
+2. `GLTFLoader` sanitises node names (`.`, `:`, `/`, `[`, `]` dropped, spaces to `_`) and de-duplicates them with `_n`. The bake now pre-sanitises, and Kenney models repeat node names (corn). → #129
+3. A multi-material part loads as a `Group` with child meshes `<name>_1`, `<name>_2` (3f/3g must treat the part node as the Group). → #130
+4. Kenney decorations carry flat decal primitives, so the "one hull per (part, material)" default needed a flat-group skip. → #131
+5. `bake --check` doesn't see config changes (renames, `static`, palette); only sources, the registry and the engine. → #132
+6. Pet anim tables moved from nlerp to slerp; frames differ from the old `assets.json` by under 1e-3 at 30 fps. → #133
+7. Rapier's f32 principal frame drifts on repeated principal inertia (R7); use a non-degenerate mesh fixture when comparing mass tensors. → #134
+8. gltf-transform `prune` drops single-colour textures unless `keepSolidTextures` is set (R8). → #135
+9. `GLTFLoader` names nodes in one namespace across all nodes and the scene, with suffix `_N` (Task 6 fix), so part names must dedupe against non-part nodes too. → #136
+10. A test whose entry sits in the game dir cannot pin dedupe, because `three` resolves there anyway (R9); the probe must be an engine-side package. → #137
