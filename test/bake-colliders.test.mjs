@@ -60,3 +60,13 @@ test('3d: the capsule/cylinder axis is the round cross-section (contract issue: 
   assert.equal(axisOf([0.5, 0.5, 0.5]), 0);   // a tie keeps the first longest
   assert.equal(axisOf([0.2, 0.5, 0.5]), 0);
 });
+
+test('3d: axisOf pins C1: the extent whose other two are closest to equal, a tie going to the longest', () => {
+  assert.equal(axisOf([1, 2, 4]), 2);      // axes 0 and 2 tie at 0.5 (axis 1 is 0.75): the longest, 4, wins
+  assert.equal(axisOf([4, 2, 1]), 0);
+  assert.equal(axisOf([2, 4, 1]), 1);      // axes 1 and 2 tie at 0.5: 4 beats 1
+  assert.equal(axisOf([3, 3, 1]), 2);      // a short disc: the round cross-section is x/y
+  assert.equal(axisOf([1, 1, 3]), 2);
+  assert.equal(axisOf([0.2, 0.5, 0.5]), 0); // a wheel lying on its side
+  assert.equal(axisOf([4, 4, 4]), 0);      // all equal: first
+});

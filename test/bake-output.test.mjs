@@ -104,3 +104,12 @@ test('3d: kits with the same Textures/colormap.png resolve per source file and n
   assert.equal(tex.length, 1); assert.equal(PNG.sync.read(Buffer.from(tex[0].getImage())).data[1], 255);
   assert.deepEqual(readdirSync(join(dir, 'baked/models')).sort(), ['a.glb', 'b.glb', 'c.glb']);
 });
+
+test('3d: a partial bake after a source change, and a full bake of a fresh copy with the same sources, are byte-identical', async () => {
+  const a = copyFixture(), b = copyFixture({ baked: false });
+  writeFileSync(join(a, 'assets/models/crate.glb'), await build('cart'));
+  writeFileSync(join(b, 'assets/models/crate.glb'), await build('cart'));
+  await bake({ game: a, ids: ['crate'], log: quiet });
+  await bake({ game: b, log: quiet });
+  for (const f of ['phys.json', 'manifest.json']) assert.ok(read(a, f).equals(read(b, f)), `${f} differs between partial and full bake`);   // sorted() keys on partial bakes
+});
