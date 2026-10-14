@@ -15,7 +15,7 @@ import { qFromYaw, qnorm } from '../../core/math.js';
 
 let SERIAL = 0; // process-wide: a new World never reuses an old World's serial (the view keys on it, S-3)
 const DESC_KEYS = new Set(['model', 'colliders', 'body', 'groups', 'at', 'yaw', 'q', 'tags', 'xf', 'contacts', 'sensor', 'partXf']);
-const WORLD_KEYS = ['id', 'sockets'];
+const WORLD_KEYS = ['id', 'sockets', 'heightfield'];
 const FIXED_PARTS = new Set(['id', 'tags', 'model', 'body', 'colliders', 'sockets', 'heightfield']);
 const BODY_KEYS = new Set(['type', 'lock', 'ccd', 'linearDamping', 'angularDamping', 'sleep', 'canSleep', 'mass', 'massProps']);
 const TYPES = { dynamic: DYNAMIC, kinematic: KINEMATIC, fixed: FIXED };
@@ -57,7 +57,7 @@ export function createWorld(engine, opts = {}) {
     if (!r || r.world !== api || r.dead) throw new Error(`world.${what}: not a live entity of this World`);
     return r;
   };
-  const record = (kind, fixedMass) => ({ world: api, slot: -1, kind, dead: false, awake: 1, own: null, k: 1, fixedMass, parts: null });
+  const record = (kind, fixedMass) => ({ world: api, slot: -1, kind, dead: false, awake: 1, own: null, k: 1, mass: undefined, fixedMass, parts: null });
   const modelSockets = id => {
     let s = socketsOf.get(id);
     if (!s) socketsOf.set(id, s = deepFreeze(structuredClone(sidecars[id].sockets ?? {})));
@@ -181,7 +181,7 @@ export function createWorld(engine, opts = {}) {
       }
       body.recomputeMassPropertiesFromColliders(); // Rapier would otherwise update mass only at the next step
       if (mass !== undefined) { // D3: scale every density so the body weighs `mass`; com and inertia shape stay geometric
-        r.k = mass / body.mass();
+        r.mass = mass; r.k = mass / body.mass();
         for (let i = 0; i < made.length; i++) e.colliders[i].collider.setDensity(made[i].density * r.k);
         body.recomputeMassPropertiesFromColliders();
       }
@@ -287,6 +287,7 @@ export function createWorld(engine, opts = {}) {
     if (part === 'net') api.net?.guard('remove', e); // 3i seam
     if (part === 'xf') {
       if (e.body) throw new Error('world.remove: a body entity keeps its xf');
+      if (r.parts) throw new Error(`world.remove: entity ${e.id} has partXf: remove partXf before xf`);
       slots.splice(slots.indexOf(r.slot), 1); pool.free(r.slot); r.slot = -1;
     }
     if (part === 'partXf') { r.parts = null; drop(parted, e); }
@@ -328,7 +329,15 @@ export function createWorld(engine, opts = {}) {
       c.material = id; handles.get(c.collider.handle).material = id;
     }
     if (n === 0) throw new Error(`world.setMaterial: entity ${e.id} has no collider on part '${part}'`);
-    if (massChanged && e.body) e.body.recomputeMassPropertiesFromColliders();
+    if (massChanged && e.body) {
+      e.body.recomputeMassPropertiesFromColliders();
+      if (r.mass !== undefined) { // D3: a body.mass entity keeps its declared weight; re-solve the scale over all its colliders
+        const s = r.mass / e.body.mass();
+        r.k *= s;
+        for (const c of e.colliders) c.collider.setDensity(registry.collider(c.material).density * r.k);
+        e.body.recomputeMassPropertiesFromColliders();
+      }
+    }
     return e;
   }
 
@@ -387,6 +396,7 @@ export function createWorld(engine, opts = {}) {
   function heightfield({ nx, nz, cell, x0 = 0, z0 = 0, heights, material, groups: g, fixInternalEdges = false, tags = ['heightfield'] } = {}) {
     live();
     const fail = m => { throw new Error(`world: 'heightfield' ${m}`); };
+    if (!Array.isArray(tags)) fail('tags must be an array');
     if (!ph) fail('needs a body but the game has no physics.rapier');
     if (!registry) fail('needs a material registry: set defs.materials');
     if (typeof material !== 'string' || !registry.has(material)) fail(`unknown material '${material}'`);

@@ -1,10 +1,15 @@
 // S-3 and the §4.4 seam: each main scene owns a World made before its enter and disposed after its exit; overlays
 // share it; the World systems sit where the step order needs them; builtin handlers (3i); the timer (#106);
 // state() carries the World digest only while it has entities.
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createEngine } from '../src/core/engine.js';
+import { createEngine as makeEngine } from '../src/core/engine.js';
 import { physGame } from './fixtures/phys/game.js';
+
+// P6: Rapier's WASM memory is not garbage collected; every engine's current World is disposed after its test
+const engines = [];
+const createEngine = (...a) => { const e = makeEngine(...a); engines.push(e); return e; };
+afterEach(() => { for (const e of engines.splice(0)) e.world?.dispose(); });
 
 const crate = (e, ctx) => ctx.world.spawn({ model: 'crate', body: 'dynamic', at: [0, 10, 0], tags: ['c'] });
 
@@ -154,4 +159,10 @@ test('3i hook: engine.netPart.attach(world) runs for every new World', () => {
   const e = createEngine(physGame({ setup: en => { en.netPart = { attach: w => seen.push(w.serial) }; } }));
   e.go('menu');
   assert.equal(seen.length, 2); assert.equal(seen[1], e.world.serial);
+  let armed = false, orphan;
+  const e3 = createEngine(physGame({ setup: en => { en.netPart = { attach: w => { if (armed) { orphan = w; throw new Error('attach failed'); } } }; } }));
+  armed = true;
+  assert.throws(() => e3.go('menu'), /attach failed/);
+  assert.equal(e3.world, undefined, 'a World whose attach threw is not left in the seat');
+  assert.equal(orphan.disposed, true);
 });

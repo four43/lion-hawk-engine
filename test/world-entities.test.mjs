@@ -20,6 +20,7 @@ test('ids count from 1 in spawn order; tags are a Set; game fields copied, World
   assert.deepEqual(Object.getOwnPropertySymbols(a).length, 1);
   assert.equal(JSON.stringify(Object.keys(a)), JSON.stringify(['id', 'tags', 'pig', 'net', 'netId', 'xf']), 'World internals are not enumerable');
   assert.throws(() => w.spawn({ tags: ['x'], id: 5 }), /world: 'x' may not set 'id' \(the World does\)/);
+  assert.throws(() => w.spawn({ tags: ['x'], heightfield: { nx: 2 } }), /world: 'x' may not set 'heightfield' \(the World does\)/);
   assert.throws(() => w.spawn({ tags: 'pig' }), /world: 'entity' tags must be an array/);
   assert.equal(w.spawn({}).id, 3, 'a throwing spawn does not use up an id');
 });

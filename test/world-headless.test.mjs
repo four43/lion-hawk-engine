@@ -1,11 +1,16 @@
 // T-1, T-5: headless reaches the World, and a finite check over every pool slot and body velocity runs after each
 // step whenever the World has entities.
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { headless } from '../testing/headless.js';
+import { headless as run } from '../testing/headless.js';
 import { worldFinite } from '../testing/invariants.js';
 import { physGame } from './fixtures/phys/game.js';
 import countdown from './fixtures/countdown.js';
+
+// P6: Rapier's WASM memory is not garbage collected; every handle's current World is disposed after its test
+const handles = [];
+const headless = (...a) => { const h = run(...a); handles.push(h); return h; };
+afterEach(() => { for (const h of handles.splice(0)) h.engine.world?.dispose(); });
 
 const farm = (e, ctx) => {
   const w = ctx.world;

@@ -56,6 +56,8 @@ export function createPool(cap = 64) {
 
 // e.xf: accessors made once at spawn onto the slot's CURRENT half. They read pool.buf on every access (the buffer is
 // replaced when the pool grows). A body entity's pose comes from Rapier: writing it throws (world.place moves it).
+// Never hold e.xf.p / e.xf.q across a despawn: the accessor reads the slot, which a later spawn may own (the
+// despawned entity's own e.xf is replaced by a frozen deadXf, but a reference kept to the old p/q is not).
 export function makeXf(pool, slot, e) {
   const o = slot * STRIDE + CURR;
   const acc = i => ({

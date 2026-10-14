@@ -150,6 +150,10 @@ test('setMaterial swaps friction and restitution; density changes recompute mass
     assert.throws(() => w.setMaterial(e, 'wheel', 'ice'), /world\.setMaterial: entity 1 has no collider on part 'wheel'/);
     assert.throws(() => w.setMaterial(e, '*', 'mud'), /world\.setMaterial: unknown material 'mud'/);
     assert.throws(() => w.setMaterial(e, '*', 'air'), /world\.setMaterial: 'air' has zero density and entity 1 is dynamic without massProps/);
+    const d = w.spawn({ tags: ['plank'], body: { type: 'dynamic', mass: 100 }, colliders: [{ shape: 'box', half: [1, 0.1, 0.5], material: 'wood' }] });
+    near(d.body.mass(), 100, 1e-3);
+    w.setMaterial(d, '*', 'steel');
+    near(d.body.mass(), 100, 1e-3); // D3: a body.mass entity weighs exactly that after a material swap
   } finally { w.dispose(); }
 });
 test('place and socket go through the World (E-8)', () => {

@@ -110,6 +110,7 @@ test('world.heightfield: a ground entity a ball rests on at the analytic height'
     assert.ok(Math.abs(y - (h(x, z) + lift)) < 0.02, `rests at ${y}, expected ${h(x, z) + lift}`);
     assert.throws(() => w.place(f, { at: [0, 0, 0] }), /world\.place: entity 1 has no xf/);
     assert.throws(() => w.heightfield({ nx, nz, cell, heights, material: 'lava' }), /world: 'heightfield' unknown material 'lava'/);
+    assert.throws(() => w.heightfield({ nx, nz, cell, heights, material: 'grass', tags: 'ground' }), /world: 'heightfield' tags must be an array/);
     w.despawn(f);
     assert.equal(w.rapier.getCollider(c.handle), null);
   } finally { w.dispose(); }

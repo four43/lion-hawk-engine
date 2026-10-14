@@ -57,5 +57,8 @@ test('partXf refuses a bodiless entity without xf and bad names, before an id is
     assert.equal(m.id, 1);
     assert.throws(() => w.add(m, 'partXf', WHEELS), /world\.add: 'partXf' needs an xf/);
     assert.throws(() => w.add(w.spawn({ tags: ['n'], xf: true }), 'partXf', ['a', 'a']), /world\.add: 'partXf' must be an array of distinct part names/);
+    const p = w.spawn({ tags: ['p'], xf: true, partXf: WHEELS });
+    assert.throws(() => w.remove(p, 'xf'), /^Error: world\.remove: entity 3 has partXf: remove partXf before xf$/);
+    assert.equal(typeof p.xf.slot, 'number'); assert.deepEqual(w.with('partXf'), [p]);
   } finally { w.dispose(); }
 });

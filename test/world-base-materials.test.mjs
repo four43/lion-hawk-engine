@@ -37,6 +37,8 @@ test("3b-R5: inline colliders are validated with 3b's validateCollider at spawn"
       /spawn 'x': colliders\[0\]\.bogus unknown field for a sphere \(got 1\)/);
     assert.throws(() => w.spawn({ tags: ['x'], body: 'dynamic', colliders: [{ shape: 'box', half: [1, 1, 1], q: [0, 0, 0, 2], material: 'steel' }] }),
       /spawn 'x': colliders\[0\]\.q must be a unit quaternion \[x, y, z, w\] \(got \[0,0,0,2\]\)/);
+    assert.throws(() => w.spawn({ tags: ['x'], body: 'dynamic', colliders: [{ shape: 'sphere', r: 0.5, material: 'paint-red' }] }),
+      /world: 'x' unknown material 'paint-red' on collider 0 \(body\)/); // A-4: a paint slot is never a registry id
     assert.ok(w.spawn({ tags: ['x'], body: 'dynamic', colliders: [{ shape: 'box', half: [0.1, 0.1, 0.1], round: 0.05, material: 'steel' }] }));
   } finally { w.dispose(); }
 });

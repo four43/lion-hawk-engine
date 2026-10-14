@@ -21,7 +21,8 @@ export function installWorld(engine, { timer = null } = {}) { // engine.loading 
     open() {
       const w = createWorld(engine, { seed: engine.seed, timer });
       seat.current = w;
-      engine.netPart?.attach(w); // 3i: present only when the game replicates its World
+      try { engine.netPart?.attach(w); } // 3i: present only when the game replicates its World
+      catch (err) { seat.current = undefined; w.dispose(); throw err; } // no orphaned live World in the seat
       return w;
     },
     close() { const w = seat.current; seat.current = undefined; w?.dispose(); },
