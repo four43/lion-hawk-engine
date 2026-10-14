@@ -129,6 +129,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 114 | A lift dispatched late can still read as a hold | engine, Tractor Pickup | open |
 | 115 | The material hash skips `look` and `game`, so a stale baked look is not caught | engine | done (0.7.4, 3b) |
 | 116 | Material pairs are order-dependent: moving body first, ground second | engine | done (0.7.4, 3b) |
+| 117 | A renderer that cannot start is reported once as `render: …` and the page runs on | engine, all games | done (0.7.5, 3e): boot reports `render: <message>` into `engine.errors` and sets `view.gfx`, `view.materials`, `view.assets`, `view.sync` to `null`; a game e2e that stubs WebGL now sees one error |
+| 118 | Turning a post pass on compiles a render-target variant of each lit material | engine, Pig Pens | open (0.7.5, 3e): tilt-shift on adds 4 programs on SwiftShader (3 passes + 1 variant); `gfx.warm` never goes through post, so warm with the post pass on |
+| 119 | SwiftShader handles half-float MSAA (`samples: 4`) | engine | done (0.7.5, 3e): GL error 0 with tilt-shift on (`test/e2e-render.test.mjs`); sky pixel within 3 observed |
 
 ## Entries
 
@@ -759,3 +762,21 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Workaround:** none needed; kits pass the moving body as `a` and the ground as `b`.
 - **Engine change:** `pair()` is cached per ordered pair (spec [M-8] clarification).
 - **Status:** done (0.7.4, 3b): convention documented; kits (3h) must follow it.
+
+### 117. A renderer that cannot start is reported once as `render: …` and the page runs on: engine, all games (phase 3e)
+- **What happened:** the spec is silent on a page without WebGL. 3e's boot render pipeline (contract issue 6, RF1) has to choose between throwing and running on.
+- **Workaround:** none needed. View halves must check `view.gfx` before drawing. A game e2e that stubs WebGL now sees exactly one `render: …` error and should expect it.
+- **Engine change:** `src/view/render/pipeline.js`: boot reports `render: <message>` once into `engine.errors` and runs on with `view.gfx`, `view.materials`, `view.assets` and `view.sync` set to `null` (`engine.assets` unset); the sim, UI and hook are unaffected.
+- **Status:** done (0.7.5, 3e): verified in unit (`test/render-pipeline.test.mjs`) and in the SwiftShader browser test (`test/e2e-render.test.mjs`).
+
+### 118. Turning a post pass on compiles a render-target variant of each lit material: engine, Pig Pens (phase 3e)
+- **What happened:** turning tilt-shift on compiled 4 programs on SwiftShader, not the plan's 3: the 3 passes plus a variant of the scene's lit material, since a material drawn into a non-null render target compiles without the output colour-space/tone-mapping step. Pig Pens has the same behaviour today.
+- **Workaround:** a game that enables a post pass mid-game should warm with the pass on, because `gfx.warm` never goes through `gfx.post`; otherwise it pays one compile per lit material when the pass turns on.
+- **Engine change:** none; `test/e2e-render.test.mjs` bounds the delta at `>= 3 && <= 4` (3e ruling, see 3e's Task 10 report).
+- **Status:** open (0.7.5, 3e): documented; a warm-through-post option is not planned yet.
+
+### 119. SwiftShader handles half-float MSAA (`samples: 4`): engine (phase 3e)
+- **What happened:** tilt-shift's post target is a half-float render target with `samples: 4` (`src/view/render/tiltShift.js`). It was unknown whether SwiftShader (the browser suites' GPU) supports it.
+- **Workaround:** none needed.
+- **Engine change:** none; `test/e2e-render.test.mjs` asserts GL error 0 with tilt-shift on (the sky pixel within 3 was observed in 3e's Task 10, not asserted).
+- **Status:** done (0.7.5, 3e): SwiftShader handled it with GL error 0, sky pixel within 3.

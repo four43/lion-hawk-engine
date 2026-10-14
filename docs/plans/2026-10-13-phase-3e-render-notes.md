@@ -113,6 +113,6 @@ None.
 
 ## Field note candidates
 
-- A renderer that fails is reported as `render: …` and the page runs on (RF1). A game e2e that stubs WebGL now sees one error.
-- Turning tilt-shift on compiled 4 programs on SwiftShader, not 3. They are the 3 passes plus a render-target variant of the scene's lit material. A game enabling a post pass mid-game should warm with it on, because `gfx.warm` never goes through post. See `.superpowers/sdd/2026-10-13-phase-3e-render/task-10-report.md` for the finding.
-- SwiftShader handled half-float MSAA (`samples: 4`) with GL error 0, and the sky pixel matched within 3.
+- A renderer that fails is reported as `render: …` and the page runs on (RF1). A game e2e that stubs WebGL now sees one error. → #117
+- Turning tilt-shift on compiled 4 programs on SwiftShader, not 3. They are the 3 passes plus a render-target variant of the scene's lit material. A game enabling a post pass mid-game should warm with it on, because `gfx.warm` never goes through post. See `.superpowers/sdd/2026-10-13-phase-3e-render/task-10-report.md` for the finding. → #118
+- SwiftShader handled half-float MSAA (`samples: 4`) with GL error 0, and the sky pixel matched within 3. → #119
