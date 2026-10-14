@@ -1,4 +1,7 @@
 // T-10, T-12, T-13, T-14 (overview §4.4): whole-game checks a game's npm test calls. Node only.
+import v8 from 'node:v8';
+import vm from 'node:vm';
+import { createEngine } from '../src/core/engine.js';
 import { headless } from './headless.js';
 import { scanPurity } from './purity.js';
 
@@ -38,4 +41,29 @@ export function simPurity(game, { roots } = {}) {
   return { ok: found.length === 0, found };
 }
 
-export const checks = { determinism, simPurity };
+// [T-13] full GCs without --expose-gc: enable the flag in this process (the game object cannot cross into a child)
+let vmGc = null;
+function collector() {
+  if (typeof globalThis.gc === 'function') return globalThis.gc;
+  if (vmGc === null) { v8.setFlagsFromString('--expose-gc'); vmGc = vm.runInNewContext('gc'); }
+  return vmGc;
+}
+// Retained heap growth over `steps` engine steps after `warm` (JIT and rings settle). Rapier's per-call vectors are
+// garbage and do not count; anything kept does. Input resolves once per run through determinism's policyOf; a named
+// policy gets a stand-in h = { engine, seed } (no h.find/world/time).
+export function zeroAlloc(game, { steps = 10000, warm = 600, seed = 1, scene, args, input, limit = 64 * 1024 } = {}) {
+  const gc = collector(), engine = createEngine(game, { seed, scene, args }), pol = policyOf(game, input);
+  const scratch = {}, h = { engine, seed: engine.seed };
+  const run = (from, n) => { for (let i = 0; i < n; i++) { if (pol) engine.input.set(pol(h, from + i, scratch)); engine.stepN(1); } };
+  try {
+    run(0, warm);
+    gc(); gc();
+    const before = v8.getHeapStatistics().used_heap_size;
+    run(warm, steps);
+    gc(); gc();
+    const growth = v8.getHeapStatistics().used_heap_size - before;
+    return { ok: growth < limit, growth, steps };
+  } finally { engine.world?.dispose(); }
+}
+
+export const checks = { determinism, simPurity, zeroAlloc };
