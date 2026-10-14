@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.3 — 2026-10-14
+
+Phase 3a: engine carry-overs.
+
+- `engine.overlay(name, args, { once })`: a no-op when the overlay is open or about to be, and never recorded (#95).
+- `engine.scene.overlayArgs(name)`, and view halves' `enter(engine, view, args)` (#105).
+- `defineGame({ reset })`, called first in every `createEngine`, so replays and `mp()` peers start from the shipped tunables (#108). Tunables are per process: a test that tunes must tune after all its `mp()` peers are created.
+- `bindGesture` times holds and taps on the event clock, with an injectable `now`; `uncapped` is ignored (#109).
+- Headless and Playwright `untilLoaded` take the step that delivers the commands pending at the call (#100); `window.engine.commands`.
+- `peers()` defaults to `render: 'manual'` (#107).
+- The domAsserts guard sees every equality form and skips quoted text (G-E2).
+- Dependencies for the phase 3 bake and build: `@gltf-transform/core`, `/extensions`, `/functions` 4.5.1, `meshoptimizer` ~1.2, `pngjs`; `esbuild` moves to `dependencies`.
+- Testing: `scanSource`/`scanPurity` take `{ rapier: true }`; engine roots are scanned with it (D9). Guard tests for field-note numbering and the phase 3 public surface.
+
 ## 0.7.2 — 2026-10-13
 
 Phase 2g G-E2: late adoption of game markup.
