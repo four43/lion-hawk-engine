@@ -59,6 +59,8 @@ const SCHEMA = {
   game: plainData, // D6: free-form, not schema-checked, copied through extends
 };
 
+const PAIR = { friction: range(0, 2), restitution: unit, tire: TIRE, sound: str, fx: str };
+
 // unknown: what an unlisted key is called at this level ('unknown block' for a material's top level).
 const check = (schema, value, path, fail, unknown = 'unknown field') => {
   if (typeof schema === 'function') { const p = schema(value); if (p) fail(path, p, value); return; }
@@ -83,6 +85,21 @@ const merge = (base, over) => { // deep, per block, child wins; arrays and scala
   return out;
 };
 const deepFreeze = o => { for (const v of Object.values(o)) if (v && typeof v === 'object') deepFreeze(v); return Object.freeze(o); };
+
+function parsePairs(pairs, has) {
+  if (!isPlain(pairs)) throw new Error(`materials: pairs must be an object (got ${show(pairs)})`);
+  const out = new Map(); // 'a|b' with a <= b → validated, frozen entry
+  for (const [key, entry] of Object.entries(pairs)) {
+    const ids = key.split('|');
+    if (ids.length !== 2 || !ids[0] || !ids[1]) throw new Error(`materials: pair '${key}' must be 'a|b'`);
+    for (const id of ids) if (!has(id)) throw new Error(`materials: pair '${key}' names unknown material '${id}'`);
+    const norm = [...ids].sort().join('|');
+    if (out.has(norm)) throw new Error(`materials: pair '${key}' repeats '${out.get(norm).key}'`);
+    check(PAIR, entry, '#', (path, problem, v) => { throw new Error(`materials: pair '${key}'${path.slice(1)} ${problem} (got ${show(v)})`); });
+    out.set(norm, { key, entry: deepFreeze(clone(entry)) });
+  }
+  return out;
+}
 
 export function defineMaterials(entries = {}, options = {}) {
   if (!isPlain(entries)) throw new Error(`materials: defineMaterials takes an object of entries (got ${show(entries)})`);
@@ -132,6 +149,29 @@ export function defineMaterials(entries = {}, options = {}) {
     density: densityOf(m),
   }));
 
+  // 4. Pairs (M-7, M-8). Cached per ORDERED pair: the tie and tyre rules depend on which side is the ground (b).
+  const table = parsePairs(options.pairs ?? {}, id => at.has(id));
+  const pairEntries = new Map();
+  for (const [norm, { entry }] of table) { const [a, b] = norm.split('|').map(need); pairEntries.set(Math.min(a, b) * 256 + Math.max(a, b), entry); }
+  const pairCache = new Map();
+  const pair = (a, b) => {
+    const ia = need(a), ib = need(b), k = ia * 256 + ib;
+    let r = pairCache.get(k);
+    if (r) return r;
+    const ma = list[ia], mb = list[ib], e = pairEntries.get(Math.min(ia, ib) * 256 + Math.max(ia, ib)) ?? {};
+    const soft = sgOf(mb) < sgOf(ma) ? mb : ma, hard = soft === ma ? mb : ma; // ties go to a
+    const ground = mb.tire ?? ma.tire;
+    r = deepFreeze({
+      friction: e.friction ?? Math.sqrt((ma.phys?.friction ?? PHYS_DEFAULTS.friction) * (mb.phys?.friction ?? PHYS_DEFAULTS.friction)),
+      restitution: e.restitution ?? Math.max(ma.phys?.restitution ?? PHYS_DEFAULTS.restitution, mb.phys?.restitution ?? PHYS_DEFAULTS.restitution),
+      tire: e.tire ? (ground ? merge(ground, e.tire) : clone(e.tire)) : ground ?? null,
+      sound: e.sound ?? soft.sound ?? hard.sound ?? null,
+      fx: e.fx ?? soft.fx ?? hard.fx ?? null,
+    });
+    pairCache.set(k, r);
+    return r;
+  };
+
   return Object.freeze({
     ids,
     get: id => list[need(id)],
@@ -140,5 +180,6 @@ export function defineMaterials(entries = {}, options = {}) {
     byIndex: i => { if (!Number.isInteger(i) || i < 0 || i >= ids.length) throw new Error(`materials: no material at index ${i}`); return ids[i]; },
     density: id => colliders[need(id)].density,
     collider: id => colliders[need(id)],
+    pair,
   });
 }
