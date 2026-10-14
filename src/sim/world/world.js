@@ -28,6 +28,9 @@ const insert = (list, e) => { const i = indexOfId(list, e.id); if (list[i] !== e
 const drop = (list, e) => { const i = indexOfId(list, e.id); if (list[i] === e) list.splice(i, 1); };
 const hasParts = (e, parts) => { for (let i = 0; i < parts.length; i++) if (e[parts[i]] === undefined) return false; return true; };
 const partNames = v => Array.isArray(v) && v.length > 0 && v.every(n => typeof n === 'string' && n !== '') && new Set(v).size === v.length;
+// partXf is [names] or { name: { p: [x, y, z], q: [x, y, z, w] } | null } (an initial pose for curr and prev; null: none)
+const partSpec = v => Array.isArray(v) ? partNames(v)
+  : v !== null && typeof v === 'object' && Object.keys(v).length > 0 && Object.entries(v).every(([n, x]) => n !== '' && (x === null || (x && typeof x === 'object' && (x.p === undefined || isVec(x.p, 3)) && (x.q === undefined || isVec(x.q, 4)))));
 const partPose = () => ({ p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
 
 // digest: FNV-1a over float64 bits, so the checksum sees every bit of a pose or velocity (no rounding)
@@ -76,9 +79,17 @@ export function createWorld(engine, opts = {}) {
   // 3g request 7: per-part poses (e.partXf[name], curr, written by sim code) with a hidden prev, copied by swap
   function setParts(e, r, names) {
     if (!r.parts) { r.parts = []; e.partXf = {}; insert(parted, e); }
-    for (const name of names) {
+    const list = Array.isArray(names) ? names.map(n => [n, null]) : Object.entries(names);
+    for (const [name, seed] of list) {
       if (Object.hasOwn(e.partXf, name)) continue;
-      const cur = partPose(); e.partXf[name] = cur; r.parts.push({ name, cur, prev: partPose() });
+      const cur = partPose(), prev = partPose();
+      if (seed) for (const o of [cur, prev]) {
+        if (seed.p) { o.p.x = seed.p[0]; o.p.y = seed.p[1]; o.p.z = seed.p[2]; }
+        if (seed.q) { o.q.x = seed.q[0]; o.q.y = seed.q[1]; o.q.z = seed.q[2]; o.q.w = seed.q[3]; }
+      }
+      // rest: 2 = neither half has been through a step (unseeded), 1 = prev has not; the view draws such a half, while it still
+      // holds the default pose, at the node's rest pose (a render before the first step puts wheels where the model has them)
+      e.partXf[name] = cur; r.parts.push({ name, cur, prev, rest: seed ? 0 : 2 });
     }
   }
 
@@ -119,7 +130,7 @@ export function createWorld(engine, opts = {}) {
     if (desc.material !== undefined && (desc.material === null || typeof desc.material !== 'object')) fail("material must be { part: id } (use { '*': id } for every part)");
     if (desc.contacts !== undefined && !(desc.contacts?.min >= 0)) fail('contacts must be { min: impulse >= 0 }');
     if (desc.partXf !== undefined) {
-      if (!partNames(desc.partXf)) fail('partXf must be an array of distinct part names');
+      if (!partSpec(desc.partXf)) fail('partXf must be an array of distinct part names or { name: { p, q } | null }');
       if (kind === BODILESS && desc.xf !== true) fail('partXf needs an xf (a body or xf: true)');
     }
     const mass = bo?.mass, mp = bo?.massProps;
@@ -265,7 +276,7 @@ export function createWorld(engine, opts = {}) {
     if (value === undefined) throw new Error(`world.add: '${part}' needs a value`);
     if (part === 'net') api.net?.guard('add', e, value); // 3i seam
     if (part === 'partXf') {
-      if (!partNames(value)) throw new Error("world.add: 'partXf' must be an array of distinct part names");
+      if (!partSpec(value)) throw new Error("world.add: 'partXf' must be an array of distinct part names or { name: { p, q } | null }");
       if (r.slot < 0) throw new Error("world.add: 'partXf' needs an xf (a body or xf: true)");
       const had = !!r.parts; setParts(e, r, value);
       if (had) return e;
@@ -353,6 +364,7 @@ export function createWorld(engine, opts = {}) {
         for (let k = 0; k < ps.length; k++) {
           const c = ps[k].cur, p = ps[k].prev;
           p.p.x = c.p.x; p.p.y = c.p.y; p.p.z = c.p.z; p.q.x = c.q.x; p.q.y = c.q.y; p.q.z = c.q.z; p.q.w = c.q.w;
+          if (ps[k].rest) ps[k].rest = ps[k].rest === 2 ? 1 : 0;
         }
       }
     },
@@ -443,6 +455,7 @@ export function createWorld(engine, opts = {}) {
       const ps = mine(e, 'partXfPrev').parts;
       if (ps) for (let k = 0; k < ps.length; k++) if (ps[k].name === name) {
         const p = ps[k].prev; out.p.x = p.p.x; out.p.y = p.p.y; out.p.z = p.p.z; out.q.x = p.q.x; out.q.y = p.q.y; out.q.z = p.q.z; out.q.w = p.q.w;
+        if ('rest' in out) out.rest = ps[k].rest; // (filled when asked: out has a rest field) 2: curr and prev have not been through a step; 1: prev has not; 0: both have (or were seeded)
         return out;
       }
       throw new Error(`world.partXfPrev: entity ${e.id} has no part '${name}'`);

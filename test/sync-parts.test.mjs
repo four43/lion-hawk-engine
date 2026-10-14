@@ -50,3 +50,18 @@ test('3g: part poses make no three objects and retain nothing: 10000 frames of 2
   assert.deepEqual(after, { object: before.object + 1, material: before.material + 1, geometry: before.geometry + 1 });
   assert.ok(grew < 128 * 1024, `retained ${grew} bytes`);
 });
+test('part nodes bind to the object the create hooks leave: one a hook returns for an undrawn entity, one that replaces the clone, and one from a hook added later', () => {
+  const hubbed = () => { const g = new THREE.Group(), m = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()); m.name = 'hub'; m.position.set(0.8, 0.3, 1.2); g.add(m); return g; };
+  const s = syncSetup(CAR);
+  s.sync.on('#own', { create: () => hubbed() });
+  const a = s.world.spawn({ draw: false, tags: ['own'], partXf: ['hub'] }), b = s.world.spawn({ model: 'car', tags: ['own'], partXf: ['hub'] });
+  set(a.partXf.hub, [1, 0, 2]); set(b.partXf.hub, [1, 0, 2]); s.world.step(); s.sync.frame(1);
+  for (const e of [a, b]) near(centre(s.sync.objectOf(e).getObjectByName('hub')), new THREE.Vector3(1, 0, 2), `entity ${e.id}: the hook's object is posed`);
+  assert.equal(s.sync.root.children.length, 2, 'the replaced clone left the scene');
+  const c = s.world.spawn({ draw: false, tags: ['late'], partXf: ['hub'] }); set(c.partXf.hub, [0, 1, 0]); s.world.step(); s.sync.frame(1);
+  s.sync.on('#late', { create: () => hubbed() }); s.sync.frame(1);
+  near(centre(s.sync.objectOf(c).getObjectByName('hub')), new THREE.Vector3(0, 1, 0), 'a hook added after the first frame binds too');
+  const t = syncSetup(CAR); t.sync.on('#own', { create: () => new THREE.Group() });
+  t.world.spawn({ model: 'car', tags: ['own'], partXf: ['hub'] });
+  assert.throws(() => t.sync.frame(1), /sync: entity 1 \(model 'car'\) has no part 'hub' for partXf/, 'checked against the hook\'s object');
+});

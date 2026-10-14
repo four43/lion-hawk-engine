@@ -24,7 +24,7 @@ import { newOffset, addFix, fade, applyOffset, active } from './smooth.js';
 const SMOOTH_MS = 150; // N-15 default when the kind has no tune.smoothMs
 const START_MAX = 16;  // instances per (model, part) before the first doubling
 const _prev = { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } };
-const _part = { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } }, _pp = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pm2 = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1);
+const _part = { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 }, rest: 0 }, _pp = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pm2 = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1);
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _m = new THREE.Matrix4(), _pm = new THREE.Matrix4();
 
 function matcher(m) {
@@ -94,7 +94,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     }
   }
   function add(e) {
-    const r = { e, id: e.id, obj: null, own: false, parts: null, slots: null, cov: null, off: newOffset(), seen: 0, hooks: [], hv: -1, wrote: false, ws: 1, at: recs.length, pv: undefined, pnodes: null };
+    const r = { e, id: e.id, obj: null, own: false, parts: null, slots: null, cov: null, off: newOffset(), seen: 0, hooks: [], hv: -1, wrote: false, ws: 1, at: recs.length, pv: undefined, pobj: null, pnodes: null };
     r.off.seq = e.netFix?.seq ?? -1; // a correction made before the entity was first drawn has nothing to smooth
     if (e.model != null && e.draw !== false) {
       if (e.draw !== undefined && e.draw !== 'object' && e.draw !== 'instanced') throw new Error(`sync: entity ${e.id} has draw ${JSON.stringify(e.draw)} (use 'object', 'instanced' or false)`);
@@ -113,13 +113,16 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
       r.hooks.push(h);
       if (was.includes(h) || !h.create) continue;
       const out = h.create(r.e, r.obj, view);
-      if (out?.isObject3D && !r.obj) { r.obj = out; r.own = false; root.add(out); }
+      if (out?.isObject3D && out !== r.obj) { // a hook's object: the entity's object from now on (it replaces a model clone)
+        if (r.obj) { r.obj.removeFromParent(); if (r.own) disposeTree(r.obj, { keepShared: true }); }
+        r.obj = out; r.own = false; root.add(out);
+      }
     }
   }
   // Part poses (Task 13b): find each named node once, after the create hooks, and keep A = T(-centre) · rest and the inverse of
   // its parent's rest, both in the model's own space (the object's local frame), so a frame is one compose and two multiplies.
   function bindParts(r) {
-    const e = r.e, obj = r.obj; r.pv = e.partXf; r.pnodes = null;
+    const e = r.e, obj = r.obj; r.pv = e.partXf; r.pobj = obj; r.pnodes = null;
     if (!e.partXf || !obj) return;
     obj.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert(), box = new THREE.Box3(), c = new THREE.Vector3();
@@ -134,16 +137,23 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
       if (box.isEmpty()) c.setFromMatrixPosition(rest); else box.getCenter(c).applyMatrix4(inv);
       const a = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z).multiply(rest);
       const parent = new THREE.Matrix4().multiplyMatrices(inv, node.parent.matrixWorld).invert();
-      return { name, node, a, parent };
+      return { name, node, a, parent, c: c.clone() }; // c: the rest centre (model space), drawn while the World says 'rest'
     });
   }
+  const IDQ = { x: 0, y: 0, z: 0, w: 1 };
+  const isDefault = v => v.p.x === 0 && v.p.y === 0 && v.p.z === 0 && v.q.x === 0 && v.q.y === 0 && v.q.z === 0 && v.q.w === 1;
   function poseParts(r, a, s) {
     const e = r.e, ps = r.pnodes;
     for (let k = 0; k < ps.length; k++) {
       const pn = ps[k], c = e.partXf[pn.name];
       world.partXfPrev(e, pn.name, _part);
-      const pp = _part.p, pq = _part.q, cp = c.p, cq = c.q;
-      _pp.set((pp.x + (cp.x - pp.x) * a) / s, (pp.y + (cp.y - pp.y) * a) / s, (pp.z + (cp.z - pp.z) * a) / s); // metres → model space
+      // a half the World marks rest (not yet through a step, unseeded) that still holds the default pose draws the node's rest
+      // pose: centre pn.c (model space, so × s in metres) and identity, so a render before the first step is not at the origin
+      const rp = _part.rest >= 1 && isDefault(_part), rc = _part.rest === 2 && isDefault(c), R = pn.c;
+      const pq = _part.q, cq = rc ? IDQ : c.q;
+      const px = rp ? R.x * s : _part.p.x, py = rp ? R.y * s : _part.p.y, pz = rp ? R.z * s : _part.p.z;
+      const cx = rc ? R.x * s : c.p.x, cy = rc ? R.y * s : c.p.y, cz = rc ? R.z * s : c.p.z;
+      _pp.set((px + (cx - px) * a) / s, (py + (cy - py) * a) / s, (pz + (cz - pz) * a) / s); // metres → model space
       let bx = cq.x, by = cq.y, bz = cq.z, bw = cq.w;
       if (pq.x * bx + pq.y * by + pq.z * bz + pq.w * bw < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; } // short arc, as the body
       _pq.set(pq.x + (bx - pq.x) * a, pq.y + (by - pq.y) * a, pq.z + (bz - pq.z) * a, pq.w + (bw - pq.w) * a).normalize();
@@ -204,7 +214,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
         }
         r.seen = frame;
         if (r.hv !== hookVer) rematch(r);
-        if (r.pv !== e.partXf) bindParts(r);
+        if (r.pv !== e.partXf || r.pobj !== r.obj) bindParts(r); // after the create hooks: whichever object they left
         fade(r.off, dt);
         const fix = e.netFix;
         if (fix && fix.seq !== r.off.seq) addFix(r.off, fix, tun?.[e.net]?.smoothMs ?? SMOOTH_MS);
