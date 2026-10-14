@@ -20,6 +20,7 @@ export function defineGame(spec) {
   if (typeof spec.id !== 'string' || !spec.id) fail('id must be a non-empty string');
   if (!spec.scenes || !Object.keys(spec.scenes).length) fail('scenes must not be empty');
   if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
+  if (spec.reset !== undefined && typeof spec.reset !== 'function') fail('reset must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
   // [I-7] a command is a handler, or { schema, handler } (N-3: checked at issue); game.commands keeps the handlers, game.schemas the schemas
   const commands = {}, schemas = {};
@@ -60,6 +61,7 @@ function netConfig(n, schemas, fail) {
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0 } = {}) {
+  game.reset?.(); // #108: module tunables back to their shipped values first, so every engine (a replay, each mp() peer) starts from them
   if (typeof wall0 !== 'number' || !Number.isFinite(wall0)) throw new Error('engine: wall0 must be a finite number');
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
