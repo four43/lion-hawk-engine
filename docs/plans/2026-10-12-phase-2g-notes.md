@@ -106,6 +106,9 @@
 
     Cost: none seen (all suites green, and the manual look matches).
 
+16. **Final fix wave: the `?fps` world-step wrapper is fixed now, not parked** (the final review rated it "can wait"). The user's standing rule is that dev tools go through game flow, with no view-writes-sim exceptions. Cost: a sim-side diagnostic field (`phys.worldMs`, outside serialised state) and an injected timer.
+17. **Final fix wave: a screen that fails to open taps its own control,** so a failed start screen begins the trip with no paint choice, and a throw from the card's bells or voice skips a card that drew. Cost: a child may miss one sticker card or the paint choice; the alternative is a farm frozen behind an invisible engine button.
+
 ## Playtest list (Tractor Pickup, on a real iPad; also the 2f items)
 - **Driving:**
   - the world-frame stick under a swinging chase camera (#81);
