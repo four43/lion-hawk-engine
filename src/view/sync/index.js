@@ -1,4 +1,5 @@
 // View sync (E-6, E-11, N-15; overview §4.9): every frame, World entities -> Object3Ds under one root group in gfx.scene.
+// - A drawn entity whose model is not loaded yet (!assets.has(model)) is skipped, hooks included, until it is.
 // - Drawn entities (`model`, draw !== false) get assets.clone(model, { paint }) (draw 'object', the default) or a slot in one
 //   createInstances per (model, part) (draw 'instanced', compiled for instancing, instancedShadows, paint-<slot> parts coloured
 //   per instance from e.paint). Instanced meshes double when full; a removed slot takes the last one (swap-remove). A part
@@ -197,7 +198,10 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
         const e = list[n];
         let r = byId.get(e.id);
         if (r && r.e !== e) { remove(r); r = undefined; } // a rebuilt entity under the same id
-        if (!r) r = add(e);
+        if (!r) {
+          if (e.model != null && e.draw !== false && assets && !assets.has(e.model)) continue; // still loading: made on a later frame
+          r = add(e);
+        }
         r.seen = frame;
         if (r.hv !== hookVer) rematch(r);
         if (r.pv !== e.partXf) bindParts(r);

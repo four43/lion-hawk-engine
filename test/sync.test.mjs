@@ -85,3 +85,13 @@ test('3g: createViewSync({ root }) parents the sync group under the given object
   assert.equal(sync.root.parent, holder); assert.equal(gfx.scene.children.length, 0);
   sync.dispose(); assert.equal(holder.children.length, 0);
 });
+test('3g: a drawn entity whose model is still loading is skipped (hooks too) and made once assets.has(model) is true', () => {
+  const s = syncSetup(), has = s.assets.has, made = [];
+  let loaded = false; s.assets.has = key => loaded && has(key);
+  s.sync.on(e => e.model === 'crate', { create: e => made.push(e.id) });
+  const e = s.world.spawn({ model: 'crate' });
+  s.sync.frame(1); s.sync.frame(1);
+  assert.equal(s.sync.objectOf(e), undefined); assert.equal(clones(s).length, 0); assert.deepEqual(made, []);
+  loaded = true; s.sync.frame(1);
+  assert.equal(s.sync.objectOf(e).parent, s.sync.root); assert.equal(clones(s).length, 1); assert.deepEqual(made, [e.id]);
+});
