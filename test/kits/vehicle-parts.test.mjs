@@ -19,7 +19,7 @@ for (const [forward, axle] of [['x', { x: 0, y: 0, z: 1 }], ['z', { x: -1, y: 0,
     const h = headless(kitGame()); flatTerrain(h.world);
     const car = spawnCar(h.world, { forward, wheels: named(forward) }), e = car.entity, vc = car.controller;
     assert.deepEqual(Object.keys(e.partXf), NAMES);
-    car.set(0, { steer: 0.3 }).set(1, { steer: 0.3 }); h.step(60);
+    car.set(0, { steer: 0.3, engine: 600 }).set(1, { steer: 0.3, engine: 600 }); h.step(60); // driven so the roll is not ~0 and the steer-then-roll order shows
     car.wheels.forEach((w, i) => {
       const at = carWheels(forward)[i].at, P = e.partXf[NAMES[i]];
       near(P.p.x, at[0], 1e-6, `wheel ${i} p.x`); near(P.p.y, at[1] - w.suspension, 1e-6, `wheel ${i} p.y`); near(P.p.z, at[2], 1e-6, `wheel ${i} p.z`);
