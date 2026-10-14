@@ -229,7 +229,7 @@ test('F6: defineGame setup(engine) runs once, before the start scene; its system
 
 test('built-in systems are named lh.ui, lh.input, lh.commands, lh.scene, lh.events', () => {
   const e = createEngine(mini({}));
-  assert.deepEqual(e.schedule(), { 'input.apply': ['lh.ui', 'lh.input', 'lh.commands'], pre: ['lh.scene'], 'physics.world': [], post: [], 'events.flush': ['lh.events'] });
+  assert.deepEqual(e.schedule(), { 'input.apply': ['lh.world.swap', 'lh.ui', 'lh.input', 'lh.commands'], pre: ['lh.scene'], 'physics.world': ['lh.physics.step', 'lh.physics.read', 'lh.physics.events'], post: [], 'events.flush': ['lh.events'] });
 });
 test('state(): the game state comes first, engine keys win', () => {
   const g = defineGame({ id: 'g', start: 'a', scenes: { a: {} }, state: () => ({ step: 'mine', scene: 'mine', hp: 3 }) });
