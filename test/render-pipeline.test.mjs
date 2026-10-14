@@ -44,8 +44,8 @@ test('render.paint reaches the compiler as paint (3f C11); the source passes it'
 });
 test('lights: false builds no rig, background or fog; shading defaults to physical', () => {
   const s = setup({ lights: false }), pipe = s.make();
-  assert.equal(s.view.gfx.lights, null); assert.equal(s.view.gfx.scene.children.length, 0); assert.equal(s.view.materials.shading, 'physical');
-  assert.equal(s.view.gfx.scene.background, null); assert.equal(s.view.gfx.scene.fog, null);
+  assert.ok(s.view.gfx.lights === null, 'no lights'); assert.equal(s.view.gfx.scene.children.length, 0); assert.equal(s.view.materials.shading, 'physical');
+  assert.ok(s.view.gfx.scene.background === null && s.view.gfx.scene.fog === null, 'no background or fog');
   pipe.dispose();
 });
 test('frame runs view.sync.frame(alpha); draw renders the scene with the camera once', () => {
@@ -69,7 +69,7 @@ test('gfx.warm compiles the compiler\'s materials and the ones it is given', asy
 test('a renderer that cannot start is reported once as render: …; the page runs on without gfx (RF1)', () => {
   const s = setup({}, { renderer: null }), pipe = s.make(); // happy-dom canvas: three cannot create a WebGL context
   assert.equal(s.errors.length, 1); assert.match(s.errors[0], /^render: .*WebGL context/);
-  for (const k of ['gfx', 'materials', 'assets', 'sync']) assert.equal(s.view[k], null, k);
+  for (const k of ['gfx', 'materials', 'assets', 'sync']) assert.ok(s.view[k] === null, k);
   assert.equal(s.engine.assets, undefined); assert.equal(typeof s.view.audio.play, 'function');
   pipe.frame(0.5); pipe.draw(); pipe.dispose(); pipe.dispose();
 });
@@ -107,4 +107,21 @@ test('checkRender names the field', () => {
   assert.throws(() => checkRender({ lights: { presets: { night: { sun: { map: 1 } } } } }), /lights: preset 'night'\.sun\.map is unknown/);
   checkRender({ shading: 'standard', dpr: { touch: 1, desktop: 2 }, shadows: false, toneMapping: 'aces', exposure: 1.05, camera: { fov: 48 }, lights: false, assets: { manifest: {}, base: './a/', decoders: {} }, paint: { base: 'chassis', shade: [0.25, 0.85, 1.1] } });
   checkRender({ paint: {} }); checkRender({ paint: { base: 'steel' } }); // either key may be left to the compiler's default
+});
+test('a build that throws after the renderer disposes what it built, rethrows, and frees the page for a retry', () => {
+  const s = setup({ lights: { shadow: 1 } });
+  assert.throws(() => s.make());
+  assert.ok(s.renderer.disposed === true, 'renderer disposed');
+  assert.ok(s.view.gfx === null && s.view.materials === null && s.view.assets === null && s.view.sync === null, 'view services reset');
+  assert.ok(s.engine.assets === undefined, 'engine.assets');
+  const again = createPipeline(s.engine, s.view, {}, { doc: s.view.doc, target: { addEventListener() {}, removeEventListener() {} }, canvas: s.renderer.domElement, renderer: fakeRenderer(), flags: {}, report() {} });
+  assert.ok(s.view.gfx, 'a second pipeline builds on the same document'); again.dispose();
+});
+test('a throwing sync.dispose still disposes the rest and the renderer; the error surfaces', () => {
+  const s = setup({ assets: { manifest: MANIFEST } }), pipe = s.make(), order = [];
+  s.view.sync.dispose = () => { throw new Error('sync boom'); };
+  s.view.assets.dispose = () => order.push('assets'); s.view.materials.dispose = () => order.push('materials'); s.view.audio.dispose = () => order.push('audio');
+  assert.throws(() => pipe.dispose(), /sync boom/);
+  assert.deepEqual(order, ['assets', 'materials', 'audio']); assert.ok(s.renderer.disposed === true);
+  pipe.dispose(); // already disposed: quiet
 });

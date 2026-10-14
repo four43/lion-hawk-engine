@@ -68,10 +68,17 @@ test('dispose frees the renderer and clears engine.assets', () => {
 test('no WebGL: boot reports render: …, the halves see gfx null, frames and the UI keep working (RF1)', () => {
   const { app, log } = run({ render: {}, renderer: null });
   assert.equal(app.hook.errors.length, 1); assert.match(app.hook.errors[0].message, /^render: /);
-  assert.deepEqual(log, ['enter gfx=null']); assert.equal(app.view.gfx, null);
+  assert.deepEqual(log, ['enter gfx=null']); assert.ok(app.view.gfx === null, 'no gfx');
   app.engine.render(0); assert.deepEqual(log, ['enter gfx=null', 'frame title']);
   app.hook.go('race'); assert.equal(app.engine.scene.name, 'race'); app.dispose();
 });
 test('render without any canvas throws from boot', () => {
   assert.throws(() => run({ render: {}, renderer: null, canvas: false }), /boot: defineView\(\{ render \}\) needs a canvas/);
+});
+test('boot\'s render-slot additions allocate nothing (GC13): the pipe.frame / pipe.draw lines', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/view/boot.js', import.meta.url), 'utf8');
+  const lines = src.split('\n').map(l => l.replace(/\/\/.*$/, '')).filter(l => /pipe\.(frame|draw)\(/.test(l));
+  assert.equal(lines.length, 2, 'exactly the frame and draw lines');
+  for (const l of lines) assert.doesNotMatch(l, /\bnew\s|\.clone\(|\.\.\.|\.slice\(|\.map\(|\.concat\(|\bArray\.from\b/);
 });

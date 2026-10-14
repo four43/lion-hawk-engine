@@ -48,7 +48,7 @@ test('auto-framing: yaw turns the object, pitch raises the camera; the object\'s
   snapshot(r, obj, { size: 8, yaw: Math.PI / 2, pitch: 0 });
   const cam = r.log.find(l => l[0] === 'render')[2], d = Math.sqrt(3) / Math.sin(28 * Math.PI / 360) * 1.02;
   assert.ok(Math.abs(cam.position.x) < 1e-9 && Math.abs(cam.position.y) < 1e-9 && Math.abs(cam.position.z - (-5 + d)) < 1e-9, cam.position.toArray().join());
-  assert.deepEqual(obj.position.toArray(), [5, 0, 0]); assert.equal(obj.rotation.y, 0); assert.equal(obj.parent, null);
+  assert.deepEqual(obj.position.toArray(), [5, 0, 0]); assert.equal(obj.rotation.y, 0); assert.ok(obj.parent === null, 'detached');
   const own = new THREE.PerspectiveCamera(); snapshot(r, obj, { size: 8, camera: own });
   assert.ok(r.log.filter(l => l[0] === 'render').at(-1)[2] === own);
 });

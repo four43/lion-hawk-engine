@@ -84,7 +84,7 @@ test('validation names the field: unknown fields, preset fields that would chang
 });
 test('fog: false leaves the scene without fog; sun.map: 0 gives a sun without shadows', () => {
   const scene = new THREE.Scene(), rig = createLightRig(scene, { fog: false, sun: { map: 0 } });
-  assert.equal(scene.fog, null); assert.equal(rig.sun.castShadow, false); rig.set(1); assert.equal(scene.fog, null);
+  assert.ok(scene.fog === null, 'no fog'); assert.equal(rig.sun.castShadow, false); rig.set(1); assert.ok(scene.fog === null, 'still no fog');
 });
 test('per-frame paths allocate nothing (R-8)', () => {
   const rig = createLightRig(new THREE.Scene());
@@ -92,5 +92,5 @@ test('per-frame paths allocate nothing (R-8)', () => {
 });
 test('dispose takes the lights and the background out of the scene', () => {
   const scene = new THREE.Scene(), rig = createLightRig(scene); rig.dispose();
-  assert.equal(scene.children.length, 0); assert.equal(scene.background, null);
+  assert.equal(scene.children.length, 0); assert.ok(scene.background === null, 'no background');
 });

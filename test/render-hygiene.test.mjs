@@ -20,7 +20,7 @@ test('instancedShadows gives instanced casters the shared instanced depth materi
   root.add(cast, quiet, plain);
   assert.ok(instancedShadows(root) === root);
   assert.ok(cast.customDepthMaterial === INSTANCED_DEPTH, 'the instanced caster');
-  assert.equal(quiet.customDepthMaterial, undefined); assert.equal(plain.customDepthMaterial, undefined);
+  assert.ok(quiet.customDepthMaterial === undefined && plain.customDepthMaterial === undefined, 'no custom depth material');
   assert.equal(INSTANCED_DEPTH.isMeshDepthMaterial, true); assert.equal(INSTANCED_DEPTH.userData.lhShared, true);
 });
 test('disposeTree frees each geometry, material and texture once, and keeps what is shared', () => {
@@ -81,4 +81,22 @@ test('warm rejects (never throws) on an unknown lhUse or a failing compile, rest
 });
 test('programCount reads renderer.info.programs', () => {
   assert.equal(programCount(fakeRenderer({ programs: 7 })), 7); assert.equal(programCount({ info: {} }), 0);
+});
+test('keepShared: true is the lhShared rule only (3g/3k/3l call it that way); other values throw by name', () => {
+  const { hits, watch } = counter(), g = new THREE.BufferGeometry(); g.userData.lhShared = true;
+  const a = watch(new THREE.MeshBasicMaterial(), 'a'); a.userData.lhShared = true;
+  const b = watch(new THREE.MeshBasicMaterial(), 'b'), root = new THREE.Group();
+  root.add(new THREE.Mesh(g, a), new THREE.Mesh(g, b));
+  assert.equal(disposeTree(root, { keepShared: true }), 1); assert.deepEqual(Object.fromEntries(hits), { b: 1 });
+  assert.throws(() => disposeTree(new THREE.Group(), { keepShared: 1 }), /disposeTree: keepShared must be true, a Set or a predicate \(got 1\)/);
+});
+test('warm leaves hidden lights hidden: a light count the frame will not have compiles the wrong programs', async () => {
+  const r = fakeRenderer(), scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera();
+  const lamp = new THREE.PointLight(), hat = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
+  lamp.visible = false; hat.visible = false; scene.add(lamp, hat);
+  let lampSeen = null, hatSeen = null;
+  r.compileAsync = s => { lampSeen = lamp.visible; hatSeen = hat.visible; return Promise.resolve(s); };
+  await warm(r, scene, cam);
+  assert.ok(lampSeen === false, 'the hidden light stayed hidden during compile'); assert.ok(hatSeen === true, 'the hidden mesh was shown');
+  assert.ok(lamp.visible === false && hat.visible === false, 'both hidden again');
 });

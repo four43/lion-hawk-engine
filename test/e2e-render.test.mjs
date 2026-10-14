@@ -98,7 +98,7 @@ test('snapshot: a PNG with a clear corner and the red box in the middle, square 
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });
-test('tilt-shift as gfx.post: off draws exactly the plain frame with no new programs; on adds its three passes without GL errors', async t => {
+test('tilt-shift as gfx.post: off draws exactly the plain frame with no new programs; on adds its passes without GL errors', async t => {
   if (skip) return t.skip(skip);
   const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
   try {
@@ -106,8 +106,8 @@ test('tilt-shift as gfx.post: off draws exactly the plain frame with no new prog
     const off = await game.page.evaluate(() => window.__fx.tilt(false));
     assert.equal(off.after, off.before); assert.deepEqual(off.px, plain); assert.equal(off.err, 0);
     const on = await game.page.evaluate(() => window.__fx.tilt(true));
-    // three pass programs, plus the scene's lit material recompiled for the linear render target (4 on SwiftShader)
-    assert.ok(on.after - on.before >= 3, `programs ${on.before} -> ${on.after}`); assert.equal(on.err, 0);
+    // three pass programs, plus likely the scene's lit material recompiled for the linear render target (a 4th, inferred from cacheKey lengths)
+    assert.ok(on.after - on.before >= 3 && on.after - on.before <= 4, `programs ${on.before} -> ${on.after}`); assert.equal(on.err, 0);
     await game.page.evaluate(() => window.__fx.noPost());
     assert.deepEqual(await game.page.evaluate(() => window.__fx.pixel(4, 4)), plain);
     assert.deepEqual(await game.errors(), []);
