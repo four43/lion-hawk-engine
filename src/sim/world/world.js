@@ -7,6 +7,8 @@ import { createPlacer } from './place.js';
 import { createPhysics } from '../physics/rapier.js';
 import { createGroups } from '../physics/groups.js';
 import { shapeDesc, materialFor, applyMaterial } from '../physics/colliders.js';
+import { heightfieldDesc } from '../physics/heightfield.js';
+import { createEventDrain } from '../physics/events.js';
 import { qFromYaw, qnorm } from '../../core/math.js';
 
 let SERIAL = 0; // process-wide: a new World never reuses an old World's serial (the view keys on it, S-3)
@@ -23,6 +25,10 @@ const indexOfId = (list, id) => { let lo = 0, hi = list.length; while (lo < hi) 
 const insert = (list, e) => { const i = indexOfId(list, e.id); if (list[i] !== e) list.splice(i, 0, e); };
 const drop = (list, e) => { const i = indexOfId(list, e.id); if (list[i] === e) list.splice(i, 1); };
 const hasParts = (e, parts) => { for (let i = 0; i < parts.length; i++) if (e[parts[i]] === undefined) return false; return true; };
+
+// digest: FNV-1a over float64 bits, so the checksum sees every bit of a pose or velocity (no rounding)
+const F64 = new Float64Array(1), U32 = new Uint32Array(F64.buffer);
+const mix = (h, v) => { F64[0] = v; h = Math.imul(h ^ U32[0], 0x01000193); return Math.imul(h ^ U32[1], 0x01000193); };
 
 export function createWorld(engine, opts = {}) {
   const game = engine.game, phys = game.physics ?? {}, hz = game.sim.hz;
@@ -258,7 +264,7 @@ export function createWorld(engine, opts = {}) {
   }
   const worldOwned = []; // world.own(fn): freed on clear() and dispose(), before the Rapier world goes (3h's controllers)
   function own(e, fn) {
-    if (typeof e === 'function' && fn === undefined) { worldOwned.push(e); return () => { const i = worldOwned.indexOf(e); if (i >= 0) worldOwned.splice(i, 1); }; }
+    if (typeof e === 'function' && fn === undefined) { live(); worldOwned.push(e); return () => { const i = worldOwned.indexOf(e); if (i >= 0) worldOwned.splice(i, 1); }; }
     const r = mine(e, 'own');
     if (typeof fn !== 'function') throw new Error('world.own: needs a function');
     (r.own ??= []).push(fn);
@@ -270,8 +276,9 @@ export function createWorld(engine, opts = {}) {
     if (!a?.body || !b?.body) throw new Error('world.joint: both entities need a body');
     mine(a, 'joint'); mine(b, 'joint');
     const j = ph.world.createImpulseJoint(data, a.body, b.body, true), rec = { on: true };
-    const free = () => { if (!rec.on) return; rec.on = false; if (ph.world && j.isValid()) ph.world.removeImpulseJoint(j, true); };
-    own(a, free); own(b, free);
+    let offA, offB; // both entities drop the closure when the joint goes, so a long-lived one holds none for dead joints
+    const free = () => { offA(); offB(); if (!rec.on) return; rec.on = false; if (ph.world && j.isValid()) ph.world.removeImpulseJoint(j, true); };
+    offA = own(a, free); offB = own(b, free);
     return j;
   }
   // §4.5 runtime material swap (Pig Pens' slide/grip): friction and restitution always; density (and so mass) when it changes
@@ -293,9 +300,81 @@ export function createWorld(engine, opts = {}) {
     return e;
   }
 
+  // §4.4 step pieces, run by the lh.* systems (install.js) in this order: swap (input.apply, first), step, read, events
+  // (physics.world). Nothing here allocates except Rapier's own per-call vectors.
+  let drainEvents = null; // made below, once api exists
+  const sys = {
+    swap() { if (!disposed) pool.swap(slots); },
+    step() { if (ph && !disposed) ph.step(); },
+    read() {
+      if (!ph || disposed) return;
+      const b = pool.buf;
+      for (let i = 0; i < bodied.length; i++) {
+        const e = bodied[i], r = e[INTERNAL], body = e.body, asleep = body.isSleeping();
+        if (!asleep || r.awake) { // awake now, or awake at the last read: Rapier may sleep a body after moving it
+          const t = body.translation(), q = body.rotation(), o = r.slot * STRIDE + CURR;
+          b[o] = t.x; b[o + 1] = t.y; b[o + 2] = t.z; b[o + 3] = q.x; b[o + 4] = q.y; b[o + 5] = q.z; b[o + 6] = q.w;
+        }
+        r.awake = asleep ? 0 : 1;
+      }
+      // #2: Rapier 0.21 wakes a body inserted asleep on its first step. Put it back to sleep unless something really
+      // set it moving (Rally's afterStep thresholds, moved; one step of gravity is 0.04 m/s).
+      for (let i = 0; i < sleepers.length; i++) {
+        const body = sleepers[i].body, v = body.linvel(), w = body.angvel();
+        if (Math.hypot(v.x, v.y, v.z) < 0.2 && Math.hypot(w.x, w.y, w.z) < 0.5) body.sleep();
+      }
+      sleepers.length = 0;
+    },
+    events() { if (ph && !disposed) drainEvents(ph.world, ph.queue); },
+  };
+  function digest() {
+    let h = 0x811c9dc5 | 0;
+    const b = pool.buf;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i], r = e[INTERNAL];
+      h = mix(h, e.id);
+      if (r.slot >= 0) { const o = r.slot * STRIDE + CURR; for (let k = 0; k < 7; k++) h = mix(h, b[o + k]); }
+      if (r.kind === DYNAMIC) {
+        const v = e.body.linvel(), w = e.body.angvel();
+        h = mix(mix(mix(h, v.x), v.y), v.z); h = mix(mix(mix(h, w.x), w.y), w.z);
+      }
+    }
+    return { n: list.length, sum: (h >>> 0).toString(16).padStart(8, '0') };
+  }
+  // §4.5 heightfield: a bodiless ground entity; heights are row-major (heightfieldDesc does Rapier's layout)
+  function heightfield({ nx, nz, cell, x0 = 0, z0 = 0, heights, material, groups: g, fixInternalEdges = false, tags = ['heightfield'] } = {}) {
+    live();
+    const fail = m => { throw new Error(`world: 'heightfield' ${m}`); };
+    if (!ph) fail('needs a body but the game has no physics.rapier');
+    if (!registry) fail('needs a material registry: set defs.materials');
+    if (typeof material !== 'string' || !registry.has(material)) fail(`unknown material '${material}'`);
+    let mask = 0xffffffff;
+    try { mask = g !== undefined ? groups.mask(g.member, g.filter) : Object.hasOwn(groups, 'ground') ? groups.mask(['ground']) : mask; }
+    catch (err) { fail(err.message.replace(/^physics: /, '')); }
+    let d;
+    try { d = heightfieldDesc(ph.R, { nx, nz, cell, x0, z0, heights, fixInternalEdges }); } catch (err) { fail(err.message); }
+    applyMaterial(ph.R, d, registry.collider(material), 0).setCollisionGroups(mask);
+    const c = ph.world.createCollider(d);
+    const e = { id: nextId++, tags: new Set(tags), heightfield: Object.freeze({ nx, nz, cell, x0, z0 }), colliders: [{ collider: c, part: 'ground', material }] };
+    handles.set(c.handle, { e, material }); nColliders++;
+    register(e, record(BODILESS, true));
+    return e;
+  }
+  // §4.5: colliders whose combine rules are not the engine's (a raw game collider wins by priority); for ?debug
+  function audit() {
+    const out = [];
+    if (!ph || disposed) return out;
+    const M = ph.R.CoefficientCombineRule;
+    ph.world.forEachCollider(c => {
+      const f = c.frictionCombineRule(), r = c.restitutionCombineRule();
+      if (f !== M.Multiply || r !== M.Max) out.push({ handle: c.handle, entity: handles.get(c.handle)?.e.id ?? null, friction: M[f], restitution: M[r] });
+    });
+    return out;
+  }
+
   const stats = {
     get entities() { return list.length; }, get bodies() { return nBodies; }, get colliders() { return nColliders; },
-    get stepMs() { return ph ? ph.stats.stepMs : 0; }, get stepMsTotal() { return ph ? ph.stats.stepMsTotal : 0; },
+    get stepMs() { return ph && !disposed ? ph.stats.stepMs : 0; }, get stepMsTotal() { return ph && !disposed ? ph.stats.stepMsTotal : 0; },
   };
   const api = {
     seed: opts.seed ?? engine.seed, serial: ++SERIAL, R, materials: registry, groups, stats,
@@ -310,9 +389,11 @@ export function createWorld(engine, opts = {}) {
     xfPrev: (e, out) => placer.xfPrev(e, out),
     materialOf: h => handles.get(h)?.material,
     entityOf: h => handles.get(h)?.e,
+    sys, digest, heightfield, audit,
     onSpawn(fn) { spawnFns = [...spawnFns, fn]; return () => { spawnFns = spawnFns.filter(f => f !== fn); }; },
     onDespawn(fn) { despawnFns = [...despawnFns, fn]; return () => { despawnFns = despawnFns.filter(f => f !== fn); }; },
   };
   placer = createPlacer(pool, () => (ph ? ph.world : null), api);
+  drainEvents = createEventDrain({ emit: (type, data) => engine.emit(type, data), hz, entityOf: api.entityOf, materialOf: api.materialOf });
   return api;
 }

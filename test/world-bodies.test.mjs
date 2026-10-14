@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../src/sim/world/world.js';
+import { INTERNAL } from '../src/sim/world/pool.js';
 import { stubEngine } from './fixtures/phys/engine.js';
 import { R } from './fixtures/phys/rapier.js';
 import PHYS from './fixtures/phys/phys.json' with { type: 'json' };
@@ -126,6 +127,7 @@ test('despawn frees the body, its colliders and owned joints; maps and counters 
     assert.equal(a.body, undefined); assert.equal(a.colliders, undefined);
     assert.deepEqual(count(w), { b: 1, c: 1 });
     assert.deepEqual({ ...w.stats, stepMs: 0, stepMsTotal: 0 }, { entities: 1, bodies: 1, colliders: 1, stepMs: 0, stepMsTotal: 0 });
+    assert.equal(b[INTERNAL].own?.length ?? 0, 0, 'the freed joint left no closure on b');
     w.despawn(b); // its side of the joint is already gone: no double free
     assert.deepEqual(count(w), { b: 0, c: 0 });
     assert.throws(() => w.joint(a, b, R.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 })), /world\.joint: both entities need a body/);

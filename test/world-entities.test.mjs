@@ -95,6 +95,7 @@ test('dispose(): idempotent, changes serial, then refuses spawn; serials are uni
   assert.equal(w.disposed, true); assert.ok(w.serial > other.serial);
   assert.throws(() => w.spawn({}), /world: disposed/);
   assert.throws(() => w.clear(), /world: disposed/);
+  assert.throws(() => w.own(() => {}), /world: disposed/);
 });
 test('onSpawn/onDespawn see each entity once; off stops them', () => {
   const w = make({ physics: false }), log = [];
@@ -103,10 +104,10 @@ test('onSpawn/onDespawn see each entity once; off stops them', () => {
   assert.deepEqual(log, ['s1', 'd1']);
 });
 test('the 3i net seam: world.net.guard sees net spawns, despawns and net part changes, never clear() or dispose()', () => {
-  const w = make({ physics: false }), log = [];
+  const w = make({ physics: false }), log = [], sawDesc = [];
   assert.equal(w.net, null);
   w.spawn({ tags: ['plain'] }); // no net part: no guard call even with a slot
-  w.net = { guard: (op, x, v) => { log.push([op, x.net ?? x.id, v]); if (x.netId === 13) throw new Error('net: guest may not spawn host kind'); } };
+  w.net = { guard: (op, x, v) => { log.push([op, x.net ?? x.id, v]); if (op === 'spawn') sawDesc.push(!('id' in x)); if (x.netId === 13) throw new Error('net: guest may not spawn host kind'); } };
   const a = w.spawn({ net: 'animal', netId: 12 });
   assert.throws(() => w.spawn({ net: 'animal', netId: 13 }), /guest may not spawn/);
   assert.equal(w.stats.entities, 2, 'a refused spawn leaves nothing');
@@ -115,6 +116,7 @@ test('the 3i net seam: world.net.guard sees net spawns, despawns and net part ch
   w.spawn({ net: 'animal', netId: 14 });
   const want = [['spawn', 'animal', undefined], ['spawn', 'animal', undefined], ['add', b.id, 'prop'], ['remove', 'prop', undefined], ['despawn', 'animal', undefined], ['spawn', 'animal', undefined]];
   assert.deepEqual(log, want, 'b has no net part when it despawns: no guard call');
+  assert.deepEqual(sawDesc, [true, true, true], 'spawn is guarded with the desc, not an entity (3i-R2)');
   w.clear();
   assert.deepEqual(log, want, 'clear() never calls the guard');
   w.spawn({ net: 'animal', netId: 15 });
