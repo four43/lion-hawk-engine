@@ -66,6 +66,7 @@ test('3b: validatePhys checks the envelope and every model, with the model id in
 });
 test('3b: materialRefs lists every material a phys.json names, and where (T-14)', () => {
   const phys = { v: 1, engine: '0.8.0', materials: '2f4f4f95', models: { cart: good() } };
+  assert.deepEqual(Object.keys(materialRefs(phys)), ['rubber', 'steel', 'wood']);
   assert.deepEqual(materialRefs(phys), {
     rubber: ['cart.colliders[1]', 'cart.colliders[3]'],
     steel: ['cart.colliders[0]', 'cart.colliders[2]'],
