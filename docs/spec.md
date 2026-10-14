@@ -2,6 +2,7 @@
 
 Version 0.1 (2026-10-11). Status: draft for review.
 Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
+Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 
 Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
 
@@ -118,6 +119,9 @@ Because the stack is fixed, the engine can join the five parts automatically.
 - **[M-1]** Materials are plain data created with `defineMaterials({...})`. The definitions layer is used by both sim and view and has no runtime dependencies.
 - **[M-2]** The engine ships a base library: `steel`, `aluminium`, `wood`, `rubber`, `glass`, `plastic`, `fabric`, `flesh`, `fur`, `gravel`, `grass`, `dirt`, `mud`, `asphalt`, `snow`, `ice`, `water`, `air`. Games add entries or extend base ones (`extends: 'steel'`, with overrides).
 - **[M-3]** Validation runs when the registry is loaded. An unknown block, a value out of range, an unknown `extends` or an `extends` cycle throws an error that names the material and the field. A material may carry a free-form `game: {...}` block. It is not validated and is copied through `extends` (D6).
+  - *Clarification (phase 3, 0.7.4; 3b contract issue 4):* a game entry whose id is a base id is merged over the base entry in place (same index; `extends` from other entries sees the merged version). Such an entry may not itself `extends` (it throws).
+  - *Clarification (phase 3, 0.7.4; 3b contract issue 5):* the registry is `{ ids, hash, get, has, index, byIndex, density, collider, pair }`. A resolved material carries its `id`. `byIndex(i)` returns the id string; terrain stores indices and `materialAt` returns ids.
+  - *Clarification (phase 3, 0.7.4; 3b contract issue 6; overview §4.2):* `registry.hash` covers only what sidecars and colliders depend on: the ids **in index order**, each material's effective `phys` (`friction`, `restitution`, `sg`, `fill`, with defaults filled in and `sg` 0 for a fluid without `phys.sg`), and each pair entry's `friction`/`restitution`. It is canonical JSON (keys sorted) hashed with FNV-1a, as 8 lowercase hex digits; the base library's hash is `2f4f4f95`. `look`, `game`, `tire`, `dirtRate`, `coverage`, `aero`, `magnet`, `fluid` (beyond its effect on `sg`), `sound`, `fx` and pair `tire`/`sound`/`fx` are read live and not hashed, so changing them needs no re-bake. Cost: a stale `look` baked into a GLB is not caught by `checks.materials`.
 
 ### 3.2 Schema
 
@@ -153,6 +157,7 @@ Every block is optional.
   - friction is the geometric mean of the two materials;
   - restitution is the maximum;
   - `sound` and `fx` come from the material with the lower `sg` (the softer one).
+  - *Clarification (phase 3, 0.7.4; 3b contract issues 1 and 5):* `pair(a, b)` is order-dependent and cached per **ordered** pair. A tie in `sg` gives the cues to `a`; the tyre is `b`'s (else `a`'s). Kits pass the moving body as `a` and the ground as `b`. A softer material without `sound`/`fx` falls back to the harder one's; absent `tire`, `sound` or `fx` are `null`. A pair entry's `tire` merges field by field over the ground's tyre; when neither material has tyre data it must give every field (parse-time error otherwise). The pair table itself is keyed by the unordered pair: `'a|b'` and `'b|a'` in one table is an error.
 - **[M-9]** Rapier's per-collider combine rules are set so that contacts match [M-8] without the engine having to intervene per contact. Each engine collider gets friction `√f` with `CoefficientCombineRule.Multiply` (so a contact gets the geometric mean) and restitution with `Max`.
 
 ### 3.5 Ground lookup
@@ -365,10 +370,13 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - aero panels and the closed volume (from phase 8).
 
   All of a game's sidecars live in `baked/phys.json`, `{ v, engine, materials: <registry hash>, models: { <id>: sidecar } }` (D2).
+  *Clarification (phase 3, 0.7.4; 3b):* `<registry hash>` is the [M-3] hash (ids, order, effective `phys`, pair friction/restitution). `validatePhys` checks shape and material existence only; comparing the hash is the caller's job (`checks.materials`, `bake --check`), so a stale bake reads as stale, not malformed.
 - **[A-6] Collider rules:**
   - Nodes named `col-box`, `col-sphere`, `col-capsule`, `col-cylinder`, `col-hull` or `col-mesh` are colliders. They are hidden at runtime and take the material of their nearest ancestor part (its largest-area material); a node's `extras.material` overrides it (D2).
   - A model with no `col-*` nodes gets one convex hull per material part.
   - Models marked `static` in the game config default to `col-mesh`.
+  - *Clarification (phase 3, 0.7.4; 3b contract issue 2):* baked and inline colliders share one entry shape. The shapes are `box`, `sphere`, `capsule`, `cylinder`, `hull`, `mesh`; `'ball'` throws `unknown shape (use 'sphere')`. Unknown fields and `paint-*` materials are errors.
+  - *Clarification (phase 3, 0.7.4; 3b contract issue 8; 3c-R5):* a `box` may carry `round`, any finite number > 0 with no upper bound. It builds Rapier's roundCuboid, which adds the radius outside `half`. Other shapes reject `round`.
 - **[A-7]** Empty nodes named `sock-*` become named sockets.
 - **[A-8]** The sim reads only sidecars. It never parses glTF.
 
