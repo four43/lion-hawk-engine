@@ -301,6 +301,14 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     return open;
   };
   const alreadyOpen = name => { throw new Error(`engine: scene '${name}' is already open`); };
+  // #95: { once: true } turns a request for an overlay that is open, or will be once the queue applies, into a no-op
+  const onceOpen = (name, opts) => {
+    if (opts === undefined) return false;
+    if (opts === null || typeof opts !== 'object' || Array.isArray(opts)) throw new Error('engine: overlay options must be an object');
+    if (opts.once !== undefined && typeof opts.once !== 'boolean') throw new Error('engine: overlay once must be a boolean');
+    if (!opts.once) return false;
+    def(name); return projectedOpen(name);
+  };
   const doGo = (name, a) => {
     def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) alreadyOpen(name);
     const from = stack[0]?.ctx.name; while (stack.length) exit(stack.length - 1); enter(name, a); events.emit('scene', { name, from });
@@ -350,7 +358,10 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     schedule: () => schedule.describe(),
     // recording, an external op's payload is validated and the scene/handler receives a copy of what was logged
     go: (name, a) => rec ? recorded(o => o.push('go', name, arg(a, 'scene args')), o => reqGo(name, o ? live(o[2]) : a)) : reqGo(name, a),
-    overlay: (name, a) => rec ? recorded(o => o.push('overlay', name, arg(a, 'scene args')), o => reqOverlay(name, o ? live(o[2]) : a)) : reqOverlay(name, a),
+    overlay: (name, a, opts) => {
+      if (onceOpen(name, opts)) return engine; // #95: a no-op, never recorded (a replay meets the same open overlay)
+      return rec ? recorded(o => o.push('overlay', name, arg(a, 'scene args')), o => reqOverlay(name, o ? live(o[2]) : a)) : reqOverlay(name, a);
+    },
     close: name => rec ? recorded(o => o.push('close', name), () => reqClose(name)) : reqClose(name),
     jump: (name, preset, opts, a) => rec
       ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))

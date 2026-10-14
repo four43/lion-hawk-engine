@@ -69,7 +69,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     enabled: id => engine.ui.enabled(id), tryTap: id => engine.ui.tryTap(id), // #45
     command(type, data) { if (!engine.commands.handles(type)) throw new Error(`headless: no handler for command '${type}'`); engine.command(type, data); return h; },
     go(n, a) { engine.go(n, a); return h; },
-    overlay(n, a) { engine.overlay(n, a); return h; },
+    overlay(n, a, o) { engine.overlay(n, a, o); return h; }, // #95: o = { once }
     close(n) { engine.close(n); return h; },
     jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),
