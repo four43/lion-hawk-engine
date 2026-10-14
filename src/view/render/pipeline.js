@@ -59,27 +59,39 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
     let gone = false;
     return { frame() {}, draw() {}, dispose() { if (gone) return; gone = true; view.audio.dispose(); } };
   }
-  gfx.lights = render.lights === false ? null : createLightRig(gfx.scene, render.lights ?? {});
-  const materials = createMaterialCompiler(engine.game.defs?.materials, { shading: render.shading ?? 'physical', paint: render.paint }); // 3f C11
-  gfx.warm = (opts = {}) => { // 3f C5: made() → [{ material, use }]; userData.lhUse on each material picks the warm mesh
-    const list = [];
-    for (const e of materials.made?.() ?? []) list.push(e?.isMaterial ? e : e.material);
-    return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []) });
+  let materials = null;
+  const abort = err => { // a failed build frees what it made: the renderer's page claim, its listeners, the audio
+    try { view.assets?.dispose(); } catch {} try { materials?.dispose(); } catch {}
+    try { gfx.lights?.dispose(); } catch {} try { gfx.dispose(); } catch {} try { view.audio.dispose(); } catch {}
+    view.gfx = view.materials = view.assets = view.sync = null; engine.assets = undefined;
+    throw err;
   };
-  view.gfx = gfx; view.materials = materials;
-  const a = render.assets; // without it, no createAssets: 3f's throws on a missing manifest
-  view.assets = a ? createAssets({ manifest: a.manifest, base: a.base ?? './assets/', decoders: a.decoders, compiler: materials, renderer: gfx.renderer, gfx }) : null;
-  engine.assets = view.assets ?? undefined;
-  view.sync = createViewSync(engine, { gfx, assets: view.assets, compiler: materials, view }); // 3g #1: view for hooks and view.dt
+  try {
+    gfx.lights = render.lights === false ? null : createLightRig(gfx.scene, render.lights ?? {});
+    materials = createMaterialCompiler(engine.game.defs?.materials, { shading: render.shading ?? 'physical', paint: render.paint }); // 3f C11
+    gfx.warm = (opts = {}) => { // 3f C5: made() → [{ material, use }]; userData.lhUse on each material picks the warm mesh
+      const list = [];
+      for (const e of materials.made?.() ?? []) list.push(e?.isMaterial ? e : e.material);
+      return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []) });
+    };
+    view.gfx = gfx; view.materials = materials;
+    const a = render.assets; // without it, no createAssets: 3f's throws on a missing manifest
+    view.assets = a ? createAssets({ manifest: a.manifest, base: a.base ?? './assets/', decoders: a.decoders, compiler: materials, renderer: gfx.renderer, gfx }) : null;
+    engine.assets = view.assets ?? undefined;
+    view.sync = createViewSync(engine, { gfx, assets: view.assets, compiler: materials, view }); // 3g #1: view for hooks and view.dt
+  } catch (err) { abort(err); }
   let disposed = false;
   return {
     frame(alpha) { if (!disposed) view.sync.frame(alpha); },
     draw() { if (!disposed) gfx.render(); },
     dispose() {
       if (disposed) return; disposed = true;
-      view.sync.dispose?.(); view.assets?.dispose(); materials.dispose(); view.audio.dispose();
-      gfx.lights?.dispose(); gfx.dispose();
       if (view.assets && engine.assets === view.assets) engine.assets = undefined;
+      let first = null; // every step runs; the first error surfaces
+      for (const step of [() => view.sync.dispose?.(), () => view.assets?.dispose(), () => materials.dispose(), () => view.audio.dispose(), () => gfx.lights?.dispose(), () => gfx.dispose()]) {
+        try { step(); } catch (err) { first ??= err; }
+      }
+      if (first) throw first;
     },
   };
 }

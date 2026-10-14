@@ -26,7 +26,8 @@ function warmMesh(m) { // the kind of object decides the program (USE_INSTANCING
 
 // B-2 (Tractor X-4): compile every program while loading, not the first time a mesh comes into view. An iPad compile
 // through ANGLE to Metal takes 50-400 ms. three.js compiles only visible objects, so hidden ones are shown for the
-// synchronous part of compileAsync and hidden again before any frame draws. Materials not in the scene yet (the compiler's)
+// synchronous part of compileAsync and hidden again before any frame draws. Hidden lights stay hidden: a light count the
+// frame will not have compiles the wrong program variants. Materials not in the scene yet (the compiler's)
 // go on a warm group for that moment.
 export function warm(renderer, scene, camera, { materials = [] } = {}) {
   const hidden = [];
@@ -34,7 +35,7 @@ export function warm(renderer, scene, camera, { materials = [] } = {}) {
   try {
     for (const m of materials) { group ??= new THREE.Group(); group.add(warmMesh(m)); }
     if (group) { group.name = 'lh.warm'; scene.add(group); }
-    scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+    scene.traverse(o => { if (!o.visible && !o.isLight) { hidden.push(o); o.visible = true; } });
     done = renderer.compileAsync ? renderer.compileAsync(scene, camera) : renderer.compile(scene, camera);
   } catch (err) {
     done = Promise.reject(err);
@@ -48,9 +49,15 @@ export function warm(renderer, scene, camera, { materials = [] } = {}) {
 // Free what a tree owns on the GPU: geometries, materials, the textures they hold (maps, ShaderMaterial uniforms, and
 // material.userData.textures for textures only a patched shader reads), instanced attributes and skeletons. Each resource
 // is freed once. Kept: anything with userData.lhShared (asset geometries, compiler materials, INSTANCED_DEPTH) and anything
-// keepShared names (a Set or a predicate); a kept material keeps its textures.
+// keepShared names: true (or null/undefined) means the lhShared rule only, a function is a predicate, an object with .has
+// is a Set; anything else throws. A kept material keeps its textures.
 export function disposeTree(root, { keepShared } = {}) {
-  const keep = keepShared == null ? null : typeof keepShared === 'function' ? keepShared : r => keepShared.has(r);
+  let keep = null;
+  if (typeof keepShared === 'function') keep = keepShared;
+  else if (keepShared != null && keepShared !== true) {
+    if (typeof keepShared.has !== 'function') throw new Error(`disposeTree: keepShared must be true, a Set or a predicate (got ${typeof keepShared === 'object' ? 'an object without .has' : String(keepShared)})`);
+    keep = r => keepShared.has(r);
+  }
   const seen = new Set();
   let n = 0;
   const kept = r => r.userData?.lhShared === true || (keep !== null && keep(r) === true);
