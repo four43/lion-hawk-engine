@@ -10,7 +10,7 @@ export { RAPIER };
 export const MATERIALS = defineMaterials({
   route: { extends: 'gravel', dirtRate: 0.01 },
   bog: { extends: 'mud', dirtRate: 0.2 },
-  coat: { extends: 'steel', coverage: { dirt: 0.5 } },
+  coat: { extends: 'steel', coverage: { dirt: 0.5, mud: 0 } },
 }, { pairs: { 'rubber|ice': { friction: 0.1 } } });
 
 export const GROUPS = ['ground', 'static', 'vehicle', 'prop'];
