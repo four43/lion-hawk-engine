@@ -173,3 +173,14 @@ All accepted.
 5. The Rapier purity rule applies to engine code only; games inject Rapier (D9).
 6. Dependency pins from 3d: `@gltf-transform/*` 4.5.1, `meshoptimizer ~1.2.0`, `pngjs ^7`, `esbuild` as a dependency; landed at 0.7.3.
 Game agents merge `feat/lion-hawk-3` when told (the D9 workspace-test change lands before 3e); game plans flag changes to their desktop e2e opening (the frame-rate probe copies it).
+
+## Reconciliation additions (2026-10-14)
+
+New engine surface added during the reconciliation pass so every game is fully on the engine. All are in the named plans with tests; the integrator broadcasts each at the merge that lands it.
+- **Part poses:** entity `partXf: [names]`, `e.partXf[name] = { p, q }` written per step, swapped by `lh.world.swap`, `world.partXfPrev(e, name, out)` (3c Task 10b); view sync interpolates and writes named GLB nodes, hub = bbox centre, missing part throws, instanced refuses (3g Task 13b); vehicle-kit wheel spec `part` (3h Task 6b). Adopted by 3j (Rally's car), 3k and 3l (wheels; Tractor replicas get them through the kit on `driven` trains).
+- **Compiler paint (3f Task 8b, C11):** `PAINT` feature, `lhPaint` attribute, `createMaterialCompiler(reg, { paint: { base, shade } })`, paint values incl. `{ hue: { axis, from, to, s, l } }`, `mc.repaint(root, paint)`. 3e accepts `render.paint` and boot passes it.
+- **3e:** `lights.follow(x, z, y = 0)`; `snapshot` `[w, h]`; `render.assets.decoders`.
+- **3h:** coverage `washes` entries may be `{ at(x, z), washTime }`.
+- **3b:** box `round` > 0 (outside `half`); registry hash = ids order + effective phys + pair friction/restitution (base `2f4f4f95`).
+- **3c:** physics (and its read/events) pause while a scene loads.
+- **Process (3m pre-flight):** game notes live under `games/<game>/docs/plans/` (3k, 3l too); 3l adds a `test:peers` script.
