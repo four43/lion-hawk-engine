@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Branch `phase-3-materials`, base v0.7.3 (2a5cbde). 3b bumps no version. Commits (`git log --oneline 2a5cbde..HEAD`, before this notes commit):
+Branch `phase-3-materials`, base v0.7.3 (2a5cbde). 3b bumps no version. Commits (`git log --oneline 2a5cbde..HEAD`; the first six are the tasks, the last four the final-review fixes and notes):
 
 ```
 8e61909 feat(sidecar): sidecar and phys.json schema, materialRefs for checks.materials (A-5, D2, T-14)
@@ -11,9 +11,13 @@ b8e2914 feat(materials): canonical JSON and the 8-hex registry hash
 acffbad feat(materials): pair table and M-8 pair resolution
 f259579 feat(materials): defineMaterials with validation, extends and collider values (M-1, M-3)
 53ad25d feat(materials): the 18-material base library (M-2)
+fc87a7a docs(materials): phase 3b notes
+41c1c92 fix(sidecar): accept partless sockets and zero-mass sidecars (3d C3/C4)
+74ecdf8 fix(materials): a pair tyre on two non-ground materials must be complete
+cdd826d test(sidecar): pin materialRefs key order
 ```
 
-Test counts: whole engine suite 472 tests, 453 pass, 0 fail, 19 skipped (version-gated tests for later phases, "engine 0.7.3 < 0.8.0/0.9.0/0.10.0"); the six 3b files alone 30 tests, 30 pass. Base material hash: `2f4f4f95` (18 materials).
+Test counts: whole engine suite 474 tests, 455 pass, 0 fail, 19 skipped (version-gated tests for later phases, "engine 0.7.3 < 0.8.0/0.9.0/0.10.0"); the six 3b files alone 32 tests, 32 pass. Base material hash: `2f4f4f95` (18 materials).
 
 ## Decisions
 
@@ -69,12 +73,20 @@ It is written as canonical JSON (keys sorted at every level) and hashed with the
 - Task 3: Ruling: plan-mandated finding (pair entry `tire` with no ground tyre on either side yields a partial tyre via clone(e.tire)) — real but rare (needs a tyre entry on a pair of two non-ground materials) and no 3b consumer reads it; queue for the final fix wave as a parse-time error ("pair '<k>'.tire must give every field when neither material has tyre data") rather than a loop round now — cost if wrong: a kit reading such a pair sees undefined tyre fields (NaN) until fixed.
 - Task 6: Ruling: plan-mandated finding (materialRefs "keys sorted" untested; deepEqual ignores key order) — add `assert.deepEqual(Object.keys(materialRefs(phys)), ['rubber','steel','wood'])` in the final fix wave together with the Task 3 item rather than a loop round now — cost if wrong: a dropped .sort() goes unnoticed until the final wave lands (same branch, before DONE).
 
+- **Integer-like ids (e.g. `'7'`) come first in `ids`**, because JS orders integer-like keys ahead of string keys. Deterministic and rare; documented, not rejected.
+
+- Ruling: start the final whole-branch review on 2a5cbde..8e61909 (all code) while Task 7 (notes only) runs; the notes are covered by the fix-wave re-review — speed for 3c/3d — cost if wrong: notes get a lighter review than code.
+- Ruling: validateSidecar accepts `sockets.<k>.part: null` and `mass.mass >= 0` — contract-issues 3d C3 ("a socket with no parent part has part: null") and 3d's zero-mass bake (colliders: false / all-air / flat static) bind over the 3b plan text; both only widen validation, hash unaffected — cost if wrong: a malformed sidecar with zero mass or partless socket passes 3b validation.
+- Ruling: partial-tyre fix = parse-time error inside defineMaterials after parsePairs, naming the first missing field: `materials: pair '<k>'.tire.<f> required when neither '<a>' nor '<b>' has tyre data (got undefined)` — final reviewer's amendment of the Task 3 ruling — cost if wrong: a game wanting a partial tyre on non-ground pairs must give all six fields.
+- Ruling: integer-like ids sorting first (JS key order) — leave code, document in notes Decisions — deterministic, rare — cost if wrong: a game using numeric ids sees unexpected index order.
+- Ruling: 3c not consuming validateCollider/materialRefs — integrator request (non-blocking), not a 3b change — 3b can't edit 3c — cost if wrong: inline paint-*/unknown fields uncaught at spawn until 3c adopts it.
+
 ## Done-when evidence
 
 - Whole engine suite, under the shared browser lock and memory caps:
   `flock /tmp/claude-1000/lion-hawk-browser.lock systemd-run --user --wait -P -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3b -E NODE_OPTIONS=--max-old-space-size=2048 node --test --test-concurrency=4 test/`
-  Result: tests 472, pass 453, fail 0, cancelled 0, skipped 19 (all "engine 0.7.3 < 0.8.0/0.9.0/0.10.0" version gates). That is the base count 442 plus 30.
-- The six 3b files alone (`test/materials-base`, `materials`, `materials-pairs`, `materials-hash`, `sidecar-collider`, `sidecar`), with the unit-run command (MemoryMax=2G, RuntimeMaxSec=300, `--max-old-space-size=512`, `--test-concurrency=4`): tests 30, pass 30, fail 0, skipped 0.
+  Result (after the final-review fixes): tests 474, pass 455, fail 0, cancelled 0, skipped 19 (all "engine 0.7.3 < 0.8.0/0.9.0/0.10.0" version gates). That is the base count 442 plus 32.
+- The six 3b files alone (`test/materials-base`, `materials`, `materials-pairs`, `materials-hash`, `sidecar-collider`, `sidecar`), with the unit-run command (MemoryMax=2G, RuntimeMaxSec=300, `--max-old-space-size=512`, `--test-concurrency=4`): tests 32, pass 32, fail 0, skipped 0 (base hash still `2f4f4f95`).
 - Probe: `defineMaterials()` gives 18 ids, hash `2f4f4f95`, and `pair('rubber','ice')` = friction 0.22360679774997896, restitution 0.6, ice's tyre, sound `'scrape'`, fx `'frost'`.
 - `test/purity.test.mjs` already scans `src/defs`; `test/sidecar.test.mjs` scans the new files.
 
@@ -100,11 +112,13 @@ It is written as canonical JSON (keys sorted at every level) and hashed with the
 6. **What the hash covers (§4.2 says the whole resolved table).** Ruled: only what sidecars depend on: ids and their order, each material's effective `phys` (defaults filled, fluid `sg` 0) and each pair's `friction`/`restitution`. Not `look`, `game`, `tire`, cues or other live-read blocks, so a look tweak needs no re-bake. Cost: a stale `look` in a baked GLB is not caught by `checks.materials` (the view reads `look` live). Base hash `2f4f4f95` (was `f327bcae` under the whole-table rule). Task 4.
 7. **`game` and `look.wear` must be plain JSON data (D6 says "not validated").** Accepted. This is needed for cloning and freezing. No other checks.
 8. **`round` on box colliders (3j #1).** Ruled: 3c builds Rapier's roundCuboid for it. 3b's schema accepts an optional `round` on `box` only: any finite number > 0 with no upper bound (Rapier's roundCuboid adds it outside `half`); other shapes reject it as an unknown field (Task 5). The plan's "below the smallest half" wording is not used. Forwarded request 3c-R5 is satisfied by Task 5 (tests in `test/sidecar-collider.test.mjs`).
-9. **New: a pair `tire` with no ground tyre on either side yields a partial tyre (Task 3).** A pair entry's `tire` merges over the ground's tyre; when neither material has tyre data the result is `clone(e.tire)`, so a kit reading it sees undefined fields (NaN). Rare, and no 3b consumer reads it. Ruled: a parse-time error ("pair '<k>'.tire must give every field when neither material has tyre data"); fix queued for the final fix wave.
+9. **A pair `tire` with no ground tyre on either side yielded a partial tyre (Task 3). Fixed.** A pair entry's `tire` merges over the ground's tyre; when neither material has tyre data the result was `clone(e.tire)`, so a kit read undefined fields (NaN). Now `defineMaterials` throws at parse time on the first missing field: `materials: pair 'a|b'.tire.C required when neither 'a' nor 'b' has tyre data (got undefined)`.
+10. **Socket `part: null` (3d C3). Fixed.** A socket with no parent part has `part: null`; `validateSidecar` now accepts it. A string still must name a listed part.
+11. **`mass.mass >= 0` (3d zero-mass bake). Fixed.** 3d bakes `mass: 0` for `colliders: false`, all-air and flat static models; the check was `> 0`. Now `mass.mass must be a number >= 0`. The hash is unaffected.
 
 ## Integrator requests
 
-All four are not blocking.
+All five are not blocking.
 
 1. **`src/index.sim.js`** (overview §3.2): add these exact lines (not blocking):
 
@@ -119,6 +133,7 @@ export { SIDECAR_VERSION, validateSidecar, validatePhys } from './defs/sidecar.j
    - sidecar schema (`validateSidecar`, `validatePhys`).
 3. **`docs/spec.md`:** record Contract issues 1, 2, 4, 5, 6 and 8 (all ruled) as clarifications of M-2/M-8, §4.2's hash and §6.2 (not blocking).
 4. **No purity-root change is needed** (not blocking). `test/purity.test.mjs` already scans `src/defs`.
+5. **3c: adopt `validateCollider` (`inline: true`) and `materialRefs`.** 3c's plan implements `checks.materials` and inline shape checks itself; 3b exports `validateCollider` and `materialRefs` for exactly this. Ask 3c to adopt them (otherwise inline `paint-*` materials and unknown fields such as `radius` are not caught at spawn), or record them as unused.
 
 ## Removed or renamed tests
 
