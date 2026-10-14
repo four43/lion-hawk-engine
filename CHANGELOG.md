@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.4 — 2026-10-14
+
+Phase 3b: material registry and sidecar schema (early landing, before Wave A closes).
+
+- Material registry in `lion-hawk/sim`: `defineMaterials(entries, { pairs })` with validation that names the material and field, `extends` (and in-place overrides of base ids), a pair table resolved by M-8 (`pair(a, b)`, cached per ordered pair: moving body `a`, ground `b`) and an 8-hex `hash` over ids, order, effective `phys` and pair friction/restitution only (M-1, M-2, M-3, M-7, M-8). `BASE_MATERIALS`: the base library of 18 (hash `2f4f4f95`).
+- Sidecar schema: `SIDECAR_VERSION`, `validateSidecar(s, { model, materials })` and `validatePhys(phys, { materials })` (A-5, A-6, D2). Baked and inline colliders share one entry shape; `'ball'` is rejected for `'sphere'`; `box` takes `round` > 0. `validatePhys` does not compare the registry hash.
+
 ## 0.7.3 — 2026-10-14
 
 Phase 3a: engine carry-overs.

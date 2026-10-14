@@ -127,6 +127,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 112 | `reset()` runs in every `createEngine`, so in `mp()` a later peer resets an earlier peer's tunables | engine, Tractor Pickup | done (0.7.3, 3a) |
 | 113 | After a fallback swap, focus on the old element is not moved to the new one | engine | open |
 | 114 | A lift dispatched late can still read as a hold | engine, Tractor Pickup | open |
+| 115 | The material hash skips `look` and `game`, so a stale baked look is not caught | engine | done (0.7.4, 3b) |
+| 116 | Material pairs are order-dependent: moving body first, ground second | engine | done (0.7.4, 3b) |
 
 ## Entries
 
@@ -745,3 +747,15 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Workaround:** keep test frame times under about 860 ms (Tractor's iPad gesture test at 1x).
 - **Engine change:** drain pending pointer events before the hold check, or check the hold against the latest event stamp.
 - **Status:** open (#109 residual).
+
+### 115. The material hash skips `look` and `game`, so a stale baked look is not caught: engine (phase 3b)
+- **What happened:** the registry hash (`registry.hash`, recorded in `baked/phys.json`) covers only the ids in order, each material's effective `phys` and pair `friction`/`restitution` (3b contract issue 6). A `look` or `game` tweak changes no hash, so it needs no re-bake, but a stale `look` baked into a GLB is not caught by `checks.materials` or `bake --check`.
+- **Workaround:** the view reads `look` live from the registry; re-bake by hand after a `look` change that a GLB bakes in.
+- **Engine change:** the hash rule in `src/defs/materials.js` (spec [M-3] clarification); base library hash `2f4f4f95`.
+- **Status:** done (0.7.4, 3b): hash rule documented in the spec; a `phys` or pair change makes every game's `bake --check` stale.
+
+### 116. Material pairs are order-dependent: moving body first, ground second: engine (phase 3b)
+- **What happened:** M-8's tie rule gives the cues to `a`, and the tyre comes from `b` first, so `pair(a, b)` and `pair(b, a)` can differ. The overview said "cached per unordered pair", which would have returned whichever order was asked first (3b contract issue 1).
+- **Workaround:** none needed; kits pass the moving body as `a` and the ground as `b`.
+- **Engine change:** `pair()` is cached per ordered pair (spec [M-8] clarification).
+- **Status:** done (0.7.4, 3b): convention documented; kits (3h) must follow it.
