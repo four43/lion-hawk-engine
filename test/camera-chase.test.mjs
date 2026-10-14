@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createChaseRig } from '../src/view/camera/chase.js';
+import { createMountRig } from '../src/view/camera/mount.js';
 
 // games/tractor-pickup/src/render/camera.js at e03ed71, with CAM and LAG inlined and the shake left out
 function tractorChase(camera) {
@@ -152,4 +153,29 @@ test('3g: style "travel" matches Rally\'s title orbit and chase frame by frame, 
   assert.ok(Math.abs(a.position.y - (0.5 + 2.4)) < 1e-9);
   assert.throws(() => createChaseRig(new THREE.PerspectiveCamera()).orbit(body, 0.1), /needs style 'travel'/);
   assert.throws(() => createChaseRig(new THREE.PerspectiveCamera(), { style: 'drone' }), /style 'drone'/);
+});
+// Rally's updateCamera at e03ed71 over all four modes: rallyCam for the title orbit and chase, render.js:179-184 for the mounts
+test('3g: Rally\'s four camera modes on one camera, title -> chase -> bumper -> bonnet -> chase, frame by frame (3j #9)', () => {
+  const a = new THREE.PerspectiveCamera(60, 1.6), b = new THREE.PerspectiveCamera(60, 1.6), zFront = 1.2;
+  a.position.set(0, 4, -8); a.userData.lhFov = 60;
+  const SOCK = { 1: { p: [0, 0.05, zFront + 0.9] }, 2: { p: [0, 0.62, 0.35] } };
+  const chase = createChaseRig(a, { style: 'travel' }), mount = createMountRig(a, { socket: SOCK[1], fovAdd: 12 }), ref = rallyCam(b);
+  const body = { p: { x: 0, y: 0.5, z: 0 }, q: new THREE.Quaternion(), v: { x: 0, y: 0, z: 0 } }, Y = new THREE.Vector3(0, 1, 0);
+  let yawB = 0.3;
+  for (let i = 0; i < 300; i++) {
+    const dt = i % 4 ? 1 / 60 : 1 / 45, mode = i < 40 ? 'title' : i < 120 ? 0 : i < 160 ? 1 : i < 200 ? 2 : 0;
+    if (mode !== 'title') { const sp = Math.min(30, (i - 40) * 0.3); yawB += 0.01; body.v.x = Math.sin(yawB + 0.3) * sp; body.v.z = Math.cos(yawB + 0.3) * sp; body.p.x += body.v.x * dt; body.p.z += body.v.z * dt; }
+    body.q.setFromAxisAngle(Y, yawB);
+    if (mode === 'title' || mode === 0) { ref.orbit = mode === 'title'; ref.update(body, dt); }
+    else { // render.js:179-184 (Rally's camPos is left alone in these modes)
+      const cp = new THREE.Vector3(body.p.x, body.p.y, body.p.z), off = mode === 1 ? new THREE.Vector3(0, 0.05, zFront + 0.9) : new THREE.Vector3(0, 0.62, 0.35);
+      b.position.copy(cp).add(off.applyQuaternion(body.q));
+      const look = cp.clone().add(new THREE.Vector3(0, 0.3, 20).applyQuaternion(body.q));
+      b.up.set(0, 1, 0).applyQuaternion(body.q); b.lookAt(look); b.up.set(0, 1, 0); b.fov = 72; b.updateProjectionMatrix();
+    }
+    if (mode === 'title') chase.orbit(body, dt); else if (mode === 0) chase.follow(body, dt); else { mount.set(SOCK[mode]); mount.follow(body); }
+    assert.ok(a.position.distanceTo(b.position) < 1e-9, `position at frame ${i} (mode ${mode})`);
+    assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `rotation at frame ${i} (mode ${mode})`);
+    assert.ok(Math.abs(a.fov - b.fov) < 1e-12, `fov at frame ${i} (mode ${mode})`);
+  }
 });
