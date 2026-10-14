@@ -44,6 +44,10 @@ test('worldFinite checks body velocities too', () => {
   const body = { linvel: () => ({ x: 0, y: Infinity, z: 0 }), angvel: () => ({ x: 0, y: 0, z: 0 }) };
   const world = { xf: { pool, stride: 14 }, with: () => [{ id: 4, tags: new Set(['car', 'red']), xf: { slot: 0 }, body }] };
   assert.throws(() => worldFinite(world, { seed: 2, time: { step: 7 } }), /finite: entity 4 \(car,red\) linvel\.y is Infinity \(seed 2, step 7\)/);
+  pool[6] = NaN; body.linvel = () => ({ x: 0, y: 0, z: 0 });
+  assert.throws(() => worldFinite(world, { seed: 2, time: { step: 7 } }), /entity 4 \(car,red\) xfPrev\.q\.w is NaN/);
+  pool[6] = 1; body.angvel = () => ({ x: 0, y: 0, z: -Infinity });
+  assert.throws(() => worldFinite(world, { seed: 2, time: { step: 7 } }), /entity 4 \(car,red\) angvel\.z is -Infinity/);
 });
 test('games without World entities run exactly as before', () => {
   const h = headless(countdown, { scene: 'race' });
