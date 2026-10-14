@@ -34,6 +34,14 @@ These replace the three games' renderer bootstraps, light rigs and Tractor Picku
 
 Interface: overview §4.6, plus the stub surfaces of §4.7, §4.8 and §4.9.
 
+**Rulings** (`docs/plans/2026-10-13-phase-3-contract-issues.md`; they override the overview). Where each one lives in this plan:
+- 3e #1 compiler stub: Task 1. #2 `warm` and 3f C5 (`mc.made()` → `[{ material, use }]`, `userData.lhUse` `'plain' | 'instanced' | 'skinned'`, `userData.lhShared`, `createAssets({ gfx })`): Tasks 4 and 7. #3 `render.assets: { manifest, base }` (also 3j #6, 3k C6, 3l CI-12), `lights.hemiSky`, `lights: false`: Tasks 3 and 7. #4 additive members: Tasks 2, 3, 5, 6. #5 no `splitShared`: Task 4 header. #6 no WebGL: Tasks 7, 8, 9.
+- 3k C5, the `gfx.post` seam: Task 2 ("The `gfx.post` seam"), Task 8 (boot draws through it), Task 10 (browser).
+- 3l CI-8, light preset field names and `hemiSky`: Task 3 ("Options shape"). 3l CI-13, `snapshot` `size: [w, h]`: Task 5.
+- 3c: boot passes `timer` to `createEngine`; 3g #1: boot passes `view` to `createViewSync`. Both: Tasks 7 and 8.
+- 3f C1: `render.assets.decoders` (optional) reaches `createAssets`; without a manifest boot makes no `createAssets` (3f throws on a missing manifest): Task 7.
+- 3f C11 and Integrator request 2 (paint reconciliation, user ruling 2026-10-14): `render.paint = { base, shade }` is accepted, shape-checked by `checkRender` and passed to `createMaterialCompiler` as `paint`; the stub accepts it: Tasks 1 and 7.
+
 **Worktree:** `~/projects/four43/lion-hawk-engine-3e` on branch `phase-3-render`. It is cut from `phase-3` **after 3a merges**, so `boot.js` already has 3a's #105 change: `enter(engine, view, args)`. Every path below is relative to that worktree.
 
 ---
@@ -161,10 +169,10 @@ The worktree is `W=/home/smiller/projects/four43/lion-hawk-engine-3e`. Every run
 **Interfaces:**
 - Consumes: nothing.
 - Produces:
-  - `createAssets({ manifest, base, compiler, renderer, gfx })` → `{ progress, preload(keys) → Promise<void>, has(key), get(key), clone(key, opts), dispose() }`
-  - `createViewSync(engine, { gfx, assets, compiler })` → `{ frame(alpha), objectOf(e), on(match, hooks) → off, dispose() }`
+  - `createAssets({ manifest, base, compiler, renderer, gfx, decoders, fetch })` → `{ progress, preload(keys) → Promise<void>, has(key), get(key), clone(key, opts), dispose() }` (3f C1)
+  - `createViewSync(engine, { gfx, assets, compiler, view })` → `{ root, frame(alpha), objectOf(e), on(match, hooks) → off, dispose() }` (3g #1: `view`, `root`, `dispose`)
   - `createAudio({ doc, flags })` → `{ ctx, master, unlocked, onUnlock(fn) → off, load(url) → Promise, play(buffer, opts) → handle, mute(on), dispose() }`
-  - `createMaterialCompiler(registry, { shading })` → `{ shading, get, paint, coverage, apply, furGeometry, keys, made, dispose }`
+  - `createMaterialCompiler(registry, { shading, paint: { base, shade } })` → `{ shading, time, get, paint, coverage, extend, apply, furGeometry, keys, made, dispose }` (3f C3–C5, C8, C11). The stub accepts `paint` and ignores it (3f validates it).
 
 - [ ] **Step 1: Write the failing test.** Create `test/render-stubs.test.mjs`:
 
@@ -190,9 +198,9 @@ test('stub createAssets has the §4.7 surface and is inert', async () => {
   assert.throws(() => a.clone('pig', {}), /assets: 'pig' is not preloaded/);
   a.dispose();
 });
-test('stub createViewSync has the §4.9 surface plus dispose, and draws nothing', () => {
-  const s = createViewSync({}, { gfx: null, assets: null, compiler: null });
-  fns(s, ['frame', 'objectOf', 'on', 'dispose']);
+test('stub createViewSync has the §4.9 surface plus root and dispose, takes view, and draws nothing', () => {
+  const s = createViewSync({}, { gfx: null, assets: null, compiler: null, view: { dt: 0 } });
+  fns(s, ['frame', 'objectOf', 'on', 'dispose']); assert.equal(s.root, null);
   assert.equal(s.frame(0.5), undefined);
   assert.equal(s.objectOf({ id: 1 }), undefined);
   const off = s.on('#pig', {}); assert.equal(typeof off, 'function'); off(); s.dispose();
@@ -206,10 +214,10 @@ test('stub createAudio has the §4.9 audio surface and stays silent', async () =
   a.mute(true); a.dispose();
 });
 test('stub createMaterialCompiler has the §4.8 surface plus made(); get/paint/coverage say 3f', () => {
-  const mc = createMaterialCompiler(undefined, { shading: 'lambert' });
-  fns(mc, ['get', 'paint', 'coverage', 'apply', 'furGeometry', 'keys', 'made', 'dispose']);
-  assert.equal(mc.shading, 'lambert'); assert.equal(createMaterialCompiler().shading, 'physical');
-  for (const f of ['get', 'paint', 'coverage']) assert.throws(() => mc[f]('steel'), /materials: the compiler lands in 3f/);
+  const mc = createMaterialCompiler(undefined, { shading: 'lambert', paint: { base: 'chassis', shade: [0.25, 0.85, 1.1] } }); // render.paint (3f C11)
+  fns(mc, ['get', 'paint', 'coverage', 'extend', 'apply', 'furGeometry', 'keys', 'made', 'dispose']);
+  assert.equal(mc.shading, 'lambert'); assert.equal(createMaterialCompiler().shading, 'physical'); assert.deepEqual(mc.time, { value: 0 });
+  for (const f of ['get', 'paint', 'coverage', 'extend']) assert.throws(() => mc[f]('steel'), /materials: the compiler lands in 3f/);
   const root = {}; assert.ok(mc.apply(root, {}) === root);
   const g = {}; assert.ok(mc.furGeometry(g) === g);
   assert.deepEqual(mc.keys(), []); assert.deepEqual([...mc.made()], []); mc.dispose();
@@ -225,7 +233,7 @@ test('stub createMaterialCompiler has the §4.8 surface plus made(); get/paint/c
 ```js
 // STUB (3e): createAssets with the overview §4.7 surface, inert, so boot's render pipeline (render/pipeline.js) runs before
 // 3f lands. 3f replaces this file wholesale; at the Wave B merge the owner's file wins.
-export function createAssets({ manifest = null, base = './assets/', compiler = null, renderer = null, gfx = null } = {}) {
+export function createAssets({ manifest = null, base = './assets/', compiler = null, renderer = null, gfx = null, decoders = {}, fetch = null } = {}) {
   const missing = key => { throw new Error(`assets: '${key}' is not preloaded (stub until 3f)`); };
   return { progress: { loaded: 0, total: 0, bytes: 0 }, preload: async () => undefined, has: () => false, get: missing, clone: missing, dispose() {} };
 }
@@ -234,10 +242,10 @@ export function createAssets({ manifest = null, base = './assets/', compiler = n
 `src/view/sync/index.js`:
 
 ```js
-// STUB (3e): createViewSync with the overview §4.9 surface (plus dispose, which boot calls), inert: it draws nothing.
-// 3g replaces this file wholesale; at the Wave B merge the owner's file wins.
-export function createViewSync(engine, { gfx = null, assets = null, compiler = null } = {}) {
-  return { frame() {}, objectOf() { return undefined; }, on() { return () => {}; }, dispose() {} };
+// STUB (3e): createViewSync with the overview §4.9 surface (plus view, root and dispose: 3g contract issue 1), inert: it
+// draws nothing. 3g replaces this file wholesale; at the Wave B merge the owner's file wins.
+export function createViewSync(engine, { gfx = null, assets = null, compiler = null, view = { dt: 0 } } = {}) {
+  return { root: null, frame() {}, objectOf() { return undefined; }, on() { return () => {}; }, dispose() {} };
 }
 ```
 
@@ -253,11 +261,12 @@ export function createAudio({ doc = null, flags = {} } = {}) {
 `src/view/materials/compiler.js`:
 
 ```js
-// STUB (3e): createMaterialCompiler with the overview §4.8 surface plus made() (the materials it has compiled, which
-// gfx.warm compiles; contract issue in docs/plans/2026-10-13-phase-3e-render.md). 3f replaces this file wholesale.
-export function createMaterialCompiler(registry, { shading = 'physical' } = {}) {
+// STUB (3e): createMaterialCompiler with the overview §4.8 surface plus made() → [{ material, use }] (what gfx.warm
+// compiles), extend and time (3f C3–C5). It accepts paint: { base, shade } (3f C11, render.paint) and ignores it.
+// 3f replaces this file wholesale.
+export function createMaterialCompiler(registry, { shading = 'physical', paint = {} } = {}) {
   const notYet = () => { throw new Error('materials: the compiler lands in 3f (stub)'); };
-  return { shading, get: notYet, paint: notYet, coverage: notYet, apply: root => root, furGeometry: g => g, keys: () => [], made: () => [], dispose() {} };
+  return { shading, time: { value: 0 }, get: notYet, paint: notYet, coverage: notYet, extend: notYet, apply: root => root, furGeometry: g => g, keys: () => [], made: () => [], dispose() {} };
 }
 ```
 
@@ -279,6 +288,14 @@ export function createMaterialCompiler(registry, { shading = 'physical' } = {}) 
   - `fitView(input, opts, out)` → `out`. Not a public export.
   - `checkShadows(v)`, `checkToneMapping(v)`, `SHADOWS`, `TONE`, `PORTRAIT_BELOW`.
   - `camera.userData.lhFov`: the base FOV after the portrait rule. Rigs that animate the FOV add to it (Contract issue 4).
+
+**The `gfx.post` seam (ruling 3k C5; games adopt it instead of replacing `view.gfx.render`):**
+- `view.gfx.post` is `null` (the default) or a post pass `{ render(scene, camera), dispose?() }`. `createTiltShift(...)` (Task 6) is one as is.
+- `gfx.render()` draws the frame exactly once: `gfx.post.render(gfx.scene, gfx.camera)` when `post` is set, else `renderer.render(scene, camera)`. Boot's render slot calls `view.gfx.render()` after the halves' `frame` (Task 8), so a value a half writes in `frame` (for tilt-shift, `post.params.focus`) applies to the same frame.
+- The pass draws to the screen and leaves the render target `null`. It may size its targets from `renderer.getDrawingBufferSize` on each call; `gfx.resize` does not notify it.
+- The game owns the pass: setting `gfx.post = null` or replacing it disposes nothing (a game may keep one pass per renderer and reuse it across scenes). The game sets it in a half's `enter` and clears it in `exit`.
+- `gfx.dispose()` (page teardown) calls `dispose()` on whatever pass is set at that moment, then sets `post` to `null`.
+- `snapshot` and `warm` never go through `post`. `view.gfx.render` is not replaced by games. Without WebGL `view.gfx` is `null`, so a game guards `view.gfx?.post`.
 
 - [ ] **Step 1: Write the fake renderer helper.** Create `test/helpers/fakeRenderer.mjs`:
 
@@ -394,6 +411,13 @@ test('render draws once per call, through post when one is set; nothing after di
   g.dispose(); assert.equal(r.disposed, true); assert.deepEqual(seen, [true, 'disposed']); assert.equal(g.post, null);
   g.render(); assert.equal(r.info.render.calls, 1); g.dispose(); assert.equal(r.log.filter(l => l[0] === 'dispose').length, 1);
 });
+test('gfx.post is the game\'s: clearing or replacing it disposes nothing; gfx.dispose disposes the one set then (3k C5)', () => {
+  const p = page(), r = fakeRenderer(), g = createRenderer({ canvas: p.canvas, target: p.target, renderer: r }), log = [];
+  const a = { render: () => log.push('a'), dispose: () => log.push('a gone') }, b = { render: () => log.push('b'), dispose: () => log.push('b gone') };
+  g.post = a; g.render(); g.post = b; g.render(); g.post = null; g.render();
+  assert.deepEqual(log, ['a', 'b']); assert.equal(r.info.render.calls, 1, 'a plain render once post is null');
+  g.post = a; g.dispose(); assert.deepEqual(log, ['a', 'b', 'a gone']); assert.equal(g.post, null);
+});
 test('info() reads renderer.info into one reused object', () => {
   const p = page(), r = fakeRenderer({ programs: 3 }), g = createRenderer({ canvas: p.canvas, target: p.target, renderer: r });
   g.render(); const a = g.info(); assert.equal(a.calls, 1); assert.equal(a.programs, 3); assert.ok(g.info() === a); g.dispose();
@@ -492,7 +516,7 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
 }
 ```
 
-- [ ] **Step 5: Run it again** (same command). Expected: PASS, 11 tests.
+- [ ] **Step 5: Run it again** (same command). Expected: PASS, 12 tests.
 - [ ] **Step 6: Prove the boundaries red by mutation.**
   - Change `out.aspect < PORTRAIT_BELOW` to `<=` and run again. Expected: FAIL in "the portrait FOV starts strictly below aspect 0.9".
   - Restore it. Then change `touchPoints > 1` to `touchPoints >= 1`. Expected: FAIL in "fitView caps DPR by touch" (the `touchPoints: 1` line).
@@ -510,7 +534,7 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
 **Interfaces:**
 - Consumes: `three`.
 - Produces:
-  - `createLightRig(scene, opts)` → `{ hemi, sun, follow(x, z), set(preset | k), lerp(a, b, k), dispose(), presets }`. `dispose` and `presets` are additive.
+  - `createLightRig(scene, opts)` → `{ hemi, sun, follow(x, z, y = 0), set(preset | k), lerp(a, b, k), dispose(), presets }`. `dispose` and `presets` are additive.
   - `checkLights(opts)`, `LIGHT_DEFAULTS`, `DEFAULT_PRESETS`.
 
 **Options shape:**
@@ -521,6 +545,8 @@ preset = { sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog: [
 ```
 
 `hemiSky` is additive (Contract issue 3). Tractor's hemisphere sky colour is `#eef7ff`, while its background is `#bfe6f5`.
+
+These are the exact field names games use (ruling 3l CI-8). A preset's sun is nested: `sun: { color, intensity, offset }`. There are no flat `sun: '#…'` or `sunIntensity` keys; they throw as unknown. A game may give its own `day` preset, which overrides the base look for `set('day')` and `set(k)`; the rig starts on `day`. `hemiSky` defaults to `#eef7ff` whatever `sky` is: a game that wants the hemisphere in its background colour sets both.
 
 **Decisions expected (judgment):**
 - `sky` is the background colour and the fog colour. `hemiSky` is the hemisphere's sky colour.
@@ -557,6 +583,9 @@ test('defaults are Tractor Pickup render/scene.js', () => {
 test('the shadow box follows a point: the sun at the point plus the offset, aimed at the point (Tractor follow)', () => {
   const rig = createLightRig(new THREE.Scene()); rig.follow(10, -4);
   assert.deepEqual(rig.sun.position.toArray(), [-16, 46, 18]); assert.deepEqual(rig.sun.target.position.toArray(), [10, 0, -4]);
+  rig.follow(10, -4, 30); // Rally: the shadow box rises with the car (3j request 6)
+  assert.deepEqual(rig.sun.position.toArray(), [-16, 76, 18]); assert.deepEqual(rig.sun.target.position.toArray(), [10, 30, -4]);
+  rig.set('dusk'); assert.equal(rig.sun.target.position.y, 30, 'a preset change keeps the followed height');
 });
 test('box: [x, z] gives Pig Pens\' uneven shadow box', () => {
   const c = createLightRig(new THREE.Scene(), { sun: { box: [38, 36] } }).sun.shadow.camera;
@@ -592,6 +621,19 @@ test('lerp blends named presets; a game preset can move the sun (Rally snow) and
   assert.deepEqual(rig.presets, ['day', 'dusk', 'night', 'snow']);
   assert.throws(() => rig.set('noon'), /lights: unknown preset 'noon' \(known: day, dusk, night, snow\)/);
   assert.throws(() => rig.set(NaN), /lights: set takes a preset name or k in \[0, 1\]/);
+});
+test('hemiSky is the hemisphere\'s sky colour, apart from the background and fog (3l CI-8); presets blend it', () => {
+  const scene = new THREE.Scene(), rig = createLightRig(scene, { sky: '#000000', presets: { night: { hemiSky: '#203050' } } });
+  assert.equal(hex(scene.background), '#000000'); assert.equal(hex(rig.hemi.color), '#eef7ff', 'the default, not the sky');
+  rig.set('night'); assert.equal(hex(rig.hemi.color), '#203050'); assert.equal(hex(scene.background), '#1b2440', 'night sky from the default preset');
+  const own = createLightRig(new THREE.Scene(), { sky: '#112233', hemiSky: '#112233' }); assert.equal(hex(own.hemi.color), '#112233');
+});
+test('a game day preset overrides the base look and is where the rig starts; flat sun keys are unknown (3l CI-8)', () => {
+  const scene = new THREE.Scene(), rig = createLightRig(scene, { presets: { day: { hemi: 1.1, sun: { intensity: 2.4 } } } });
+  assert.equal(rig.hemi.intensity, 1.1); assert.equal(rig.sun.intensity, 2.4);
+  rig.set(1); rig.set(0); assert.equal(rig.hemi.intensity, 1.1); assert.equal(rig.sun.intensity, 2.4);
+  assert.throws(() => checkLights({ presets: { day: { sun: '#fff3dc' } } }), /lights: preset 'day'\.sun must be \{ color, intensity, offset \}/);
+  assert.throws(() => checkLights({ presets: { day: { sunIntensity: 2.1 } } }), /lights: preset 'day'\.sunIntensity is unknown/);
 });
 test('validation names the field: unknown fields, preset fields that would change shaders, fog without fog', () => {
   assert.throws(() => checkLights({ shadow: 1 }), /lights: shadow is unknown/);
@@ -650,6 +692,7 @@ export function checkLights(opts = {}) {
   if (opts.fog !== undefined && opts.fog !== false && !(Array.isArray(opts.fog) && opts.fog.length === 2)) throw new Error(`lights: fog must be [near, far] or false (got ${JSON.stringify(opts.fog)})`);
   for (const [name, p] of Object.entries(opts.presets ?? {})) {
     unknown(p, PRESET, `preset '${name}'.`);
+    if (p.sun !== undefined && (!p.sun || typeof p.sun !== 'object')) throw new Error(`lights: preset '${name}'.sun must be { color, intensity, offset } (got ${JSON.stringify(p.sun)})`);
     unknown(p.sun, PRESET_SUN, `preset '${name}'.sun.`, ' (presets change colours, intensities, the sun offset and fog distances only)');
     if (p.fog !== undefined && opts.fog === false) throw new Error(`lights: preset '${name}'.fog needs lights.fog (fog on or off changes shaders)`);
   }
@@ -684,17 +727,18 @@ export function createLightRig(scene, opts = {}) {
   for (const name of new Set(['day', 'dusk', 'night', ...Object.keys(opts.presets ?? {})])) presets[name] = resolve(opts.presets?.[name], name === 'day' ? undefined : DEFAULT_PRESETS[name]);
   const names = Object.freeze(Object.keys(presets));
   const offset = new THREE.Vector3().copy(presets.day.offset);
-  let fx = 0, fz = 0;
+  let fx = 0, fy = 0, fz = 0;
   const fail = name => { throw Error(`lights: unknown preset '${name}' (known: ${names.join(', ')})`); };
   const get = name => presets[name] ?? fail(name);
-  function follow(x, z) { fx = x; fz = z; sun.position.set(x + offset.x, offset.y, z + offset.z); sun.target.position.set(x, 0, z); }
+  // y: the followed point's height (Rally's stages climb; 3j request 6). Default 0 keeps Tractor and Pig Pens unchanged.
+  function follow(x, z, y = 0) { fx = x; fz = z; fy = y; sun.position.set(x + offset.x, y + offset.y, z + offset.z); sun.target.position.set(x, y, z); }
   function lerp(a, b, k) {
     const A = get(a), B = get(b), t = k < 0 ? 0 : k > 1 ? 1 : k;
     sky.copy(A.sky).lerp(B.sky, t);
     if (scene.fog) { scene.fog.color.copy(sky); scene.fog.near = A.near + (B.near - A.near) * t; scene.fog.far = A.far + (B.far - A.far) * t; }
     hemi.color.copy(A.hemiSky).lerp(B.hemiSky, t); hemi.groundColor.copy(A.ground).lerp(B.ground, t); hemi.intensity = A.hemi + (B.hemi - A.hemi) * t;
     sun.color.copy(A.sunColor).lerp(B.sunColor, t); sun.intensity = A.sun + (B.sun - A.sun) * t;
-    offset.copy(A.offset).lerp(B.offset, t); follow(fx, fz);
+    offset.copy(A.offset).lerp(B.offset, t); follow(fx, fz, fy);
   }
   function set(x) {
     if (typeof x === 'string') return lerp(x, x, 0);
@@ -708,7 +752,7 @@ export function createLightRig(scene, opts = {}) {
 }
 ```
 
-- [ ] **Step 4: Run it again** (same command). Expected: PASS, 10 tests.
+- [ ] **Step 4: Run it again** (same command). Expected: PASS, 12 tests.
 - [ ] **Step 5: Prove the parity test red by mutation.** Change the default night `intensity: 0.15` to `0.2` and run again. Expected: FAIL in "set(k) reproduces Tractor setNight(k)", with `sun at 0.7`. Restore it and run again. Expected: PASS.
 - [ ] **Step 6: Commit.** `git add src/view/render/lights.js test/render-lights.test.mjs && git commit -m "feat(view): light rig with a following sun, fog and look presets (Tractor setNight parity)"`
 
@@ -723,7 +767,7 @@ export function createLightRig(scene, opts = {}) {
 **Interfaces:**
 - Consumes: `three`.
 - Produces:
-  - `warm(renderer, scene, camera, { materials = [] } = {})` → `Promise<void>`. It never throws synchronously. Each material in `materials` goes onto a hidden warm group as one mesh, of the kind its `userData.lhUse` names: `'mesh'` (the default), `'instanced'`, `'instancedColor'` or `'skinned'` (Contract issue 2).
+  - `warm(renderer, scene, camera, { materials = [] } = {})` → `Promise<void>`. It never throws synchronously. Each material in `materials` goes onto a hidden warm group as one mesh, of the kind its `userData.lhUse` names: `'plain'` (3f's name) or `'mesh'` (the default; the same), `'instanced'`, `'instancedColor'` or `'skinned'` (Contract issue 2, 3f C5).
   - `instancedShadows(root)` → `root`.
   - `INSTANCED_DEPTH`
   - `disposeTree(root, { keepShared } = {})` → the number of resources disposed. `keepShared` is a `Set` or a predicate. Anything with `userData.lhShared === true` is always kept.
@@ -792,7 +836,7 @@ test('warm compiles hidden objects too, then hides them again before any frame (
 });
 test('warm adds one mesh per given material, of the kind userData.lhUse names, on a group it removes', async () => {
   const r = fakeRenderer(), scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera();
-  const mats = ['mesh', 'instanced', 'instancedColor', 'skinned'].map(k => { const m = new THREE.MeshLambertMaterial(); m.userData.lhUse = k; return m; });
+  const mats = ['mesh', 'instanced', 'instancedColor', 'skinned', 'plain'].map(k => { const m = new THREE.MeshLambertMaterial(); m.userData.lhUse = k; return m; });
   mats.push(new THREE.MeshLambertMaterial()); // untagged: a plain mesh
   await warm(r, scene, cam, { materials: mats });
   const [, seen] = r.log.find(l => l[0] === 'compileAsync'), by = m => seen.find(o => o.material === m);
@@ -800,7 +844,8 @@ test('warm adds one mesh per given material, of the kind userData.lhUse names, o
   assert.ok(by(mats[1]).isInstancedMesh && by(mats[1]).instanceColor === null, 'instanced');
   assert.ok(by(mats[2]).isInstancedMesh && by(mats[2]).instanceColor !== null, 'instancedColor');
   assert.ok(by(mats[3]).isSkinnedMesh, 'skinned');
-  assert.ok(by(mats[4]) && !by(mats[4]).isInstancedMesh, 'untagged');
+  assert.ok(by(mats[4]) && !by(mats[4]).isInstancedMesh && !by(mats[4]).isSkinnedMesh, 'plain (3f C5)');
+  assert.ok(by(mats[5]) && !by(mats[5]).isInstancedMesh, 'untagged');
   assert.equal(scene.children.length, 0, 'the warm group is gone');
 });
 test('warm rejects (never throws) on an unknown lhUse or a failing compile, restores hidden objects, and falls back to compile()', async () => {
@@ -839,10 +884,10 @@ export function instancedShadows(root) {
 
 const WARM_GEO = new THREE.BoxGeometry(0.01, 0.01, 0.01); WARM_GEO.userData.lhShared = true; // compile never uploads it
 const WHITE = new THREE.Color(1, 1, 1);
-export const WARM_USES = Object.freeze(['mesh', 'instanced', 'instancedColor', 'skinned']);
+export const WARM_USES = Object.freeze(['plain', 'mesh', 'instanced', 'instancedColor', 'skinned']); // 'plain' is 3f's name for 'mesh'
 function warmMesh(m) { // the kind of object decides the program (USE_INSTANCING, USE_INSTANCING_COLOR, USE_SKINNING)
   const use = m.userData?.lhUse ?? 'mesh';
-  if (use === 'mesh') return new THREE.Mesh(WARM_GEO, m);
+  if (use === 'mesh' || use === 'plain') return new THREE.Mesh(WARM_GEO, m);
   if (use === 'instanced' || use === 'instancedColor') { const im = new THREE.InstancedMesh(WARM_GEO, m, 1); if (use === 'instancedColor') im.setColorAt(0, WHITE); return im; }
   if (use === 'skinned') { const sm = new THREE.SkinnedMesh(WARM_GEO, m), bone = new THREE.Bone(); sm.add(bone); sm.bind(new THREE.Skeleton([bone])); return sm; }
   throw new Error(`warm: material '${m.name}' has userData.lhUse '${use}' (known: ${WARM_USES.join(', ')})`);
@@ -916,6 +961,7 @@ export function programCount(renderer) { return renderer.info?.programs?.length 
 - Consumes: `three`.
 - Produces:
   - `snapshot(renderer, object, { size = 256 | [w, h], camera, yaw = 0, pitch = 0.22, fov = 28, fill = 1.02, lights = true, crop = false, outline = null | { px = 11, color = '#ffffff' }, alpha = 8, colorSpace = 'linear', out })` → data URL string, or `''` when a crop finds nothing.
+  - `size` is a positive integer (square) or `[w, h]` of positive integers (ruling 3l CI-13: Tractor's paint picture is `[480, 360]`). Anything else throws `snapshot: size must be a positive integer or [w, h] of positive integers (got …)`.
   - With `out`, writes `out.w` and `out.h`. These options are additive (Contract issue 4).
   - `alphaBounds(px, w, h, min, out)` and `copyRows(px, w, x0, y0, x1, y1, dst)`.
   - `STUDIO`
@@ -924,6 +970,7 @@ export function programCount(renderer) { return renderer.info?.programs?.length 
 - The object is moved into a private studio scene (one per renderer) for the call.
 - Afterwards it is put back under its old parent. Its index in that parent may change, which is documented.
 - Its own transform is never written.
+- Auto-framing fits the bounding sphere in the narrower field of view: the vertical `fov` when `w >= h`, the horizontal one when the picture is portrait.
 - `colorSpace: 'linear'` keeps Tractor's output as it ships today. `'srgb'` is available.
 
 - [ ] **Step 1: Write the fake canvas helper.** Create `test/helpers/fakeCanvas.mjs`:
@@ -1007,6 +1054,25 @@ test('auto-framing: yaw turns the object, pitch raises the camera; the object\'s
   const own = new THREE.PerspectiveCamera(); snapshot(r, obj, { size: 8, camera: own });
   assert.ok(r.log.filter(l => l[0] === 'render').at(-1)[2] === own);
 });
+test('size [w, h] is a non-square picture (3l CI-13): a w x h target and read, the framing aspect w/h, out w x h', () => {
+  const r = fakeRenderer({ doc: fakeDoc() }), info = {};
+  const url = snapshot(r, new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()), { size: [480, 360], out: info });
+  const draw = r.log.find(l => l[0] === 'render'), read = r.log.find(l => l[0] === 'read');
+  assert.deepEqual([draw[3].width, draw[3].height], [480, 360]); assert.deepEqual(read.slice(2), [480, 360]);
+  assert.equal(draw[2].aspect, 480 / 360); assert.deepEqual(info, { w: 480, h: 360 }); assert.equal(url, 'data:image/png;fake,480x360');
+});
+test('a non-square crop walks GPU rows of width w (3l CI-13)', () => {
+  const doc = fakeDoc(), info = {}, seen = [];
+  snapshot(fakeRenderer({ doc, pixels: (px, w, h) => { seen.push(w, h); px[((h - 1) * w + w - 1) * 4 + 3] = 255; } }), new THREE.Group(), { size: [6, 4], crop: true, out: info });
+  assert.deepEqual(seen, [6, 4]); assert.deepEqual(info, { w: 1, h: 1 }); // the top-right pixel only
+});
+test('a portrait size frames by the horizontal field of view; a bad size throws', () => {
+  const r = fakeRenderer({ doc: fakeDoc() }), obj = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial());
+  snapshot(r, obj, { size: [100, 200], pitch: 0 });
+  const cam = r.log.find(l => l[0] === 'render')[2], d = Math.sqrt(3) / Math.sin(Math.atan(Math.tan(28 * Math.PI / 360) * 0.5)) * 1.02;
+  assert.equal(cam.aspect, 0.5); assert.ok(Math.abs(cam.position.z - d) < 1e-9, `${cam.position.z} vs ${d}`);
+  for (const size of [0, 2.5, [480], [480, 0], [480, 360.5], '256']) assert.throws(() => snapshot(r, obj, { size }), /snapshot: size must be a positive integer or \[w, h\] of positive integers/);
+});
 ```
 
 - [ ] **Step 3: Run it.** `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3e -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 test/render-snapshot.test.mjs`. Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `src/view/render/snapshot.js`.
@@ -1049,10 +1115,11 @@ function studioOf(renderer) {
   return st;
 }
 const box = new THREE.Box3(), centre = new THREE.Vector3(), extent = new THREE.Vector3();
-function frame(st, object, aspect, fov, pitch, fill) { // stickerArt: the bounding sphere fills the view
-  const cam = st.cam;
+const dim = v => Number.isInteger(v) && v > 0;
+function frame(st, object, aspect, fov, pitch, fill) { // stickerArt: the bounding sphere fills the narrower field of view
+  const cam = st.cam, half = fov * Math.PI / 360, fit = aspect < 1 ? Math.atan(Math.tan(half) * aspect) : half;
   box.setFromObject(object); box.getCenter(centre);
-  const r = (box.isEmpty() ? 0 : box.getSize(extent).length() / 2) || 1, d = r / Math.sin(fov * Math.PI / 360) * fill;
+  const r = (box.isEmpty() ? 0 : box.getSize(extent).length() / 2) || 1, d = r / Math.sin(fit) * fill;
   cam.fov = fov; cam.aspect = aspect; cam.near = Math.max(0.01, d - r * 2); cam.far = d + r * 2;
   cam.position.set(centre.x, centre.y + Math.sin(pitch) * d, centre.z + Math.cos(pitch) * d); cam.lookAt(centre);
   cam.updateProjectionMatrix(); cam.updateMatrixWorld();
@@ -1060,7 +1127,8 @@ function frame(st, object, aspect, fov, pitch, fill) { // stickerArt: the boundi
 }
 
 export function snapshot(renderer, object, { size = 256, camera = null, yaw = 0, pitch = 0.22, fov = 28, fill = 1.02, lights = true, crop = false, outline = null, alpha = 8, colorSpace = 'linear', out = null } = {}) {
-  const [W, H] = Array.isArray(size) ? size : [size, size];
+  const [W, H] = Array.isArray(size) ? size : [size, size]; // 3l CI-13: [w, h] for a non-square picture
+  if (!dim(W) || !dim(H) || (Array.isArray(size) && size.length !== 2)) throw new Error(`snapshot: size must be a positive integer or [w, h] of positive integers (got ${JSON.stringify(size)})`);
   const st = studioOf(renderer), parent = object.parent, px = new Uint8Array(W * H * 4);
   st.lit.visible = lights !== false; st.pivot.rotation.y = yaw; st.pivot.add(object);
   try {
@@ -1105,10 +1173,12 @@ function encode(renderer, px, W, H, crop, outline, alpha, out) {
 }
 ```
 
-- [ ] **Step 5: Run it again** (same command). Expected: PASS, 6 tests.
-- [ ] **Step 6: Prove RF5 red by mutation.**
+- [ ] **Step 5: Run it again** (same command). Expected: PASS, 9 tests.
+- [ ] **Step 6: Prove RF5 and CI-13 red by mutation.**
   - In `copyRows`, change `(y1 - y)` to `(y0 + y)` and run again. Expected: FAIL in "copyRows flips GPU rows".
   - Restore it. Then delete `if (parent) parent.add(object);`. Expected: FAIL in "…restores the renderer and the object's parent".
+  - Restore it. Then change `const [W, H] = Array.isArray(size) ? size : [size, size];` to `const W = Array.isArray(size) ? size[0] : size, H = W;`. Expected: FAIL in "size [w, h] is a non-square picture" and "a non-square crop".
+  - Restore it. Then change `aspect < 1 ? Math.atan(…) : half` to `half`. Expected: FAIL in "a portrait size frames by the horizontal field of view".
   - Restore it and run again. Expected: PASS.
 - [ ] **Step 7: Commit.** `git add src/view/render/snapshot.js test/helpers/fakeCanvas.mjs test/render-snapshot.test.mjs && git commit -m "feat(view): snapshot an object to a PNG data URL with framing, crop and outline"`
 
@@ -1125,7 +1195,7 @@ function encode(renderer, px, W, H, crop, outline, alpha, out) {
 - Produces:
   - `createTiltShift(renderer, opts)` → `{ render(scene, camera, focus = params.focus), setSize(), dispose(), params, targets: { full, half, blur }, passes: { pre, blur, comp, quad } }`.
   - `TILT_DEFAULTS`, `SHADERS`.
-  - A game sets `view.gfx.post = fx` and writes `fx.params.focus` each frame. Pig Pens used `rig.cam.dist`.
+  - It is a `gfx.post` pass as is (Task 2, "The `gfx.post` seam"; ruling 3k C5). A game sets `view.gfx.post = fx` in a half's `enter`, writes `fx.params.focus` in that half's `frame` (Pig Pens: `rig.cam.dist`), and sets `view.gfx.post = null` in `exit`. It never replaces `view.gfx.render`.
 
 **Changes from Pig Pens' `src/tiltshift.js`:**
 - `focus` defaults to `params.focus`.
@@ -1323,6 +1393,7 @@ export function createTiltShift(renderer, opts = {}) {
   - `checkRender(render)`, which throws with `defineView: render.<field> …`.
   - `createPipeline(engine, view, render, { doc, target, canvas, renderer, flags, report })` → `{ frame(alpha), draw(), dispose() }`.
   - It sets `view.gfx`, `view.materials`, `view.assets`, `view.sync`, `view.audio` and `engine.assets`.
+  - It builds the sync as `createViewSync(engine, { gfx, assets: view.assets, compiler: view.materials, view })`: `view` reaches 3g's hooks and `view.dt` fades (ruling 3g #1).
   - `view.gfx` is the `createRenderer` result plus `lights` and `warm(opts)`.
 
 **Decisions expected (judgment):**
@@ -1333,8 +1404,10 @@ export function createTiltShift(renderer, opts = {}) {
   - `frame` and `draw` are no-ops.
 
   This is Contract issue 6.
-- **`render.assets = { manifest, base = './assets/' }`** feeds `createAssets` (Contract issue 3). `createAssets` also receives `gfx`, so 3f's `preload` can end with `gfx.warm()` in the real scene and its lights (Contract issue 2).
-- **`gfx.warm(opts)`** compiles the scene plus the compiler's `made()` materials, plus `opts.materials`.
+- **`render.assets = { manifest, base = './assets/', decoders? }`** feeds `createAssets` (Contract issue 3; rulings 3j #6, 3k C6, 3l CI-12). This is the only way a game hands boot its baked manifest: `defineView({ scenes, render: { assets: { manifest, base } } })`, never a top-level `defineView({ assets })`, `render.manifest` or `render.assetsBase`. `decoders` (optional, `{ ktx2, draco }`) is passed through for 3f C1. `createAssets` also receives `gfx`, so 3f's `preload` can end with `gfx.warm()` in the real scene and its lights (Contract issue 2). `checkRender` requires `manifest` once `render.assets` is declared.
+- **`render.paint = { base, shade }`** reaches the compiler as `createMaterialCompiler(registry, { shading, paint: render.paint })` (3f C11, 3f Integrator request 2; Tractor's base is `chassis`, which carries its dirt coverage, and it pins `shade`). `checkRender` checks only the shape: an object with known keys `base` and `shade`, `base` a non-empty string, `shade` `[floor, gain, max]` finite numbers. Whether `base` is in the registry is the compiler's check (3f: `compiler: paint base '…' is not in the registry`), so it throws at boot, not at `defineView`. The stub ignores the option. Without `render.paint` the compiler's defaults stand (`steel`, `[0.25, 0.85, 1.1]`).
+- **Without `render.assets`, boot makes no `createAssets`** (3f's throws on a missing manifest): `view.assets` is `null` and `engine.assets` `undefined`, as without WebGL. The sync then gets `assets: null`.
+- **`gfx.warm(opts)`** compiles the scene plus the compiler's `made()` materials, plus `opts.materials`. `made()` returns 3f's `[{ material, use }]`; `gfx.warm` passes each `material` (a bare material is accepted too, as the stub's).
 - **Build order:** audio, then renderer, lights, compiler, assets, sync. **Dispose order** is the reverse: sync, assets, compiler, audio, lights, renderer.
 
 - [ ] **Step 1: Write the failing test.** Create `test/render-pipeline.test.mjs`:
@@ -1351,6 +1424,7 @@ import { dom } from './helpers/dom.mjs';
 import { fakeRenderer } from './helpers/fakeRenderer.mjs';
 
 const HOT = /\bnew\s|\.clone\(|\.\.\.|\.slice\(|\.map\(|\.concat\(|\bArray\.from\b/;
+const MANIFEST = { v: 1, models: {} }; // a baked manifest with no models: enough for the stub and for 3f's createAssets
 const setup = (render = {}, { renderer = fakeRenderer(), withCanvas = true } = {}) => {
   const { document } = dom(), engine = createEngine(game, {}), view = { doc: document }, errors = [];
   const canvas = withCanvas ? document.createElement('canvas') : null; if (canvas) document.body.appendChild(canvas);
@@ -1360,18 +1434,33 @@ const setup = (render = {}, { renderer = fakeRenderer(), withCanvas = true } = {
 };
 
 test('builds gfx with lights and warm, the compiler, assets, sync and audio; engine.assets is view.assets', () => {
-  const s = setup({ shading: 'lambert' }), pipe = s.make(), g = s.view.gfx;
+  const s = setup({ shading: 'lambert', assets: { manifest: MANIFEST } }), pipe = s.make(), g = s.view.gfx;
   assert.ok(g.renderer === s.renderer && g.scene.isScene && g.camera.isPerspectiveCamera, 'gfx parts');
   for (const k of ['resize', 'render', 'warm', 'info', 'dispose']) assert.equal(typeof g[k], 'function', k);
   assert.ok(g.scene.children.includes(g.lights.hemi), 'the light rig is in the scene');
   assert.equal(s.view.materials.shading, 'lambert');
-  for (const k of ['assets', 'sync', 'audio']) assert.equal(typeof s.view[k], 'object', k);
+  for (const k of ['assets', 'sync', 'audio']) assert.ok(s.view[k] && typeof s.view[k] === 'object', k);
   assert.ok(s.engine.assets === s.view.assets, 'engine.assets'); assert.deepEqual(s.errors, []);
   pipe.dispose();
 });
-test('lights: false builds no rig; shading defaults to physical', () => {
+test('without render.assets there is no createAssets: view.assets null, engine.assets undefined, the rest is built', () => {
+  const s = setup(), pipe = s.make();
+  assert.equal(s.view.assets, null); assert.equal(s.engine.assets, undefined);
+  assert.ok(s.view.gfx && s.view.sync && s.view.materials, 'gfx, sync and compiler'); pipe.frame(0); pipe.draw(); pipe.dispose();
+});
+test('the sync is built with the view (3g #1); the source passes it', () => {
+  assert.match(createPipeline.toString(), /createViewSync\(engine, \{[^}]*, view \}\)/);
+});
+test('render.paint reaches the compiler as paint (3f C11); the source passes it', () => {
+  const s = setup({ paint: { base: 'steel', shade: [0.25, 0.85, 1.1] } }), pipe = s.make(); // the stub accepts it
+  assert.ok(s.view.materials, 'compiler built'); assert.deepEqual(s.errors, []);
+  assert.match(createPipeline.toString(), /createMaterialCompiler\([^)]*paint: render\.paint/);
+  pipe.dispose();
+});
+test('lights: false builds no rig, background or fog; shading defaults to physical', () => {
   const s = setup({ lights: false }), pipe = s.make();
   assert.equal(s.view.gfx.lights, null); assert.equal(s.view.gfx.scene.children.length, 0); assert.equal(s.view.materials.shading, 'physical');
+  assert.equal(s.view.gfx.scene.background, null); assert.equal(s.view.gfx.scene.fog, null);
   pipe.dispose();
 });
 test('frame runs view.sync.frame(alpha); draw renders the scene with the camera once', () => {
@@ -1386,7 +1475,7 @@ test('frame runs view.sync.frame(alpha); draw renders the scene with the camera 
 });
 test('gfx.warm compiles the compiler\'s materials and the ones it is given', async () => {
   const s = setup(), pipe = s.make(), made = new THREE.MeshLambertMaterial(), extra = new THREE.MeshPhongMaterial();
-  s.view.materials.made = () => [made];
+  made.userData.lhUse = 'plain'; s.view.materials.made = () => [{ material: made, use: 'plain' }]; // 3f C5's shape
   await s.view.gfx.warm({ materials: [extra] });
   const [, seen] = s.renderer.log.find(l => l[0] === 'compileAsync');
   assert.ok(seen.some(o => o.material === made) && seen.some(o => o.material === extra), 'both on the warm group');
@@ -1404,7 +1493,7 @@ test('no canvas anywhere is a programming error', () => {
   assert.throws(() => s.make(), /boot: defineView\(\{ render \}\) needs a canvas/);
 });
 test('dispose frees everything once, in reverse, and stops drawing', () => {
-  const s = setup(), pipe = s.make(), order = [], scene = s.view.gfx.scene;
+  const s = setup({ assets: { manifest: MANIFEST } }), pipe = s.make(), order = [], scene = s.view.gfx.scene;
   s.view.sync.dispose = () => order.push('sync'); s.view.assets.dispose = () => order.push('assets');
   s.view.materials.dispose = () => order.push('materials'); s.view.audio.dispose = () => order.push('audio');
   pipe.dispose(); pipe.dispose();
@@ -1422,9 +1511,17 @@ test('checkRender names the field', () => {
   assert.throws(() => checkRender({ dpr: 0 }), /defineView: render\.dpr must be a number above 0 or \{ touch, desktop \}/);
   assert.throws(() => checkRender({ dpr: { phone: 1 } }), /defineView: render\.dpr must be/);
   assert.throws(() => checkRender({ camera: { zoom: 2 } }), /defineView: render\.camera\.zoom is unknown/);
-  assert.throws(() => checkRender({ assets: { url: 'x' } }), /defineView: render\.assets\.url is unknown \(known: manifest, base\)/);
+  assert.throws(() => checkRender({ assets: { url: 'x' } }), /defineView: render\.assets\.url is unknown \(known: manifest, base, decoders\)/);
+  assert.throws(() => checkRender({ assets: { base: './a/' } }), /defineView: render\.assets\.manifest is required \(the baked manifest\.json\)/);
+  assert.throws(() => checkRender({ lights: true }), /lights: options must be an object/);
+  assert.throws(() => checkRender({ paint: 'red' }), /defineView: render\.paint must be \{ base, shade \}/);
+  assert.throws(() => checkRender({ paint: { color: 'red' } }), /defineView: render\.paint\.color is unknown \(known: base, shade\)/);
+  assert.throws(() => checkRender({ paint: { base: '' } }), /defineView: render\.paint\.base must be a material id \(got ""\)/);
+  assert.throws(() => checkRender({ paint: { shade: [1, 2] } }), /defineView: render\.paint\.shade must be \[floor, gain, max\] numbers \(got \[1,2\]\)/);
+  assert.throws(() => checkRender({ paint: { shade: [0, 1, NaN] } }), /render\.paint\.shade must be/);
   assert.throws(() => checkRender({ lights: { presets: { night: { sun: { map: 1 } } } } }), /lights: preset 'night'\.sun\.map is unknown/);
-  checkRender({ shading: 'standard', dpr: { touch: 1, desktop: 2 }, shadows: false, toneMapping: 'aces', exposure: 1.05, camera: { fov: 48 }, lights: false, assets: { manifest: {}, base: './a/' } });
+  checkRender({ shading: 'standard', dpr: { touch: 1, desktop: 2 }, shadows: false, toneMapping: 'aces', exposure: 1.05, camera: { fov: 48 }, lights: false, assets: { manifest: {}, base: './a/', decoders: {} }, paint: { base: 'chassis', shade: [0.25, 0.85, 1.1] } });
+  checkRender({ paint: {} }); checkRender({ paint: { base: 'steel' } }); // either key may be left to the compiler's default
 });
 ```
 
@@ -1449,9 +1546,9 @@ import { createViewSync } from '../sync/index.js';
 import { createAudio } from '../audio/index.js';
 import { createMaterialCompiler } from '../materials/compiler.js';
 
-export const RENDER_KEYS = Object.freeze(['shading', 'dpr', 'antialias', 'shadows', 'toneMapping', 'exposure', 'camera', 'lights', 'assets']);
+export const RENDER_KEYS = Object.freeze(['shading', 'dpr', 'antialias', 'shadows', 'toneMapping', 'exposure', 'camera', 'lights', 'assets', 'paint']);
 export const SHADING = Object.freeze(['physical', 'standard', 'lambert']);
-const CAMERA_KEYS = ['fov', 'fovPortrait', 'near', 'far'], ASSET_KEYS = ['manifest', 'base'], DPR_KEYS = ['touch', 'desktop'];
+const CAMERA_KEYS = ['fov', 'fovPortrait', 'near', 'far'], ASSET_KEYS = ['manifest', 'base', 'decoders'], DPR_KEYS = ['touch', 'desktop'], PAINT_KEYS = ['base', 'shade'];
 const known = (o, keys, where) => { for (const k of Object.keys(o)) if (!keys.includes(k)) throw new Error(`defineView: render.${where}${k} is unknown (known: ${keys.join(', ')})`); };
 
 export function checkRender(render) {
@@ -1464,7 +1561,18 @@ export function checkRender(render) {
   const d = render.dpr;
   if (d !== undefined && !(typeof d === 'number' && d > 0) && !(d && typeof d === 'object' && Object.keys(d).length && Object.keys(d).every(k => DPR_KEYS.includes(k) && d[k] > 0))) throw new Error(`defineView: render.dpr must be a number above 0 or { touch, desktop } (got ${JSON.stringify(d)})`);
   if (render.camera !== undefined) known(render.camera, CAMERA_KEYS, 'camera.');
-  if (render.assets !== undefined) { if (!render.assets || typeof render.assets !== 'object') throw new Error('defineView: render.assets must be { manifest, base }'); known(render.assets, ASSET_KEYS, 'assets.'); }
+  if (render.assets !== undefined) { // rulings 3e #3, 3j #6, 3k C6, 3l CI-12: the one way the baked manifest reaches boot
+    if (!render.assets || typeof render.assets !== 'object') throw new Error('defineView: render.assets must be { manifest, base, decoders? }');
+    known(render.assets, ASSET_KEYS, 'assets.');
+    if (!render.assets.manifest) throw new Error('defineView: render.assets.manifest is required (the baked manifest.json)');
+  }
+  if (render.paint !== undefined) { // 3f C11: the shape here; whether base is in the registry is the compiler's check at boot
+    const p = render.paint;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('defineView: render.paint must be { base, shade }');
+    known(p, PAINT_KEYS, 'paint.');
+    if (p.base !== undefined && !(typeof p.base === 'string' && p.base)) throw new Error(`defineView: render.paint.base must be a material id (got ${JSON.stringify(p.base)})`);
+    if (p.shade !== undefined && !(Array.isArray(p.shade) && p.shade.length === 3 && p.shade.every(Number.isFinite))) throw new Error(`defineView: render.paint.shade must be [floor, gain, max] numbers (got ${JSON.stringify(p.shade)})`);
+  }
   if (render.lights !== undefined && render.lights !== false) checkLights(render.lights);
 }
 
@@ -1484,28 +1592,33 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
     return { frame() {}, draw() {}, dispose() { if (gone) return; gone = true; view.audio.dispose(); } };
   }
   gfx.lights = render.lights === false ? null : createLightRig(gfx.scene, render.lights ?? {});
-  const materials = createMaterialCompiler(engine.game.defs?.materials, { shading: render.shading ?? 'physical' });
-  gfx.warm = (opts = {}) => warm(gfx.renderer, gfx.scene, gfx.camera, { materials: [...(materials.made?.() ?? []), ...(opts.materials ?? [])] });
+  const materials = createMaterialCompiler(engine.game.defs?.materials, { shading: render.shading ?? 'physical', paint: render.paint }); // 3f C11
+  gfx.warm = (opts = {}) => { // 3f C5: made() → [{ material, use }]; userData.lhUse on each material picks the warm mesh
+    const list = [];
+    for (const e of materials.made?.() ?? []) list.push(e?.isMaterial ? e : e.material);
+    return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []) });
+  };
   view.gfx = gfx; view.materials = materials;
-  view.assets = createAssets({ manifest: render.assets?.manifest ?? null, base: render.assets?.base ?? './assets/', compiler: materials, renderer: gfx.renderer, gfx });
-  engine.assets = view.assets;
-  view.sync = createViewSync(engine, { gfx, assets: view.assets, compiler: materials });
+  const a = render.assets; // without it, no createAssets: 3f's throws on a missing manifest
+  view.assets = a ? createAssets({ manifest: a.manifest, base: a.base ?? './assets/', decoders: a.decoders, compiler: materials, renderer: gfx.renderer, gfx }) : null;
+  engine.assets = view.assets ?? undefined;
+  view.sync = createViewSync(engine, { gfx, assets: view.assets, compiler: materials, view }); // 3g #1: view for hooks and view.dt
   let disposed = false;
   return {
     frame(alpha) { if (!disposed) view.sync.frame(alpha); },
     draw() { if (!disposed) gfx.render(); },
     dispose() {
       if (disposed) return; disposed = true;
-      view.sync.dispose?.(); view.assets.dispose(); materials.dispose(); view.audio.dispose();
+      view.sync.dispose?.(); view.assets?.dispose(); materials.dispose(); view.audio.dispose();
       gfx.lights?.dispose(); gfx.dispose();
-      if (engine.assets === view.assets) engine.assets = undefined;
+      if (view.assets && engine.assets === view.assets) engine.assets = undefined;
     },
   };
 }
 ```
 
-- [ ] **Step 4: Run it again** (same command). Expected: PASS, 8 tests.
-- [ ] **Step 5: Prove RF1 red by mutation.** Replace the `try { … } catch (err) { report(…) }` around `createRenderer` with a bare `gfx = createRenderer(…)` and run again. Expected: FAIL in "a renderer that cannot start is reported once…" with the thrown WebGL error. Restore it and run again. Expected: PASS.
+- [ ] **Step 4: Run it again** (same command). Expected: PASS, 11 tests.
+- [ ] **Step 5: Prove RF1 red by mutation.** Replace the `try { … } catch (err) { report(…) }` around `createRenderer` with a bare `gfx = createRenderer(…)` and run again. Expected: FAIL in "a renderer that cannot start is reported once…" with the thrown WebGL error. Restore it. Then drop `, view` from the `createViewSync` call. Expected: FAIL in "the sync is built with the view". Restore it. Then drop `, paint: render.paint` from the `createMaterialCompiler` call. Expected: FAIL in "render.paint reaches the compiler". Restore it, then remove `'paint'` from `RENDER_KEYS`. Expected: FAIL in "checkRender names the field" (`render.paint is unknown`). Restore it and run again. Expected: PASS.
 - [ ] **Step 6: Commit.** `git add src/view/render/pipeline.js test/render-pipeline.test.mjs && git commit -m "feat(view): render pipeline that builds gfx, lights, compiler, assets, sync and audio for boot"`
 
 ---
@@ -1517,11 +1630,11 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
 - Test: `test/render-boot.test.mjs`
 
 **Interfaces:**
-- Consumes: `createPipeline`, `checkRender` (Task 7). `createEngine(game, { …, timer })`: 3c adds `timer` (#106). Until 3c merges, `createEngine` ignores the extra key.
+- Consumes: `createPipeline`, `checkRender` (Task 7). `createEngine(game, { …, timer })`: 3c adds `timer` (#106; 3c ruling: boot passes it). Until 3c merges, `createEngine` ignores the extra key, so the unit test pins the forwarding in boot's source and Integrator request 4 adds the runtime check.
 - Produces:
   - `defineView({ scenes, render })` → `Object.freeze({ scenes, render? })`. `render` is present only when declared.
-  - `boot(game, view, { …existing, canvas, timer, renderer })`. With `render`, the view object gains `gfx`, `materials`, `assets`, `sync` and `audio` before any half enters, and `engine.assets` is set.
-  - Render slot order: reconcile → `pipe.frame(alpha)` → the halves' `frame` → `pipe.draw()` → the existing `dt` reset and refresh.
+  - `boot(game, view, { …existing, canvas, timer, renderer })`. With `render`, the view object gains `gfx`, `materials`, `assets`, `sync` and `audio` before any half enters, and `engine.assets` is set (`view.assets` is `null` and `engine.assets` `undefined` without `render.assets`, Task 7).
+  - Render slot order: reconcile → `pipe.frame(alpha)` → the halves' `frame` → `pipe.draw()` (`view.gfx.render()`: through `gfx.post` when set, Task 2) → the existing `dt` reset and refresh.
 
 **Base text.** 3e's branch starts after 3a, so `boot.js` has 3a's #105 change: view halves' `enter(engine, view, args)`. The edits below touch only lines 3a does not change. If a quoted `old` line differs only by 3a's edit, keep 3a's version and apply the 3e insertion.
 
@@ -1556,7 +1669,7 @@ test('without render, defineView and boot are exactly 0.7: no render key, no ser
   app.engine.render(0); assert.deepEqual(log, ['enter gfx=undefined', 'frame title']); app.dispose();
 });
 test('with render, the services exist before the first half enters, and engine.assets is view.assets', () => {
-  const { app, log, renderer } = run({ render: { lights: { fog: [60, 200] } } });
+  const { app, log, renderer } = run({ render: { lights: { fog: [60, 200] }, assets: { manifest: { v: 1, models: {} }, base: './assets/' } } });
   assert.deepEqual(log, ['enter gfx=yes']);
   assert.ok(app.view.gfx.renderer === renderer, 'the injected renderer'); assert.equal(app.view.gfx.scene.fog.far, 200);
   assert.ok(app.engine.assets === app.view.assets, 'engine.assets'); assert.equal(typeof app.view.audio.play, 'function');
@@ -1567,6 +1680,16 @@ test('the render slot runs sync.frame(alpha), then the halves\' frames, then one
   app.view.sync.frame = a => log.push(`sync ${a}`);
   const draw = renderer.render; renderer.render = (s, c) => { log.push('draw'); draw(s, c); };
   app.engine.render(0.5); assert.deepEqual(log, ['sync 0.5', 'frame title', 'draw']); app.dispose();
+});
+test('with gfx.post set, the slot draws through post.render(scene, camera) after the halves, not renderer.render (3k C5)', () => {
+  const { app, log, renderer } = run({ render: {} }); log.length = 0;
+  const g = app.view.gfx, draws = () => renderer.log.filter(l => l[0] === 'render').length;
+  g.post = { render: (s, c) => log.push(`post ${s === g.scene && c === g.camera}`) };
+  app.engine.render(0); assert.deepEqual(log, ['frame title', 'post true']); assert.equal(draws(), 0);
+  g.post = null; app.engine.render(0); assert.equal(draws(), 1); app.dispose();
+});
+test('boot passes timer to createEngine (3c, #106)', () => {
+  assert.match(boot.toString(), /acks: flags\.lhTest \? 'steps' : 'frames', timer\b/);
 });
 test('a throwing sync.frame or half is reported; the frame still draws', () => {
   const { app, log, renderer } = run({ render: {}, frame: () => { throw new Error('half bug'); } }); log.length = 0;
@@ -1648,9 +1771,9 @@ test('render without any canvas throws from boot', () => {
 
      Keep 3a's text for the halves loop line if it differs. Only the two `if (pipe)` lines are new.
 
-- [ ] **Step 4: Run it again** (same command). Expected: PASS, 8 tests.
+- [ ] **Step 4: Run it again** (same command). Expected: PASS, 10 tests.
 - [ ] **Step 5: Run the existing boot, hook and loading suites.** These suites must be unchanged: `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3e -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 test/boot.test.mjs test/hook.test.mjs test/loading.test.mjs test/uiDom.test.mjs test/package.test.mjs`. Expected: PASS with the same counts as on the base branch.
-- [ ] **Step 6: Prove the slot order red by mutation.** Move the `pipe.frame` line below the halves loop and run `test/render-boot.test.mjs`. Expected: FAIL in "the render slot runs sync.frame(alpha), then…". Restore it and run again. Expected: PASS.
+- [ ] **Step 6: Prove the slot order red by mutation.** Move the `pipe.frame` line below the halves loop and run `test/render-boot.test.mjs`. Expected: FAIL in "the render slot runs sync.frame(alpha), then…". Restore it. Then remove `, timer` from the `createEngine` call. Expected: FAIL in "boot passes timer to createEngine". Restore it and run again. Expected: PASS.
 - [ ] **Step 7: Commit.** `git add src/view/boot.js test/render-boot.test.mjs && git commit -m "feat(view): boot builds the render pipeline from defineView({ render }) and draws after the halves"`
 
 ---
@@ -1871,7 +1994,7 @@ test('warm compiles the hidden toon sphere and an instanced material, and leaves
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });
-test('snapshot: a PNG with a clear corner and the red box in the middle; renderer and scene untouched (RF5)', async t => {
+test('snapshot: a PNG with a clear corner and the red box in the middle, square and [w, h]; renderer and scene untouched (RF5)', async t => {
   if (skip) return t.skip(skip);
   const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
   try {
@@ -1883,11 +2006,14 @@ test('snapshot: a PNG with a clear corner and the red box in the middle; rendere
     assert.equal(d.corner[3], 0, `clear corner: ${d.corner}`); assert.ok(d.centre[3] > 200 && d.centre[0] > d.centre[1] + 40, `red centre: ${d.centre}`);
     const c = await game.page.evaluate(() => window.__fx.snap({ crop: true, outline: { px: 4 } }));
     assert.ok(c.info.w > 8 && c.info.w < 64 + 8 && c.info.h > 8, `cropped ${c.info.w}x${c.info.h}`);
+    const wide = await game.page.evaluate(() => window.__fx.snap({ size: [96, 64] })); // 3l CI-13: a non-square picture
+    const dw = await game.page.evaluate(url => window.__fx.decode(url), wide.url);
+    assert.deepEqual([wide.info.w, wide.info.h, dw.w, dw.h], [96, 64, 96, 64]); assert.equal(dw.corner[3], 0); assert.ok(dw.centre[3] > 200, `box in the middle: ${dw.centre}`);
     near(await game.page.evaluate(() => window.__fx.pixel(640, 360)), plain, 0, 'the main view draws as before');
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });
-test('tilt-shift: off draws exactly the plain frame with no new programs; on adds its three passes without GL errors', async t => {
+test('tilt-shift as gfx.post: off draws exactly the plain frame with no new programs; on adds its three passes without GL errors', async t => {
   if (skip) return t.skip(skip);
   const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
   try {
@@ -1916,7 +2042,7 @@ test('tilt-shift: off draws exactly the plain frame with no new programs; on add
 **Files:**
 - Create: `docs/plans/2026-10-13-phase-3e-render-notes.md`
 
-- [ ] **Step 1: Run every unit file in the engine.** `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3e -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 $(ls /home/smiller/projects/four43/lion-hawk-engine-3e/test/*.test.mjs | grep -v e2e)`. Expected: PASS. The count is the base count plus 61 (4 + 11 + 10 + 7 + 6 + 7 + 8 + 8).
+- [ ] **Step 1: Run every unit file in the engine.** `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3e -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 $(ls /home/smiller/projects/four43/lion-hawk-engine-3e/test/*.test.mjs | grep -v e2e)`. Expected: PASS. The count is the base count plus 72 (4 + 12 + 12 + 7 + 9 + 7 + 11 + 10).
 - [ ] **Step 2: Run each browser file, one at a time.** Run the browser command once per file: `test/e2e.test.mjs`, `test/load-e2e.test.mjs`, `test/touch-e2e.test.mjs`, `test/hold-e2e.test.mjs`, `test/bridge-e2e.test.mjs`, `test/e2e-render.test.mjs`. Each uses `flock /tmp/claude-1000/lion-hawk-browser.lock systemd-run --user --wait -P -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3e -E NODE_OPTIONS=--max-old-space-size=2048 node --test --test-concurrency=4 <file>`. Expected: all PASS, with the existing ones unchanged.
 - [ ] **Step 3: Write the notes.** Create `docs/plans/2026-10-13-phase-3e-render-notes.md` with these sections:
   - `## Outcome`: commits, test counts, any tolerance changes from Tasks 9–10.
@@ -1931,7 +2057,7 @@ test('tilt-shift: off draws exactly the plain frame with no new programs; on add
 
 ## Done when
 
-- **Unit:** every `test/*.test.mjs` except the e2e files passes in the worktree, including the 8 new `render-*` files with 61 tests.
+- **Unit:** every `test/*.test.mjs` except the e2e files passes in the worktree, including the 8 new `render-*` files with 72 tests.
 - **Browser:**
   - `test/e2e-render.test.mjs` passes: 6 tests, under the lock.
   - The five existing browser files pass unchanged.
@@ -1948,28 +2074,29 @@ The file is `docs/plans/2026-10-13-phase-3e-render-notes.md`. Its sections are `
 
 1. **There is no compiler stub in §4.6.** Boot must build `view.materials`, but the overview lists stubs only for `assets`, `sync` and `audio`. Decision: 3e also creates an inert `src/view/materials/compiler.js`. 3f owns that path and its file wins at the merge, as with the other stubs.
 2. **`warm` needs the compiler's materials and their mesh kind, and `preload` needs the scene.**
-   - Decision: `warm(renderer, scene, camera, { materials })` places each material on a hidden mesh of the kind named by `material.userData.lhUse`: `'mesh' | 'instanced' | 'instancedColor' | 'skinned'`.
-   - `gfx.warm(opts)` adds `view.materials.made()`.
+   - Decision: `warm(renderer, scene, camera, { materials })` places each material on a hidden mesh of the kind named by `material.userData.lhUse`: `'plain'` (3f's name) or `'mesh'`, `'instanced'`, `'instancedColor'`, `'skinned'`.
+   - `gfx.warm(opts)` adds the `material` of each `view.materials.made()` entry (`[{ material, use }]`, 3f C5).
    - `createAssets` receives `gfx`, so `preload` can end with `gfx.warm()`.
    - Asks of 3f:
-     - `mc.made()` → an iterable of the compiled materials;
+     - `mc.made()` → `[{ material, use }]` (ruled: 3e #2, 3f C5);
      - set `userData.lhUse` on each;
      - set `userData.lhShared = true` on compiler materials and template geometries, so `disposeTree` keeps them;
      - accept `gfx` in `createAssets`;
      - accept an `undefined` registry, meaning the base library.
-3. **The `defineView` `render` block grows by three optional keys:**
-   - `render.assets = { manifest, base }`, because boot needs the manifest for `createAssets`;
-   - `render.lights.hemiSky`, because Tractor's hemisphere sky colour differs from its background;
-   - `render.lights: false`, for no rig.
+3. **The `defineView` `render` block grows by four optional keys:**
+   - `render.assets = { manifest, base }`, because boot needs the manifest for `createAssets` (ruled; also 3j #6, 3k C6, 3l CI-12). Optional `decoders` passes 3f C1's `{ ktx2, draco }` through. Without `render.assets` boot makes no `createAssets` (`view.assets` `null`);
+   - `render.lights.hemiSky`, because Tractor's hemisphere sky colour differs from its background (ruled; 3l CI-8). Preset fields: `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog: [near, far] }`;
+   - `render.lights: false`, for no rig;
+   - `render.paint = { base, shade }`, passed to `createMaterialCompiler` as `paint` (3f C11 and Integrator request 2, from the paint reconciliation, user ruling 2026-10-14). `checkRender` checks the shape; the compiler checks `base` against the registry.
 4. **Additive options and members, no changed signatures:**
-   - `createRenderer` options `renderer` (inject) and `target`, and members `size` and `post`;
+   - `createRenderer` options `renderer` (inject) and `target`, and members `size` and `post`. `post` is the post-pass seam games use instead of replacing `gfx.render` (ruled: 3k C5; spec in Task 2);
    - `camera.userData.lhFov`, the base FOV after the portrait rule. 3g's rigs that animate the FOV should add to it;
    - `boot` option `renderer`;
    - `createLightRig` `dispose` and `presets`;
    - the `disposeTree` return count and its `userData.lhShared` rule;
-   - `snapshot` options `yaw, pitch, fov, fill, lights, crop, outline, alpha, colorSpace, out`;
+   - `snapshot` options `yaw, pitch, fov, fill, lights, crop, outline, alpha, colorSpace, out`, and `size` as a number or `[w, h]` (ruled: 3l CI-13);
    - `createTiltShift` `params.focus`, `setSize`, `dispose`, `targets` and `passes`;
-   - `createViewSync` `dispose`, which boot calls if present.
+   - `createViewSync` `dispose`, which boot calls if present, and the `view` option boot passes (ruled: 3g #1).
 5. **matSplit (M-13).** The brief lists matSplit under 3e's hygiene, but §3.2 and §4.8 make it the compiler's cache key (3f). 3e ships no `splitShared`. A game with its own non-compiler material shared between instanced and plain meshes keeps its own split until it moves to the compiler.
 6. **No WebGL.** The spec is silent. Decision: boot reports `render: <message>` once into `engine.errors` and runs on with `view.gfx`, `view.materials`, `view.assets` and `view.sync` set to `null`. View halves must check `view.gfx`. A game e2e that stubs WebGL now sees one error.
 
@@ -1986,9 +2113,10 @@ The file is `docs/plans/2026-10-13-phase-3e-render-notes.md`. Its sections are `
 2. **The four43 workspace test.** `games/test/workspace.test.mjs` ("engine source does not import three or Rapier yet") fails once 3e merges into `phase-3`, because `src/view/render/*` imports `three` (D9).
    - Narrow it to the sim roots (`src/core`, `src/defs`, `src/sim`, `src/kits/*/sim.js`).
    - Make sure each game builds with `lion-hawk build` (dedupe) before it takes 0.9.0. A `build.py`/esbuild-CLI build would bundle the engine's own copy of three.
-3. **Stubs at the Wave B merge.** Take 3f's `src/view/assets/index.js` and `src/view/materials/compiler.js`, and 3g's `src/view/sync/index.js` and `src/view/audio/index.js`, over 3e's stubs. Then rerun `test/render-pipeline.test.mjs` and `test/render-boot.test.mjs`. The stub-shape test `test/render-stubs.test.mjs` should be deleted at that merge, since its "inert" assertions no longer hold. Confirm the 3f asks in Contract issue 2 (`made()`, `userData.lhUse`, `userData.lhShared`, `gfx`).
-4. **The timer.** After 3c merges, add one assertion that `boot(…, { timer })` reaches `world.stats.stepMs` (#106). 3e passes `timer` to `createEngine` but cannot observe it before 3c.
+3. **Stubs at the Wave B merge.** Take 3f's `src/view/assets/index.js` and `src/view/materials/compiler.js`, and 3g's `src/view/sync/index.js` and `src/view/audio/index.js`, over 3e's stubs. Then rerun `test/render-pipeline.test.mjs` and `test/render-boot.test.mjs`. The stub-shape test `test/render-stubs.test.mjs` should be deleted at that merge, since its "inert" assertions no longer hold. Confirm the 3f asks in Contract issue 2 (`made()` → `[{ material, use }]`, `userData.lhUse` including `'plain'`, `userData.lhShared`, `gfx`, `decoders`), and that 3g's sync reads `view.dt` from the `view` boot passes. With 3f's compiler in place, add two assertions to "render.paint reaches the compiler": `setup({ paint: { base: 'unobtainium' } }).make()` throws `/paint base 'unobtainium' is not in the registry/`, and a game whose registry has `chassis` builds with `render.paint = { base: 'chassis', shade: [0.25, 0.85, 1.1] }` (3f C11).
+4. **The timer.** After 3c merges, add one assertion that `boot(…, { timer })` reaches `world.stats.stepMs` (#106) with a physics game. 3e passes `timer` to `createEngine` (3c ruling; pinned in `test/render-boot.test.mjs` by source) but cannot observe it before 3c.
 5. **CHANGELOG (0.9.0):**
    - "view: `defineView({ render })`, `createRenderer`, `createLightRig`, `warm`, `instancedShadows`, `disposeTree`, `programCount`, `snapshot`, `createTiltShift`;
    - boot builds `view.gfx`/`materials`/`assets`/`sync`/`audio` and `engine.assets`;
    - a renderer that cannot start is reported as `render: …`."
+6. **Game plans at reconciliation** (names they must match): `defineView({ render: { assets: { manifest, base } } })` (not a top-level `assets`); `view.gfx.post = pass` / `null` (not replacing `view.gfx.render`); light presets `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog }` (not `sun: '#…'`, `sunIntensity`); `snapshot(renderer, object, { size: [w, h] })`; `render.paint = { base, shade }` (Tractor: `{ base: 'chassis', shade: [0.25, 0.85, 1.1] }`).

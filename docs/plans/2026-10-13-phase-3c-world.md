@@ -15,7 +15,7 @@
 - **One step, in this order** (overview §4.4):
   1. `lh.world.swap` (stage `input.apply`, first): copy curr → prev for every live slot;
   2. `lh.ui`, `lh.input`, `lh.commands`, game input systems; `pre` (`lh.scene` and game systems); kit systems in `physics.world` with `before: ['lh.physics.step']`;
-  3. `lh.physics.step`: `rapierWorld.step(eventQueue)`, timed when a timer was injected;
+  3. `lh.physics.step`: `rapierWorld.step(eventQueue)`, timed when a timer was injected; skipped, with `read` and `events`, while a scene loads (CI-16 ruling, S-3);
   4. `lh.physics.read`: curr ← Rapier for every dynamic and kinematic body that is awake **or was awake last step** (so the pose of the step a body falls asleep is not lost), then the #2 re-sleep of bodies spawned asleep;
   5. `lh.physics.events`: contact-force events → `contact`, then collision events on sensors → `sensor`, in Rapier's drain order;
   6. game systems in `physics.world` with no ordering, then `post`, then `events.flush`.
@@ -77,7 +77,7 @@ GLOBAL CONSTRAINTS (phase 3)
 The five failure modes most likely to bite, each pinned by a named test:
 
 1. **Stale pose after pool growth or slot reuse.** `e.xf` accessors must read through the pool's *current* buffer after it doubles, and a despawned entity must not keep reading the slot a newer entity now owns. Pinned by `world-pool.test.mjs` "xf accessors read and write curr through growth" (Task 5, with a mutation step) and `world-entities.test.mjs` "despawn keeps a frozen last pose; the next spawn reuses the lowest slot" (Task 9).
-2. **Step order and smear.** prev must be last step's curr when game systems run; `place` must write both slots; the step a body falls asleep must still be read. Pinned by `world-engine.test.mjs` "pre systems see prev == curr; physics then moves curr" (Task 11), `world-place.test.mjs` "place writes prev and curr" (Task 6) and `world-step.test.mjs` "the step a body falls asleep is read" (Task 10).
+2. **Step order and smear.** prev must be last step's curr when game systems run; `place` must write both slots; the step a body falls asleep must still be read. Pinned by `world-engine.test.mjs` "pre systems see prev == curr; physics then moves curr" and "the World does not step while a scene loads" (Task 11), `world-place.test.mjs` "place writes prev and curr" (Task 6) and `world-step.test.mjs` "the step a body falls asleep is read" (Task 10).
 3. **Determinism of ids, slots, Rapier order and clear().** Two runs agree step for step, a run that leaks module state between runs is caught at the exact step, and a recorded tape that clears and rebuilds the World replays. Pinned by `checks-determinism.test.mjs` (Task 13) and `world-replay.test.mjs` (Task 16).
 4. **Combine rules and mass.** √f with Multiply gives the geometric mean (two blocks sliding), restitution takes the max, `body.mass` lands to 0.1 %, `massProps` is exact, zero density on a dynamic body throws. Pinned by `physics-colliders.test.mjs` "a slick block on grip decelerates at the geometric mean" (Task 8) and `world-bodies.test.mjs` "body.mass scales densities" (Task 9).
 5. **Rapier 0.21 quirks.** The heightfield is column-major with subdivision counts (a ball rests at the analytic height, not the swapped one); a body inserted asleep wakes on its first step unless the World re-sleeps it (#2); a Rapier bump that moves a default fails `PINNED_DEFAULTS` (#1). Pinned by `physics-heightfield.test.mjs` (Task 4), `world-step.test.mjs` "a post spawned asleep on the ground stays asleep" (Task 10) and `physics-rapier.test.mjs` (Task 2).
@@ -95,7 +95,7 @@ All paths are in the engine worktree `~/projects/four43/lion-hawk-engine-3c`.
 | `src/sim/world/place.js` | create (T6) | `createPlacer(pool, rapier, world)` → `{ place, socket, xfPrev }` |
 | `src/sim/physics/events.js` | create (T7) | `createEventDrain({ emit, hz, entityOf, materialOf })` → `drain(rapierWorld, queue)` |
 | `src/sim/physics/colliders.js` | create (T8) | `shapeDesc`, `materialFor`, `applyMaterial` |
-| `src/sim/world/world.js` | create (T9), extend (T10, T17) | `createWorld`: lifecycle, queries, ids, bodies, colliders, mass, joints, `own`, `setMaterial`; T10: `sys`, `digest`, `heightfield`, `audit` |
+| `src/sim/world/world.js` | create (T9), extend (T10, T17) | `createWorld`: lifecycle, queries, ids, bodies, colliders, mass, joints, `own`, `setMaterial`; T10: `sys`, `digest`, `heightfield`, `audit`; T10b: `partXf`, `partXfPrev` |
 | `src/sim/world/install.js` | create (T11) | `checkPhysics`, `installWorld`: the World seat, the four `lh.*` systems, the digest hook |
 | `src/core/engine.js` | modify (T11) | World around main scenes, `ctx.world`, `engine.world`, `timer` option, `engine.builtin`, `state().world`, `defineGame` physics check |
 | `testing/invariants.js` | modify (T12) | `worldFinite(world, engine)` |
@@ -117,6 +117,7 @@ All paths are in the engine worktree `~/projects/four43/lion-hawk-engine-3c`.
 | `test/world-entities.test.mjs` | create (T9) | ids, queries, despawn, add/remove, clear, dispose, hooks |
 | `test/world-bodies.test.mjs` | create (T9) | bodies, colliders, materials, mass, errors, joints, setMaterial |
 | `test/world-step.test.mjs` | create (T10) | read order, #2, events through the World, digest, heightfield, clear with physics, timer, audit |
+| `test/world-parts.test.mjs` | create (T10b) | `partXf` part poses, swap, `partXfPrev`, validation |
 | `test/world-engine.test.mjs` | create (T11) | S-3 ownership, schedule, step order, builtin, timer, state digest, init check |
 | `test/world-headless.test.mjs` | create (T12) | T-5 access, T-1 finite |
 | `test/checks-determinism.test.mjs` | create (T13) | `determinism`, `simPurity` |
@@ -1349,7 +1350,7 @@ git commit -m "feat(physics): contact and sensor events drained in Rapier order 
 **Interfaces:**
 - Consumes: the registry contract `collider(id) → { friction: √f, restitution, density }` (§4.2).
 - Produces:
-  - `shapeDesc(R, entry) → ColliderDesc` for `box` (`half`, optional `round` → Rapier `roundCuboid`, controller ruling for Rally's car hull), `sphere` (`r`; `'ball'` is not accepted, 3b ruling), `capsule` and `cylinder` (`halfHeight`, `r`, along the local y axis), `hull` (`points`, at least 4), `mesh` (`vertices`, `indices`). Throws `unknown collider shape '<s>'` and dimension errors (the World prefixes them).
+  - `shapeDesc(R, entry) → ColliderDesc` for `box` (`half`, optional `round` → Rapier `roundCuboid`, controller ruling for Rally's car hull), `sphere` (`r`; `'ball'` throws `unknown collider shape 'ball' (use 'sphere')`, 3b ruling), `capsule` and `cylinder` (`halfHeight`, `r`, along the local y axis), `hull` (`points`, at least 4), `mesh` (`vertices`, `indices`). Throws `unknown collider shape '<s>'` and dimension errors (the World prefixes them).
   - `materialFor(entry, overrides) → id`: `overrides[part]`, else `overrides['*']`, else `entry.material` (part defaults to `'body'`).
   - `applyMaterial(R, desc, m, density) → desc`: friction `m.friction` with `Multiply`, restitution `m.restitution` with `Max`, the given density.
 - Consumed by: `world.js` (spawn, heightfield, setMaterial).
@@ -1383,7 +1384,7 @@ test('each sidecar shape becomes the matching Rapier shape', () => withWorld(w =
 }));
 test('bad shapes throw before Rapier sees them', () => {
   assert.throws(() => shapeDesc(R, { shape: 'cone' }), /unknown collider shape 'cone'/);
-  assert.throws(() => shapeDesc(R, { shape: 'ball', r: 1 }), /unknown collider shape 'ball'/);
+  assert.throws(() => shapeDesc(R, { shape: 'ball', r: 1 }), /unknown collider shape 'ball' \(use 'sphere'\)/); // 3b ruling: a hint
   assert.throws(() => shapeDesc(R, { shape: 'box', half: [1, 1, 1], round: -0.1 }), /box round must be > 0/);
   assert.throws(() => shapeDesc(R, { shape: 'box', half: [1, 0, 1] }), /box half must be three sizes > 0/);
   assert.throws(() => shapeDesc(R, { shape: 'sphere', r: -1 }), /sphere r must be > 0 \(got -1\)/);
@@ -1451,6 +1452,7 @@ export function shapeDesc(R, c) {
       if (c.round !== undefined) return D.roundCuboid(c.half[0], c.half[1], c.half[2], positive(c.round, 'box round'));
       return D.cuboid(c.half[0], c.half[1], c.half[2]);
     case 'sphere': return D.ball(positive(c.r, 'sphere r'));
+    case 'ball': throw new Error("unknown collider shape 'ball' (use 'sphere')"); // 3b ruling: §4.4's example was wrong
     case 'capsule': return D.capsule(positive(c.halfHeight, 'capsule halfHeight'), positive(c.r, 'capsule r'));
     case 'cylinder': return D.cylinder(positive(c.halfHeight, 'cylinder halfHeight'), positive(c.r, 'cylinder r'));
     case 'hull': {
@@ -2321,6 +2323,28 @@ test('clear() with physics: a fresh Rapier world, owned frees before the old one
     step(w, 2);
   } finally { w.dispose(); }
 });
+test('world.heightfield forwards fixInternalEdges to Rapier (3h C2)', () => {
+  const flags = [];
+  const RR = { ...R, ColliderDesc: { __proto__: R.ColliderDesc, heightfield: (...a) => { flags.push(a[4]); return R.ColliderDesc.heightfield(...a); } } };
+  const w = createWorld(stubEngine(), { rapier: RR });
+  try {
+    const f = { nx: 2, nz: 2, cell: 1, heights: [0, 0, 0, 0], material: 'grass' };
+    w.heightfield({ ...f, fixInternalEdges: true }); w.heightfield(f);
+    assert.deepEqual(flags, [R.HeightFieldFlags.FIX_INTERNAL_EDGES, undefined]);
+  } finally { w.dispose(); }
+});
+test('despawn and dispose with physics: owned frees run before Rapier objects and the Rapier world go (3h C3)', () => {
+  const w = createWorld(stubEngine()), seen = [];
+  const a = w.spawn({ model: 'crate', body: 'dynamic' }), b = w.spawn({ model: 'crate', body: 'dynamic', at: [3, 0, 0] });
+  const ha = a.body.handle, hb = b.body.handle;
+  w.own(a, () => seen.push(['a', w.rapier.getRigidBody(ha) != null]));
+  w.own(b, () => seen.push(['b', w.rapier !== null && w.rapier.getRigidBody(hb) != null]));
+  w.own(() => seen.push(['world', w.rapier !== null]));
+  w.despawn(a);
+  w.dispose();
+  assert.deepEqual(seen, [['a', true], ['b', true], ['world', true]]);
+  assert.equal(w.rapier, null);
+});
 test('with a timer, stats.stepMs is the last Rapier step (#106); disposed Worlds ignore sys calls', () => {
   let t = 0;
   const w = createWorld(stubEngine(), { timer: () => (t += 2) });
@@ -2454,18 +2478,180 @@ and after `placer = createPlacer(...)`:
 - [ ] **Step 4: Run, expect PASS**
 
 Run: `$UNIT test/world-step.test.mjs test/world-entities.test.mjs test/world-bodies.test.mjs`
-Expected: PASS, 10 + 9 + 11 tests.
+Expected: PASS, 12 + 9 + 11 tests.
 
 - [ ] **Step 5: Mutation checks**
 
 1. Replace `if (!asleep || r.awake)` with `if (!asleep)`. Run `test/world-step.test.mjs`. If "the step a body falls asleep is read" FAILS, good. If it still passes, Rapier zeroes the velocity before integrating the sleeping step in this case; record that in the notes ("mutation not observable in 0.21.0") and keep the code and the test. Revert.
 2. Remove the `sleepers` loop. "a post spawned asleep on the ground stays asleep" FAILS. Revert; PASS.
+3. Drop `fixInternalEdges` from the `heightfieldDesc` call in `heightfield()`. "world.heightfield forwards fixInternalEdges" FAILS. Revert; PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/sim/world/world.js test/world-step.test.mjs
 git commit -m "feat(world): step pieces (swap, step, read, events), #2 re-sleep, digest, heightfield entity and audit"
+```
+
+---
+## Task 10b: Part transforms (`partXf`) for view sync (3g Integrator request 7)
+
+**Files:**
+- Modify: `src/sim/world/world.js`
+- Create: `test/world-parts.test.mjs`
+
+**Interfaces:**
+- Consumes: Tasks 9 and 10.
+- Produces (added to the World; 3g's Task 13b and 3h's Task 6b consume them):
+  - Spawn desc key `partXf: [name, …]` (consumed, not copied) and `world.add(e, 'partXf', [name, …])`: the entity must have an `xf` (a body or `xf: true`). The World sets `e.partXf = { [name]: { p: { x, y, z }, q: { x, y, z, w } } }`, identity at first, in the given order. These are the **current** step's part poses; sim code writes them every step (Rally's `rally.vehicle`, 3h's vehicle kit). A second `add` merges: new names are added, existing ones keep their values. `world.remove(e, 'partXf')` drops them.
+  - `lh.world.swap` (`world.sys.swap`) copies curr → prev for every part of every entity with `partXf`, right after the pose pool, in id order. So prev is always last step's curr, exactly like `e.xf` (copy, not flip; the World keeps on stepping parts during a scene load, as it does poses).
+  - `world.partXfPrev(e, name, out) → out`: fills `out = { p: { x, y, z }, q: { x, y, z, w } }` with the previous step's part pose. An unknown name throws `world.partXfPrev: entity <id> has no part '<name>'`.
+  - What a part pose means (the frame, which model node it moves) is 3g's (view sync Task 13b). The World only stores and swaps it. It is view data derived from sim state, so it is **not** in `world.digest()` or the finite check, and `place` does not touch it (part poses are body-relative, so a teleport does not smear them).
+- Decision: names are plain strings (the baked part names, 3d), checked only for shape here; whether the model has them is 3g's check, at draw time.
+
+- [ ] **Step 1: Write the failing test** `test/world-parts.test.mjs`:
+
+```js
+// partXf: per-part poses with prev/curr, swapped by lh.world.swap (3g Integrator request 7: Rally's wheels drawn by view sync).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createWorld } from '../src/sim/world/world.js';
+import { stubEngine } from './fixtures/phys/engine.js';
+
+const step = (w, n = 1) => { for (let i = 0; i < n; i++) { w.sys.swap(); w.sys.step(); w.sys.read(); w.sys.events(); } };
+const WHEELS = ['wheel-front-left', 'wheel-front-right'];
+
+test('partXf: identity parts; writes land in curr; swap copies curr to prev; partXfPrev fills out; with("partXf") lists it', () => {
+  const w = createWorld(stubEngine());
+  try {
+    const e = w.spawn({ tags: ['car'], xf: true, partXf: WHEELS }), out = { p: { x: 9, y: 9, z: 9 }, q: { x: 9, y: 9, z: 9, w: 9 } };
+    assert.deepEqual(Object.keys(e.partXf), WHEELS);
+    assert.deepEqual(e.partXf['wheel-front-left'], { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
+    assert.equal(w.partXfPrev(e, 'wheel-front-left', out), out);
+    assert.deepEqual(out, { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
+    const fl = e.partXf['wheel-front-left'];
+    fl.p.y = -0.2; fl.q.x = 0.6; fl.q.w = 0.8;
+    assert.equal(w.partXfPrev(e, 'wheel-front-left', out).p.y, 0, 'a write lands in curr only');
+    step(w);
+    assert.deepEqual(w.partXfPrev(e, 'wheel-front-left', out), { p: { x: 0, y: -0.2, z: 0 }, q: { x: 0.6, y: 0, z: 0, w: 0.8 } });
+    assert.equal(w.partXfPrev(e, 'wheel-front-right', out).q.w, 1);
+    assert.deepEqual(w.with('partXf'), [e]);
+    assert.throws(() => w.partXfPrev(e, 'wheel-x', out), /^Error: world\.partXfPrev: entity 1 has no part 'wheel-x'$/);
+  } finally { w.dispose(); }
+});
+
+test('partXf: add merges names and keeps values; remove drops it; despawn stops the swap and keeps the last values', () => {
+  const w = createWorld(stubEngine());
+  try {
+    const e = w.spawn({ tags: ['cart'], xf: true }), q = w.with('partXf'), out = { p: {}, q: {} };
+    w.add(e, 'partXf', ['wheel-front-left']); e.partXf['wheel-front-left'].p.x = 1;
+    w.add(e, 'partXf', WHEELS);
+    assert.deepEqual(Object.keys(e.partXf), WHEELS); assert.equal(e.partXf['wheel-front-left'].p.x, 1); assert.deepEqual(q, [e]);
+    step(w); assert.equal(w.partXfPrev(e, 'wheel-front-left', out).p.x, 1);
+    w.remove(e, 'partXf'); assert.equal(e.partXf, undefined); assert.deepEqual(q, []);
+    assert.throws(() => w.partXfPrev(e, 'wheel-front-left', out), /has no part 'wheel-front-left'/);
+    const f = w.spawn({ tags: ['cart'], xf: true, partXf: ['wheel-front-left'] }), last = f.partXf['wheel-front-left'];
+    last.p.z = 3; w.despawn(f); step(w);
+    assert.equal(f.partXf['wheel-front-left'], last); assert.equal(last.p.z, 3); assert.deepEqual(q, []);
+  } finally { w.dispose(); }
+});
+
+test('partXf refuses a bodiless entity without xf and bad names, before an id is taken', () => {
+  const w = createWorld(stubEngine());
+  try {
+    assert.throws(() => w.spawn({ tags: ['m'], partXf: WHEELS }), /world: 'm' partXf needs an xf \(a body or xf: true\)/);
+    for (const bad of [[], 'wheel', [''], [3], ['a', 'a']]) assert.throws(() => w.spawn({ tags: ['m'], xf: true, partXf: bad }), /world: 'm' partXf must be an array of distinct part names/);
+    const m = w.spawn({ tags: ['m'] });
+    assert.equal(m.id, 1);
+    assert.throws(() => w.add(m, 'partXf', WHEELS), /world\.add: 'partXf' needs an xf/);
+    assert.throws(() => w.add(w.spawn({ tags: ['n'], xf: true }), 'partXf', ['a', 'a']), /world\.add: 'partXf' must be an array of distinct part names/);
+  } finally { w.dispose(); }
+});
+```
+
+- [ ] **Step 2: Run, expect FAIL**
+
+Run: `$UNIT test/world-parts.test.mjs`. Expected: FAIL (`e.partXf` is the desc's array, copied as a game field; `w.partXfPrev is not a function`).
+
+- [ ] **Step 3: Implement** in `src/sim/world/world.js`:
+  - Add `'partXf'` to `DESC_KEYS`. Below `hasParts` add:
+
+```js
+const partNames = v => Array.isArray(v) && v.length > 0 && v.every(n => typeof n === 'string' && n !== '') && new Set(v).size === v.length;
+const partPose = () => ({ p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
+```
+
+  - In `createWorld`, next to `slots`: `const parted = []; // entities with partXf, in id order (lh.world.swap copies their parts)`. `record(...)` gains `parts: null` (an array of `{ name, cur, prev }`, made at spawn or add).
+  - Add, before `spawn`:
+
+```js
+  // 3g request 7: per-part poses (e.partXf[name], curr, written by sim code) with a hidden prev, copied by swap
+  function setParts(e, r, names) {
+    if (!r.parts) { r.parts = []; e.partXf = {}; insert(parted, e); }
+    for (const name of names) {
+      if (Object.hasOwn(e.partXf, name)) continue;
+      const cur = partPose(); e.partXf[name] = cur; r.parts.push({ name, cur, prev: partPose() });
+    }
+  }
+```
+
+  - In `spawn`, with the other pre-id checks: `if (desc.partXf !== undefined) { if (!partNames(desc.partXf)) fail('partXf must be an array of distinct part names'); if (kind === BODILESS && desc.xf !== true) fail('partXf needs an xf (a body or xf: true)'); }`. After the slot block: `if (desc.partXf !== undefined) setParts(e, r, desc.partXf);` (before `register`, so queries see it).
+  - In `add`, beside the `xf` branch:
+
+```js
+    if (part === 'partXf') {
+      if (!partNames(value)) throw new Error("world.add: 'partXf' must be an array of distinct part names");
+      if (r.slot < 0) throw new Error("world.add: 'partXf' needs an xf (a body or xf: true)");
+      const had = !!r.parts; setParts(e, r, value);
+      if (had) return e;
+    } else if (part === 'xf') {
+```
+
+    (the existing `if (part === 'xf') { … } else { … }` becomes the tail of this chain).
+  - In `remove`, beside the `xf` branch: `if (part === 'partXf') { r.parts = null; drop(parted, e); }`.
+  - In `forget`: `if (r.parts) { r.parts = null; drop(parted, e); }` (the entity keeps `e.partXf` with its last values). In `teardown`: `parted.length = 0;`.
+  - `sys.swap` becomes:
+
+```js
+    swap() {
+      if (disposed) return;
+      pool.swap(slots);
+      for (let i = 0; i < parted.length; i++) {
+        const ps = parted[i][INTERNAL].parts;
+        for (let k = 0; k < ps.length; k++) {
+          const c = ps[k].cur, p = ps[k].prev;
+          p.p.x = c.p.x; p.p.y = c.p.y; p.p.z = c.p.z; p.q.x = c.q.x; p.q.y = c.q.y; p.q.z = c.q.z; p.q.w = c.q.w;
+        }
+      }
+    },
+```
+
+  - In the `api` literal, after `xfPrev`:
+
+```js
+    partXfPrev(e, name, out = partPose()) {
+      const ps = mine(e, 'partXfPrev').parts;
+      if (ps) for (let k = 0; k < ps.length; k++) if (ps[k].name === name) {
+        const p = ps[k].prev; out.p.x = p.p.x; out.p.y = p.p.y; out.p.z = p.p.z; out.q.x = p.q.x; out.q.y = p.q.y; out.q.z = p.q.z; out.q.w = p.q.w;
+        return out;
+      }
+      throw new Error(`world.partXfPrev: entity ${e.id} has no part '${name}'`);
+    },
+```
+
+  `mine` throws for a despawned entity (its parts no longer swap). The lookup is a short linear scan (a car has four parts) and allocates nothing.
+
+- [ ] **Step 4: Run, expect PASS**
+
+Run: `$UNIT test/world-parts.test.mjs test/world-step.test.mjs test/world-entities.test.mjs`. Expected: PASS, 3 + 12 + 9 tests.
+
+- [ ] **Step 5: Mutation check.** Delete the parts loop from `sys.swap`. The first test FAILS (prev stays identity). Revert; PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/sim/world/world.js test/world-parts.test.mjs
+git commit -m "feat(world): partXf part poses with prev/curr, swapped by lh.world.swap (3g request 7)"
 ```
 
 ---
@@ -2482,12 +2668,13 @@ git commit -m "feat(world): step pieces (swap, step, read, events), #2 re-sleep,
 - Consumes: `createWorld` (Tasks 9–10), `checkRapier`, `PINNED_DEFAULTS` (Task 2), `createGroups` (Task 3); 3i's optional `engine.netPart` (`attach(world)`).
 - Produces:
   - `checkPhysics(physics, fail)`: `physics.gravity` is `[x, y, z]`, every `physics.params` key is pinned, `physics.groups` passes `createGroups`; failures read `defineGame: physics.<field> …`.
-  - `installWorld(engine, { timer }) → seat` with `seat.current` (the main scene's World or `undefined`), `seat.open()`, `seat.close()`, `seat.digest()` (`world.digest()` while the World has entities, else `undefined`). It runs `checkRapier(game.physics?.rapier)` and adds `lh.world.swap` (`input.apply`, before `lh.ui`), `lh.physics.step`, `lh.physics.read` (after step), `lh.physics.events` (after read), all in `physics.world`. `open()` calls `engine.netPart?.attach(world)` when 3i has installed it.
+  - `installWorld(engine, { timer }) → seat` with `seat.current` (the main scene's World or `undefined`), `seat.open()`, `seat.close()`, `seat.digest()` (`world.digest()` while the World has entities, else `undefined`). It runs `checkRapier(game.physics?.rapier)` and adds `lh.world.swap` (`input.apply`, before `lh.ui`), `lh.physics.step`, `lh.physics.read` (after step), `lh.physics.events` (after read), all in `physics.world`. `open()` calls `engine.netPart?.attach(world)` when 3i has installed it. While a scene loads (`engine.loading.active`, S-6) `lh.physics.step` does not step Rapier and `lh.physics.read`/`lh.physics.events` skip with it (CI-16 ruling, S-3); `lh.world.swap` keeps running, so prev catches up with curr and the view holds still.
   - In `engine.js`: `createEngine(game, { …, timer = null })`; `ctx.world` (getter, non-enumerable, main scene and overlays); `engine.world` (getter); `engine.builtin(type, fn) → off`, `fn(engine, data, mainCtx)` runs before the game's handler and the scene handlers, and `commands.handles(type)` counts it; `state()` gains `world: { n, sum }` only while the World has entities; `defineGame` runs `checkPhysics` when `physics` is given.
 - Decisions (judgment):
   1. A World is created for every main scene, physics or not (a no-physics World holds bodiless entities, §4.1). It is opened **before** the scene's `enter` (and before 3a's `enter(engine, view, args)` view logic, which is not in this file) and closed in `exit`'s `finally`, after the scene's `exit` hook. A main `enter` that throws closes its World.
   2. `ctx.world` is a getter onto the seat, so an overlay always sees the current main World.
   3. One `builtin` per command type; a second registration throws.
+  4. **Physics pauses while a scene loads** (contract-issues CI-16, S-3). The pause is decided once per step in `lh.physics.step` from `engine.loading.active` (one load in the engine at a time, S-6, so any scene's load pauses it); `read` and `events` follow that decision. So the step that asks for a load does not step Rapier, every step of `hold`/`settle` is frozen, and the first step after `then` ran steps again (a load without `settle` finishes inside `pre`, so its build step already steps). `read` must skip too: an unstepped read would run the #2 re-sleep loop and clear `sleepers` before their first real step, so bodies a load build spawns asleep would wake. Kit and game systems in `physics.world` and `pre`/`post` still run (only the scene's `step` hook is suspended, S-6); the `world` digest does not move while paused.
 
 - [ ] **Step 1: Create the physics game fixture** `test/fixtures/phys/game.js`:
 
@@ -2597,6 +2784,38 @@ test('a pausing overlay freezes physics; prev catches up with curr so the view h
   e.stepN(3);
   assert.equal(c.xf.p.y, y); assert.equal(e.world.xfPrev(c).p.y, y);
 });
+test('the World does not step while a scene loads; prev catches up; physics resumes when the load ends (S-3, CI-16)', () => {
+  let n = 0, t = 0;
+  const g = physGame({ build: crate, tick: (e, dt, ctx) => { if (++n === 3) ctx.load({ hold: 0.25, build() {} }); } });
+  const e = createEngine(g, { timer: () => (t += 0.5) }), w = e.world, c = w.get(1);
+  e.stepN(3);
+  assert.equal(e.loading.active, true);
+  assert.equal(w.stats.stepMsTotal, 1, 'two Rapier steps: the step that asked for the load does not step');
+  const y = c.xf.p.y, d = e.state().world.sum;
+  e.stepN(5);
+  assert.equal(c.xf.p.y, y); assert.equal(w.xfPrev(c).p.y, y, 'swap still runs: the view holds still');
+  assert.equal(w.stats.stepMsTotal, 1); assert.equal(e.state().world.sum, d);
+  let k = 0; while (e.loading.active && k++ < 60) e.stepN(1);
+  assert.equal(e.loading.active, false);
+  const total = w.stats.stepMsTotal; e.stepN(2);
+  assert.equal(w.stats.stepMsTotal, total + 1); assert.ok(c.xf.p.y < y);
+});
+test('a load build that rebuilds in place: a body spawned asleep stays asleep when physics resumes (#2, CI-16)', () => {
+  let n = 0, release;
+  const rebuild = (en, c) => {
+    c.world.clear();
+    c.world.spawn({ tags: ['ground'], colliders: [{ shape: 'box', half: [20, 0.5, 20], p: [0, -0.5, 0], material: 'gravel' }], groups: { member: ['ground'] } });
+    c.world.spawn({ tags: ['post'], body: { type: 'dynamic', sleep: true }, colliders: [{ shape: 'box', half: [0.06, 0.6, 0.045], material: 'wood' }], at: [0, 0.6, 0], groups: { member: ['prop'] } });
+    release = en.block('rebuild'); // holds the settle, so physics stays paused for steps after the build
+  };
+  const e = createEngine(physGame({ tick: (en, dt, ctx) => { if (++n === 2) ctx.load({ settle: true, build: rebuild }); } }));
+  e.stepN(5); // step 2 asks, step 3 builds, steps 3-5 wait on the block
+  assert.equal(e.loading.phase, 'settle');
+  release(); e.stepN(1);
+  assert.equal(e.loading.active, false);
+  e.stepN(10);
+  assert.equal(e.world.get(2).body.isSleeping(), true, 'the first real step after the load re-slept it');
+});
 test('builtin handlers run before the game handler, which still runs (3i seam)', () => {
   const log = [];
   const e = createEngine(physGame({ commands: { 'net.frame': (en, d) => { log.push(['game', d.n]); } } }));
@@ -2666,7 +2885,7 @@ export function checkPhysics(p, fail) {
   try { createGroups(p.groups ?? []); } catch (err) { fail(err.message.replace(/^physics: /, 'physics.groups: ')); }
 }
 
-export function installWorld(engine, { timer = null } = {}) {
+export function installWorld(engine, { timer = null } = {}) { // engine.loading (S-6) is read per step, so the engine object must exist
   checkRapier(engine.game.physics?.rapier ?? null); // §4.1: an uninitialised Rapier fails createEngine, not the first spawn
   const seat = {
     current: undefined,
@@ -2680,9 +2899,12 @@ export function installWorld(engine, { timer = null } = {}) {
     digest() { const w = seat.current; return w !== undefined && w.stats.entities > 0 ? w.digest() : undefined; },
   };
   engine.system('lh.world.swap', () => { const w = seat.current; if (w !== undefined) w.sys.swap(); }, { stage: 'input.apply', before: ['lh.ui'] });
-  engine.system('lh.physics.step', () => { const w = seat.current; if (w !== undefined) w.sys.step(); }, { stage: 'physics.world' });
-  engine.system('lh.physics.read', () => { const w = seat.current; if (w !== undefined) w.sys.read(); }, { stage: 'physics.world', after: ['lh.physics.step'] });
-  engine.system('lh.physics.events', () => { const w = seat.current; if (w !== undefined) w.sys.events(); }, { stage: 'physics.world', after: ['lh.physics.read'] });
+  // CI-16 (S-3): no Rapier step while a scene loads; read and events follow this step's decision (an unstepped read
+  // would run the #2 re-sleep early). swap still runs, so prev catches up with curr and the view holds still.
+  let stepped = false;
+  engine.system('lh.physics.step', () => { const w = seat.current; stepped = w !== undefined && !engine.loading.active; if (stepped) w.sys.step(); }, { stage: 'physics.world' });
+  engine.system('lh.physics.read', () => { if (stepped) seat.current.sys.read(); }, { stage: 'physics.world', after: ['lh.physics.step'] });
+  engine.system('lh.physics.events', () => { if (stepped) seat.current.sys.events(); }, { stage: 'physics.world', after: ['lh.physics.read'] });
   return seat;
 }
 ```
@@ -2793,7 +3015,7 @@ If the integrator has not approved it, leave the line as is, let that one test f
 - [ ] **Step 7: Run, expect PASS**
 
 Run: `$UNIT test/world-engine.test.mjs`
-Expected: PASS, 13 tests.
+Expected: PASS, 15 tests.
 Then the whole engine suite: `$UNIT test/`
 Expected: PASS, every existing test unchanged (games without `physics` behave as before; `state()` gains nothing without entities). Record the count in the notes.
 
@@ -2801,11 +3023,13 @@ Expected: PASS, every existing test unchanged (games without `physics` behave as
 
 Temporarily move `if (i === 0) worlds.close();` out of `exit` into `doGo` after `enter(name, a)`. Run `test/world-engine.test.mjs`: "leaving the main scene disposes its World" FAILS (the old World is closed after the new one opens and the seat points at the wrong one). Revert; PASS.
 
+Then the scene-load pause (CI-16): (1) drop `&& !engine.loading.active` from `lh.physics.step`: "the World does not step while a scene loads" FAILS; (2) make `lh.physics.read` ignore `stepped` (`const w = seat.current; if (w !== undefined) w.sys.read();`): "a load build that rebuilds in place" FAILS (the post wakes). Revert each; PASS.
+
 - [ ] **Step 9: Commit**
 
 ```bash
 git add src/sim/world/install.js src/core/engine.js test/fixtures/phys/game.js test/world-engine.test.mjs test/engine.test.mjs
-git commit -m "feat(engine): scene-owned World, lh.world/lh.physics systems, builtin seam, timer and state digest (S-3, #106)"
+git commit -m "feat(engine): scene-owned World, lh.world/lh.physics systems, physics paused during loads, builtin seam, timer and state digest (S-3, #106)"
 ```
 
 ---
@@ -3122,6 +3346,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { zeroAlloc } from '../testing/checks.js';
 import { physGame } from './fixtures/phys/game.js';
+import { actions, axis } from '../src/core/actions.js';
 
 const scene = (e, ctx) => {
   const w = ctx.world, r = e.rng('alloc');
@@ -3146,6 +3371,13 @@ test('zeroAlloc catches a system that keeps what it allocates', { timeout: 30000
   const r = zeroAlloc(physGame({ build: scene, tick: (e, dt, ctx) => { tick(e, dt, ctx); kept.push(new Float64Array(16)); } }), { steps: 3000 });
   assert.equal(r.ok, false);
   assert.ok(r.growth > 64 * 1024, `${r.growth}`);
+});
+test('zeroAlloc takes start args and an input(step) policy over warm and measured steps (3j #5 ruling)', () => {
+  const got = [], asked = [];
+  const game = physGame({ actions: actions({ push: axis() }), build: (e, ctx) => { scene(e, ctx); got.push(ctx.args?.crates); }, tick });
+  const r = zeroAlloc(game, { warm: 10, steps: 50, args: { crates: 4 }, input: step => { asked.push(step); return { push: 0 }; } });
+  assert.equal(r.steps, 50); assert.deepEqual(got, [4]);
+  assert.deepEqual(asked, Array.from({ length: 60 }, (_, i) => i), 'called with the step about to run');
 });
 ```
 
@@ -3191,7 +3423,7 @@ export const checks = { determinism, simPurity, zeroAlloc };
 - [ ] **Step 4: Run, expect PASS**
 
 Run: `$UNIT test/checks-alloc.test.mjs`
-Expected: PASS, 2 tests. If the clean run reports growth over 64 KB, do not raise the limit: find what grows (`--heapsnapshot-near-heap-limit` is not needed; compare two `v8.getHeapSnapshot()` dumps around the steps in a scratch script) and fix it in engine code, or report it as a finding with numbers if it is inside Rapier's JS wrappers.
+Expected: PASS, 3 tests. If the clean run reports growth over 64 KB, do not raise the limit: find what grows (`--heapsnapshot-near-heap-limit` is not needed; compare two `v8.getHeapSnapshot()` dumps around the steps in a scratch script) and fix it in engine code, or report it as a finding with numbers if it is inside Rapier's JS wrappers.
 
 - [ ] **Step 5: Commit**
 
@@ -3511,8 +3743,8 @@ git commit -m "feat(world): the base material library is the default registry (�
 ## Done when
 
 - Every new file passes under `$UNIT`:
-  - Task 1: `physics-fixtures` (4); Task 2: `physics-rapier` (8); Task 3: `physics-groups` (4); Task 4: `physics-heightfield` (3); Task 5: `world-pool` (6); Task 6: `world-place` (6); Task 7: `physics-events` (4); Task 8: `physics-colliders` (6); Task 9: `world-entities` (9), `world-bodies` (11); Task 10: `world-step` (10); Task 11: `world-engine` (13); Task 12: `world-headless` (5); Task 13: `checks-determinism` (5); Task 14: `checks-alloc` (2); Task 15: `checks-materials` (4); Task 16: `world-replay` (4); Task 17: `world-base-materials` (3).
-  - 107 new tests, give or take the counts the implementer records per task in the notes.
+  - Task 1: `physics-fixtures` (4); Task 2: `physics-rapier` (8); Task 3: `physics-groups` (4); Task 4: `physics-heightfield` (3); Task 5: `world-pool` (6); Task 6: `world-place` (6); Task 7: `physics-events` (4); Task 8: `physics-colliders` (6); Task 9: `world-entities` (9), `world-bodies` (11); Task 10: `world-step` (12); Task 10b: `world-parts` (3); Task 11: `world-engine` (15); Task 12: `world-headless` (5); Task 13: `checks-determinism` (5); Task 14: `checks-alloc` (3); Task 15: `checks-materials` (4); Task 16: `world-replay` (4); Task 17: `world-base-materials` (3).
+  - 115 new tests, give or take the counts the implementer records per task in the notes.
 - The whole engine suite passes: `$UNIT test/`, including `test/engine.test.mjs` with Integrator request 1 applied, `test/purity.test.mjs` (now scanning `src/sim/world` and `src/sim/physics`), and every existing golden and replay test unchanged.
 - No file under `src/` imports `@dimforge/rapier3d-compat`: `grep -rn "rapier3d" src/` prints only comments.
 - The notes file has the per-task table, every "Contract issue" below with what was done, and the field note candidates.
@@ -3538,16 +3770,18 @@ File: `docs/plans/2026-10-13-phase-3c-world-notes.md` (created in Task 1). Secti
 2. **Exports at the Wave A merge** (§3.2): `src/index.sim.js` gains `export { createWorld } from './sim/world/world.js';` and `export { heightfieldDesc } from './sim/physics/heightfield.js';`; `testing/index.js` gains `export { checks } from './checks.js';`.
 3. **Task 17 if 3b merges after 3c**: the base-library default registry in `src/sim/world/world.js` and `testing/checks.js`, with its tests, at the Wave A merge.
 4. **Cross-plan (3e):** `boot(game, view, { timer })` passes `timer` through to `createEngine` (§4.5 "Timing"); 3c accepts it in `createEngine` only.
-5. **Spec and field notes at 0.8.0:** spec T-1 (finite over pool and velocities is built), E-10 (`e.xf.slot`, copy-not-flip), R-6 (`lh.world.swap`, `lh.physics.*`); field notes #1, #2, #28, #64, #106 statuses from the notes file.
+5. **Cross-plan (3b):** 3b's `validateCollider`/`validateSidecar` must accept `round` (> 0) on a `box` (3j #1 ruling); 3c's `shapeDesc` builds it.
+6. **Spec and field notes at 0.8.0:** spec T-1 (finite over pool and velocities is built), E-10 (`e.xf.slot`, copy-not-flip), R-6 (`lh.world.swap`, `lh.physics.*`), S-3 (the World does not step while a scene loads); field notes #1, #2, #28, #64, #106 statuses from the notes file.
 
 ## Contract issues
 
-- **Contract issue: default groups.** §4.4 says `groups` defaults to "member [], filter all". In Rapier a membership of 0 touches nothing. 3c treats an omitted `member` or `filter` as every group (Rapier's own default); an explicit `member: []` still means none.
+- **Contract issue: default groups.** §4.4 says `groups` defaults to "member [], filter all". In Rapier a membership of 0 touches nothing. 3c treats an omitted `member` or `filter` as every group (Rapier's own default); an explicit `member: []` still means none (controller ruling; Task 3). 3h's `rayGroups.member: []` = all applies to its ray filter only (3h documents it); colliders follow 3c.
+- **Contract issue: physics pauses during a scene load** (CI-16 ruling, S-3). While `engine.loading.active`, `lh.physics.step` does not step Rapier and `read`/`events` skip with it; `lh.world.swap` still runs (prev catches up with curr). Task 11, decision 4 and two `world-engine` tests.
 - **Contract issue: the view needs each entity's pool slot.** §4.4 gives `world.xf = { pool, stride }` but no way to find an entity's slot. 3c adds a read-only `e.xf.slot`; 3g reads `world.xf.pool[e.xf.slot * 14 + …]` (prev at +0, curr at +7) and must re-read `world.xf.pool` each frame (it is replaced when the pool grows).
 - **Contract issue: raw colliders in events.** `contact.a`/`b`, `materials[i]`, `sensor.sensor`/`other` are `null` for a collider no entity owns.
 - **Contract issue: `body.lock: { x, y, z }`** is read as per-axis rotation locks (`true` = locked); `{ rot: true }` locks all rotations. Translation locks stay raw Rapier (L-1).
 - **Contract issue: colliders without `body`** sit on a fixed body (so `place`, `xf` and `entityOf` behave the same for static scenery).
-- **Contract issue: inline shapes.** `'sphere'` only (§4.4's example `'ball'` is wrong, 3b ruling); `box` takes an optional `round` (Rapier `roundCuboid`, controller ruling for Rally's hull).
+- **Contract issue: inline shapes.** `'sphere'` only (§4.4's example `'ball'` is wrong, 3b ruling; `'ball'` throws `unknown collider shape 'ball' (use 'sphere')`); `box` takes an optional `round` (Rapier `roundCuboid`, controller ruling 3j #1 for Rally's hull; Task 8).
 - **Contract issue: additive World members.** `world.engine` (3h), `world.net` (writable slot, 3i), `world.own(fn)` World-scoped frees on clear/dispose (3h) besides `own(e, fn)`, `world.onSpawn`/`onDespawn`, `world.dispose`/`disposed`, `world.sys` (engine-internal step pieces), `world.audit()` (stands in for "flagged under ?debug": the sim has no flags), `world.with()` with no parts = every entity, at most 4 parts. `world.net?.guard(op, eOrDesc, value)` runs on spawn (with the desc) and despawn of entities with a `net` part and on `add`/`remove` of `net`, never from `clear()`; `installWorld` calls `engine.netPart?.attach(world)` for each new World (3i's seams).
 - **Contract issue: `checks.zeroAlloc` without `--expose-gc`** enables GC in-process (`v8.setFlagsFromString` + `vm`) instead of a child process: the game object cannot cross a process boundary.
 - **Contract issue: `checks.materials(game, { inline })`.** Inline colliders and `world.heightfield` materials are passed by the caller; the check cannot see runtime calls (a missing one also throws at spawn).
@@ -3555,4 +3789,5 @@ File: `docs/plans/2026-10-13-phase-3c-world-notes.md` (created in Task 1). Secti
 - **Contract issue: `read` after sleep.** curr is written for bodies awake now or at the previous read (the overview says non-sleeping only), so the step a body falls asleep is not lost.
 - **Contract issue: `stats.stepMs`/`stepMsTotal` are 0 without a timer** (not absent).
 - **Contract issue: `add`/`remove` of `xf`** is allowed on bodiless entities (allocates or frees a slot); `id`, `tags`, `model`, `body`, `colliders`, `sockets`, `heightfield` cannot be added or removed.
+- **Contract issue: part poses for view sync** (3g Integrator request 7, user ruling 2026-10-14: Rally's car drawn by the engine). `partXf` (desc key and `add`/`remove`), its swap in `lh.world.swap` and `world.partXfPrev(e, name, out)` are additive (Task 10b). Not in the digest.
 - **Contract issue: `place` forms.** `q` is `[x, y, z, w]` (also in `spawn`); `place` returns `e`; `rel` without `yaw`/`q` takes the other entity's rotation.

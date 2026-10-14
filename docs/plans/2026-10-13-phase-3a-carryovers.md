@@ -10,7 +10,7 @@
 - #108 a game `reset()` hook that `createEngine` calls first;
 - #109 `bindGesture` measures holds and taps on the pointer events' own clock;
 - the G-E2 parked minors (domAsserts guard gaps, `setup2` placement);
-- the spec write-up of deltas D1–D9 plus this plan's own amendments (integrator-executed, gated on the user's approval).
+- the spec write-up of deltas D1–D9 plus this plan's own amendments (integrator-executed at the 3a merge; the user approved D1–D9 on 2026-10-14).
 
 **Architecture:**
 - Every change is small and local to the file that owns the behaviour: `src/core/engine.js` (#95, #105 sim side, #108), `src/view/boot.js` (#105 view side), `src/view/gesture.js` (#109), `testing/headless.js` (#95 pass-through, #100), `testing/playwright.js` (#100, #107), `src/view/hook.js` (two pass-throughs, see Contract issue 1).
@@ -19,7 +19,7 @@
 
 **Tech Stack:** Node 22 ESM, `node:test`, happy-dom 20 (view unit tests), playwright-core 1.64 with SwiftShader Chromium (browser tests). No three.js or Rapier code is touched.
 
-**Spec:** `docs/spec.md` plus `docs/plans/2026-10-13-phase-3-overview.md` (binding; §2 deltas D1–D9 are approved amendments once the user signs them off, §9.1). Requirement IDs: R-6, S-1, S-2, T-5, T-9, T-17, T-20, I-2, D-4, §8.2. Field notes #95, #100, #103, #105, #107, #108, #109.
+**Spec:** `docs/spec.md` plus `docs/plans/2026-10-13-phase-3-overview.md` (binding; §2 deltas D1–D9 are approved amendments, signed off by the user 2026-10-14). Requirement IDs: R-6, S-1, S-2, T-5, T-9, T-17, T-20, I-2, D-4, §8.2. Field notes #95, #100, #103, #105, #107, #108, #109.
 
 **Base:** engine branch `phase-3` (8744038 or the later plan-docs commit). Worktree `~/projects/four43/lion-hawk-engine-3a` on branch `phase-3-carryovers`. The integrator merges it into `phase-3` with `--no-ff` and bumps to 0.7.3. Every other engine branch is cut from `phase-3` after that merge.
 
@@ -63,7 +63,7 @@ GLOBAL CONSTRAINTS (phase 3)
 - 3a runs alone, before any other phase 3 branch exists. Keep diffs minimal in `engine.js`, `boot.js` and `headless.js`, because 3c and 3e fork from them.
 - No new public exports, no version bump, no CHANGELOG or spec edits by the implementer. Task 10 is executed by the integrator (see its header).
 - `engine.state()`, checksums, tape format (`v: 1`) and replay ops are unchanged. A no-op `overlay(..., { once: true })` is never recorded.
-- The three files outside the §5.2 "Owns" column that this plan edits are listed under Contract issues 1–3. Touch nothing else.
+- Files beyond the §5.2 "Owns" column: `src/view/hook.js` is added to 3a's Owns by ruling (Contract issue 1); `test/gesture.test.mjs` and `test/uiDom.test.mjs` are accepted one-off edits (Contract issues 2–3). Touch nothing else.
 - Shorthands used in the steps (`WT=/home/smiller/projects/four43/lion-hawk-engine-3a`):
   - **UNIT** `<files>` = `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=300 --working-directory=$WT -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 <files>`
   - **BROWSER** `<file>` = `flock /tmp/claude-1000/lion-hawk-browser.lock systemd-run --user --wait -P -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 --working-directory=$WT -E NODE_OPTIONS=--max-old-space-size=2048 node --test --test-concurrency=4 <file>`
@@ -1016,9 +1016,9 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
 
 ---
 
-### Task 10: Spec write-up: D1–D9 and the 3a amendments (integrator; gated on the user's approval)
+### Task 10: Spec write-up: D1–D9 and the 3a amendments (integrator; D1–D9 approved 2026-10-14)
 
-**Executed by the integrator** on `phase-3` at the 3a merge (overview §2: "the integrator writes them into `spec.md` in 3a once the user approves"). `docs/spec.md` is integrator-only (Global Constraint 9), so the 3a implementer does not run this task. If the user has not yet approved D1–D9 (overview §9.1), the integrator writes only part B and leaves part A for the approval. The exact text is below, so the integrator does not have to re-derive it.
+**Executed by the integrator** on `phase-3` at the 3a merge (overview §2: "the integrator writes them into `spec.md` in 3a once the user approves"). `docs/spec.md` is integrator-only (Global Constraint 9), so the 3a implementer does not run this task. Part A (D1–D9) and part B (3a's amendments) are written together at the 3a merge: the user approved D1–D9 on 2026-10-14 (contract-issues "User decisions (2026-10-14)"), so part A is no longer gated. The exact text is below, so the integrator does not have to re-derive it.
 
 **Files:** `docs/spec.md`.
 
@@ -1038,7 +1038,7 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
   - **[A-1]**. Replace with: "Input is `assets/models/*.glb`. Output goes to the game's `baked/` directory, which is committed: optimised GLBs in `baked/models/`, optional `<model>.anim.json` tables beside them, one `baked/phys.json` holding every model's sidecar keyed by model id (the sim imports it as JSON), and `baked/manifest.json` (D1, D2)."
   - **[A-5]**. Append: "All of a game's sidecars live in `baked/phys.json`, `{ v, engine, materials: <registry hash>, models: { <id>: sidecar } }` (D2)."
   - **[A-6]**, first bullet. Replace with: "Nodes named `col-box`, `col-sphere`, `col-capsule`, `col-cylinder`, `col-hull` or `col-mesh` are colliders. They are hidden at runtime and take the material of their nearest ancestor part (its largest-area material); a node's `extras.material` overrides it (D2)."
-  - **[B-3]**. Replace with: "**Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page (D1)."
+  - **[B-3]**. Replace with: "**Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page: the build writes the bundle at the template's bare `<!--APP-->` marker as an inline `<script type="module">` (D1)."
 
 - [ ] **Step 3: Part B, the 3a amendments (0.7.3):**
   - **[S-1]**, view half. Replace `{ enter(engine, view), exit(engine, view), frame(engine, alpha, view) }` with `{ enter(engine, view, args), exit(engine, view), frame(engine, alpha, view) }`, and add: "`args` is the scene's args: `engine.scene.args` for the main scene, `engine.scene.overlayArgs(name)` for an overlay, read when the half enters. Treat it as read-only (#105)."
@@ -1049,9 +1049,9 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
   - **[T-17]**. In the stepping bullet, replace "`untilLoaded` steps until `engine.loading.active` is false." with "`untilLoaded` steps until `engine.loading.active` is false, first taking the step that delivers commands pending at the call (#100)."
   - **[T-20]**. In the signature, add `render = 'manual'`, and add: "Pages open with `?lh-test=render` unless `render: 'auto'` is passed, because a manual-stepping SwiftShader page that renders every rAF starves the others (#107)."
   - **[D-4]**, commands and loading. Replace with: "`command(type, data)`, `commands` (the live `engine.commands`: `pending`, `dropped`, `handles`), `loading` (the live `engine.loading`)". In scenes, write `overlay(name, args, opts)`.
-  - **§8.2**, game contract. Add a `reset() { … },` line after `debug:` in the code block, and below it: "**[G-1a]** `reset()` (optional, no arguments) restores the game's module-level tunables. `createEngine` calls it before anything else, so every headless handle, replay, `mp()` peer and browser boot starts from the shipped values. Two engines in one process still share module state: a later engine's reset also resets an earlier one's tunables (#108)."
+  - **§8.2**, game contract. Add a `reset() { … },` line after `debug:` in the code block, and below it: "**[G-1a]** `reset()` (optional, no arguments) restores the game's module-level tunables. `createEngine` calls it before anything else, so every headless handle, replay, `mp()` peer and browser boot starts from the shipped values. Two engines in one process still share module state: a later engine's reset also resets an earlier one's tunables, so a test that tunes must tune after all its `mp()` peers are created (#108)."
 
-- [ ] **Step 4: Commit** (integrator): `git add docs/spec.md && git commit -m "docs(spec): phase 3 deltas D1–D9 and the 0.7.3 carry-overs"` (part B alone: `"docs(spec): 0.7.3 carry-overs"`).
+- [ ] **Step 4: Commit** (integrator): `git add docs/spec.md && git commit -m "docs(spec): phase 3 deltas D1–D9 and the 0.7.3 carry-overs"` (one commit for parts A and B).
 
 ---
 
@@ -1066,11 +1066,11 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
 - [ ] **Step 3: Write the notes file** `docs/plans/2026-10-13-phase-3a-carryovers-notes.md` with these sections:
   - **Status**: the branch head, the commits per task, and the suite count before and after.
   - **Rulings**: the two (judgment) decisions (Task 5: pending at the call; Task 8: event clock, `uncapped` ignored), and every contract issue below with its outcome.
-  - **For the game plans**: Tractor (3l) can now drop its extra `step(1)` before `untilLoaded`, `flow.open`'s guard, the sleep half's event scan (`enter(engine, view, args)`), the tune `afterEach` resets (`reset()`), and `render: 'manual'` in its `peers()` call. Pig Pens (3k): `bindGesture`'s `uncapped` is ignored now.
+  - **For the game plans**: Tractor (3l) can now drop its extra `step(1)` before `untilLoaded`, `flow.open`'s guard, the sleep half's event scan (`enter(engine, view, args)`), the tune `afterEach` resets (`reset()`; tunes in `mp()` tests must come after every peer is created, ruling 4), and `render: 'manual'` in its `peers()` call. Pig Pens (3k): `bindGesture`'s `uncapped` is ignored now.
   - **Field note candidates** (the integrator numbers them from #110):
     1. "`bindGesture` reads the event clock (#109 outcome): holds are real time at any frame rate; the frame-sum overcounted the frame before the down. A hidden tab cancels fingers, so nothing pauses a hold."
     2. "`untilLoaded` waits for commands pending at the call, not while any are pending (#100 outcome): a game whose systems issue commands every step would otherwise never settle."
-    3. "`reset()` runs in every `createEngine`; in `mp()` a later peer's engine resets tunables an earlier peer's run changed (#108 outcome). Tunables are still not on the tape."
+    3. "`reset()` runs in every `createEngine`; in `mp()` a later peer's engine resets tunables an earlier peer's run changed, so tests that tune must tune after all peers are created (#108 outcome). Tunables are per process and still not on the tape."
     4. "After a fallback swap (an adopted `data-lh-slot` element leaves the document and the engine re-adopts or creates a control), focus that was on the old element is not moved to the new one (G-E2 parked minor; no code change in 0.7.3)."
   - **Measured**: the suite runtime and the peak memory if `systemd-run` reports it.
 
@@ -1083,7 +1083,7 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
 - **SUITE** passes in the worktree: the baseline plus 28 new tests (by file: reset 3, overlay-once 4, overlay-args 2, boot-args 2, untilLoaded 3, hook-commands 1, untilLoaded-driver 2, untilLoaded-e2e 1, peers-render 2, gesture-stamp 5, domAsserts-scan 3). `gesture.test.mjs`, `domAsserts.test.mjs` and `uiDom.test.mjs` keep their counts.
 - `test/load-e2e.test.mjs`, `test/bridge-e2e.test.mjs`, `test/touch-e2e.test.mjs` and `test/hold-e2e.test.mjs` pass unchanged.
 - The mutation steps in Tasks 1, 2, 5, 8 and 9 were run and the results noted.
-- The integrator has merged `phase-3-carryovers` into `phase-3` (`--no-ff`) as **0.7.3**, written Task 10 (part B at least), and then run the games workspace suite against `phase-3` (`cd /home/smiller/projects/four43/four43-lion-hawk/games && env -u CI` under the unit caps of Global Constraint 5, `npm test`). Expected green. Tractor's `flow.test.mjs` calls `untilLoaded` after `step(1)`, so its behaviour is unchanged. Any red goes back to this plan's controller before Wave A forks.
+- The integrator has merged `phase-3-carryovers` into `phase-3` (`--no-ff`) as **0.7.3**, written Task 10 (parts A and B), and then run the games workspace suite against `phase-3` (`cd /home/smiller/projects/four43/four43-lion-hawk/games && env -u CI` under the unit caps of Global Constraint 5, `npm test`). Expected green. Tractor's `flow.test.mjs` calls `untilLoaded` after `step(1)`, so its behaviour is unchanged. Any red goes back to this plan's controller before Wave A forks.
 - Notes file written.
 
 ## Notes stub
@@ -1094,16 +1094,16 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
 
 ## Contract issues
 
-1. **`src/view/hook.js` is not in 3a's "Owns" column.** #100's Playwright `untilLoaded` runs in the page and can only read `window.engine`, which has no `commands`. #95's `once` must also pass through `window.engine.overlay`. Decision: Task 6 edits two lines of `hook.js` (`commands: engine.commands`, `overlay(n, a, o)`). 3a runs alone, so nothing conflicts. Spec D-4 gains `commands` (Task 10).
-2. **`test/gesture.test.mjs` is not owned, and §4 lists no `now` option for `bindGesture`.** The event clock (#109) means the existing tests' `update`-driven holds no longer fire. Decision: Task 8 adds an optional `now` (needed to test the hold) and moves two timings in that file onto an injected clock, with no assertion weakened. `uncapped` is accepted and ignored.
-3. **`test/uiDom.test.mjs` is not owned.** The G-E2 minor "move `setup2` up beside `setup`" lives there. Decision: Task 9 moves one line verbatim. If the controller prefers, drop that step; nothing depends on it.
-4. **`reset()` signature.** §4.1 shows `reset()` without arguments and "called first in createEngine", before the engine exists. Decision: no arguments. In `mp()`, every peer's `createEngine` resets shared module state (documented; tunables stay off the tape, as #108's workaround noted).
-5. **#100 semantics.** The field note's "keep stepping while `pending > 0`" can never finish when systems issue commands every step. Decision: `untilLoaded` takes the step that delivers the commands pending at the call (Task 5, test 3).
-6. **The spec write-up.** Overview §2 assigns D1–D9 to "the integrator … in 3a", but `docs/spec.md` is integrator-only. Decision: Task 10 holds the exact text for the integrator to apply at the 3a merge, part A gated on the user's approval (§9.1).
+1. **`src/view/hook.js` is not in 3a's "Owns" column.** #100's Playwright `untilLoaded` runs in the page and can only read `window.engine`, which has no `commands`. #95's `once` must also pass through `window.engine.overlay`. Decision: Task 6 edits two lines of `hook.js` (`commands: engine.commands`, `overlay(n, a, o)`). 3a runs alone, so nothing conflicts. Spec D-4 gains `commands` (Task 10). **Ruling: accepted; `src/view/hook.js` is added to 3a's Owns.**
+2. **`test/gesture.test.mjs` is not owned, and §4 lists no `now` option for `bindGesture`.** The event clock (#109) means the existing tests' `update`-driven holds no longer fire. Decision: Task 8 adds an optional `now` (needed to test the hold) and moves two timings in that file onto an injected clock, with no assertion weakened. `uncapped` is accepted and ignored. **Ruling: accepted.**
+3. **`test/uiDom.test.mjs` is not owned.** The G-E2 minor "move `setup2` up beside `setup`" lives there. Decision: Task 9 moves one line verbatim. **Ruling: accepted; the move stays (one line, unchanged).**
+4. **`reset()` signature.** §4.1 shows `reset()` without arguments and "called first in createEngine", before the engine exists. Decision: no arguments. In `mp()`, every peer's `createEngine` resets shared module state (documented; tunables stay off the tape, as #108's workaround noted). **Ruling: accepted; tunables are per process, and tests that tune must tune after all peers are created** (Task 10 G-1a text, Task 11 notes).
+5. **#100 semantics.** The field note's "keep stepping while `pending > 0`" can never finish when systems issue commands every step. Decision: `untilLoaded` takes the step that delivers the commands pending at the call (Task 5, test 3). **Ruling: accepted.**
+6. **The spec write-up.** Overview §2 assigns D1–D9 to "the integrator … in 3a", but `docs/spec.md` is integrator-only. Decision: Task 10 holds the exact text for the integrator to apply. **Ruling: the integrator runs Task 10: part B at the 3a merge, part A (D1–D9) once the user approves. The user approved D1–D9 on 2026-10-14, so both parts go in at the 3a merge.**
 
 ## Integrator requests
 
-1. At the merge: bump `package.json` and `src/version.js` to **0.7.3**. Add the new dependencies from overview §3.2 (`@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` ^4.5, `meshoptimizer`, all as `dependencies`) with the lockfile.
+1. At the merge: bump `package.json` and `src/version.js` to **0.7.3**. Add the new dependencies pinned by 3d (3m ruling 6), all as `dependencies`, with the lockfile: `@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` at `4.5.1`, `meshoptimizer ~1.2.0`, `pngjs ^7`, and `esbuild`.
 2. `CHANGELOG.md`, `## 0.7.3 — <date>`, "Phase 3a: engine carry-overs.":
    - `engine.overlay(name, args, { once })` (#95);
    - `engine.scene.overlayArgs(name)` and view halves' `enter(engine, view, args)` (#105);
@@ -1113,7 +1113,7 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
    - `window.engine.commands`;
    - `peers()` defaults to `render: 'manual'` (#107);
    - the domAsserts guard sees every equality form and skips quoted text (G-E2).
-3. Apply Task 10 to `docs/spec.md`: part B at the merge, and part A once the user approves D1–D9.
+3. Apply Task 10 to `docs/spec.md` at the merge: parts A and B (D1–D9 approved 2026-10-14).
 4. `docs/field-notes.md`:
    - set #95, #100, #105, #107, #108 and #109 to **done (0.7.3)**, each with a one-line outcome (from the notes file's "Rulings");
    - number the notes file's field note candidates from #110.
@@ -1121,4 +1121,4 @@ In `test/uiDom.test.mjs`, delete the last line (`function setup2(g) { … }`, li
 
 ## Needs the user
 
-- Approval of deltas D1–D9 (overview §9.1) before Task 10 part A goes into the spec. Nothing else in 3a waits on it.
+- Nothing. D1–D9 were approved on 2026-10-14, so Task 10 part A goes in with part B at the 3a merge.

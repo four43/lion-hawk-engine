@@ -2,11 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Steps marked **(judgment)** need design care beyond the written interfaces; flag anything that doesn't fit to the controller rather than improvising across task boundaries.
 
-**Goal:** the engine view layer that draws a World: `createViewSync` turns World entities into Object3Ds every frame, with interpolation from the prev/curr transform pool (E-6, E-11), N-15 smoothing of net corrections, instanced entity groups and baked-animation crowds; camera rigs that cover all three games (Tractor's chase, Rally's travel chase, title orbit and bumper/bonnet mounts, Pig Pens' orbit with gestures, framing and drive chase, and `view.project`); and the audio service (#67: unlock on a gesture or page show, suspend while hidden, master limiter, clip decode, positional option).
+**Goal:** the engine view layer that draws a World: `createViewSync` turns World entities into Object3Ds every frame, with interpolation from the prev/curr transform pool (E-6, E-11), N-15 smoothing of net corrections, instanced entity groups and baked-animation crowds; camera rigs that cover all three games, which all three adopt (Tractor's chase with velocity heading, portrait framing, shake, live `?tune` options and the F-10 blend back from the show camera, Rally's travel chase, title orbit and bumper/bonnet mounts, Pig Pens' orbit with gestures, framing and drive chase, and `view.project`); and the audio service (#67: unlock on a gesture or page show, suspend while hidden, master limiter, clip decode, positional option).
 
 **Architecture:**
 - **Sync reads, never writes.** `sync.frame(alpha)` walks `engine.world.with('xf')` in spawn order, keeps one record per entity (a `Map` by id plus an array, made when the entity first appears) and writes poses into Object3Ds or instance matrices. Prev poses come from `world.xfPrev(e, out)`, curr from `e.xf`. A new World (`engine.world` replaced, or `world.serial` changed) drops everything (S-3).
 - **Drawn entities** (`model`, `draw !== false`): `draw: 'object'` (default) gets `assets.clone(model, { paint })`; `draw: 'instanced'` gets a slot in one `createInstances` per (model, part), compiled by 3f's compiler with `{ instanced: true, coverage: true }`. Paint slots become instance colours, and coverage materials (`COVERAGE_INSTANCED`) get a per-instance `instanceCoverage` written from `e.coverage`. Static instanced entities are not re-uploaded.
+- **Part poses** (Task 13b): an entity's `e.partXf[name] = { p, q }` (3c Task 10b, written by sim code every step and swapped with `xf`) poses the model's named part: its centre at `p` in the body frame, turned by `q` from rest, interpolated with the body's alpha. Rally's wheels and the vehicle kit's wheels are drawn this way, so no game draws its own car.
 - **Hooks** (`sync.on(match, { create, frame, remove })`) let games decorate or adopt objects for undrawn entities.
 - **N-15** lives in `sync/smooth.js`: plain-number offsets, `dq = old ⊗ new⁻¹`, drawn = `offset ⊗ pose`, a linear fade over the kind's `smoothMs` on `view.dt`.
 - **Rigs are small factories over a camera**, with live option objects so `?tune` can write them. Rigs that change the FOV add to 3e's `camera.userData.lhFov`; they never overwrite `camera.fov` blindly.
@@ -15,7 +16,7 @@
 
 **Tech Stack:** three 0.186 (engine view modules import `three` directly, D9), Node `node:test`, happy-dom for DOM tests, playwright-core Chromium for the audio e2e, esbuild for the e2e bundle.
 
-**Spec:** `docs/spec.md` (E-6, E-10, E-11, N-15, N-17, S-1 `project`, S-3, R-8, A-11, I-2) plus `docs/plans/2026-10-13-phase-3-overview.md` (§4.4, §4.6–§4.9, §4.11, §5.2 row 3g) and the controller's rulings in `docs/plans/2026-10-13-phase-3-contract-issues.md` (3e: `camera.userData.lhFov`, null gfx without WebGL; 3f C3, C6, C7; 3j #9 rigs cover Rally; 3k's orbit needs).
+**Spec:** `docs/spec.md` (E-6, E-10, E-11, N-15, N-17, S-1 `project`, S-3, R-8, A-11, I-2) plus `docs/plans/2026-10-13-phase-3-overview.md` (§4.4, §4.6–§4.9, §4.11, §5.2 row 3g) and the controller's rulings in `docs/plans/2026-10-13-phase-3-contract-issues.md` (3e: `camera.userData.lhFov`, null gfx without WebGL; 3f C3 `mc.time`, C6 `instanceCoverage`, C7 anim tables and `blendAnimTable`; 3g #1–#5 and the merge order; 3j #9 rigs cover Rally's chase/orbit/bumper/bonnet; 3k C9 orbit pose/clamps/chase; 3l CI-10 the chase rig gains velocity heading, portrait framing, shake and live tuning so Tractor adopts it).
 
 **Branch:** `phase-3-viewsync` in worktree `/home/smiller/projects/four43/lion-hawk-engine-3g`, cut from `phase-3` after 0.8.0 (Wave A). Merges in Wave B (0.9.0) **after 3e and 3f**.
 
@@ -61,7 +62,7 @@ GLOBAL CONSTRAINTS (phase 3)
 - **Stubs.** 3e creates stub `src/view/sync/index.js` and `src/view/audio/index.js`. 3g replaces both **wholesale**: at the Wave B merge 3g's file wins, and 3e's `test/render-stubs.test.mjs` is deleted (3e's integrator request 3).
 - **No WebGL.** Boot sets `view.gfx`, `view.materials`, `view.assets` and `view.sync` to `null` and runs on (3e RF1). Sync is never built then. Audio does not depend on WebGL. Rigs are built by game view halves only when `view.gfx` exists.
 - **FOV.** A rig that changes the FOV writes `camera.fov = (camera.userData.lhFov ?? <fov at create>) + <its add>` (3e ruling). It never writes an absolute FOV.
-- **Shared clock.** `sync.frame` advances 3f's `compiler.time.value` by `view.dt` once per frame (3f C3).
+- **Shared clock.** `sync.frame` advances 3f's `compiler.time.value` (`mc.time`, the shared `uLhTime` uniform `{ value }`) by `view.dt` once per frame (3f C3, 3g ruling 4). Games never write it (Integrator request 6).
 - **Prerequisites.** Tasks 1–10 need only `phase-3` at 0.8.0. Tasks 11–14 import 3e's `src/view/render/hygiene.js` (`instancedShadows`, `disposeTree`). Task 15 imports 3f's `src/view/assets/animTable.js` and its `test/helpers/glb.mjs` (`makeAnimJson`). Before Task 11, and again before Task 15, run `git -C /home/smiller/projects/four43/lion-hawk-engine-3g merge --no-edit phase-3` once the integrator says 3e (or 3f) has landed on `phase-3` (Integrator request 1). If it has not landed, stop after Task 10 and report.
 - **Scratch.** Any scratch files go under `$SCRATCH/3g-work/` (plan writers and executors share one scratch root).
 
@@ -94,7 +95,7 @@ The five failure modes most likely to bite, each pinned by a test:
 |---|---|---|
 | `src/view/audio/index.js` | replace 3e stub | `createAudio`: gesture unlock, hidden suspend, page-show and interruption resume, master → mute → limiter, `load`/`play`, positional gain and pan. |
 | `src/view/camera/project.js` | new | `makeProject(camera, canvas)` → `view.project` (`{ x, y, z, onScreen }`), plus `project.ndc`. |
-| `src/view/camera/chase.js` | new | `createChaseRig`: `'heading'` style (Tractor) and `'travel'` style (Rally chase plus title orbit, speed FOV over `lhFov`). |
+| `src/view/camera/chase.js` | new | `createChaseRig`: `'heading'` style (Tractor: velocity heading, portrait framing, shake, live opts, `blendFrom`) and `'travel'` style (Rally chase plus title orbit, speed FOV over `lhFov`). |
 | `src/view/camera/mount.js` | new | `createMountRig`: body-fixed camera (Rally bumper, bonnet), FOV add over `lhFov`. |
 | `src/view/camera/orbit.js` | new | `createOrbitRig`: Pig Pens' orbit (live pose and limits, `fit`, `panBy`, `chase`, `release`, `ray`) and `bindGesture` (one-finger orbit or chase drag, pinch/turn/pan, mouse, wheel). |
 | `src/view/instancing/instances.js` | new | `createInstances`: one `InstancedMesh`, live count, matrices, colours, `instanceCoverage`, swap copy, dirty-only commit. |
@@ -109,7 +110,7 @@ The five failure modes most likely to bite, each pinned by a test:
 | `test/audio.test.mjs`, `test/audio-lifecycle.test.mjs`, `test/audio-clips.test.mjs`, `test/audio-e2e.test.mjs` | new | Tasks 1–3. |
 | `test/camera-project.test.mjs`, `test/camera-chase.test.mjs`, `test/camera-mount.test.mjs`, `test/camera-orbit.test.mjs`, `test/camera-orbit-gesture.test.mjs` | new | Tasks 4–8. |
 | `test/sync-instances.test.mjs`, `test/sync-smooth.test.mjs` | new | Tasks 9–10. |
-| `test/sync.test.mjs`, `test/sync-hooks.test.mjs`, `test/sync-instanced.test.mjs`, `test/sync-netfix.test.mjs`, `test/sync-world.test.mjs`, `test/sync-crowd.test.mjs` | new | Tasks 11–15. |
+| `test/sync.test.mjs`, `test/sync-hooks.test.mjs`, `test/sync-instanced.test.mjs`, `test/sync-netfix.test.mjs`, `test/sync-parts.test.mjs`, `test/sync-world.test.mjs`, `test/sync-crowd.test.mjs` | new | Tasks 11–15 (`sync-parts`: Task 13b). |
 | `docs/plans/2026-10-13-phase-3g-viewsync-notes.md` | new | Outcome, contract issues, integrator requests, field note candidates (Task 16). |
 
 ---
@@ -837,15 +838,21 @@ export function makeProject(camera, canvas) {
 
 **Interfaces:**
 - Consumes: a three camera; `camera.userData.lhFov` (3e) when present.
-- Produces: `createChaseRig(camera, opts)` → `{ opts, yaw, follow(pose, dt), snap(pose), orbit(pose, dt), shake(a) }`.
-  - `opts.style: 'heading'` (default). pose `{ x, y, z, yaw, fwd?, velYaw? }`. Defaults `{ distance: 12, height: 10.2, lag: 3, lookAhead: 11, lookHeight: 0.8, ease: 6, slide: 2, portrait: 1.25 }`. This is Tractor's chase cam, exactly.
-  - `opts.style: 'travel'`. pose `{ p, q, v }`. Defaults `{ distance: 6.8, height: 2.4, lag: 3.5, lookAhead: 3, lookHeight: 0.6, ease: 8, lookEase: 12, blendFrom: 3, blendSpan: 20, blendMax: 0.55, fovAdd: 2, fovSpeed: 0.25, fovMax: 10, orbit* }`. This is Rally's chase and title orbit; FOV = base + add, the base being `lhFov`.
+- Produces: `createChaseRig(camera, opts)` → `{ opts, yaw, follow(pose, dt), snap(pose), orbit(pose, dt), shake(a), blendFrom(q, time = 1) }`.
+  - `opts.style: 'heading'` (default). pose `{ x, y, z, yaw, fwd?, velYaw? }`. Defaults `{ distance: 12, height: 10.2, lag: 3, lookAhead: 11, lookHeight: 0.8, ease: 6, slide: 2, portrait: 1.25, portraitAspect: 0.9, shakeTime: 0.25 }`. This is Tractor's chase cam (`render/camera.js` `CAM` + `LAG`, and `view/rig.js`), exactly (CI-10):
+    - **velocity heading:** above `slide` m/s of forward speed (`pose.fwd`) it looks along `pose.velYaw` (the game passes `atan2(v.x, v.z)`), else along `pose.yaw`;
+    - **portrait framing:** below `portraitAspect` the camera sits `portrait` times farther back and higher (X-12);
+    - **shake:** `shake(a)` jitters the position for `shakeTime` s, fading linearly (a counter hash, not `Math.random`);
+    - **live tuning:** `opts` is the caller's object, filled once and read every frame, so one module-level object can serve every farm's rig and `?tune` sliders write `opts.distance`/`height`/`lookAhead` (Tractor's `CAM.D`/`H`/`AHEAD`);
+    - **F-10 blend:** `blendFrom(q, time = 1)` turns the camera from rotation `q` (the show camera's last) back to the chase over `time` s with a smoothstep slerp (Tractor's `view/rig.js` `blendFrom`); `snap` cancels it and any shake (a new farm's fresh camera).
+  - `opts.style: 'travel'`. pose `{ p, q, v }`. Defaults `{ distance: 6.8, height: 2.4, lag: 3.5, lookAhead: 3, lookHeight: 0.6, ease: 8, lookEase: 12, blendFrom: 3, blendSpan: 20, blendMax: 0.55, fovAdd: 2, fovSpeed: 0.25, fovMax: 10, shakeTime: 0.25, orbit* }`. This is Rally's chase and title orbit; FOV = base + add, the base being `lhFov`. `shake` and `blendFrom` work in this style too.
   - `opts` is the caller's object, filled and kept live.
 
 **Decisions to confirm in review (judgment):**
 - Rally's absolute FOVs (55 title, 62 + speed chase) become adds over 3e's base (`-5`, `+2`). With 3e's default base of 60 the numbers are Rally's today. In portrait (base 64) the whole range is 4° wider, which Rally lacks today. This is Contract issue 3.
 - The shake uses a counter hash instead of `Math.random` (view code, but deterministic for tests and replays).
 - One factory with two styles, not two factories, because §4.9 names one `createChaseRig`.
+- CI-10 (3l): everything Tractor's chase camera does lives in the rig, so Tractor deletes `render/camera.js` and the chase half of `view/rig.js`. Only the stand-in heading before the first follow (`rig.yaw ?? tractor.yaw`) stays game-side. A new farm calls `snap(pose)` where Tractor called `follow(1, pose)` on a fresh camera (the same pose).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -914,6 +921,42 @@ test('3g: opts are the live object (?tune); shake jitters for 0.25 s, determinis
   assert.ok(peak > 0.001 && peak < 0.25, `peak ${peak}`); assert.deepEqual(run(), xs); // no Math.random
   assert.ok(Math.abs(xs.at(-1)) < 0.01);
   assert.throws(() => createChaseRig({}), /camera required/);
+});
+test('3g: one opts object serves every rig (a new farm keeps ?tune values); portraitAspect and shakeTime are live (CI-10)', () => {
+  const CAM = {}, pose = { x: 0, y: 0, z: 0, yaw: 0 };
+  createChaseRig(new THREE.PerspectiveCamera(60, 1), CAM);
+  assert.equal(CAM.portraitAspect, 0.9); assert.equal(CAM.shakeTime, 0.25); assert.equal(CAM.style, 'heading');
+  CAM.distance = 15; const c = new THREE.PerspectiveCamera(60, 1), rig = createChaseRig(c, CAM); // the next farm's rig
+  assert.equal(rig.opts.distance, 15); rig.snap(pose); assert.ok(Math.abs(c.position.z + 15) < 1e-9); // aspect 1: landscape
+  CAM.portraitAspect = 1.2; rig.snap(pose); // aspect 1 is portrait now
+  assert.ok(c.position.distanceTo(new THREE.Vector3(0, 10.2 * 1.25, -15 * 1.25)) < 1e-9);
+  // ease 1e6 puts the camera on its target each frame, so the shaken-minus-plain distance is the jitter itself
+  const o = { ease: 1e6, shakeTime: 0.5 }, ca = new THREE.PerspectiveCamera(60, 1.5), cb = new THREE.PerspectiveCamera(60, 1.5);
+  const ra = createChaseRig(ca, o), rb = createChaseRig(cb, { ...o });
+  ra.snap(pose); rb.snap(pose); ra.shake(0.4);
+  for (let i = 0; i < 40; i++) {
+    ra.follow(pose, 0.02); rb.follow(pose, 0.02); const off = ca.position.distanceTo(cb.position);
+    if (i < 20) assert.ok(off > 1e-6, `still shaking at ${(i + 1) * 0.02} s`); else if (i >= 27) assert.ok(off < 1e-9, `settled at ${(i + 1) * 0.02} s`);
+  }
+  ra.shake(0.4); ra.snap(pose); rb.snap(pose); ra.follow(pose, 0.02); rb.follow(pose, 0.02);
+  assert.ok(ca.position.distanceTo(cb.position) < 1e-9); // snap cancels a shake
+});
+test('3g: blendFrom turns from the show camera back to the chase over time s, smoothstep; snap cancels it (Tractor F-10, view/rig.js)', () => {
+  const a = new THREE.PerspectiveCamera(60, 1.6), b = new THREE.PerspectiveCamera(60, 1.6), rig = createChaseRig(a), ref = tractorChase(b);
+  const showQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.3, 2, 0)), chaseQ = new THREE.Quaternion();
+  const s = { x: 0, y: 0, z: 0, yaw: 0.5, fwd: 0, velYaw: 0.5 };
+  let blend = 1; // games/tractor-pickup/src/view/rig.js at e03ed71: follow() after the chase cam's update
+  for (let i = 0; i < 90; i++) {
+    if (i === 10) { rig.blendFrom(showQ); blend = 0; }
+    s.x += 0.1; rig.follow(s, 1 / 60); ref.update(1 / 60, s);
+    if (blend < 1) { blend = Math.min(1, blend + 1 / 60); const k = blend * blend * (3 - 2 * blend); chaseQ.copy(b.quaternion); b.quaternion.slerpQuaternions(showQ, chaseQ, k); }
+    assert.ok(a.position.distanceTo(b.position) < 1e-9, `position at frame ${i}`);
+    assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `rotation at frame ${i}`);
+    if (i === 10) assert.ok(1 - Math.abs(a.quaternion.dot(showQ)) < 1e-4, 'starts at the show camera');
+  }
+  rig.blendFrom(showQ, 0.5); rig.snap(s);
+  const c = new THREE.PerspectiveCamera(60, 1.6); createChaseRig(c).snap(s);
+  assert.ok(1 - Math.abs(a.quaternion.dot(c.quaternion)) < 1e-12); // no blend after a snap
 });
 
 // games/rally/src/render.js:152-171 at e03ed71 (title orbit and chase), with its absolute FOVs 55 and 62 written as 3e's base 60
@@ -984,7 +1027,7 @@ test('3g: style "travel" matches Rally\'s title orbit and chase frame by frame, 
 // - 'heading' (default; Tractor Pickup's render/camera.js, V-1..V-3): `distance` behind and `height` above the target, turning
 //   with `lag`, looking at a point `lookAhead` in front and `lookHeight` up; the position eases in at `ease` per second. In a
 //   slide (pose.fwd > `slide` m/s) it looks along the travel (pose.velYaw), otherwise along the nose (pose.yaw). Portrait
-//   (aspect < 0.9) moves it `portrait` times back and up (X-12). pose = { x, y, z, yaw, fwd?, velYaw? }.
+//   (aspect < `portraitAspect`) moves it `portrait` times back and up (X-12). pose = { x, y, z, yaw, fwd?, velYaw? }.
 // - 'travel' (Rally's render.js:152-187): the look direction is the body's heading blended toward its velocity above `blendFrom`
 //   m/s (up to `blendMax`), smoothed exponentially (`lag` per second); the position eases at `ease`, the look point at `lookEase`.
 //   The field of view widens with speed: base + fovAdd + min(fovMax, speed x fovSpeed), the base being camera.userData.lhFov
@@ -992,11 +1035,13 @@ test('3g: style "travel" matches Rally\'s title orbit and chase frame by frame, 
 //   base + orbitFovAdd), after which the chase starts afresh behind. pose = { p, q, v } (positions, quaternion, velocity).
 // opts is the object passed in, filled with the style's defaults and kept live (?tune may write rig.opts.distance). rig.yaw is
 // the view heading a stick reads against (C-2, #81; heading style), null before the first follow or snap. shake(a) jitters the
-// position for 0.25 s from a hash (no Math.random). Nothing is allocated per frame.
+// position for `shakeTime` s, fading, from a hash (no Math.random). blendFrom(q, time = 1) turns the camera from rotation q back to
+// the chase over `time` s, smoothstep (Tractor's F-10 hand-back from the show camera); snap cancels a blend and a shake.
+// Nothing is allocated per frame.
 import * as THREE from 'three';
 
-const HEADING = Object.freeze({ distance: 12, height: 10.2, lag: 3, lookAhead: 11, lookHeight: 0.8, ease: 6, slide: 2, portrait: 1.25 });
-const TRAVEL = Object.freeze({ distance: 6.8, height: 2.4, lag: 3.5, lookAhead: 3, lookHeight: 0.6, ease: 8, lookEase: 12, blendFrom: 3, blendSpan: 20, blendMax: 0.55,
+const HEADING = Object.freeze({ distance: 12, height: 10.2, lag: 3, lookAhead: 11, lookHeight: 0.8, ease: 6, slide: 2, portrait: 1.25, portraitAspect: 0.9, shakeTime: 0.25 });
+const TRAVEL = Object.freeze({ distance: 6.8, height: 2.4, lag: 3.5, lookAhead: 3, lookHeight: 0.6, ease: 8, lookEase: 12, blendFrom: 3, blendSpan: 20, blendMax: 0.55, shakeTime: 0.25,
   fovAdd: 2, fovSpeed: 0.25, fovMax: 10, orbitRadius: 9, orbitHeight: 3.2, orbitLook: 0.4, orbitSpeed: 0.12, orbitStart: 0.6, orbitFovAdd: -5 });
 const Z = new THREE.Vector3(0, 0, 1);
 
@@ -1009,18 +1054,24 @@ export function createChaseRig(camera, opts = {}) {
   opts.style = style;
   const tgt = new THREE.Vector3(), pos = new THREE.Vector3(), cp = new THREE.Vector3(), bq = new THREE.Quaternion(), dir = new THREE.Vector3(), vel = new THREE.Vector3();
   const camPos = camera.position.clone(), camLook = new THREE.Vector3(), chaseDir = new THREE.Vector3(), fov0 = camera.fov;
-  let yaw = null, shakeT = 0, shakeA = 0, n = 0, fresh = true, orbitA = null;
+  const fromQ = new THREE.Quaternion(), toQ = new THREE.Quaternion();
+  let yaw = null, shakeT = 0, shakeA = 0, n = 0, fresh = true, orbitA = null, blendK = 1, blendT = 1;
   const jitter = () => { // -0.5..0.5, a counter hash
     n = (n + 1) | 0; let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
     return (h >>> 0) / 4294967296 - 0.5;
   };
-  const shaken = dt => { if (shakeT > 0) { shakeT -= dt; const a = shakeA * (shakeT / 0.25); pos.x += jitter() * a; pos.y += jitter() * a; } else shakeA = 0; };
+  const shaken = dt => { if (shakeT > 0) { shakeT -= dt; const a = shakeA * (shakeT / opts.shakeTime); pos.x += jitter() * a; pos.y += jitter() * a; } else shakeA = 0; };
+  const blended = dt => { // F-10: slerp from the given rotation to this frame's chase rotation, smoothstep over blendT s
+    if (blendK >= 1) return;
+    blendK = Math.min(1, blendK + dt / blendT); const k = blendK * blendK * (3 - 2 * blendK);
+    toQ.copy(camera.quaternion); camera.quaternion.slerpQuaternions(fromQ, toQ, k); camera.updateMatrixWorld();
+  };
   const setFov = add => { const f = (camera.userData.lhFov ?? fov0) + add; if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix(); } };
   function heading(pose, kYaw, kPos, dt) {
     const want = (pose.fwd ?? 0) > opts.slide ? (pose.velYaw ?? pose.yaw) : pose.yaw;
     if (yaw === null) yaw = want;
     let d = want - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); yaw += d * kYaw;
-    const fx = Math.sin(yaw), fz = Math.cos(yaw), k = camera.aspect < 0.9 ? opts.portrait : 1;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), k = camera.aspect < opts.portraitAspect ? opts.portrait : 1;
     tgt.set(pose.x + fx * opts.lookAhead, pose.y + opts.lookHeight, pose.z + fz * opts.lookAhead);
     pos.set(pose.x - fx * opts.distance * k, pose.y + opts.height * k, pose.z - fz * opts.distance * k);
     shaken(dt);
@@ -1048,8 +1099,11 @@ export function createChaseRig(camera, opts = {}) {
   return {
     opts,
     get yaw() { return yaw; },
-    follow(pose, dt) { if (style === 'travel') travel(pose, dt, false); else heading(pose, Math.min(1, dt * opts.lag), Math.min(1, dt * opts.ease), dt); },
-    snap(pose) { if (style === 'travel') travel(pose, 0, true); else { yaw = null; heading(pose, 1, 1, 0); } }, // straight behind at once
+    follow(pose, dt) { if (style === 'travel') travel(pose, dt, false); else heading(pose, Math.min(1, dt * opts.lag), Math.min(1, dt * opts.ease), dt); blended(dt); },
+    snap(pose) { // straight behind at once, no blend or shake (a new farm)
+      shakeT = 0; shakeA = 0; blendK = 1;
+      if (style === 'travel') travel(pose, 0, true); else { yaw = null; heading(pose, 1, 1, 0); }
+    },
     orbit(pose, dt) { // travel style: Rally's title turntable
       if (style !== 'travel') throw new Error("chase.orbit: needs style 'travel'");
       body(pose);
@@ -1059,20 +1113,23 @@ export function createChaseRig(camera, opts = {}) {
       camera.position.copy(camPos); camera.lookAt(camLook); setFov(opts.orbitFovAdd); camera.updateMatrixWorld();
       fresh = true; // the chase starts afresh behind the car
     },
-    shake(a) { shakeA = Math.max(shakeA, a); shakeT = 0.25; },
+    shake(a) { shakeA = Math.max(shakeA, a); shakeT = opts.shakeTime; },
+    blendFrom(q, time = 1) { fromQ.copy(q); blendK = 0; blendT = time; },
   };
 }
 ```
 
-- [ ] **Step 4: Run; expect PASS** (4 tests).
+- [ ] **Step 4: Run; expect PASS** (6 tests).
 
 - [ ] **Step 5: Prove the oracles bite.**
   - Change `HEADING.ease` to 5: expect the Tractor oracle test to fail at frame 0.
+  - Restore, then change `shakeT = opts.shakeTime` in `shake` to `shakeT = 0.25`: expect the live-opts test to fail at "still shaking at 0.26 s".
+  - Restore, then delete `blended(dt);` from `follow`: expect the blend test to fail on rotation at frame 10.
   - Restore, then change `TRAVEL.lookEase` to 11: expect the Rally oracle test to fail on rotation.
   - Restore, then change `setFov`'s `camera.userData.lhFov ?? fov0` to `fov0`: expect the `76` assertion to fail.
   - Restore; PASS.
 
-- [ ] **Step 6: Commit.** `git add src/view/camera/chase.js test/camera-chase.test.mjs && git commit -m "feat(view): chase rig with Tractor's heading style and Rally's travel style, title orbit and speed FOV over lhFov"`
+- [ ] **Step 6: Commit.** `git add src/view/camera/chase.js test/camera-chase.test.mjs && git commit -m "feat(view): chase rig with Tractor's heading style (velocity heading, portrait, shake, live opts, F-10 blend) and Rally's travel style, title orbit and speed FOV over lhFov"`
 
 ---
 
@@ -1080,12 +1137,18 @@ export function createChaseRig(camera, opts = {}) {
 
 **Files:**
 - Create: `src/view/camera/mount.js`, `test/camera-mount.test.mjs`
+- Modify: `test/camera-chase.test.mjs` (one test: Rally's four modes on one camera)
 
 **Interfaces:**
 - Consumes: a three camera; `camera.userData.lhFov`.
 - Produces: `createMountRig(camera, { socket: { p, look? }, fovAdd? })` → `{ fovAdd, set(socket), follow(pose) }`. `pose` is `{ p, q }` or an Object3D (`sync.objectOf(car)`). `p`/`look` take `[x, y, z]` or `{ x, y, z }` in body space; `look` defaults to `[0, 0.3, 20]`.
 
 **Decision (judgment):** §4.9 gives `createMountRig(camera, { socket })` with no methods. `follow`/`set` are the smallest surface that works (Contract issue 3). A socket *name* (resolved through `world.socket`) is left to the game, which passes `e.sockets[name]`.
+
+**3j #9: the rigs cover all four of Rally's camera modes** (`render.js:152-184`, `camMode` 0 chase, 1 bumper, 2 bonnet, plus the title `orbit`). Rally keeps one travel chase rig and one mount rig on its camera:
+- title → `chase.orbit(pose, dt)`; chase → `chase.follow(pose, dt)`; bumper → `mount.set({ p: [0, 0.05, zFront + 0.9] })`, bonnet → `mount.set({ p: [0, 0.62, 0.35] })`, then `mount.follow(pose)`, with `fovAdd: 12`;
+- the socket is a plain body-space offset, so the Kenney cars need no `sock-*` empties (3j's objection);
+- the mount never touches the chase rig's eased position, so switching back to chase eases from where the chase left off, as Rally's `this.camPos` does today. Step 1's second test pins all of it frame by frame.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1131,6 +1194,36 @@ test('3g: follow takes the synced Object3D; set swaps the mount; a socket is req
 });
 ```
 
+Append to `test/camera-chase.test.mjs` (it has Task 5's `rallyCam` oracle; add `import { createMountRig } from '../src/view/camera/mount.js';` at the top):
+
+```js
+// Rally's updateCamera at e03ed71 over all four modes: rallyCam for the title orbit and chase, render.js:179-184 for the mounts
+test('3g: Rally\'s four camera modes on one camera, title -> chase -> bumper -> bonnet -> chase, frame by frame (3j #9)', () => {
+  const a = new THREE.PerspectiveCamera(60, 1.6), b = new THREE.PerspectiveCamera(60, 1.6), zFront = 1.2;
+  a.position.set(0, 4, -8); a.userData.lhFov = 60;
+  const SOCK = { 1: { p: [0, 0.05, zFront + 0.9] }, 2: { p: [0, 0.62, 0.35] } };
+  const chase = createChaseRig(a, { style: 'travel' }), mount = createMountRig(a, { socket: SOCK[1], fovAdd: 12 }), ref = rallyCam(b);
+  const body = { p: { x: 0, y: 0.5, z: 0 }, q: new THREE.Quaternion(), v: { x: 0, y: 0, z: 0 } }, Y = new THREE.Vector3(0, 1, 0);
+  let yawB = 0.3;
+  for (let i = 0; i < 300; i++) {
+    const dt = i % 4 ? 1 / 60 : 1 / 45, mode = i < 40 ? 'title' : i < 120 ? 0 : i < 160 ? 1 : i < 200 ? 2 : 0;
+    if (mode !== 'title') { const sp = Math.min(30, (i - 40) * 0.3); yawB += 0.01; body.v.x = Math.sin(yawB + 0.3) * sp; body.v.z = Math.cos(yawB + 0.3) * sp; body.p.x += body.v.x * dt; body.p.z += body.v.z * dt; }
+    body.q.setFromAxisAngle(Y, yawB);
+    if (mode === 'title' || mode === 0) { ref.orbit = mode === 'title'; ref.update(body, dt); }
+    else { // render.js:179-184 (Rally's camPos is left alone in these modes)
+      const cp = new THREE.Vector3(body.p.x, body.p.y, body.p.z), off = mode === 1 ? new THREE.Vector3(0, 0.05, zFront + 0.9) : new THREE.Vector3(0, 0.62, 0.35);
+      b.position.copy(cp).add(off.applyQuaternion(body.q));
+      const look = cp.clone().add(new THREE.Vector3(0, 0.3, 20).applyQuaternion(body.q));
+      b.up.set(0, 1, 0).applyQuaternion(body.q); b.lookAt(look); b.up.set(0, 1, 0); b.fov = 72; b.updateProjectionMatrix();
+    }
+    if (mode === 'title') chase.orbit(body, dt); else if (mode === 0) chase.follow(body, dt); else { mount.set(SOCK[mode]); mount.follow(body); }
+    assert.ok(a.position.distanceTo(b.position) < 1e-9, `position at frame ${i} (mode ${mode})`);
+    assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `rotation at frame ${i} (mode ${mode})`);
+    assert.ok(Math.abs(a.fov - b.fov) < 1e-12, `fov at frame ${i} (mode ${mode})`);
+  }
+});
+```
+
 - [ ] **Step 2: Run; expect FAIL** with `ERR_MODULE_NOT_FOUND`. `UNIT test/camera-mount.test.mjs`
 
 - [ ] **Step 3: Implement**
@@ -1173,11 +1266,13 @@ export function createMountRig(camera, { socket, fovAdd = null } = {}) {
 }
 ```
 
-- [ ] **Step 4: Run; expect PASS** (2 tests).
+- [ ] **Step 4: Run; expect PASS** (2 tests, and 7 in `test/camera-chase.test.mjs`). `UNIT test/camera-mount.test.mjs test/camera-chase.test.mjs`
 
-- [ ] **Step 5: Prove the roll test bites.** Delete `camera.up.copy(UP).applyQuaternion(q); ` (keep `camera.lookAt(at)`): expect the oracle test to fail on rotation (the camera no longer rolls with the body). Restore; PASS.
+- [ ] **Step 5: Prove the tests bite.**
+  - Delete `camera.up.copy(UP).applyQuaternion(q); ` (keep `camera.lookAt(at)`): expect the oracle test to fail on rotation (the camera no longer rolls with the body). Restore; PASS.
+  - In `chase.js`, make `travel` ease from the camera's current position (insert `camPos.copy(camera.position);` before the `camPos.lerp`): expect the four-modes test to fail on position at frame 200 (the chase must ease from its own last position, not the mount's). Restore; PASS.
 
-- [ ] **Step 6: Commit.** `git add src/view/camera/mount.js test/camera-mount.test.mjs && git commit -m "feat(view): mount rig for body-fixed cameras (Rally bumper and bonnet), FOV over lhFov"`
+- [ ] **Step 6: Commit.** `git add src/view/camera/mount.js test/camera-mount.test.mjs test/camera-chase.test.mjs && git commit -m "feat(view): mount rig for body-fixed cameras (Rally bumper and bonnet), FOV over lhFov"`
 
 ---
 
@@ -1192,6 +1287,7 @@ export function createMountRig(camera, { socket, fovAdd = null } = {}) {
   - `state` `{ tx, ty, tz, yaw, pitch, dist, chaseOff }` and `limits` `{ pitchMin, pitchMax, min, max, bounds }` are live, readable and writable (3k's need).
   - `fit` is `{ portrait, landscape }` partial states (Pig Pens' `fitCam`).
   - `chase(pose, dt)` with pose `{ x, z, yaw, fwd }` eases the target toward a moving point; `release()` hands back to orbit (Pig Pens' `afterDrive`).
+  - **3k C9.** This is the surface 3k said `createOrbitRig` lacked (a readable/writable pose, clamps, drive chase): Pig Pens adopts the rig and deletes `cam`, `applyCam`, `fitCam`, `panBy`, `chase`, `afterDrive`, `ray` and its gesture code from `view/rig.js`. Its values are the defaults here plus `PIG_PENS` in the test (`target { x: 0, y: 0.5, z: 1 }`, `bounds { x: [-34, 34], z: [-30, 30] }`) and its `fit` (portrait `{ yaw: π/2, dist: 60, tx: -3, tz: -9 }`, landscape `{ yaw: 0, dist: 46, tx: -1, tz: -4 }`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1284,8 +1380,10 @@ test('3g: fit frames by aspect (Pig Pens\' fitCam); limits are live (Pig Pens fr
 // fit.portrait below 0.9, else fit.landscape; each a partial state). update(dt, raw) drives the bound gestures, then apply()
 // clamps and places the camera.
 // bindGesture(engine, el, { mode, tapMove }) adds the view-only camera gestures (lion-hawk bindGesture): one finger drags by
-// mode() ('orbit' | 'chase' | 'none', asked when the drag starts; 'orbit' sets rig.orbiting for the game's tool picker, #52),
-// two fingers pinch-zoom, turn and pan (turn the chase offset when mode() is 'chase'), mouse right-drag orbits, middle-drag pans,
+// mode() ('orbit' | 'chase' | 'none' | null, asked when the drag starts; 'orbit' sets rig.orbiting for the game's tool picker, #52;
+// an orbit drag stops for good once mode() stops answering 'orbit', e.g. a drive began mid-drag, 3k C9),
+// two fingers pinch-zoom, turn and pan (turn the chase offset instead while mode() is 'chase', asked on every move),
+// mouse right-drag orbits, middle-drag pans,
 // the wheel zooms, no context menu. Do not also add it to boot's devices: rig.update drives it.
 // chase(pose, dt) is Pig Pens' drive camera (pose { x, z, yaw, fwd }); release() lifts it back over the farm.
 // ray(cx, cy, out?) is the camera ray through a client point, [ox, oy, oz, dx, dy, dz] (a fresh array without out, #72).
@@ -1347,19 +1445,21 @@ export function createOrbitRig(camera, { target = { x: 0, y: 0.5, z: 0 }, distan
     bindGesture(engine, element, { mode = () => 'orbit', tapMove = 12 } = {}) {
       if (!element) throw new Error('orbit.bindGesture: element required');
       el ??= element;
-      let one = null, lx = 0, ly = 0, chasing = false, d0 = 0, yaw0 = 0, off0 = 0, px = 0, py = 0, mx = 0, my = 0;
+      let one = null, lx = 0, ly = 0, d0 = 0, r0 = 0, px = 0, py = 0, mx = 0, my = 0;
       const drag = d => { // cumulative from the down point; apply the change since the last call
-        if (d.phase === 'start') { one = mode(); lx = 0; ly = 0; if (one === 'orbit') rig.orbiting = true; rig.gesture = one === 'none' ? null : one; return; }
+        if (d.phase === 'start') { one = mode(); lx = 0; ly = 0; if (one === 'orbit') rig.orbiting = true; rig.gesture = one === 'orbit' || one === 'chase' ? one : null; return; }
         const ix = d.dx - lx, iy = d.dy - ly; lx = d.dx; ly = d.dy;
+        if (one === 'orbit' && mode() !== 'orbit') { one = null; rig.gesture = null; } // Pig Pens: a Hand drag begun before a drive must not orbit it
         if (one === 'orbit') { state.yaw -= ix * 0.006; state.pitch += iy * 0.005; }
         else if (one === 'chase') { state.chaseOff -= ix * 0.006; state.pitch += iy * 0.004; }
         if (d.phase === 'end') { one = null; rig.gesture = null; }
       };
       const pinch = p => {
-        if (p.phase === 'start') { chasing = mode() === 'chase'; d0 = state.dist; yaw0 = state.yaw; off0 = state.chaseOff; px = 0; py = 0; rig.gesture = 'pinch'; return; }
+        if (p.phase === 'start') { d0 = state.dist; r0 = 0; px = 0; py = 0; rig.gesture = 'pinch'; return; }
         state.dist = d0 / Math.max(0.05, p.scale);
-        if (chasing) state.chaseOff = off0 + p.rotate;
-        else { state.yaw = yaw0 + p.rotate; rig.panBy(p.panX - px, p.panY - py); }
+        const da = p.rotate - r0; r0 = p.rotate; // the turn since the last move, so a drive that starts mid-pinch turns the chase from then on
+        if (mode() === 'chase') state.chaseOff += da;
+        else { state.yaw += da; rig.panBy(p.panX - px, p.panY - py); }
         px = p.panX; py = p.panY;
         if (p.phase === 'end') rig.gesture = null;
       };
@@ -1420,6 +1520,7 @@ export function createOrbitRig(camera, { target = { x: 0, y: 0.5, z: 0 }, distan
 
   Both are flagged for 3k's playtest in the notes.
 - `rig.gesture` clears at the gesture's `end`, not when the last finger lifts (Pig Pens' `'idle'` state is not modelled).
+- `mode()` is asked again as a gesture moves (3k C9, Pig Pens' `rig.js` reads `driving` on every move): an orbit drag stops once a drive starts, and a pinch turns the chase offset from the move the drive starts on.
 
 - [ ] **Step 1: Write the test**
 
@@ -1482,16 +1583,31 @@ test('3g: mouse right-drag orbits, middle-drag pans, the wheel zooms, no context
   s.ev(s.el, 'pointerdown', 3, 100, 100); s.ev(s.window, 'pointermove', 3, 200, 100); s.rig.update(0.016); s.el.dispatchEvent(new s.window.WheelEvent('wheel', { deltaY: 100 }));
   assert.deepEqual({ ...st }, before); assert.equal(s.el.style.touchAction, '');
 });
+test('3g: mode() is asked again as a gesture moves: a drive that starts mid-drag stops the orbit; mid-pinch it turns the chase offset (3k C9)', () => {
+  let mode = 'orbit'; const s = setup({ mode: () => mode }), st = s.rig.state;
+  s.ev(s.el, 'pointerdown', 1, 100, 100); s.ev(s.window, 'pointermove', 1, 150, 100); s.rig.update(0.016);
+  near(st.yaw, -50 * 0.006, 'orbits before the drive');
+  mode = 'chase'; s.ev(s.window, 'pointermove', 1, 200, 120); s.rig.update(0.016);
+  near(st.yaw, -50 * 0.006, 'no orbit once driving'); near(st.chaseOff, 0, 'nor a chase turn'); assert.equal(s.rig.gesture, null);
+  s.ev(s.window, 'pointerup', 1, 200, 120);
+  mode = 'orbit'; const yaw0 = st.yaw;
+  s.ev(s.el, 'pointerdown', 2, 100, 100); s.ev(s.el, 'pointerdown', 3, 200, 100);
+  s.ev(s.window, 'pointermove', 3, 200, 200); s.rig.update(0.016); near(st.yaw, yaw0 + Math.PI / 4, 'pinch turns the view');
+  mode = 'chase'; s.ev(s.window, 'pointermove', 3, 100, 200); s.rig.update(0.016);
+  near(st.yaw, yaw0 + Math.PI / 4, 'not the view once driving'); near(st.chaseOff, Math.PI / 4, 'the chase offset instead');
+  s.ev(s.window, 'pointerup', 3, 100, 200); s.ev(s.window, 'pointerup', 2, 100, 100);
+});
 ```
 
-- [ ] **Step 2: Run; expect PASS** (4 tests). `UNIT test/camera-orbit-gesture.test.mjs`. A failure here is a fault in Task 7's `bindGesture`: fix it there, and rerun Task 7's test too.
+- [ ] **Step 2: Run; expect PASS** (5 tests). `UNIT test/camera-orbit-gesture.test.mjs`. A failure here is a fault in Task 7's `bindGesture`: fix it there, and rerun Task 7's test too.
 
 - [ ] **Step 3: Prove the tests bite.**
   - In `drag`, change `const ix = d.dx - lx` to `const ix = d.dx`: expect "one finger orbits…" to fail (the end phase applies the drag twice).
   - Restore, then remove `rig.panBy(p.panX - px, p.panY - py);`: expect the pinch test to fail on `pan x`.
+  - Restore, then delete the `if (one === 'orbit' && mode() !== 'orbit')` line in `drag`: expect the 3k C9 test to fail on "no orbit once driving".
   - Restore; PASS.
 
-- [ ] **Step 4: Commit.** `git add test/camera-orbit-gesture.test.mjs && git commit -m "test(view): orbit gestures: one-finger orbit and chase, pinch, mouse, wheel (#59)"`
+- [ ] **Step 4: Commit.** `git add test/camera-orbit-gesture.test.mjs && git commit -m "test(view): orbit gestures: one-finger orbit and chase, pinch, mouse, wheel, mode changes mid-gesture (#59)"`
 
 ---
 
@@ -2718,13 +2834,168 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
 
 ---
 
+## Task 13b: View sync: part poses (`partXf`) for sub-parts such as wheels
+
+**Why:** user ruling 2026-10-14 (every game fully on the engine). Rally's wheels (spin, steer, suspension travel) are per-step sim state, so Rally drew its own car from the current slot; Pig Pens and Tractor turn their wheels in sync hooks of their own. Part poses make that data: the sim writes one pose per named model part each step, the World swaps prev/curr with the entity pose (3c Task 10b), and view sync interpolates it onto the part's node with the same alpha as the body, so body and wheels never slide against each other.
+
+**Precondition:** 3c's Task 10b (`partXf`, `world.partXfPrev`) is on `phase-3` (Integrator request 7). It is part of 3c, so 0.8.0 has it.
+
+**Files:**
+- Create: `test/sync-parts.test.mjs`
+- Modify: `test/helpers/fakeWorld.mjs` (parts), `src/view/sync/index.js` (the edits below, on Task 13's final version)
+
+**Interfaces:**
+- Consumes: `e.partXf[name] = { p, q }` (curr, written by sim code) and `world.partXfPrev(e, name, out)` (3c Task 10b).
+- Produces: for every object-drawn entity (or one whose hook `create` returned an Object3D) with `e.partXf`, each frame:
+  - the named node is found once with `obj.getObjectByName(name)` (the baked part names, 3d; sanitised as GLTFLoader does);
+  - `p` (metres) and `q` are the pose of the part's **centre** in the entity's body frame (e.xf's frame, before `e.scale`), with `q` relative to the part's rest orientation. The centre is the node's bounding-box centre (a wheel's hub), measured once after the entity's create hooks ran (a hook may rescale a part first, as Rally's does). At `p` = the rest centre and `q` = identity the node is drawn at its rest pose;
+  - the drawn pose is `lerp(prev.p, curr.p, alpha)` and the short-arc nlerp of `q`, with the body's alpha. The node keeps its rest scale (and `e.scale` applies through the root as for the body);
+  - errors: `sync: entity <id> (model '<m>') has no part '<name>' for partXf (parts: <names>)`; `sync: entity <id>: partXf needs draw 'object' (instanced parts are not posed per entity)`.
+  - A part turning more than half a turn in one step draws the short way round (backwards); at 240 Hz that is above 750 rad/s.
+
+**Decisions to confirm in review (judgment):**
+- Data, not a hook: the pose rides 3c's swap exactly as `xf` does. A per-kind `draw` hook would put interpolation back in every game.
+- Body frame and hub centre, not the node's raw local transform: the vehicle kit (sim, 3h Task 6b) and Rally's vehicle know the hub in the chassis frame and nothing of the model's node offsets, axis fixes or scales. The node's parent chain (rest, measured at bind) converts. A part under a parent with non-uniform scale and a rotation would shear; such a part is not supported (no game has one).
+- Binding is redone when `e.partXf` is replaced or removed (`world.add`/`remove`); otherwise once, on the entity's first frame, after the create hooks that are registered by then. A hook that reshapes parts must be registered before the entity is first drawn (a view half's `enter`); hooks added later do not re-measure (the nodes are no longer at rest). Names merged into the same `e.partXf` after the first frame (3c's `add` merges) are not bound; the vehicle kit adds its wheels in `createVehicle`, in the spawn's step.
+
+- [ ] **Step 1: Write the helpers and the failing tests**
+
+`test/helpers/fakeWorld.mjs`: in the header add "partXf: [names] at spawn gives e.partXf (curr) and a prev per part, copied by step(), read by partXfPrev(e, name, out); place() does not touch parts (3c Task 10b)". In `spawn`, after `prev.set(…)`:
+
+```js
+      if (rest.partXf) { const names = rest.partXf; e.partXf = {}; const pp = new Map(); for (const n of names) { e.partXf[n] = { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } }; pp.set(n, copy(e.partXf[n], { p: {}, q: {} })); } partPrev.set(e.id, pp); }
+```
+
+with `const partPrev = new Map();` beside `prev`. `step()` also copies every part: `for (const [id, pp] of partPrev) { const e = list.find(x => x.id === id); if (e) for (const [n, v] of pp) copy(e.partXf[n], v); }`. `despawn` and `clear` drop `partPrev` entries. Add:
+
+```js
+    partXfPrev(e, name, out) { const v = partPrev.get(e.id)?.get(name); if (!v) throw new Error(`world.partXfPrev: entity ${e.id} has no part '${name}'`); return copy(v, out); },
+```
+
+`test/sync-parts.test.mjs`:
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { syncSetup } from './helpers/syncSetup.mjs';
+import { threeIds, retained } from './helpers/alloc.mjs';
+
+const CAR = { car: [{ name: 'body', material: 'steel' }, { name: 'hub', material: 'rubber', p: [0.8, 0.3, 1.2] }] };
+const yaw = a => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a);
+const set = (part, p, q = yaw(0), sign = 1) => { Object.assign(part.p, { x: p[0], y: p[1], z: p[2] }); Object.assign(part.q, { x: sign * q.x, y: sign * q.y, z: sign * q.z, w: sign * q.w }); };
+const centre = node => { node.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3()); };
+const near = (a, b, msg) => assert.ok(a.distanceTo(b) < 1e-9, `${msg}: ${a.toArray()} vs ${b.toArray()}`);
+
+test('3g: a part centre is drawn at body · p, turned body · q · rest, interpolated with the body\'s alpha on the short arc; e.scale keeps metres', () => {
+  const s = syncSetup(CAR), body = yaw(Math.PI / 2);
+  const e = s.world.spawn({ model: 'car', at: [10, 0, 0], q: [body.x, body.y, body.z, body.w], scale: 2, partXf: ['hub'] });
+  set(e.partXf.hub, [1, 0, 2]); s.sync.frame(1);
+  const hub = s.sync.objectOf(e).getObjectByName('hub');
+  near(centre(hub), new THREE.Vector3(12, 0, -1), 'centre at body · p'); // yaw 90°: (1, 0, 2) → (2, 0, -1)
+  assert.ok(Math.abs(hub.getWorldScale(new THREE.Vector3()).x - 2) < 1e-9, 'rest scale × e.scale');
+  s.world.step(); set(e.partXf.hub, [3, 0, 2], yaw(Math.PI / 2), -1); // curr stored as -q
+  s.sync.frame(0.5);
+  near(centre(hub), new THREE.Vector3(12, 0, -2), 'p halfway');
+  const want = body.clone().multiply(yaw(Math.PI / 4)), got = hub.getWorldQuaternion(new THREE.Quaternion());
+  assert.ok(1 - Math.abs(got.dot(want)) < 1e-12, 'q halfway on the short arc');
+});
+test('3g: the centre is the node\'s bounding-box centre after create hooks: an off-centre wheel turns about its hub', () => {
+  const s = syncSetup(CAR);
+  s.sync.on('model:car', { create: (e, obj) => { obj.getObjectByName('hub').geometry = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0); } });
+  const e = s.world.spawn({ model: 'car', partXf: ['hub'] }), q = yaw(Math.PI / 2);
+  set(e.partXf.hub, [0, 0.3, 1.2]); s.sync.frame(1);
+  const hub = s.sync.objectOf(e).getObjectByName('hub');
+  near(centre(hub), new THREE.Vector3(0, 0.3, 1.2), 'centre at p'); near(hub.position, new THREE.Vector3(-0.5, 0.3, 1.2), 'node origin');
+  set(e.partXf.hub, [0, 0.3, 1.2], q); s.world.step(); s.sync.frame(1);
+  near(centre(hub), new THREE.Vector3(0, 0.3, 1.2), 'turned about its centre'); near(hub.position, new THREE.Vector3(0, 0.3, 1.7), 'node swung round it');
+});
+test('3g: a missing part names the model\'s parts; instanced entities refuse partXf; an undrawn entity\'s parts are ignored', () => {
+  const s = syncSetup(CAR); s.world.spawn({ model: 'car', partXf: ['wheel-x'] });
+  assert.throws(() => s.sync.frame(1), /^Error: sync: entity 1 \(model 'car'\) has no part 'wheel-x' for partXf \(parts: body, hub\)$/);
+  const t = syncSetup(CAR); t.world.spawn({ model: 'car', draw: 'instanced', partXf: ['hub'] });
+  assert.throws(() => t.sync.frame(1), /sync: entity 1: partXf needs draw 'object'/);
+  const u = syncSetup(CAR); u.world.spawn({ model: 'car', draw: false, partXf: ['hub'] }); u.sync.frame(1); assert.equal(u.sync.root.children.length, 0);
+});
+test('3g: part poses make no three objects and retain nothing: 10000 frames of 20 cars with 4 parts (R-8)', () => {
+  const wheels = ['fl', 'fr', 'rl', 'rr'], s = syncSetup({ car: [{ name: 'body', material: 'steel' }, ...wheels.map((name, i) => ({ name, material: 'rubber', p: [i, 0, 0] }))] }), es = [];
+  for (let i = 0; i < 20; i++) es.push(s.world.spawn({ model: 'car', at: [i * 3, 0, 0], partXf: wheels }));
+  s.sync.frame(1);
+  let t = 0;
+  const tick = () => { t++; for (const e of es) for (const w of wheels) { const q = e.partXf[w].q, a = t * 0.3; q.x = Math.sin(a); q.w = Math.cos(a); e.partXf[w].p.y = Math.sin(t) * 0.1; } s.world.step(); s.sync.frame(0.5); };
+  const before = threeIds(), grew = retained(tick, 10000), after = threeIds();
+  assert.deepEqual(after, { object: before.object + 1, material: before.material + 1, geometry: before.geometry + 1 });
+  assert.ok(grew < 128 * 1024, `retained ${grew} bytes`);
+});
+```
+
+- [ ] **Step 2: Run; expect FAIL.** `UNIT test/sync-parts.test.mjs`. The first test fails on "centre at body · p" (the hub stays at its rest pose).
+
+- [ ] **Step 3: Implement** in `src/view/sync/index.js`:
+  - Header comment, after the pose bullet: "- Part poses (3c's e.partXf, swapped like xf): each named part's centre (its bounding-box centre after create hooks) is drawn at lerp(prev.p, curr.p, alpha) in the body frame, turned by the short-arc nlerp of q from its rest orientation (Task 13b)."
+  - Module scratch, beside `_prev`: `const _part = { p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } }, _pp = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pm2 = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1);`
+  - The record in `add` gains `pv: undefined, pnodes: null`. In `add`'s instanced branch, first: `if (e.partXf) throw new Error(`sync: entity ${e.id}: partXf needs draw 'object' (instanced parts are not posed per entity)`);`.
+  - Add, after `rematch`:
+
+```js
+  // Part poses (Task 13b): find each named node once, after the create hooks, and keep A = T(-centre) · rest and the inverse of
+  // its parent's rest, both in the model's own space (the object's local frame), so a frame is one compose and two multiplies.
+  function bindParts(r) {
+    const e = r.e, obj = r.obj; r.pv = e.partXf; r.pnodes = null;
+    if (!e.partXf || !obj) return;
+    obj.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert(), box = new THREE.Box3(), c = new THREE.Vector3();
+    r.pnodes = Object.keys(e.partXf).map(name => {
+      const node = obj.getObjectByName(name);
+      if (!node || node === obj) {
+        const names = []; obj.traverse(o => { if (o !== obj && o.name) names.push(o.name); });
+        throw new Error(`sync: entity ${e.id} (model '${e.model}') has no part '${name}' for partXf (parts: ${names.join(', ')})`);
+      }
+      const rest = new THREE.Matrix4().multiplyMatrices(inv, node.matrixWorld);
+      box.setFromObject(node);
+      if (box.isEmpty()) c.setFromMatrixPosition(rest); else box.getCenter(c).applyMatrix4(inv);
+      const a = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z).multiply(rest);
+      const parent = new THREE.Matrix4().multiplyMatrices(inv, node.parent.matrixWorld).invert();
+      return { name, node, a, parent };
+    });
+  }
+  function poseParts(r, a, s) {
+    const e = r.e, ps = r.pnodes;
+    for (let k = 0; k < ps.length; k++) {
+      const pn = ps[k], c = e.partXf[pn.name];
+      world.partXfPrev(e, pn.name, _part);
+      const pp = _part.p, pq = _part.q, cp = c.p, cq = c.q;
+      _pp.set((pp.x + (cp.x - pp.x) * a) / s, (pp.y + (cp.y - pp.y) * a) / s, (pp.z + (cp.z - pp.z) * a) / s); // metres → model space
+      let bx = cq.x, by = cq.y, bz = cq.z, bw = cq.w;
+      if (pq.x * bx + pq.y * by + pq.z * bz + pq.w * bw < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; } // short arc, as the body
+      _pq.set(pq.x + (bx - pq.x) * a, pq.y + (by - pq.y) * a, pq.z + (bz - pq.z) * a, pq.w + (bw - pq.w) * a).normalize();
+      _pm2.compose(_pp, _pq, _one).multiply(pn.a).premultiply(pn.parent);
+      _pm2.decompose(pn.node.position, pn.node.quaternion, pn.node.scale);
+    }
+  }
+```
+
+  - In `pose`, after the `if (r.obj) { … }` line: `if (r.pnodes) poseParts(r, a, s);`.
+  - In `frame`, after `if (r.hv !== hookVer) rematch(r);`: `if (r.pv !== e.partXf) bindParts(r);` (the first frame binds after `add`'s create hooks; a replaced or removed `partXf` rebinds).
+
+- [ ] **Step 4: Run; expect PASS.** `UNIT test/sync.test.mjs test/sync-hooks.test.mjs test/sync-instanced.test.mjs test/sync-netfix.test.mjs test/sync-parts.test.mjs` (26 tests).
+
+- [ ] **Step 5: Prove the subtle tests bite.**
+  - Change the short-arc test in `poseParts` to `if (false)`: expect the first test to fail on "q halfway on the short arc". Restore.
+  - In `bindParts`, make `a` just `rest` (drop the `makeTranslation(-c.x, -c.y, -c.z)`): expect the second test to fail on "turned about its centre". Restore.
+  - Move `if (r.pv !== e.partXf) bindParts(r);` into `add` before `rematch(r)`: expect the second test to fail on "centre at p" (the hook's geometry was not seen). Restore; PASS.
+
+- [ ] **Step 6: Commit.** `git add src/view/sync/index.js test/helpers/fakeWorld.mjs test/sync-parts.test.mjs && git commit -m "feat(view): view sync draws part poses (partXf) on named model parts, interpolated with the body"`
+
+---
+
 ## Task 14: View sync on 3c's real World
 
 **Files:**
 - Create: `test/sync-world.test.mjs`
 
 **Interfaces:**
-- Consumes: 3c's `createEngine` World (`engine.world`, `spawn({ model, xf: true })`, `e.xf` accessors, `xfPrev`, `lh.world.swap`, `despawn`, `clear`, `serial`), and `defs.models` sidecars (§4.3).
+- Consumes: 3c's `createEngine` World (`engine.world`, `spawn({ model, xf: true, partXf })`, `e.xf` accessors, `xfPrev`, `partXfPrev`, `lh.world.swap`, `despawn`, `clear`, `serial`), and `defs.models` sidecars (§4.3).
 - Produces: none (test only).
 
 - [ ] **Step 1: Write the test**
@@ -2756,15 +3027,23 @@ test('3g: sync draws a real World: xf entities, prev from xfPrev, the step\'s sw
   w.spawn({ model: 'crate', xf: true }); sync.frame(1); assert.equal(sync.root.children.length, 1);
   w.clear(); sync.frame(1); assert.equal(sync.root.children.length, 0);
 });
+test('3g: part poses on a real World: e.partXf curr, partXfPrev, swapped by lh.world.swap (3c Task 10b)', () => {
+  const engine = createEngine(game), fa = fakeAssets(), gfx = { scene: new THREE.Scene() };
+  const sync = createViewSync(engine, { gfx, assets: fa.assets, compiler: fa.compiler, view: { dt: 0 } }), w = engine.world;
+  const e = w.spawn({ model: 'crate', xf: true, partXf: ['body'] });
+  e.partXf.body.p.x = 2; sync.frame(0.5);
+  const body = sync.objectOf(e).getObjectByName('body'); assert.equal(body.position.x, 1); // prev is still the identity part pose
+  engine.stepN(1); sync.frame(0.5); assert.equal(body.position.x, 2);
+});
 ```
 
-- [ ] **Step 2: Run; expect PASS** (1 test). `UNIT test/sync-world.test.mjs`. This checks Contract issue 1 against the real World. If it fails, see which:
+- [ ] **Step 2: Run; expect PASS** (2 tests). `UNIT test/sync-world.test.mjs`. This checks Contract issue 1 against the real World. If it fails, see which:
   - The sidecar fixture is rejected (the message names the field). Fix the fixture, or import 3c's `test/fixtures/phys/` fixture (read only).
-  - `with('xf')` misses bodiless `xf: true` entities, or `xfPrev` has another out shape. That is a contract mismatch: **stop**, write it in the notes, and ask the integrator (constraint 10). Do not change the sync's reads on your own.
+  - `with('xf')` misses bodiless `xf: true` entities, or `xfPrev` (or `partXfPrev`) has another out shape. That is a contract mismatch: **stop**, write it in the notes, and ask the integrator (constraint 10). Do not change the sync's reads on your own.
 
-- [ ] **Step 3: Prove it can fail.** In the test, replace `engine.stepN(1);` with nothing: expect the `2` assertion to fail (prev not caught up). Restore; PASS.
+- [ ] **Step 3: Prove it can fail.** In each test, replace `engine.stepN(1);` with nothing: expect its `2` assertion to fail (prev not caught up). Restore; PASS.
 
-- [ ] **Step 4: Commit.** `git add test/sync-world.test.mjs && git commit -m "test(view): view sync against the real World: pool, swap, despawn and clear"`
+- [ ] **Step 4: Commit.** `git add test/sync-world.test.mjs && git commit -m "test(view): view sync against the real World: pool, swap, part poses, despawn and clear"`
 
 ---
 
@@ -2932,6 +3211,8 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
     - the `instanceCoverage` geometry wrapper that is never disposed (Task 9);
     - Pig Pens' gesture feel changes (Task 8);
     - Rally's FOVs as adds over `lhFov` and the portrait widening (Task 5);
+    - Tractor's chase shake from a counter hash instead of `Math.random`, and its F-10 blend moved into the rig as `blendFrom` (Task 5, CI-10);
+    - Pig Pens' `mode()` asked on every move, so a drive that starts mid-gesture stops an orbit (Task 8, 3k C9);
     - JIT warm-up in heap probes (`retained` warms 2000 runs first: the first 2000 frames retain about 110 KB of compiled code and feedback, measured while writing this plan);
     - any surprise from Tasks 3 and 14.
 - [ ] **Step 3: Commit.** `git add docs/plans/2026-10-13-phase-3g-viewsync-notes.md && git commit -m "docs: phase 3g notes, contract issues and field note candidates"`
@@ -2940,7 +3221,7 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
 
 ## Done when
 
-- `SUITE` passes in the worktree: the baseline count plus 3g's 71 new tests: audio 17, audio e2e 1 (it runs in SUITE too, and skips only where no Chromium is installed), cameras 18, instances 4, smoothing 4, sync 23 (9 + 3 + 6 + 4 + 1), crowd 4.
+- `SUITE` passes in the worktree: the baseline count plus 3g's 80 new tests: audio 17, audio e2e 1 (it runs in SUITE too, and skips only where no Chromium is installed), cameras 22 (project 4, chase 7, mount 2, orbit 4, gestures 5), instances 4, smoothing 4, sync 28 (9 + 3 + 6 + 4 + 4 + 2), crowd 4.
 - `BROWSER test/audio-e2e.test.mjs` passes (1 test).
 - Every mutation step above was seen red, then green.
 - `git diff --stat phase-3...phase-3-viewsync` touches only the files in the File Structure table.
@@ -2960,16 +3241,18 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
    - The entity set is `world.with('xf')`, and prev poses come from `world.xfPrev(e, { p, q })`. §4.4 says neither that `xf` is a queryable part nor what shape `xfPrev`'s `out` has. Task 14 checks both on 3c's World.
 2. **`e.netFix.dq` convention.** `dq = q_old ⊗ q_new⁻¹` (world frame), and drawn = `offset ⊗ q`. `dp = p_old − p_new`. `smoothMs` is read from `world.net.tunables[e.net].smoothMs` (default 150). 3i must produce `netFix` in this convention.
 3. **Rigs beyond the §4.9 signatures** (3e, 3j and 3k rulings):
-   - `createChaseRig` adds `opts.style: 'heading' | 'travel'`, `orbit(pose, dt)`, `yaw`, `shake(a)` and live `opts`. Rally's absolute FOVs (55, 62 + speed) become adds over `camera.userData.lhFov` (−5, +2), so in portrait Rally's FOV is 4° wider than today.
-   - `createMountRig` has `follow(pose)`, `set(socket)` and `fovAdd`; §4.9 gave it no methods.
-   - `createOrbitRig` adds `state`, `limits`, `fit`, `apply`, `panBy`, `chase`, `release`, `gesture`/`orbiting`, a `canvas` option, `update(dt, raw)` and `bindGesture(engine, el, { mode, tapMove })`.
+   - `createChaseRig` adds `opts.style: 'heading' | 'travel'`, `orbit(pose, dt)`, `yaw`, `shake(a)`, `blendFrom(q, time)` and live `opts`. Rally's absolute FOVs (55, 62 + speed) become adds over `camera.userData.lhFov` (−5, +2), so in portrait Rally's FOV is 4° wider than today.
+   - **CI-10 (3l).** The heading style carries Tractor's velocity heading (`slide`, `pose.velYaw`), portrait framing (`portrait`, `portraitAspect`), shake (`shake(a)`, `shakeTime`), live tuning (the caller's `opts` object, shared across rigs) and the F-10 blend (`blendFrom`), so Tractor adopts the rig (Task 5).
+   - `createMountRig` has `follow(pose)`, `set(socket)` and `fovAdd`; §4.9 gave it no methods. With the travel chase it covers all four of Rally's modes (3j #9, Task 6's four-modes test); sockets are plain offsets, so no `sock-*` empties are needed.
+   - `createOrbitRig` adds `state`, `limits`, `fit`, `apply`, `panBy`, `chase`, `release`, `gesture`/`orbiting`, a `canvas` option, `update(dt, raw)` and `bindGesture(engine, el, { mode, tapMove })`; `mode()` is asked again on every move (3k C9: the pose, clamps and drive chase Pig Pens needs).
    - `makeProject` adds `project.ndc` and an optional `out`.
 4. **Instancing extras.**
    - `createInstances` adds `setMatrix`, `getMatrix`, `color` accepting CSS strings, `cover`, `copy`, `dispose`, and the `colors` and `coverage` options; `count` is settable.
    - `createCrowd` adds `parts`, `cover`, `dispose`, and a Matrix4 pose. `blend.k` is the current clip's weight.
    - Sync writes `instanceCoverage` from `e.coverage { dirt, rust, snow, mud }` for instanced entities (3h's `coverageView` does object-drawn ones), and advances `compiler.time` once per frame (3f C3).
    - Particle and mark pools are 3h's fx kit (§4.10), not 3g's.
-5. **Audio.**
+5. **Part poses (`partXf`).** §4.4/§4.9 have no per-part state. 3c adds `partXf` and `world.partXfPrev(e, name, out)` (3c Task 10b, Integrator request 7); sync poses named parts from it (Task 13b): body-frame centre and rest-relative rotation, interpolated with the body; `draw: 'instanced'` refuses it.
+6. **Audio.**
    - Unlock listens on `pointerup` and `click` too, and keeps listening until the context runs: iOS grants activation on up/click/touchend, not on a touch `pointerdown`.
    - Added: `onGesture(fn)`, `muted`, `listen(obj)`, `distanceGain(x, y, z)`, and the `play` options `at`, `when`, `loop` and `offset`.
    - Test seams: the `AudioContext` and `fetch` options, and `positional`, `volume` and `limiter` tunables.
@@ -2982,4 +3265,8 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
 3. **Exports in `src/index.view.js`:** `createViewSync`, `createChaseRig`, `createOrbitRig`, `createMountRig`, `makeProject`, `createInstances`, `createCrowd` and `createAudio` (overview §3.2).
 4. **At the Wave B merge:** take 3g's `src/view/sync/index.js` and `src/view/audio/index.js` over 3e's stubs, and delete `test/render-stubs.test.mjs` (as 3e's request 3 says). Rerun `test/render-pipeline.test.mjs` and `test/render-boot.test.mjs` with the real sync and audio.
 5. **Field notes:** mark #67 done at the merge, and number 3g's candidates from the notes file.
-6. **Forward to 3i:** the `netFix` convention (Contract issue 2). **Forward to 3h:** sync writes `instanceCoverage` for instanced entities from `e.coverage` (Contract issue 4). **Forward to 3j/3k/3l:** the rig surfaces in Contract issue 3 (Rally: `style: 'travel'`, `orbit`, mount `fovAdd: 12`; Pig Pens: orbit `fit`, `chase`, `release`, `bindGesture({ mode, tapMove: ORBIT_PX })`; Tractor: `style: 'heading'`, `yaw`, `shake`).
+6. **Forward to 3i:** the `netFix` convention (Contract issue 2). **Forward to 3h:** sync writes `instanceCoverage` for instanced entities from `e.coverage` (Contract issue 4). **Forward to 3j/3k/3l** (each amends its plan to adopt the rigs; option names and defaults are the code in Tasks 5–7):
+   - **Rally (3j #9; replaces 3j's own-camera Task 16):** `chase = createChaseRig(camera, { style: 'travel' })` (defaults `distance 6.8, height 2.4, lag 3.5, lookAhead 3, lookHeight 0.6, ease 8, lookEase 12, blendFrom 3, blendSpan 20, blendMax 0.55, fovAdd 2, fovSpeed 0.25, fovMax 10, orbitRadius 9, orbitHeight 3.2, orbitLook 0.4, orbitSpeed 0.12, orbitStart 0.6, orbitFovAdd -5, shakeTime 0.25`): title → `chase.orbit(pose, dt)`, chase → `chase.follow(pose, dt)`, pose `{ p, q, v }`; `mount = createMountRig(camera, { socket: { p: [0, 0.05, zFront + 0.9] }, fovAdd: 12 })`, bonnet `mount.set({ p: [0, 0.62, 0.35] })`, `mount.follow(pose)`. The FOV base is `camera.userData.lhFov` (3e sets 60 in landscape; a camera made outside boot, as in 3j's camera golden, sets `userData.lhFov = 60` itself), so landscape numbers are today's and only portrait is 4° wider. Rally does not write `mc.time` (view sync advances it, 3f C3).
+   - **Pig Pens (3k C9; replaces 3k's "not adopted" decision):** `createOrbitRig(camera, { target: { x: 0, y: 0.5, z: 1 }, distance: 46, pitch: 0.92, bounds: { x: [-34, 34], z: [-30, 30] }, canvas, fit: { portrait: { yaw: π/2, dist: 60, tx: -3, tz: -9 }, landscape: { yaw: 0, dist: 46, tx: -1, tz: -4 } } })` (defaults `min 2.5, max 80, pitchMin 0.28, pitchMax 1.48, yaw 0, ground 0`; chase `lag 2.5, recentre 0.8, lead 0.5, leadMin -1, leadMax 3, follow 5, pitch 0.42, near 9, far 22, ease 2`; `release({ pitch: 0.7, distance: 18 })`), `rig.bindGesture(engine, canvas, { mode: () => driving ? 'chase' : downTool === 'hand' ? 'orbit' : 'none', tapMove: ORBIT_PX })`, read `rig.orbiting` in `devices.js`, `rig.ray` for tool rays, `makeProject` for `view.project`.
+   - **Tractor (CI-10; replaces 3l's "keeps render/camera.js"):** one module-level `CAM = {}` passed to every farm's `createChaseRig(camera, CAM)` (heading defaults `distance 12, height 10.2, lag 3, lookAhead 11, lookHeight 0.8, ease 6, slide 2, portrait 1.25, portraitAspect 0.9, shakeTime 0.25`); `?tune` rows write `CAM.distance`/`height`/`lookAhead`; pose `{ x, y, z, yaw, fwd, velYaw: atan2(v.x, v.z) }`; `snap(pose)` on a new farm; `shake(0.35)`/`shake(0.25)` on boop/bump; `blendFrom(showCamera.quaternion)` at the show's end; `rig.yaw ?? tractor.yaw` for the stick (C-2); `makeProject` for `view.project`.
+7. **Part poses (Task 13b; user ruling 2026-10-14).** 3c's Task 10b (`partXf`, its swap in `lh.world.swap`, `world.partXfPrev`) must be on `phase-3` before Task 13b; it is in 3c's plan, so 0.8.0 carries it. Spec E-10 gains a line: part poses are swapped with the pose pool. **Forward:** to 3h, its Task 6b (the vehicle kit writes `partXf` for wheels that name a `part`); to 3j, Rally's car is drawn by sync (3j Task 15, closes 3j request 7); to 3k and 3l, drop the wheel-turning code in their sync hooks: name each kit wheel's `part` (3h Task 6b) and keep only static decoration (axis fix, paint) in `create`.

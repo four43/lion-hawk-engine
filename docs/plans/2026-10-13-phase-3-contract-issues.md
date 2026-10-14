@@ -8,6 +8,13 @@ The controller's rulings on gaps or conflicts in `2026-10-13-phase-3-overview.md
 - Pig Pens source GLBs vendored from `~/Downloads/Kenney Game Assets All-in-1 3.7.0`: approved.
 - Multiplayer tractors are solid (`driven` remotes) and a tractor-to-tractor collision honks (debounced): 3i and 3l.
 
+## User decisions (2026-10-14)
+
+- Spec deltas D1–D9 (overview §2): approved as written. 3a Task 10 part A is unblocked.
+- Execution: subagent-driven, parallel worktrees per 3m, in dependency waves with gated `--ff-only` merges.
+- No review gate after the reconciliation pass: commit it and start execution.
+- Every game moves fully onto the engine. No plan may fall back to keeping a game's own copy of something the engine provides (camera, terrain mesh, particles, materials, physics…). If the engine piece can't match today's feel, the game step stops and files an integrator request; the owning engine plan's patch closes the gap.
+
 ## 3b materials
 
 1. `pair(a, b)` is cached per ordered pair (M-8 tie-to-`a`, tyre-from-`b` make it asymmetric). Accepted.

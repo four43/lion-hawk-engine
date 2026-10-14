@@ -68,7 +68,7 @@ GLOBAL CONSTRAINTS (phase 3)
 The five inputs or failure modes most likely to bite, and the test that pins each:
 
 1. **A three.js chunk rename or a GLSL error in one tier × feature combination** (the patches compile only inside a real GL context). Pinned by `test/compiler-chunks.test.mjs` "every patched chunk exists…" plus "CHUNKS lists exactly…" (Task 3), and by `test/compiler-e2e.test.mjs` "every feature compiles" with `renderer.debug.onShaderError` on all three tiers (Task 8).
-2. **Programs or uniforms shared wrongly**: a per-entity coverage clone or a paint colour that compiles a new program (R1 iPad cost), or clones that share one `uCoverage`, so one tractor's dirt shows on every tractor. Pinned by `test/compiler-apply.test.mjs` "coverage(): a per-entity clone…" (Task 6) and the e2e "more paint and coverage users add no programs" and "a coverage clone's uCoverage reaches the GPU, and only for that clone" (Task 8).
+2. **Programs or uniforms shared wrongly**: a per-entity coverage clone, a paint colour or a hue ramp that compiles a new program (R1 iPad cost), or clones that share one `uCoverage` or one paint mode, so one tractor's dirt or paint shows on every tractor. Pinned by `test/compiler-apply.test.mjs` "coverage(): a per-entity clone…" (Task 6), `test/compiler-paint.test.mjs` "paint values…" and "repaint()…" (Task 8b), and the e2e "more paint and coverage users add no programs", "a coverage clone's uCoverage reaches the GPU, and only for that clone" (Task 8) and "paint keeps the vertex shading… no new programs" (Task 8b).
 3. **matSplit by construction (M-13):** an instanced and a plain user, or a shadow receiver and a non-receiver, getting the same material. Pinned by `test/compiler.test.mjs` "cache: same options share one material; each user kind gets its own" (Task 5) and `test/compiler-apply.test.mjs` "re-apply and clones keep the authored names; instanced users…" (Task 6).
 4. **Loader cache and failure handling:** the same URL fetched twice under overlapping preloads, a failed fetch poisoning the cache so a retry never loads, or `preload` resolving before `gfx.warm()`. Pinned by `test/assets.test.mjs` "preload fetches each URL once…", "unknown keys, failed loads… a failed key can be retried" and "preload resolves only after gfx.warm() resolves" (Task 7).
 5. **Animation data on the wrong object:** a skinned clone that shares the template's skeleton (the mixer moves every pig), or an anim-table layout that transposes rotations or does not loop. Pinned by `test/assets.test.mjs` "skinned models clone with SkeletonUtils…" (Task 7) and `test/assets-animTable.test.mjs` "decode keeps fps… (rotation not transposed)" and "sampling lerps… and loops" (Task 2).
@@ -82,9 +82,9 @@ The five inputs or failure modes most likely to bite, and the test that pins eac
 | `src/view/assets/loader.js` | new | The page's one `GLTFLoader` with `MeshoptDecoder`; optional injected KTX2/Draco loaders; `loadGlb(url)` / `loadJson(url)` via `fetch` (works in Node). |
 | `src/view/assets/animTable.js` | new | `decodeAnimTable(json)`, `sampleAnimTable(table, clip, t, part, out)`, `blendAnimTable(...)`: baked crowd animation, zero allocation. |
 | `src/view/assets/index.js` | new (replaces 3e's stub if present) | `createAssets({ manifest, base, compiler, renderer, gfx, decoders, fetch })`: manifest keys, `Map<url, Promise>` cache, progress, templates (compiled materials, sockets, clips, anim table), clones, dispose. |
-| `src/view/materials/chunks.js` | new | `CHUNKS` table, `inject()` chunk guard, the GLSL of `COVERAGE` (dirt, rust, snow, mud), `FUR`, `SUBSURFACE`, `WIND`; `patchShader(sh, features)`. |
+| `src/view/materials/chunks.js` | new | `CHUNKS` table, `inject()` chunk guard, the GLSL of `COVERAGE` (dirt, rust, snow, mud), `FUR`, `SUBSURFACE`, `WIND`, `PAINT` (Task 8b); `patchShader(sh, features)`. |
 | `src/view/materials/fur.js` | new | `furGeometry(geometry, mask, { shells })`: Pig Pens' shell geometry, generic. |
-| `src/view/materials/compiler.js` | new (replaces 3e's stub if present) | `createMaterialCompiler(registry, { shading, paint })`: tiers, `look` mapping, cache key, defines, `customProgramCacheKey`, `get`, `paint`, `coverage`, `extend`, `apply`, `furGeometry`, `keys`, `made`, `time`, `dispose`. |
+| `src/view/materials/compiler.js` | new (replaces 3e's stub if present) | `createMaterialCompiler(registry, { shading, paint: { base, shade } })`: tiers, `look` mapping, cache key, defines, `customProgramCacheKey`, `get`, `paint`, `coverage`, `extend`, `apply`, `repaint` (Task 8b), `furGeometry`, `keys`, `made`, `time`, `dispose`. |
 | `test/helpers/glb.mjs` | new | `makeGlb()` (in-memory GLB, optional meshopt and skin), `fakeFetch()`, `makeAnimJson()`. |
 | `test/assets-loader.test.mjs` | new | Task 1. |
 | `test/assets-animTable.test.mjs` | new | Task 2. |
@@ -93,7 +93,8 @@ The five inputs or failure modes most likely to bite, and the test that pins eac
 | `test/compiler.test.mjs` | new | Task 5. |
 | `test/compiler-apply.test.mjs` | new | Task 6. |
 | `test/assets.test.mjs` | new | Task 7. |
-| `test/compiler-e2e.page.js`, `test/compiler-e2e.test.mjs` | new | Task 8: real WebGL2 compile, program sharing and pixel checks. |
+| `test/compiler-e2e.page.js`, `test/compiler-e2e.test.mjs` | new | Task 8: real WebGL2 compile, program sharing and pixel checks (Task 8b adds the paint page function and 3 tests). |
+| `test/compiler-paint.test.mjs` | new | Task 8b: shading-preserving and hue-ramp paint, `repaint`. |
 | `docs/plans/2026-10-13-phase-3f-assets-notes.md` | new | Decisions, contract issues, integrator requests, field note candidates. |
 
 Exports (`createAssets`, `createMaterialCompiler`, `furGeometry`, `sampleAnimTable`, plus `blendAnimTable`, `decodeAnimTable`) are added to `src/index.view.js` by the integrator (Integrator request 1). Tests import the modules by path.
@@ -1134,7 +1135,7 @@ git commit -m "feat(view): material compiler tiers, look mapping and the matSpli
 **Interfaces:**
 - Consumes: Task 5's `get`, `STATE`, `install`, `uniformsFor`.
 - Produces:
-  - `mc.paint(id, color, opts) → THREE.Material`: one clone per (key, colour), cached, same program, `color` = the paint (times vertex colours, as Tractor's `paintable` did);
+  - `mc.paint(id, color, opts) → THREE.Material`: one clone per (key, colour), cached, same program, `color` = the paint (times the vertex colours; Task 8b adds the `PAINT` variant that keeps the vertex shading instead, as Tractor's `paintable` did, and a hue-ramp value);
   - `mc.coverage(material, { uCoverage } = {}) → { material, uniforms: { uCoverage: THREE.Vector4 } }`: plain material → a new uncached clone with its own (or the given) `uCoverage`, `userData.lhShared = false` (the entity's to dispose); instanced material → one cached shared variant with `COVERAGE_INSTANCED` that reads the `instanceCoverage` attribute;
   - `mc.extend(material, name, patch(shader, inject)) → THREE.Material`: a cached clone whose `onBeforeCompile` runs the engine patches, then `patch`; program key `lh:<features>|x:<name>`;
   - `mc.apply(root, { instanced = false, paint = null, coverage = false } = {}) → { uCoverage: THREE.Vector4 | null }`.
@@ -1859,6 +1860,390 @@ git commit -m "test(view): compile every tier and feature in WebGL2; program sha
 
 ---
 
+## Task 8b (judgment): Paint that keeps vertex shading, and a hue-ramp paint (3l Integrator request 6)
+
+**Why here (3f, not 3g):** paint is a material and look concern. A paint value becomes a material colour plus uniforms, and the per-vertex data it needs is written by `mc.apply`, which `assets.clone(model, { paint })` already calls. 3g's view sync only passes `e.paint` to `assets.clone` and writes `instanceColor` for instanced slots, so 3g needs no change. 3l's Tractor (Tasks 16 and 17) is the user: its 1.8 `paintable` turns into this feature, and Tractor keeps no copy of it (user ruling 2026-10-14).
+
+**Files:**
+- Modify: `src/view/materials/chunks.js`, `src/view/materials/compiler.js`, `test/compiler-e2e.page.js`, `test/compiler-e2e.test.mjs`
+- Create: `test/compiler-paint.test.mjs`
+
+**Interfaces:**
+- Consumes: Tasks 3, 5, 6 and 8 (`CHUNKS`, `patchShader`, `get`, `variant`, `paint`, `apply`, `STATE`, the e2e `rig`).
+- Produces:
+  - `createMaterialCompiler(registry, { shading, paint: { base = 'steel', shade = [0.25, 0.85, 1.1] } })`. `shade` is `[floor, gain, max]`, and a painted vertex's shade is `k = min(max, floor + gain × b)`. `b` is the vertex's brightness (`0.3 r + 0.6 g + 0.1 b` of its linear colour) divided by the brightest vertex of the same paint slot in the model. The defaults are Tractor 1.8's `paintable` numbers. A bad `shade` throws `compiler: paint.shade must be [floor, gain, max] numbers`.
+  - A fifth shader feature `PAINT`: `CHUNKS.PAINT = { vertex: ['common', 'begin_vertex'], fragment: ['common', 'color_fragment'] }`. It reads `attribute vec4 lhPaint` (model-space xyz, `b`) and the uniforms `uPaintMode` (vec3: mode, s, l), `uPaintAxis` (vec4) and `uPaintShade` (vec3, one object per compiler). Modes: 0 keep (the vertex colours as authored); 1 solid (`diffuse × k`, times `instanceColor` when instanced); 2 hue (`hsl(fract(dot(p, axis.xyz) + axis.w), s, l) × k`). Mode 2 is worked out per vertex, so triangles blend the same RGB that 1.8's vertex colours did.
+  - `mc.get(id, { paint: true })` adds `PAINT` (in the cache key's feature list) and sets `color` to white.
+  - **Paint values** (in `mc.paint`, `mc.apply`'s `paint`, `assets.clone(key, { paint })` and `mc.repaint`): a colour (CSS string, hex number or `THREE.Color`), or `{ hue: { axis = [0, 0, 1], from = -1, to = 1, s = 0.75, l = 0.5 } }`, where hue = `fract((dot(p, axis) - from) / (to - from))`. Anything else throws `compiler: a paint value is a colour or { hue: { axis: [x, y, z], from, to (from ≠ to), s, l } }`.
+  - `mc.paint(id, value, opts)`: a hue implies `paint: true`. The key is `<base key>|paint:<hex>` or `<base key>|paint:hue:<ax>,<ay>,<az>:<from>,<to>:<s>,<l>`. There is one cached material per value and one program for every value.
+  - `mc.apply`: a `paint-<slot>` mesh that has a `color` attribute gets `lhPaint`, written once per geometry, and compiles with `paint: true`. Unpainted plain meshes use mode 0, painted plain meshes mode 1 or 2. Instanced meshes always use mode 1: `instanceColor` is the paint and the shading is kept. A value is not per instance, so it is ignored there, as colours are today. A hue on a paint mesh with no vertex colours throws `compiler: a hue paint needs vertex colours (mesh '<mesh>', paint-<slot>)`.
+  - `mc.repaint(root, paint) → root`: points a compiled tree's paint slots at new values, at create time or when the paint changes. It never runs per frame.
+
+**Decisions to confirm in review:**
+- **Bounded programs.** `PAINT` adds one program per feature set that has vertex-coloured paint slots (Tractor: `lh:COVERAGE+PAINT`). Colour, hue and keep are uniform values, so changing the paint never compiles a program. Meshes without vertex colours keep Task 6's colour paint unchanged, so every Task 5–8 test stands.
+- **Dirt goes on top of paint.** `inject(…, 'after')` puts each later patch nearer the tag, and `PAINT` is last in `CHUNKS`. So its `color_fragment` code runs before COVERAGE's layers and FUR's root shading.
+- **`lhPaint` lives on the template geometry.** That geometry is already shared (`lhShared`), so clones and re-applies read the attribute and nothing is copied per entity. A geometry used by two meshes at different places takes the first mesh's positions. A multi-material mesh's brightness top counts the whole geometry.
+- **`repaint` and per-entity clones.** It repaints per-entity clones (`coverage()`, `lhShared === false`, for example 3h's `coverageView`) in place: their own `uPaintMode`, `uPaintAxis` and `color`. So whoever holds the clone keeps a valid material and its `uCoverage`. Shared materials swap to the cached paint material, instanced meshes are skipped, and a paint slot the compiler never compiled throws `compiler: repaint() needs a tree compiled by apply()`.
+
+- [ ] **Step 1: Write the failing test**
+
+`test/compiler-paint.test.mjs`:
+
+```js
+// Task 8b (3l Integrator request 6): paint that keeps each vertex's shading, a hue-ramp paint and repaint, on one program per
+// feature set. The look's oracle is Tractor Pickup 1.8's paintable (games/tractor-pickup/src/render/vehicles3d.js), copied below.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshStandardMaterial, ShaderLib } from 'three';
+import { defineMaterials } from '../src/defs/materials.js';
+import { createMaterialCompiler } from '../src/view/materials/compiler.js';
+import { patchShader } from '../src/view/materials/chunks.js';
+
+const REG = defineMaterials({ testMud: { look: { color: '#ff0000' }, coverage: { dirt: 1 } } });
+const compile = m => { const sh = { vertexShader: ShaderLib.physical.vertexShader, fragmentShader: ShaderLib.physical.fragmentShader, uniforms: {} }; m.onBeforeCompile(sh, null); return sh; };
+// a strip of n vertices along z from -1 to 1 (x alternates 0, 1), grey rising 0.2 → 0.8, times scale
+function strip(n, scale = 1) {
+  const g = new BufferGeometry(), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = i % 2; pos[i * 3 + 2] = -1 + 2 * i / (n - 1); col.fill((0.2 + 0.6 * i / (n - 1)) * scale, i * 3, i * 3 + 3); }
+  g.setAttribute('position', new BufferAttribute(pos, 3)); g.setAttribute('color', new BufferAttribute(col, 3));
+  return g;
+}
+const mesh = (name, geo, p = [0, 0, 0]) => { const m = new Mesh(geo, new MeshStandardMaterial({ name })); m.name = name; m.position.fromArray(p); m.receiveShadow = true; return m; };
+// a little tractor: body (paint-body, z from -1.5), fenders at z + 2 and the darker roof on them (both paint-trim), glass (testMud)
+function model() {
+  const root = new Group(), body = mesh('paint-body', strip(8), [0, 0, -0.5]), fenders = mesh('paint-trim', strip(6), [0, 0, 2]);
+  const roof = mesh('paint-trim', strip(4, 0.5), [0, 1, 0]), glass = mesh('testMud', strip(4));
+  root.add(body, fenders, glass); fenders.add(roof);
+  return { root, body, fenders, roof, glass };
+}
+// Tractor 1.8's paintable over rows { area 1 | 2, pos (model space), col (linear) }: the paint, or the rainbow hue at z, times
+// 0.25 + 0.85 × the vertex's brightness over its area's brightest, capped at 1.1
+const PAINTS = { blue: '#2f6fd6', yellow: '#f2c230' };
+function paintable18(rows, { body, trim }) {
+  const top = [0, 0, 0], c = new Color();
+  const lum = rows.map(r => Array.from({ length: r.col.length / 3 }, (_, i) => 0.3 * r.col[i * 3] + 0.6 * r.col[i * 3 + 1] + 0.1 * r.col[i * 3 + 2]));
+  rows.forEach((r, j) => lum[j].forEach(l => { top[r.area] = Math.max(top[r.area], l); }));
+  return rows.map((r, j) => lum[j].flatMap((l, i) => {
+    const name = r.area === 1 ? body : trim, k = Math.min(1.1, 0.25 + 0.85 * l / top[r.area]);
+    if (name === 'rainbow') c.setHSL(((r.pos[i * 3 + 2] + 1) * 0.5) % 1, 0.75, 0.5); else c.set(PAINTS[name]);
+    return [c.r * k, c.g * k, c.b * k];
+  }));
+}
+// chunks.js paint() for a plain mesh, in JS: the vertex stage's vLhPaint and the fragment's choice (null: mode 0, three's own colours)
+const fract = x => x - Math.floor(x);
+function drawn(m, a, i, out) {
+  const u = compile(m).uniforms, md = u.uPaintMode.value, ax = u.uPaintAxis.value, sh = u.uPaintShade.value, k = Math.min(sh.z, sh.x + sh.y * a.getW(i));
+  if (md.x > 1.5) return out.setHSL(fract(ax.x * a.getX(i) + ax.y * a.getY(i) + ax.z * a.getZ(i) + ax.w), md.y, md.z).multiplyScalar(k);
+  if (md.x > 0.5) return out.copy(m.color).multiplyScalar(k);
+  return null;
+}
+
+test('PAINT declares its attribute and uniforms in both stages, shades instance colours, and runs before the coverage layers', () => {
+  const sh = patchShader({ vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} }, ['PAINT', 'COVERAGE']);
+  assert.match(sh.vertexShader, /attribute vec4 lhPaint; uniform vec3 uPaintMode; uniform vec4 uPaintAxis; uniform vec3 uPaintShade; varying vec3 vLhPaint;/);
+  assert.match(sh.vertexShader, /#ifdef USE_INSTANCING_COLOR\nvLhPaint \*= instanceColor\.rgb;\n#endif/);
+  assert.match(sh.fragmentShader, /uniform vec3 uPaintMode; varying vec3 vLhPaint;/);
+  const f = sh.fragmentShader, paint = f.indexOf('diffuseColor.rgb = diffuse * vLhPaint;'), dirt = f.indexOf('// dirt');
+  assert.ok(paint > 0 && dirt > paint, `paint first (${paint}), then dirt on top (${dirt})`);
+});
+
+test('apply(): vertex-coloured paint slots get PAINT and lhPaint (model-space position, brightness over the slot\'s brightest in the tree)', () => {
+  const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body, fenders, roof, glass } = model();
+  mc.apply(root);
+  for (const m of [body, fenders, roof]) { assert.equal(m.material.defines.PAINT, ''); assert.equal(m.material.customProgramCacheKey(), 'lh:COVERAGE+PAINT'); }
+  assert.equal(glass.material.defines.PAINT, undefined); assert.equal(glass.geometry.attributes.lhPaint, undefined, 'not a paint slot');
+  const a = roof.geometry.attributes.lhPaint;
+  assert.deepEqual([a.getX(3), a.getY(3), a.getZ(3)], [1, 1, 3], 'roof vertex (1, 0, 1), on the fenders at z + 2, raised 1');
+  assert.ok(Math.abs(a.getW(3) - 0.5) < 1e-6, `roof grey 0.4 over the trim's brightest, the fenders' 0.8: w ${a.getW(3)}`);
+  assert.ok(Math.abs(fenders.geometry.attributes.lhPaint.getW(5) - 1) < 1e-6);
+  assert.ok(Math.abs(body.geometry.attributes.lhPaint.getW(0) - 0.25) < 1e-6, 'the body has its own top');
+  assert.deepEqual(compile(body.material).uniforms.uPaintMode.value.toArray(), [0, 0, 0], 'unpainted: mode 0, the vertex colours as authored');
+  const copy = root.clone(true);
+  mc.apply(copy);
+  assert.equal(copy.children[1].children[0].geometry.attributes.lhPaint, a, 'written once per geometry; clones share it');
+});
+
+test('paint values: a colour (mode 1) and a hue ramp (mode 2) are uniforms of one program, cached per value', () => {
+  const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body, fenders } = model();
+  mc.apply(root, { paint: { body: '#2f6fd6', trim: { hue: {} } } });
+  const b = compile(body.material).uniforms, t = compile(fenders.material).uniforms, keep = mc.get('testMud', { vertexColors: true, paint: true });
+  assert.deepEqual(b.uPaintMode.value.toArray(), [1, 0, 0]); assert.ok(body.material.color.equals(new Color('#2f6fd6')));
+  assert.deepEqual(t.uPaintMode.value.toArray(), [2, 0.75, 0.5]); assert.deepEqual(t.uPaintAxis.value.toArray(), [0, 0, 0.5, 0.5], 'hue = fract((z + 1) / 2)');
+  assert.equal(b.uPaintShade, t.uPaintShade, 'one shade uniform per compiler'); assert.deepEqual(b.uPaintShade.value.toArray(), [0.25, 0.85, 1.1]);
+  assert.notEqual(b.uPaintMode, t.uPaintMode, 'the mode is per material');
+  assert.equal(keep.userData.lh.key, 'testMud|physical|0|1|0|1||COVERAGE+PAINT');
+  assert.equal(new Set([keep, body.material, fenders.material].map(m => m.customProgramCacheKey())).size, 1, 'one program');
+  assert.equal(fenders.material.userData.lh.key, `${keep.userData.lh.key}|paint:hue:0,0,1:-1,1:0.75,0.5`);
+  assert.equal(mc.paint('testMud', { hue: {} }, { vertexColors: true }), fenders.material, 'cached per value; a hue implies paint: true');
+  const own = createMaterialCompiler(REG, { paint: { base: 'testMud', shade: [0, 1, 1] } });
+  assert.deepEqual(compile(own.get('testMud', { paint: true })).uniforms.uPaintShade.value.toArray(), [0, 1, 1]);
+});
+
+test('the drawn colours match Tractor 1.8\'s paintable at every paint vertex, rainbow included', () => {
+  const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body, fenders, roof } = model();
+  mc.apply(root);
+  const rows = [[body, 1], [fenders, 2], [roof, 2]].map(([m, area]) => {
+    const a = m.geometry.attributes.lhPaint, c = m.geometry.attributes.color, pos = [], col = [];
+    for (let i = 0; i < a.count; i++) { pos.push(a.getX(i), a.getY(i), a.getZ(i)); col.push(c.getX(i), c.getY(i), c.getZ(i)); }
+    return { m, area, pos, col };
+  });
+  const v = n => n === 'rainbow' ? { hue: { axis: [0, 0, 1], from: -1, to: 1, s: 0.75, l: 0.5 } } : PAINTS[n], out = new Color();
+  for (const p of [{ body: 'blue', trim: 'yellow' }, { body: 'rainbow', trim: 'rainbow' }, { body: 'yellow', trim: 'blue' }]) {
+    mc.repaint(root, { body: v(p.body), trim: v(p.trim) });
+    const want = paintable18(rows, p);
+    rows.forEach((r, j) => { for (let i = 0; i < r.pos.length / 3; i++) {
+      drawn(r.m.material, r.m.geometry.attributes.lhPaint, i, out);
+      ['r', 'g', 'b'].forEach((ch, k) => assert.ok(Math.abs(out[ch] - want[j][i * 3 + k]) < 1e-5, `${p.body}/${p.trim} ${r.m.name} vertex ${i} ${ch}: ${out[ch]} vs ${want[j][i * 3 + k]}`));
+    } });
+  }
+});
+
+test('repaint(): per-entity coverage clones repaint in place (same material, same uCoverage); shared ones swap; one program', () => {
+  const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body, fenders } = model();
+  const { uCoverage } = mc.apply(root, { coverage: true, paint: { body: '#2f6fd6' } }), own = body.material;
+  assert.equal(own.userData.lhShared, false);
+  assert.equal(mc.repaint(root, { body: { hue: {} }, trim: '#f2c230' }), root);
+  assert.equal(body.material, own, 'in place: a holder such as coverageView keeps a valid material');
+  assert.deepEqual(compile(own).uniforms.uPaintMode.value.toArray(), [2, 0.75, 0.5]);
+  assert.equal(compile(own).uniforms.uCoverage.value, uCoverage, 'the entity keeps its dirt vector');
+  assert.ok(fenders.material.color.equals(new Color('#f2c230')));
+  mc.repaint(root, { trim: '#f2c230' });
+  assert.deepEqual(compile(own).uniforms.uPaintMode.value.toArray(), [0, 0, 0], 'no value: back to the vertex colours');
+  const s = model();
+  mc.apply(s.root);
+  const keep = s.body.material;
+  mc.repaint(s.root, { body: '#2f6fd6' });
+  assert.equal(s.body.material, mc.paint('testMud', '#2f6fd6', { vertexColors: true, paint: true }), 'shared: the cached paint material');
+  assert.equal(new Set([own, keep, s.body.material].map(m => m.customProgramCacheKey())).size, 1);
+});
+
+test('instanced paint slots shade the instance colour (mode 1); bad values, hues without vertex colours and uncompiled trees throw', () => {
+  const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body } = model();
+  mc.apply(root, { instanced: true, paint: { body: { hue: {} } } });
+  assert.equal(body.material.userData.lh.instanced, true); assert.equal(body.material.defines.PAINT, '');
+  assert.deepEqual(compile(body.material).uniforms.uPaintMode.value.toArray(), [1, 0, 0], 'instanceColor is the paint; values are not per instance');
+  assert.throws(() => mc.paint('testMud', { hue: { from: 1, to: 1 } }), /a paint value is a colour or \{ hue/);
+  assert.throws(() => mc.paint('testMud', {}), /a paint value is a colour or \{ hue/);
+  assert.throws(() => createMaterialCompiler(REG, { paint: { base: 'testMud', shade: [1, 2] } }), /paint\.shade must be \[floor, gain, max\] numbers/);
+  assert.throws(() => mc.apply(new Group().add(mesh('paint-body', new BoxGeometry())), { paint: { body: { hue: {} } } }), /a hue paint needs vertex colours \(mesh 'paint-body', paint-body\)/);
+  assert.throws(() => mc.repaint(model().root, { body: '#ffffff' }), /repaint\(\) needs a tree compiled by apply\(\)/);
+});
+```
+
+- [ ] **Step 2: Run; expect FAIL**: `UNIT test/compiler-paint.test.mjs`. The first test fails in `patchShader` (no `PAINT` patch, so no `lhPaint` declaration), and the others fail because `mc.repaint is not a function` or `defines.PAINT` is `undefined`.
+
+- [ ] **Step 3: Implement the patch.** In `src/view/materials/chunks.js`, add the `PAINT` row last in `CHUNKS` (after `WIND`):
+
+```js
+  PAINT: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'color_fragment'] },
+```
+
+Add this function before `const PATCH = …`, and add `PAINT: paint` to `PATCH`:
+
+```js
+// PAINT (Task 8b; Tractor 1.8's paintable): a paint slot that keeps its vertex shading. lhPaint = (model-space xyz, brightness b over
+// the slot's brightest vertex, written by mc.apply). k = min(max, floor + gain × b) from uPaintShade. uPaintMode.x: 0 keeps the vertex
+// colours, 1 paints diffuse × k (× instanceColor), 2 paints a hue ramp hsl(fract(dot(xyz, axis) + w), s, l) × k. Worked out per
+// vertex, as 1.8's vertex colours were, so triangles blend the same RGB. Injected last, so it runs before the coverage layers.
+function paint(sh) {
+  const hsl = `float lhHue( float p, float q, float t ) { if ( t < 0.0 ) t += 1.0; if ( t > 1.0 ) t -= 1.0;
+  if ( t < 1.0 / 6.0 ) return p + ( q - p ) * 6.0 * t; if ( t < 0.5 ) return q; if ( t < 2.0 / 3.0 ) return p + ( q - p ) * 6.0 * ( 2.0 / 3.0 - t ); return p; }
+vec3 lhHsl( float h, float s, float l ) { float p = l <= 0.5 ? l * ( 1.0 + s ) : l + s - l * s, q = 2.0 * l - p; // three's Color.setHSL
+  return vec3( lhHue( q, p, h + 1.0 / 3.0 ), lhHue( q, p, h ), lhHue( q, p, h - 1.0 / 3.0 ) ); }`;
+  sh.vertexShader = inject(sh.vertexShader, 'common', `attribute vec4 lhPaint; uniform vec3 uPaintMode; uniform vec4 uPaintAxis; uniform vec3 uPaintShade; varying vec3 vLhPaint;
+${hsl}`);
+  sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', `float lhK = min( uPaintShade.z, uPaintShade.x + uPaintShade.y * lhPaint.w );
+vLhPaint = vec3( lhK );
+#ifdef USE_INSTANCING_COLOR
+vLhPaint *= instanceColor.rgb;
+#endif
+if ( uPaintMode.x > 1.5 ) vLhPaint = lhHsl( fract( dot( lhPaint.xyz, uPaintAxis.xyz ) + uPaintAxis.w ), uPaintMode.y, uPaintMode.z ) * lhK;`);
+  sh.fragmentShader = inject(sh.fragmentShader, 'common', 'uniform vec3 uPaintMode; varying vec3 vLhPaint;');
+  sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', `if ( uPaintMode.x > 1.5 ) diffuseColor.rgb = vLhPaint;
+else if ( uPaintMode.x > 0.5 ) diffuseColor.rgb = diffuse * vLhPaint;`);
+}
+```
+
+- [ ] **Step 4: Implement the compiler side.** In `src/view/materials/compiler.js`:
+  1. Add `Matrix4, Vector3, BufferAttribute` to the `three` import.
+  2. After `const WIND_AMP = [0.12, 0.08];` add:
+
+```js
+const PAINT_SHADE = [0.25, 0.85, 1.1]; // [floor, gain, max] of k: Tractor 1.8's paintable
+const WHITE = new Color(1, 1, 1);
+const KEEP = Object.freeze({ mode: 0, axis: [0, 0, 0, 0], s: 0, l: 0, color: null, key: 'keep' });  // unpainted: the vertex colours
+const SOLID = Object.freeze({ mode: 1, axis: [0, 0, 0, 0], s: 0, l: 0, color: null, key: 'solid' }); // instanced: instanceColor
+// a paint value → { mode, axis: [ax, ay, az, w] (hue = fract(dot(p, axis.xyz) + w)), s, l, color, key }; allocates (create or change only)
+function coatOf(v) {
+  if (typeof v === 'string' || typeof v === 'number' || v?.isColor) { const color = new Color(v); return { mode: 1, axis: [0, 0, 0, 0], s: 0, l: 0, color, key: color.getHexString() }; }
+  const h = v?.hue;
+  if (h && typeof h === 'object') {
+    const { axis = [0, 0, 1], from = -1, to = 1, s = 0.75, l = 0.5 } = h, d = to - from;
+    if (Array.isArray(axis) && axis.length === 3 && [...axis, from, to, s, l].every(Number.isFinite) && d !== 0)
+      return { mode: 2, axis: [axis[0] / d, axis[1] / d, axis[2] / d, -from / d], s, l, color: null, key: `hue:${axis.join(',')}:${from},${to}:${s},${l}` };
+  }
+  throw new Error(`compiler: a paint value is a colour or { hue: { axis: [x, y, z], from, to (from ≠ to), s, l } } (got ${JSON.stringify(v)})`);
+}
+```
+  3. Replace the `export function createMaterialCompiler(…)` line with the following, and add the check after the paint-base check:
+
+```js
+export function createMaterialCompiler(registry = defineMaterials({}), { shading = 'physical', paint: { base: paintBase = 'steel', shade = PAINT_SHADE } = {} } = {}) {
+```
+```js
+  if (!Array.isArray(shade) || shade.length !== 3 || !shade.every(Number.isFinite)) throw new Error(`compiler: paint.shade must be [floor, gain, max] numbers (got ${JSON.stringify(shade)})`);
+```
+     Change `const Base = TIERS[shading], params = PARAMS[shading], cache = new Map(), time = { value: 0 };` to end with `, time = { value: 0 }, uPaintShade = { value: new Vector3(shade[0], shade[1], shade[2]) };`.
+  4. In `norm`, after `map: o.map ?? null, fur: o.fur !== false,` add `paint: !!o.paint,`. In `featuresOf`, after `if (o.wind) f.push('WIND');` add `if (o.paint) f.push('PAINT'); // Task 8b: shading-preserving paint slot`.
+  5. `uniformsFor(def, features, o, uCoverage = new Vector4(0, 0, 0, 0), coat = null)`, and before its `return u;`:
+
+```js
+    if (features.includes('PAINT')) {
+      const c = coat ?? (o.instanced ? SOLID : KEEP);
+      u.uPaintMode = { value: new Vector3(c.mode, c.s, c.l) }; u.uPaintAxis = { value: new Vector4(c.axis[0], c.axis[1], c.axis[2], c.axis[3]) };
+      u.uPaintShade = uPaintShade; // one [floor, gain, max] per compiler
+    }
+```
+  6. In `get`, after `if (o.vertexColors) m.color.setRGB(1, 1, 1);` add `if (o.paint) m.color.setRGB(1, 1, 1); // the paint value sets it (mode 1)`, and change the `install(…)` call to `install(m, { id, o, features, extras: [], coat: null, uniforms: uniformsFor(def, features, o) });`.
+  7. In `variant`, take `{ features, extras, uCoverage, coat } = {}`, build `const st = { ...s, features: features ?? s.features, extras: extras ?? s.extras, coat: coat !== undefined ? coat : s.coat };` and `st.uniforms = uniformsFor(def, st.features, s.o, uCoverage, st.coat);`.
+  8. Replace `paint` with:
+
+```js
+  function paint(id, value, opts) {
+    const coat = coatOf(value), base = get(id, coat.mode === 2 ? { ...opts, paint: true } : opts);
+    const key = `${base.userData.lh.key}|paint:${coat.key}`, hit = cache.get(key);
+    if (hit) return hit;
+    const m = variant(base, key, { coat: STATE.get(base).features.includes('PAINT') ? coat : null });
+    m.color.copy(coat.color ?? WHITE); // mode 1: the paint (times the vertex colours without PAINT, times the shade with it)
+    return m;
+  }
+```
+  9. Insert before `function apply`:
+
+```js
+  // Task 8b: lhPaint for each vertex-coloured paint-<slot> mesh that lacks it: model-space xyz (relative to root) and the vertex's
+  // brightness (0.3 r + 0.6 g + 0.1 b, linear) over the brightest vertex of the same slot in this tree (Tractor's trim spans the
+  // fenders and the roof). Written once onto the shared template geometry; clones and re-applies find it there.
+  const toRoot = new Matrix4(), toMesh = new Matrix4(), pv = new Vector3();
+  function paintAttributes(root) {
+    const rows = [], top = new Map(), seen = new Set();
+    root.updateMatrixWorld(true); toRoot.copy(root.matrixWorld).invert();
+    root.traverse(o => {
+      const g = o.isMesh ? o.geometry : null, c = g?.attributes.color;
+      if (!c || g.attributes.lhPaint || seen.has(g)) return;
+      const slot = (o.userData.lhMat ?? [o.material].flat().map(m => m.name)).find(n => n.startsWith('paint-'));
+      if (!slot) return;
+      seen.add(g);
+      const p = g.attributes.position, a = new Float32Array(c.count * 4);
+      toMesh.multiplyMatrices(toRoot, o.matrixWorld);
+      let t = top.get(slot) ?? 0;
+      for (let i = 0; i < c.count; i++) {
+        pv.fromBufferAttribute(p, i).applyMatrix4(toMesh);
+        const b = 0.3 * c.getX(i) + 0.6 * c.getY(i) + 0.1 * c.getZ(i);
+        a[i * 4] = pv.x; a[i * 4 + 1] = pv.y; a[i * 4 + 2] = pv.z; a[i * 4 + 3] = b;
+        if (b > t) t = b;
+      }
+      top.set(slot, t); rows.push({ g, a, slot });
+    });
+    for (const { g, a, slot } of rows) {
+      const t = top.get(slot) || 1;
+      for (let i = 3; i < a.length; i += 4) a[i] /= t;
+      g.setAttribute('lhPaint', new BufferAttribute(a, 4));
+    }
+  }
+```
+  10. In `apply`: make `paintAttributes(root);` its first line. In the per-material `opts`, add `paint: name.startsWith('paint-') && !!a.color && !!a.lhPaint`. In the `paint-` branch, after `const c = colors?.[name.slice(6)];`, add `if (c?.hue && !opts.paint) throw new Error(`compiler: a hue paint needs vertex colours (mesh '${o.name}', ${name})`);`. The rest of the branch stays as it is: instanced meshes and slots without a value take `get(paintBase, opts)`, which is mode 1 or mode 0.
+  11. After `apply` add:
+
+```js
+  // Task 8b: point a compiled tree's paint slots at new values (create time or on a paint change, never per frame). Shared
+  // materials swap to the cached paint material; per-entity clones (coverage(), lhShared false, e.g. 3h's coverageView) change in
+  // place, so their holders keep a valid material and its uCoverage. Instanced meshes are skipped (their paint is instanceColor).
+  function repaint(root, colors) {
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material], names = o.userData.lhMat ?? list.map(m => m.name);
+      const out = names.map((name, i) => {
+        const m = list[i];
+        if (!name.startsWith('paint-')) return m;
+        const s = STATE.get(m);
+        if (!s) throw new Error(`compiler: repaint() needs a tree compiled by apply() (mesh '${o.name}' has an uncompiled '${name}')`);
+        if (s.o.instanced) return m;
+        const v = colors?.[name.slice(6)] ?? null, coat = v == null ? null : coatOf(v), shaded = s.features.includes('PAINT');
+        if (coat?.mode === 2 && !shaded) throw new Error(`compiler: a hue paint needs vertex colours (mesh '${o.name}', ${name})`);
+        if (m.userData.lhShared !== false) return coat ? paint(paintBase, v, s.o) : get(paintBase, s.o);
+        if (shaded) { const c = coat ?? KEEP; s.uniforms.uPaintMode.value.set(c.mode, c.s, c.l); s.uniforms.uPaintAxis.value.fromArray(c.axis); s.coat = coat; }
+        m.color.copy(coat?.color ?? (shaded || s.o.vertexColors ? WHITE : get(paintBase, s.o).color));
+        return m;
+      });
+      o.material = Array.isArray(o.material) ? out : out[0];
+    });
+    return root;
+  }
+```
+  12. In the returned object, change `shading, time, get, paint, coverage, extend, apply,` to `shading, time, get, paint, coverage, extend, apply, repaint,`.
+
+- [ ] **Step 5: Run; expect PASS** (6 tests): `UNIT test/compiler-paint.test.mjs`. Then the earlier suites, which must pass unchanged: `UNIT test/compiler-chunks.test.mjs test/compiler.test.mjs test/compiler-apply.test.mjs test/assets.test.mjs`. "CHUNKS lists exactly…" now walks `PAINT` too.
+
+- [ ] **Step 6: The GPU check.** Append to `test/compiler-e2e.page.js`:
+
+```js
+// Task 8b: PAINT on the GPU. A plane, dark on the left and bright on the right: a solid paint keeps the bright side brighter in the
+// paint's hue; a hue ramp along x is red on the left and green on the right; no paint draws exactly the plain vertex colours; more
+// colours and hues add no programs.
+window.lhPaint = tier => {
+  const r = rig(tier), g = new THREE.PlaneGeometry(3, 3), n = g.attributes.position.count, col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.fill(g.attributes.position.getX(i) < 0 ? 0.2 : 0.8, i * 3, i * 3 + 3);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ name: 'paint-body' })), root = new THREE.Group().add(mesh);
+  r.scene.add(root);
+  const at = (px, x) => { const i = ((S >> 1) * S + x) * 4; return [px[i], px[i + 1], px[i + 2]]; }, L = S >> 2, R = S - (S >> 2);
+  r.mc.apply(root, { paint: { body: '#ff0000' } });
+  const red = r.shot(), before = r.renderer.info.programs.length;
+  r.mc.repaint(root, { body: { hue: { axis: [1, 0, 0], from: -1.5, to: 4.5 } } });
+  const hue = r.shot();
+  r.mc.repaint(root, { body: null });
+  const keep = r.shot();
+  for (const c of ['#00ff00', '#0000ff', '#ffff00']) { r.mc.repaint(root, { body: c }); r.shot(); }
+  const after = r.renderer.info.programs.length;
+  mesh.material = r.mc.get('steel', { vertexColors: true, receiveShadow: false });
+  const plain = r.shot();
+  const out = { errors: r.errors, before, after, red: [at(red, L), at(red, R)], hue: [at(hue, L), at(hue, R)], keepDiff: diff(keep, plain) };
+  r.done();
+  return out;
+};
+```
+
+Inside the `for (const tier of …)` loop of `test/compiler-e2e.test.mjs` add:
+
+```js
+  test(`${tier}: paint keeps the vertex shading, a hue ramp varies along x, no paint draws the vertex colours, no new programs (Task 8b)`, async t => {
+    if (skip) return t.skip(skip);
+    const r = await page.evaluate(tr => window.lhPaint(tr), tier);
+    assert.deepEqual(r.errors, []);
+    assert.equal(r.after, r.before, `programs ${r.before} → ${r.after}`);
+    const [[lr], [rr, rg, rb]] = r.red;
+    assert.ok(rr > lr, `the brighter source side stays brighter: ${lr} → ${rr}`);
+    assert.ok(rr > 2 * Math.max(rg, rb), `the hue is the paint: ${r.red[1]}`);
+    const [[hlr, hlg], [hrr, hrg]] = r.hue;
+    assert.ok(hlr > hlg && hrg > hrr, `hue ramp: left ${r.hue[0]}, right ${r.hue[1]}`);
+    assert.equal(r.keepDiff, 0, 'unpainted draws exactly the vertex colours');
+  });
+```
+
+Run `BROWSER test/compiler-e2e.test.mjs`: expect 12 tests to pass. Record the paint probe numbers (programs, the red and hue pixels) in the notes.
+
+- [ ] **Step 7: Prove the paint tests bite.** (a) In `paintAttributes`, change `let t = top.get(slot) ?? 0;` to `let t = 0;`, so each mesh gets its own top. Expect "apply(): vertex-coloured paint slots…" to fail at the roof's `w`, and "the drawn colours match…" to fail on the trim. (b) In `coatOf`, change `-from / d` to `0`. Expect "paint values…" to fail at `uPaintAxis` and "the drawn colours match…" to fail on rainbow. (c) In `chunks.js` `paint()`, change `diffuseColor.rgb = diffuse * vLhPaint;` to `diffuseColor.rgb = vLhPaint;`. Expect the first unit test and the three e2e paint tests ("the hue is the paint") to fail. Restore all three; everything passes.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/view/materials/chunks.js src/view/materials/compiler.js test/compiler-paint.test.mjs test/compiler-e2e.page.js test/compiler-e2e.test.mjs
+git commit -m "feat(view): paint that keeps vertex shading, hue-ramp paint and repaint on one program per feature set (A-4, 3l request 6)"
+```
+
+---
+
 ## Task 9: Notes, full run, hand-off
 
 **Files:**
@@ -1867,16 +2252,32 @@ git commit -m "test(view): compile every tier and feature in WebGL2; program sha
 - [ ] **Step 1: Write the notes file** with these sections, filled from the run:
   - **Outcome:** test counts, commits, and the e2e probe numbers (programs per tier, coverage blue drop, fur/subsurface/wind numbers).
   - **Decisions:** the "(judgment)" decisions of Tasks 3, 6 and 7 as built, and anything a reviewer changed.
-  - **Contract issues:** C1–C10 below, with their status.
-  - **Integrator requests:** 1–6 below.
-  - **For the game plans (3j/3k/3l):** how to port each game patch: Tractor `dirtify` → a registry `coverage` block plus `coverageView`; Pig Pens pig mud → `coverage.mud` with `mc.coverage(instancedMaterial)` and an `instanceCoverage` attribute, eyelids → `mc.extend(m, 'eyelids', patch)`; Pig Pens fur → `furGeometry(geo, mask, { shells })` with a soft face mask and the registry `fur` entry (`length 0.07`, `density 34`); Rally verge grass → `mc.get(id, { instanced: true, vertexColors: true, wind: { fade: COVER.fade } })` and `mc.time.value = t` per frame; Tractor ground rock and Rally snow → `mc.extend`.
+  - **Contract issues:** C1–C11 below, with their status.
+  - **Integrator requests:** 1–7 below.
+  - **For the game plans (3j/3k/3l):** how to port each game patch: Tractor `dirtify` → a registry `coverage` block plus `coverageView`; Pig Pens pig mud → `coverage.mud` with `mc.coverage(instancedMaterial)` and an `instanceCoverage` attribute, eyelids → `mc.extend(m, 'eyelids', patch)`; Pig Pens fur → `furGeometry(geo, mask, { shells })` with a soft face mask and the registry `fur` entry (`length 0.07`, `density 34`); Rally verge grass → `mc.get(id, { instanced: true, vertexColors: true, wind: { fade: COVER.fade } })`, with `mc.time` advanced once per frame by 3g's view sync (C3; games do not set it); Tractor ground rock and Rally snow → `mc.extend`; Tractor `paintable` (shaded paint, rainbow) → the `PAINT` feature through `assets.clone(key, { paint })` / `mc.repaint(root, paint)` with `{ hue: { axis: [0, 0, 1], from: -1, to: 1, s: 0.75, l: 0.5 } }` for rainbow and `render.paint = { base: 'chassis', shade: [0.25, 0.85, 1.1] }` (Task 8b); Pig Pens' tractor recolour (3k, farm3d.js's "painted farm red, trim kept") can use the same `paint-<slot>` route.
   - **Field note candidates** (the integrator numbers them from #110):
     1. three's `FileLoader` builds a `ProgressEvent`, which Node lacks: load bytes with `fetch` and call `GLTFLoader.parseAsync` so assets load the same in Node tests and the browser.
     2. `Material.clone()` drops `onBeforeCompile` and the `defines` (the subclass resets them) and JSON-copies `userData`: any clone of a patched material must re-install its patch, defines and uniform objects (the compiler's `install`).
     3. A program attribute the geometry lacks reads whatever generic vertex value was last set at that location, not zero: never draw a `FUR` or `COVERAGE_INSTANCED` program on geometry without its attribute (the compiler picks the variant from the geometry).
     4. Every base material with a `coverage` block (most of them) compiles the `COVERAGE` program even on clean entities. The cost is four compares per fragment; R1's program count per scene is the gate.
 
-- [ ] **Step 2: Full engine run** (the engine `test/` directory includes browser suites, so it runs under the browser lock): `BROWSER test/` → every test passes, including the 49 of this plan (40 unit + 9 e2e). Record the counts in the notes.
+- [ ] **Step 1b: Stub-surface check** (3e ruling #1: these files replace 3e's inert stubs with the same export names, so boot and 3e's pipeline keep working). Expected output: `ok`.
+
+```bash
+cd ~/projects/four43/lion-hawk-engine-3f && node --input-type=module -e "
+const { createAssets } = await import('./src/view/assets/index.js');
+const { createMaterialCompiler } = await import('./src/view/materials/compiler.js');
+const a = createAssets({ manifest: { v: 1, models: {} }, gfx: null }), mc = createMaterialCompiler(undefined, { shading: 'lambert' });
+const need = (o, ks, w) => { for (const k of ks) if (!(k in o)) throw new Error(w + ' lacks ' + k); };
+need(a, ['progress', 'preload', 'has', 'get', 'clone', 'dispose'], 'assets');
+need(mc, ['shading', 'time', 'get', 'paint', 'coverage', 'extend', 'apply', 'repaint', 'furGeometry', 'keys', 'made', 'dispose'], 'compiler');
+if (mc.shading !== 'lambert' || !Array.isArray(mc.made())) throw new Error('compiler surface');
+console.log('ok');"
+```
+
+The member lists are 3e's stub surfaces (3e Task 1), plus `repaint` (Task 8b, an addition that 3e's stub does not need: nothing in 3e calls it). A missing member is a contract break with 3e: fix it here, do not ask 3e to change.
+
+- [ ] **Step 2: Full engine run** (the engine `test/` directory includes browser suites, so it runs under the browser lock): `BROWSER test/` → every test passes, including the 58 of this plan (46 unit + 12 e2e). Record the counts in the notes.
 
 - [ ] **Step 3: Commit**
 
@@ -1889,8 +2290,8 @@ git commit -m "docs(plan): phase 3f notes, contract issues and integrator reques
 
 ## Done when
 
-- `UNIT` over the seven 3f unit files: **40 tests pass** (loader 4, animTable 4, chunks 4, fur 3, compiler 9, compiler-apply 8, assets 8).
-- `BROWSER test/compiler-e2e.test.mjs`: **9 tests pass**, none skipped.
+- `UNIT` over the eight 3f unit files: **46 tests pass** (loader 4, animTable 4, chunks 4, fur 3, compiler 9, compiler-apply 8, assets 8, compiler-paint 6).
+- `BROWSER test/compiler-e2e.test.mjs`: **12 tests pass**, none skipped.
 - `BROWSER test/` (the whole engine suite) passes with no other test changed.
 - Every mutation step above was seen red, then restored.
 - The notes file lists the contract issues and integrator requests below.
@@ -1909,20 +2310,25 @@ git commit -m "docs(plan): phase 3f notes, contract issues and integrator reques
    `view.materials = createMaterialCompiler(game.defs?.materials, { shading: render.shading, paint: render.paint })` and
    `view.assets = engine.assets = createAssets({ manifest: render.assets?.manifest, base: render.assets?.base, compiler: view.materials, renderer, gfx: view.gfx, decoders: render.assets?.decoders })`.
    The manifest reaches boot from the game's view entry, e.g. `defineView({ render: { assets: { manifest } } })` (3e names the field; this plan only needs it passed). Without a manifest, boot skips `createAssets` (`engine.assets` stays `undefined`).
+   **Gap found in the paint reconciliation (2026-10-14):** 3e's `checkRender` has no `paint` in `RENDER_KEYS`, so `render.paint` throws "unknown", and 3e's `createPipeline` builds the compiler with `{ shading }` only. 3e must accept `render.paint = { base, shade }` (validated by the compiler: an unknown base or a bad `shade` throws) and pass `paint: render.paint`. Tractor needs it: its paint base is `chassis`, which carries the dirt coverage block, and it pins `shade` (3l Task 16).
 3. **3e's hygiene (as ruled):** `gfx.warm()` walks `view.materials.made()` and builds a dummy of each `use` (`InstancedMesh` for `'instanced'`, a skinned dummy for `'skinned'`), so their programs compile too. `disposeTree(root, { keepShared })` skips anything with `userData.lhShared === true` (compiler cache materials, template geometries) and frees the rest (per-entity coverage clones).
 4. **3d's anim-table bake** writes the 12 floats as `Matrix4.elements` indices `0,1,2,4,5,6,8,9,10,12,13,14`, little-endian Float32, base64 (C7). A shared fixture in 3d's tests decoded by `decodeAnimTable` would pin it across plans.
 5. **`meshoptimizer`** must be resolvable from the engine root (it is a `dependencies` entry per §3.2, installed by 3a); `test/helpers/glb.mjs` imports its encoder.
-6. **Overview §4.7 and §4.8:** record C1–C10 once reconciled, and tell 3g (crowds write `instanceCoverage` and use `blendAnimTable`) and 3h (`coverageView` writes the `uCoverage` vector from `apply`/`coverage`).
+6. **Stubs at the Wave B merge** (3e ruling #1): take this plan's `src/view/assets/index.js` and `src/view/materials/compiler.js` over 3e's stubs (same export names, Task 9 Step 1b), and drop 3e's stub-shape cases for them (3e integrator request 3). Then rerun 3e's `test/render-pipeline.test.mjs` and `test/render-boot.test.mjs`.
+7. **Overview §4.7 and §4.8:** record C1–C11 once reconciled, and tell 3g (crowds write `instanceCoverage` and use `blendAnimTable`) and 3h (`coverageView` writes the `uCoverage` vector from `apply`/`coverage`).
 
 ## Contract issues
 
+Ruling (contract-issues "3f assets and compiler"): C1–C10 all accepted and forwarded to 3g, 3h and 3d; 3e rulings #1 (this plan's files replace 3e's stubs, same export names) and #2 (`mc.made()`, `userData.lhUse`/`lhShared`, `createAssets` takes `gfx`, an undefined registry falls back to the base library) are built into Tasks 5–7 and checked in Task 9 Step 1b. C11 is new from the paint reconciliation (user ruling 2026-10-14, 3l Integrator request 6) and awaits the integrator.
+
 - **C1. `createAssets` options.** §4.7 lists `{ manifest, base, compiler, renderer }`. This plan adds optional `gfx` (as ruled with 3e: `preload` ends with `await gfx.warm()`; without it `preload` resolves after loading), `decoders: { ktx2, draco }` (configured `KTX2Loader`/`DRACOLoader` instances; KTX2 calls `detectSupport(renderer)`), and `fetch` (tests). Spec A-9 asks for KTX2 and optional Draco while overview §1.2 puts both out of scope; injection satisfies A-9 without bundling either. Untested beyond wiring.
 - **C2. `assets.has(key)`** means "loaded and ready" (so `has` guards `get`), not "in the manifest". Template meshes default to `castShadow`/`receiveShadow` true.
-- **C3. `mc.get` options** gain `fur` (default true; `apply` passes whether the geometry has shells) and `wind: { fade: [near, far], amp: [x, z] }`. `WIND` is a fourth feature (Rally's grass) that §4.8 does not list, with one shared clock `mc.time`.
+- **C3. `mc.get` options** gain `fur` (default true; `apply` passes whether the geometry has shells) and `wind: { fade: [near, far], amp: [x, z] }`. `WIND` is a fourth feature (Rally's grass) that §4.8 does not list, with one shared clock `mc.time`, advanced once per frame by the view sync (3g ruling 4).
 - **C4. `mc.extend(material, name, patch(shader, inject))`** for game-only patches (Pig Pens' eyelids, Tractor's ground rock, Rally's snow). Without it a game's `onBeforeCompile` would overwrite the compiler's.
 - **C5. `mc.made()`, `userData.lhUse`, `userData.lhShared`** (agreed with 3e via the controller) so `warm` and `disposeTree` can see what the compiler made; §4.8 has only `keys()`. `userData.lh` (`id`, `key`, `tier`, `features`, …) is extra, for debugging. `createMaterialCompiler()` with no registry falls back to the base library.
 - **C6. Coverage plumbing.** `mc.apply` returns `{ uCoverage }` (one `Vector4` shared by the tree's coverage materials, `null` without `coverage: true`); `mc.coverage(material, { uCoverage })` takes an optional shared vector. For an instanced material, `coverage()` returns one shared `COVERAGE_INSTANCED` variant that reads a per-instance `instanceCoverage` vec4 attribute, which the caller (3g crowds, 3h `coverageView`) must add to the geometry.
 - **C7. Anim-table layout.** §4.3 says "frames×parts×12" without the order. Decision: `Matrix4.elements` minus the bottom row (indices 0,1,2, 4,5,6, 8,9,10, 12,13,14), looping, element-wise lerp. `get(key).anim` is the decoded table. `blendAnimTable` and `decodeAnimTable` are exported alongside `sampleAnimTable`.
 - **C8. `createMaterialCompiler(registry, { shading, paint: { base } })`.** The view cannot read `game.config.js`'s `bake.paint.base`; the compiler takes it (default `steel`) and throws if it is not in the registry.
 - **C9. Chunk guard scope.** §4.8 names four chunks; the patches also need `begin_vertex`, `clipping_planes_fragment`, `opaque_fragment` and `normal_fragment_begin`. The guard covers all eight, for every tier.
+- **C11. Paint that keeps vertex shading; hue-ramp paint; `repaint` (Task 8b, 3l Integrator request 6).** §4.8's paint is one material colour per slot. This plan adds a `PAINT` feature for vertex-coloured paint slots (`lhPaint` attribute written by `apply`; `uPaintMode`, `uPaintAxis`, `uPaintShade` uniforms), a paint value `{ hue: { axis, from, to, s, l } }` beside colours, `paint: { shade: [floor, gain, max] }` on the compiler, `get(id, { paint: true })` and `mc.repaint(root, paint)`. The program count stays bounded (one more program per feature set that has paint slots; colours, hues and "no paint" are uniforms). Instanced paint slots shade `instanceColor`; a value is not per instance. Meshes without vertex colours keep the plain colour paint.
 - **C10. Fur parameters.** `furMask` is a 0..1 strand-length factor (Pig Pens' `bare` box and `fade` become the game's mask). The shell count belongs to the geometry (`furGeometry(g, mask, { shells })`, 1..32); `look.fur.shells` is what the game passes there. `mc.furGeometry` takes the same optional third argument.

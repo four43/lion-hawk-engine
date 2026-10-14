@@ -6,7 +6,8 @@
 - baked GLBs from `lion-hawk bake`, shipped beside the page by `lion-hawk build`;
 - a material registry that carries the tyre model's surface parameters (`tire.js` `SURFACES` is retired);
 - every Rapier body and collider made by the scene's `World` (ground, pad features, gate posts, marker posts, cones, the car), with Rally's custom ray-cast vehicle and its snow kept as game code on top;
-- the engine renderer, light rig and material compiler, with instanced props read from the transform pool.
+- the engine renderer, light rig and material compiler, with instanced props read from the transform pool;
+- 3g's camera rigs (a `'travel'` chase rig with the title orbit, and a mount rig for bumper and bonnet) and 3h's `createTerrainMesh` for the 3-LOD terrain chunk streaming, in place of Rally's own camera and chunk code (contract-issues 3j #9).
 
 Then Rally's cross-game final-pass items, the size and frame-rate records, and version 0.4.0.
 
@@ -17,7 +18,8 @@ Then Rally's cross-game final-pass items, the size and frame-rate records, and v
   2. the `Sim` stepping on the World's Rapier world (bit-exact);
   3. static colliders, then props, then the car body spawned through the World. Each step re-blesses the goldens once for its cause under overview §5.5, with the feel sample checked first;
   4. the terrain kit at 0.9.0 (bit-exact again).
-- The vehicle stays Rally's (overview §1.2): `Vehicle.step` runs as the `rally.vehicle` system in `physics.world`, before `lh.physics.step`. Its wheel rays are raw Rapier queries (L-1), marked `// lh-allow`.
+- The vehicle stays Rally's (overview §1.2): `Vehicle.step` runs as the `rally.vehicle` system in `physics.world`, before `lh.physics.step`. Its wheel rays are raw Rapier queries (L-1), marked `// lh-allow`. Rally does not use 3h's vehicle kit (`lh.kit.vehicle`), so the kit's axes, `forward` and `rayGroups.member: []` rules do not apply to it.
+- The World does not step Rapier while a scene loads (`engine.loading.active`, 3c CI-16). Rally's own `rally.vehicle`/`rally.after` systems skip the same steps (Task 6), so the car, its wheels and the sim clock freeze with Rapier during a track rebuild.
 
 **Tech Stack:** lion-hawk 0.8.0 → 0.9.0, three 0.186, `@dimforge/rapier3d-compat` 0.21 (injected, D9), esbuild through `lion-hawk build`, Playwright through `lion-hawk/playwright`, `node:test`.
 
@@ -77,9 +79,10 @@ GLOBAL CONSTRAINTS (phase 3)
     - `$UNIT npm test` is Rally's whole unit suite. Its `node --test` already passes `--test-concurrency=4`.
     - A single file runs as `$UNIT node --test --test-concurrency=4 test/<file>`.
     - A script runs as `$UNIT node test/<script>.mjs`.
-15. **Golden checkpoints.** Tasks 5, 6, 10 and 11 and every view task must leave both goldens (`test/goldens/stage-autopilot.json`, `test/goldens/stage-scene.json`) **bit-exact**. Tasks 7, 8 and 9 may each re-bless once, only under the §5.5 procedure in their steps.
+15. **Golden checkpoints.** Tasks 5, 10 and 11 and every view task must leave both goldens (`test/goldens/stage-autopilot.json`, `test/goldens/stage-scene.json`) **bit-exact**. Task 6 is bit-exact except for one possible cause, the scene-load pause (3c CI-16), and only under its Step 10. Tasks 7, 8 and 9 may each re-bless once, only under the §5.5 procedure in their steps.
 16. **Feel tolerances.** These are fixed now, before any run (overview §5.5-2). Stage times: ±3 %. Speeds: ±3 % or ±1 km/h, whichever is larger. Decelerations: ±3 % or ±0.01 g, whichever is larger. There are no count metrics in Rally's sample.
 17. **No `rm -i`.** The shell aliases `rm`. Delete files with `git rm` (tracked) or `/bin/rm -f` (scratch).
+18. **Fully on the engine (user ruling 2026-10-14).** No step keeps Rally's own copy of anything the engine provides (camera, terrain mesh, materials, physics, build, dev server…). If the engine part cannot match today's behaviour, stop that step, file an integrator request for the engine change with measured numbers, and resume on the engine patch.
 
 ---
 
@@ -112,11 +115,11 @@ All paths are under `$W/games/rally/`.
 | `src/game/stage.js` | modify (T6, T20) | Sim on `e.world`, `rally.vehicle`/`rally.after` systems; `ctx` kept out of state (T20) |
 | `src/world/padWorld.js` | modify (T5, T7, T8) | pad colliders as inline World entries; cones as entities |
 | `src/world/trackWorld.js` | modify (T5, T7, T8, T11) | heightfield via the World, then the terrain kit; gate posts and marker posts as entities |
-| `src/vehicle.js` | modify (T5, T9) | car body and colliders through `world.spawn` (`massProps`, D3); `place` for resets; rays marked `lh-allow` |
-| `src/render.js` | modify (T12, T13, T15, T16) | Rally's scene on `view.gfx`: car from `view.assets`, looks through the light rig, cameras moved out |
-| `src/render/camera.js` | new (T16) | chase, title orbit, bumper and bonnet cameras with scratch math (no per-frame allocation) |
-| `src/render/padView.js`, `src/render/trackView.js` | modify (T13–T15) | compiler materials, instanced props from the pool, baked cone geometry |
-| `src/game.view.js` | modify (T12, T13, T18, T19) | `defineView({ render })`, preload, `built` hook, `data-lh-*` in place of screen classes |
+| `src/vehicle.js` | modify (T5, T9, T15) | car body and colliders through `world.spawn` (`massProps`, D3); `place` for resets; rays marked `lh-allow`; wheel part poses (`partXf`, T15) |
+| `src/render.js` | modify (T12, T13, T15, T16) | Rally's scene on `view.gfx`: the car's static shaping as a view sync hook (T15; sync draws it), looks as light-rig presets, cameras through `src/render/camera.js` |
+| `src/render/camera.js` | new (T16) | `createRallyCamera(cam)`: Rally's four camera modes on 3g's travel chase rig and mount rig (no camera maths of its own) |
+| `src/render/padView.js`, `src/render/trackView.js` | modify (T13–T15, T15b) | compiler materials, instanced props from the pool, baked cone geometry; terrain chunks through 3h's `createTerrainMesh` (T15b) |
+| `src/game.view.js` | modify (T12, T13, T15, T18, T19) | `defineView({ render })`, preload, the car's sync hook (T15), `built` hook, `data-lh-*` in place of screen classes |
 | `src/main.js` | modify (T6, T12) | injects Rapier, passes the canvas |
 | `index.template.html` | modify (T4, T19) | `<!--APP-->` marker; screen CSS keyed on `html[data-lh-overlays]` |
 | `pwa/sw.js` | modify (T4) | `__PRECACHE__` list |
@@ -127,12 +130,13 @@ All paths are under `$W/games/rally/`.
 | `test/feel.mjs`, `test/feel-baseline.json` | new (T1) | the §5.5 feel sample and its pre-swap record |
 | `test/helpers/bench.mjs` | new (T6) | `benchSim(opts)` (a `Sim` on a one-scene engine) and `game(opts)` (`rallyGame` with Rapier) |
 | `test/materials.test.mjs` | new (T2) | registry ids, tyre blocks, phys values |
-| `test/bake.test.mjs` | new (T3) | baked vertex counts equal today's; `phys.json` hash equals the registry's |
+| `test/bake.test.mjs` | new (T3) | baked triangle counts equal today's (weld changes vertex counts); `phys.json` hash equals the registry's |
 | `test/surface.test.mjs` | new (T5) | tyre table parity, blend cache |
-| `test/lh-world.test.mjs` | new (T6–T10) | World stepping, groups, materials on colliders, sleep, car mass |
+| `test/lh-world.test.mjs` | new (T6–T10), modify (T15) | World stepping, groups, materials on colliders, sleep, car mass; wheel part poses (T15) |
 | `test/lh-rules.test.mjs` | new (T10, T13) | §1.3 static rules over `src/` |
 | `test/lh-checks.test.mjs` | new (T10) | `checks.determinism`, `simPurity`, `materials`, `zeroAlloc` |
-| `test/camera.test.mjs`, `test/goldens/camera.json` | new (T16) | camera characterisation golden |
+| `test/camera.test.mjs` | new (T16) | Rally's camera modes on the 3g rigs, frame by frame against today's `updateCamera` (oracle copy) |
+| `test/terrain-mesh.test.mjs`, `test/helpers/chunk-oracle.mjs` | new (T15b) | the kit's chunks against today's `buildChunk`/`updateLod` (oracle copy), vertex for vertex and frame by frame |
 | `test/render.browser.mjs` | new (T12) | one canvas, no errors, settled, cars and props drawn |
 | `test/built.browser.mjs` | new (T18) | the load settles only after the track view exists |
 | `test/offline.browser.mjs` | new (T21) | the built game loads offline after the first visit |
@@ -389,7 +393,7 @@ Expect three finite stage times (roughly 100–250 s), `grassTop` 70–100 and `
 - Consumes: `defineMaterials(table, { pairs }) → registry` with `get`, `has`, `ids`, `index`, `byIndex`, `collider`, `hash` (overview §4.2); the game config shape (§4.3).
 - Produces: the default export of `src/defs/materials.js` (the registry); `rally-<key>` ids for the nine surface keys `tarmac, hardpack, gravel, grass, sand, mud, packed, snowbank, ice`; collider ids `rally-ground`, `car-hull`, `car-cabin`, `marker`, `gate-post`, `cone`; look ids `rally-road`, `car-body`, `tyre`, `gate-banner`, `pad-prop`, `pad-stripe`.
 
-**Decision (judgment):** game ids never reuse a base id (`gravel`, `grass`, `mud`, `ice` are base materials). Surfaces are `rally-<key>`. This is listed as a contract issue. Every Rally material sets `phys.friction` and `phys.restitution` explicitly, so base-library values can never leak into feel.
+**Decision (judgment):** game ids never reuse a base id (`gravel`, `grass`, `mud`, `ice` are base materials). Surfaces are `rally-<key>`. Settled: games may use their own ids (3j #3). Every Rally material sets `phys.friction` and `phys.restitution` explicitly, so base-library values can never leak into feel.
 
 - [ ] **Step 1: Failing test** `test/materials.test.mjs`:
 
@@ -486,7 +490,8 @@ export default defineMaterials({
 // Rally's lion-hawk CLI config (Node only; overview §4.3, §5.4). The Kenney Car Kit GLBs carry one textured material,
 // `colormap`: the bake samples it into vertex colours (palette: 'vertex', as bake.mjs did) and renames it per model.
 // Rally's car colliders are inline (the vehicle builds them) and the track is procedural, so the sidecars only feed
-// checks.materials. weld stays off so every baked part keeps today's vertex count (the parity test, overview §5.3-1).
+// checks.materials. The engine's default optimise (weld on) applies: dropping the UVs lets weld merge vertices, so the
+// parity test compares triangle counts (3d note (a)).
 export default {
   id: 'rally', site: 'rally', outEnv: 'RALLY_OUT',
   bake: {
@@ -499,7 +504,6 @@ export default {
       'wheel-racing': { rename: { materials: { colormap: 'tyre' } } },
       cone: { rename: { materials: { colormap: 'cone' } } },
     },
-    optimise: { meshopt: true, quantize: true, weld: false, prune: true, dedupe: true },
   },
   build: { entry: 'src/main.js', template: 'index.template.html', pwa: 'pwa' },
 };
@@ -524,8 +528,9 @@ export default {
 - [ ] **Step 1: Failing test** `test/bake.test.mjs`:
 
 ```js
-// The bake (lion-hawk overview §5.3-1): every Kenney model is baked, each mesh part keeps today's vertex count (the
-// counts src/assets.json held at e03ed71), and phys.json was baked against today's registry.
+// The bake (lion-hawk overview §5.3-1): every Kenney model is baked, each mesh part keeps today's triangle count (the
+// counts src/assets.json held at e03ed71; weld merges vertices once the palette step drops UVs, so vertex counts fall,
+// e.g. hatchback-sports 3709 → about 2048), and phys.json was baked against today's registry.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -533,12 +538,13 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MATERIALS from '../src/defs/materials.js';
 
-const COUNTS = { // node name → POSITION count, from src/assets.json at e03ed71
-  'hatchback-sports': { 'wheel-front-right': 528, 'wheel-front-left': 528, 'wheel-back-right': 528, 'wheel-back-left': 528, body: 1597 },
-  'sedan-sports': { 'wheel-back-right': 528, body: 1078, spoiler: 78, 'wheel-back-left': 528, 'wheel-front-left': 528, 'wheel-front-right': 528 },
-  'wheel-racing': { 'wheel-racing': 528 },
-  cone: { cone: 288 },
+const COUNTS = { // node name → triangle count (index count / 3), from src/assets.json at e03ed71
+  'hatchback-sports': { 'wheel-front-right': 332, 'wheel-front-left': 332, 'wheel-back-right': 332, 'wheel-back-left': 332, body: 760 },
+  'sedan-sports': { 'wheel-back-right': 332, body: 712, spoiler: 48, 'wheel-back-left': 332, 'wheel-front-left': 332, 'wheel-front-right': 332 },
+  'wheel-racing': { 'wheel-racing': 332 },
+  cone: { cone: 172 },
 };
+const tris = p => (p.getIndices() ? p.getIndices().getCount() : p.getAttribute('POSITION').getCount()) / 3;
 // The engine's own gltf-transform and meshopt copies (one core across extensions): resolved from lion-hawk/bake.
 const req = createRequire(fileURLToPath(import.meta.resolve('lion-hawk/bake')));
 const load = name => import(pathToFileURL(req.resolve(name)).href);
@@ -555,12 +561,12 @@ test('every Kenney model is baked, no animation tables', () => {
   for (const m of Object.values(manifest.models)) assert.equal(m.anim, null);
 });
 for (const [model, parts] of Object.entries(COUNTS)) {
-  test(`${model}: baked part vertex counts equal today's`, async () => {
+  test(`${model}: baked part triangle counts equal today's`, async () => {
     const doc = await io.read(fileURLToPath(new URL(`../baked/${manifest.models[model].glb}`, import.meta.url)));
     const got = {};
     for (const n of doc.getRoot().listNodes()) {
       const mesh = n.getMesh();
-      if (mesh) got[n.getName()] = mesh.listPrimitives().reduce((a, p) => a + p.getAttribute('POSITION').getCount(), 0);
+      if (mesh) got[n.getName()] = mesh.listPrimitives().reduce((a, p) => a + tris(p), 0);
     }
     assert.deepEqual(got, parts);
     for (const mat of doc.getRoot().listMaterials()) assert.ok(MATERIALS.has(mat.getName()), mat.getName());
@@ -572,7 +578,7 @@ test('phys.json was baked against this registry', () => {
 });
 test('today\'s assets.json counts are the table above (until the view retires it)', () => {
   const a = json('../src/assets.json');
-  for (const [m, parts] of Object.entries(COUNTS)) assert.deepEqual(Object.fromEntries(Object.entries(a[m]).map(([k, v]) => [k, v.p.length / 3])), parts, m);
+  for (const [m, parts] of Object.entries(COUNTS)) assert.deepEqual(Object.fromEntries(Object.entries(a[m]).map(([k, v]) => [k, v.i.length / 3])), parts, m);
 });
 ```
 
@@ -581,9 +587,13 @@ test('today\'s assets.json counts are the table above (until the view retires it
 - [ ] **Step 4: `package.json` scripts:** `"bake": "lion-hawk bake"`. `bake.mjs` stays until Task 13, because the view still reads `assets.json`.
 - [ ] **Step 5: (none; `defs.models` is wired in Task 6.)**
 - [ ] **Step 6: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/bake.test.mjs`.
-  - If a count differs, the bake merged or split vertices. Check `optimise.weld` and `dedupe`, then rebake. Do not change the table.
+  - If a triangle count differs, the bake dropped or split geometry (weld alone never changes triangles). Check `prune` and `dedupe`, then rebake. Do not change the table, and do not turn `weld` off to chase vertex counts.
+  - Record the baked vertex counts beside today's in the notes (informational: weld lowers them, 3d note (a)).
+  - The palette step follows the engine's colour formula, not bake.mjs's `pow(f, 1/2.2)` factor (3d note (b)); Task 13's screenshot check looks at the car colours.
   - If `req.resolve` cannot load an ESM-only package, swap `req.resolve(name)` for `import.meta.resolve(name, import.meta.resolve('lion-hawk/bake'))` (Node ≥ 22 two-argument resolve). Record the swap.
 - [ ] **Step 7: Mutation.** Edit `src/defs/materials.js` (`rally-ground` restitution 0 → 0.01). Run `test/bake.test.mjs`, and expect "phys.json was baked against this registry" to FAIL. Restore it.
+  - The registry hash covers only ids (index order), effective `phys` and pair friction/restitution (3b ruling #6). It does not cover `look`, `game` or `tire`, so a look or tyre edit needs no re-bake and does not fail this test. Pick the mutation from `phys` as above.
+  - Never write a hash literal in a test. The base hash has already changed (`f327bcae` → `2f4f4f95`) and may change again; compare `phys.materials` with `MATERIALS.hash` only.
 - [ ] **Step 8: Whole suite, goldens bit-exact:** `$UNIT npm test`. Sidecars are informational for Rally: no entity uses a `model` with sidecar colliders.
 - [ ] **Step 9: Commit:** `git add baked test/bake.test.mjs package.json && git commit -m "feat(rally): bake the Kenney models with lion-hawk bake; baked/ committed with parity tests"`
 
@@ -596,20 +606,20 @@ test('today\'s assets.json counts are the table above (until the view retires it
 - Delete: `build.py`
 
 **Interfaces:**
-- Consumes: `lion-hawk build --out <dir>`, which writes `index.html` (the template's `<!--APP-->` replaced by the bundle as an inline `<script>`), `assets/models/*`, the PWA files and the stamped `sw.js` (`__VERSION__`, `__PRECACHE__`); `dedupe({ root })` (`lion-hawk/build`).
+- Consumes: `lion-hawk build --out <dir>`, which writes `index.html` (the template's bare `<!--APP-->` replaced by the ESM bundle as an inline `<script type="module">`, D1), `assets/models/*`, the PWA files and the stamped `sw.js` (`__VERSION__`, `__PRECACHE__`); `dedupe({ root })` (`lion-hawk/build`). Rally uses the CLI only; it does not call the programmatic `build({ game, out, env, site, mode, e2e, entry, log })`.
 - Produces: `serveRally({ entry })`, unchanged in signature. It now also serves `/assets/models/*` from `baked/models/`. The template marker is `<!--APP-->`.
 
-**Contract issue (minor):** §4.3 says "template `<!--APP-->`" but not what replaces it. This plan assumes an inline `<script>` holding the bundle, so the template has no surrounding `<script>` tag. If 3d expects the marker inside a script tag, move it there and record the change.
+**Settled (3j #7, 3d):** the template holds a **bare** `<!--APP-->`, with no `<script>` around it. The build replaces it with an inline `<script type="module">` holding an ESM bundle (D1). A marker inside `<script>…</script>` fails the build with a hint.
 
 - [ ] **Step 1: Failing check.** `RALLY_OUT=$SCRATCH/rally-build npx lion-hawk build` must fail: `build.py`-era template, no `<!--APP-->`. Run it and expect a non-zero exit or a page without the bundle. `grep -c "rallyGame\|lion-hawk" $SCRATCH/rally-build/index.html` gives 0.
-- [ ] **Step 2: Template.** In `index.template.html`, replace `<script>/*BUNDLE*/</script>` with `<!--APP-->`.
+- [ ] **Step 2: Template.** In `index.template.html`, replace the whole `<script>/*BUNDLE*/</script>` with a bare `<!--APP-->` (no surrounding tag).
 - [ ] **Step 3: `pwa/sw.js`.**
   - Header comment: "Offline support. The page plus every file `lion-hawk build` lists (manifest, icons, `assets/models/*`) is precached".
   - `const PRECACHE = __PRECACHE__;` in place of the literal list.
 - [ ] **Step 4: `test/serve.mjs` `serveRally`.**
   - Import `dedupe` from `lion-hawk/build`.
-  - Bundle with `plugins: [dedupe({ root })]`.
-  - Build the page with `.replace('<!--APP-->', () => `<script>${js.replace(/<\/script/g, '<\\/script')}</script>`)`.
+  - Bundle with `format: 'esm'` (was `'iife'`) and `plugins: [dedupe({ root })]`, as the build does.
+  - Build the page with `.replace('<!--APP-->', () => `<script type="module">${js.replace(/<\/script/g, '<\\/script')}</script>`)`, the build's output form.
   - Serve models: before the PWA lookup, add
 
     ```js
@@ -619,7 +629,7 @@ test('today\'s assets.json counts are the table above (until the view retires it
   - Update the header comment.
 - [ ] **Step 5: `package.json`.** Scripts: `"build": "lion-hawk build"`; `"test:e2e": "node --test test/e2e.browser.mjs test/render.browser.mjs test/built.browser.mjs"` (the last two files arrive in Tasks 12 and 18; until then keep only `e2e.browser.mjs`); `"test:offline": "node --test test/offline.browser.mjs"`. `git rm build.py`.
 - [ ] **Step 6: Build and check:** `cd $W/games/rally && RALLY_OUT=$SCRATCH/rally-build npx lion-hawk build`. Expect a size report. Check that:
-  - `$SCRATCH/rally-build/index.html` holds the bundle;
+  - `$SCRATCH/rally-build/index.html` holds the bundle in one `<script type="module">` and no `<!--APP-->` is left;
   - `assets/models/*.glb` exist;
   - `sw.js` has no `__PRECACHE__` or `__VERSION__` left (`grep -c __ $SCRATCH/rally-build/sw.js` → 0).
   - `npx lion-hawk build` without `--out` and without `RALLY_OUT` exits 2 with `build: pass --out or set $RALLY_OUT`.
@@ -761,7 +771,7 @@ Note: the old cache key was built from surface keys and the new one from materia
   - `new Sim(lh, opts)`, with `sim.preStep()`, `sim.postStep()`, `sim.step()` (only with `opts.step`) and `sim.phys` (getter → `lh.rapier`);
   - test helpers `benchSim(opts) → sim` and `game(opts) → rallyGame({ rapier: R, ...opts })`.
 
-**Decision:** Rapier is injected (`rallyGame({ rapier })`). Constraint 1 forbids a Rapier import in the sim tree, although overview §4.1's example shows one. This is listed as a contract issue. In this task Rally's colliders are still made raw on `world.rapier`. Nothing is spawned yet, so creation order, timestep and parameters are unchanged and the goldens must not move.
+**Decision:** Rapier is injected (`rallyGame({ rapier })`). Constraint 1 forbids a Rapier import in the sim tree, although overview §4.1's example shows one. Settled (3j #2, D9): the §4.1 example is wrong. In this task Rally's colliders are still made raw on `world.rapier`. Nothing is spawned yet, so creation order, timestep and parameters are unchanged and the goldens must not move.
 
 - [ ] **Step 1: Failing test** `test/lh-world.test.mjs`:
 
@@ -801,6 +811,23 @@ test('the stage builds its Sim on the engine\'s World and steps it from the sche
   const text = JSON.stringify(names);
   assert.ok(text.indexOf('rally.vehicle') < text.indexOf('lh.physics.step'), text);
   assert.ok(text.indexOf('lh.physics.step') < text.indexOf('rally.after'), text);
+});
+test('during a track rebuild neither Rapier nor Rally\'s systems step (3c CI-16)', () => {
+  const h = headless(game(), { args: { settings: { mode: 'freeDrive', world: 'loop', seed: 'ld1', theme: 'summer', assist: true } } });
+  const e = h.engine, S = () => e.scene.state;
+  h.until(x => !x.engine.loading.active && x.state().phase === 'title', { maxSeconds: 10, message: 'first build' });
+  h.fill('title.seed', 'ld2');
+  for (let n = 0; !e.loading.active && n < 60; n++) h.step(1);
+  assert.ok(e.loading.active, 'a load started');
+  const t0 = S().sim.time;
+  for (let k = 0; e.loading.active && k < 2400; k++) {
+    const car = S().sim.car, p = car.body.translation(), w = car.wheels.map(x => x.omega);
+    h.step(1);
+    if (S().sim.car !== car) continue; // the load's build placed a new car
+    const q = car.body.translation();
+    assert.deepEqual([q.x, q.y, q.z], [p.x, p.y, p.z]); assert.deepEqual(car.wheels.map(x => x.omega), w);
+  }
+  assert.equal(S().sim.time, t0, 'the sim clock does not run during a load');
 });
 ```
 
@@ -939,9 +966,10 @@ Delete `export default rallyGame();` and the `import { DT }` line, which is no l
 
     ```js
     // The vehicle's forces go in before Rapier's step and the clock after it (overview §4.4: kits and games put pre-step
-    // work in physics.world before lh.physics.step).
-    ctx.system('rally.vehicle', () => s.sim.preStep(), { stage: 'physics.world', before: ['lh.physics.step'] });
-    ctx.system('rally.after', () => s.sim.postStep(), { stage: 'physics.world', after: ['lh.physics.events'] });
+    // work in physics.world before lh.physics.step). While a scene loads the World does not step Rapier (3c CI-16), and
+    // these skip with it, so the car's wheels, drivetrain and the clock freeze with its body.
+    ctx.system('rally.vehicle', () => { if (!e.loading.active) s.sim.preStep(); }, { stage: 'physics.world', before: ['lh.physics.step'] });
+    ctx.system('rally.after', () => { if (!e.loading.active) s.sim.postStep(); }, { stage: 'physics.world', after: ['lh.physics.events'] });
     ```
 
   - Update the header comment: "the World owns the Rapier world".
@@ -1001,7 +1029,10 @@ Then:
 - `test/golden.test.mjs`: the `new Sim` line becomes `benchSim({ world: new TrackWorld(track), car: 'awd', assist: true })`. Nothing else changes, and `sim.step()` is one engine step.
 
 - [ ] **Step 9: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/lh-world.test.mjs`
-- [ ] **Step 10: Whole suite, goldens bit-exact:** `$UNIT npm test` with **no** bless. If a golden moves, the World changed creation or parameters. Stop, diff the trail (`golden` names the first differing checkpoint), and record it under "Contract issues" in the notes before going on.
+- [ ] **Step 10: Whole suite, goldens bit-exact:** `$UNIT npm test` with **no** bless. If a golden moves, diff the trail (`golden` names the first differing checkpoint).
+  - If the first difference is at or right after a track rebuild (a load), the cause is the scene-load pause: today `rally.physics` stepped Rapier through the loading hold with the car held. That is the one allowed cause here. Check that every checkpoint before the first load is unchanged, then follow Task 7 Step 9 items 1–4 with `$SCRATCH/feel-T6a.json` and the cause **"physics paused during scene loads (3c CI-16)"**.
+  - Any other difference means the World changed creation or parameters. Stop and record it under "Contract issues" in the notes before going on.
+- [ ] **Step 10b: Mutation.** Drop the `!e.loading.active` guard from `rally.after`. Run `test/lh-world.test.mjs` and expect "during a track rebuild…" to FAIL on the clock. Restore it.
 - [ ] **Step 11: Feel unchanged:** `$UNIT node test/feel.mjs --check test/feel-baseline.json`. Expect `within tolerance`; the numbers should be identical.
 - [ ] **Step 12: Commit:** `git add -A src test && git commit -m "refactor(rally): the Sim runs on the scene's World; Rapier injected into rallyGame"`
 
@@ -1275,11 +1306,10 @@ Keep `this.lh = lh;` at the top of `build`, then:
   - `world.place(e, { at }, { yaw })`;
   - `world.despawn(e)`;
   - `world.rapier` and `world.R` for the wheel rays (L-1).
-- Produces: `new Vehicle(lh, cfg, opts)`, with `vehicle.e` (the car entity, `draw: false`: Rally draws its car), `vehicle.body === vehicle.e.body` and `vehicle.colliders` (the Rapier colliders).
+- Produces: `new Vehicle(lh, cfg, opts)`, with `vehicle.e` (the car entity, `draw: false` until Task 15, which gives it `model` and wheel part poses so view sync draws it), `vehicle.body === vehicle.e.body` and `vehicle.colliders` (the Rapier colliders).
 
-**Contract issue (blocking for exact feel):** the hull is a `ColliderDesc.roundCuboid` (0.2 m rounded edges, so a nose strike rides up). §4.3 has no rounded box. This plan uses `{ shape: 'box', half, round: 0.2 }`, which needs 3c to map `round` to `roundCuboid`.
-- If 3c has not added `round` by 0.8.0, use the fallback instead: `{ shape: 'hull', points: roundedBoxHull(half, 0.2) }` with 8 corner spheres × 7 points = 56 points (code below).
-- Record the choice in "Decisions" and make it a user playtest item. A hull is a new golden cause, so this task's re-bless names it.
+**Settled (3j #1, 3c):** the hull stays today's `roundCuboid` (0.2 m rounded edges, so a nose strike rides up), written `{ shape: 'box', half, round: 0.2 }`; 3c's `shapeDesc` builds `ColliderDesc.roundCuboid(half…, round)`. There is **no hull fallback**. If `round` is missing at 0.8.0, stop and tell the integrator.
+- `half` is the inner core, as in Rapier and today's code: `[0.86 - 0.2, 0.24 - 0.2, len - 0.2]`. So `round` (0.2) is larger than the core's y half (0.04). 3c accepts that (`round > 0`). 3b's sidecar validator currently also demands `round` < the smallest half, which this collider breaks. Inline colliders are not run through it, but if a check or the World ever does, that bound must go (integrator request 5), not Rally's numbers.
 
 - [ ] **Step 1: Failing test.** Append to `test/lh-world.test.mjs`:
 
@@ -1295,6 +1325,9 @@ test('the car is a World entity with cars.js mass and inertia (massProps, D3) an
     assert.deepEqual(car.e.colliders.map(c => c.material), ['car-hull', 'car-cabin']);
     for (const c of car.colliders) assert.equal(c.collisionGroups() >>> 16, sim.lh.groups.car);
     assert.equal(car.colliders[0].friction(), MATERIALS.collider('car-hull').friction);
+    const hull = car.colliders[0], len = cfg.wheelbase / 2 + 0.85, he = hull.halfExtents(); // today's roundCuboid, exactly
+    assert.equal(hull.shapeType(), R.ShapeType.RoundCuboid); assert.equal(hull.roundRadius(), Math.fround(0.2));
+    assert.deepEqual([he.x, he.y, he.z], [0.86 - 0.2, 0.24 - 0.2, len - 0.2].map(Math.fround));
   }
 });
 test('changing car despawns the old body; reset places the car stopped', () => {
@@ -1348,18 +1381,6 @@ test('changing car despawns the old body; reset places the car stopped', () => {
       const hit = this.lh.rapier.castRayAndGetNormal(ray, maxT + (snow ? SNOW.depth / slant : 0), true, undefined, this.rayGroups, undefined, b);
 ```
 
-  - If `round` is unavailable, use this fallback and add it to the file:
-
-```js
-// Fallback while box colliders have no `round`: the hull of 8 corner spheres (7 points each) of the rounded box.
-export function roundedBoxHull(half, r) {
-  const pts = [], D = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.577, 0.577, 0.577], [0.577, -0.577, 0.577], [-0.577, 0.577, 0.577], [0.577, 0.577, -0.577]];
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-    for (const d of D) pts.push(sx * (half[0] + r * Math.abs(d[0])), sy * (half[1] + r * Math.abs(d[1])), sz * (half[2] + r * Math.abs(d[2])));
-  }
-  return pts; // 56 points ≤ 64
-}
-```
 
 - [ ] **Step 4: `src/sim.js` `setCar`:**
 
@@ -1377,9 +1398,9 @@ export function roundedBoxHull(half, r) {
 ```
 
 - [ ] **Step 5: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/lh-world.test.mjs`
-- [ ] **Step 6: Mutation.** Drop `massProps` from the spawn so the colliders' density sets the mass. Run, and expect the mass assertion to FAIL. Restore it.
+- [ ] **Step 6: Mutation.** Drop `massProps` from the spawn so the colliders' density sets the mass. Run, and expect the mass assertion to FAIL. Restore it. Then drop `round` from the hull entry (a plain cuboid): expect the `RoundCuboid` assertion to FAIL. Restore it.
 - [ ] **Step 7: Expect the goldens to move:** `$UNIT npm test`. Every non-golden check must PASS. `physics.mjs` covers the hull strikes, skidpad, ramps and humps.
-- [ ] **Step 8: §5.5 re-bless 3.** Cause: **the car's colliders under the combine rules (`√f` with Multiply, restitution Max). If the fallback hull was used, also the hull in place of the rounded box.** Follow Task 7 Step 9 items 1–4, with `$SCRATCH/feel-T7.json`.
+- [ ] **Step 8: §5.5 re-bless 3.** Cause: **the car's colliders under the combine rules (`√f` with Multiply, restitution Max).** The hull shape is unchanged (roundCuboid), so it is not a cause. Follow Task 7 Step 9 items 1–4, with `$SCRATCH/feel-T7.json`.
 - [ ] **Step 9: Commit:** `git add -A src test docs && git commit -m "refactor(rally): the car body and colliders through the World (massProps, registry materials); goldens re-blessed (car combine rules)"`
 
 ---
@@ -1390,9 +1411,9 @@ export function roundedBoxHull(half, r) {
 - Create: `test/lh-checks.test.mjs`, `test/lh-rules.test.mjs`
 
 **Interfaces:**
-- Consumes: `checks.determinism(game, { seed, steps, input, args })`, `checks.simPurity(game, { roots })`, `checks.materials(game)`, `checks.zeroAlloc(game, { steps, warm, args, input })` (§4.4); `stripComments` (`lion-hawk/test`).
+- Consumes: `checks.determinism(game, { seed, steps, input, scene, args }) → { ok, step, a, b }`, `checks.simPurity(game, { roots }) → { ok, found }`, `checks.materials(game, { inline }) → { ok, missing, hash }`, `checks.zeroAlloc(game, { steps, warm, seed, scene, args, input, limit }) → { ok, growth, steps }` (3c); `stripComments` (`lion-hawk/test`).
 
-**Contract issue:** §4.4 gives `checks.determinism(game, { seed, steps, input })` without start `args`, and leaves `input` unspecified. Rally's stage needs args to reach a driving state. This plan passes `args` (forwarded as `headless`'s `args`) and `input` as a policy function `(h, i, scratch) → actions`, the same as `h.step(n, policy)`. If 3c's signature differs, adapt the call and record it.
+**Settled (3j #5, 3c):** both checks take start `args` and an `input` that is a function `(step) → snapshot` (called with the step about to run), a named policy of the game, or a constant snapshot. Rally passes `args` and `DRIVE` (a `(step) → snapshot` function). `zeroAlloc` runs in-process (it enables `--expose-gc` itself) and reports retained bytes as `growth`.
 
 - [ ] **Step 1: Failing test** `test/lh-rules.test.mjs`:
 
@@ -1464,21 +1485,23 @@ test('sim purity over Rally\'s sim roots', () => {
   assert.equal(r.ok, true, JSON.stringify(r));
 });
 test('materials: every collider material exists and phys.json matches the registry', () => {
-  const r = checks.materials(game());
+  // Inline colliders and the heightfield are runtime calls the check cannot see: list their materials (3c).
+  const inline = ['rally-ground', 'car-hull', 'car-cabin', 'marker', 'gate-post', 'cone'].map(material => ({ material }));
+  const r = checks.materials(game(), { inline });
   assert.equal(r.ok, true, JSON.stringify(r));
 });
 test('zero retained allocation over 10000 steps of driving', () => {
   const r = checks.zeroAlloc(game(), { steps: 10000, warm: 600, input: DRIVE, args: { pad: true } });
-  assert.ok(r.ok, `retained ${r.bytes ?? JSON.stringify(r)} B`);
+  assert.ok(r.ok, `retained ${r.growth} B over ${r.steps} steps`);
 });
 ```
 
-This assumes 3c's checks return `{ ok, … }`. If 3c's result shape differs, adapt only the assertion and keep it strict: zero problems. Until Task 3 adds `defs.models`, `checks.materials` verifies the materials alone.
+Keep every assertion strict: zero problems. `checks.materials` also compares `phys.json`'s hash with the registry's (`hash.ok`).
 
 - [ ] **Step 2: Run:** `$UNIT node --test --test-concurrency=4 test/lh-rules.test.mjs test/lh-checks.test.mjs`. After Task 9 the rules scan should already pass. Prove it can fail: add `c.setFriction(1);` to `src/sim.js`, run, expect FAIL naming `src/sim.js`, then revert. `lh-checks` passes or fails depending on 3c; read any failure and fix only Rally-side causes.
 - [ ] **Step 3: Fix the Rally-side violations** the scan lists (expected: none, or leftovers from Tasks 7–9). Do not add `lh-allow` to anything but `massProps` and the wheel rays.
 - [ ] **Step 4: Run, expect PASS.** Then run the whole suite, goldens bit-exact: `$UNIT npm test`.
-  - If `zeroAlloc` reports retained growth, find the cause with `--heap-prof` on `node test/feel.mjs` (pad part). Fix it if it is in Rally (for example a cache growing per step). If it is engine-side, record it under "Contract issues" and mark the test `{ todo: 'engine: <reason>' }` with the integrator told.
+  - If `zeroAlloc` reports retained growth, find the cause with `--heap-prof` on `node test/feel.mjs` (pad part). Fix it if it is in Rally (for example a cache growing per step). If it is engine-side, stop, file an integrator request with the measured growth and the heap-profile culprit, and resume on the engine patch.
 - [ ] **Step 5: Commit:** `git add test/lh-rules.test.mjs test/lh-checks.test.mjs src && git commit -m "test(rally): engine checks (determinism, purity, materials, zero alloc) and the physics rules"`
 
 ---
@@ -1489,10 +1512,10 @@ This assumes 3c's checks return `{ ok, … }`. If 3c's result shape differs, ada
 - Modify: `src/world/trackWorld.js`, `test/lh-world.test.mjs`
 
 **Interfaces:**
-- Consumes: `createTerrain(world, { nx, nz, cell, x0, z0, heights, materials: (x, z) => id, blend: (x, z, out) => out })` → `{ heightAt, normalAt, materialAt, blendAt, entity }` (`lion-hawk/kits/terrain`, §4.10).
+- Consumes: `createTerrain(world, { nx, nz, cell, x0, z0, heights, materials, blend, material, groups, fixInternalEdges })` → frozen `{ entity, grid, heightAt, normalAt, materialAt, blendAt }` (`lion-hawk/kits/terrain`, 3h). `materials` is sampled once per height sample (nearest) at creation; `material` is the heightfield collider's material; an omitted `groups` is `{ member: ['ground'] }`.
 - Produces: `TrackWorld.terrain`; `TrackWorld.materialAt(x, z) → id` (M-10, the section's dominant surface: road within 3.5 m, else verge); `TrackWorld.surfaceAt(x, z)` through `terrain.blendAt` and `blendSurface`.
 
-**Contract issue:** §4.10's `createTerrain` has a per-cell lookup (`materials`) but no **collider** material for the heightfield entity. Rally's ground collider is `rally-ground` (friction 0.8). This plan passes `material: 'rally-ground'` as an extra option. If 3h names it differently, use 3h's name. If 3h gives no way to set it, keep `world.heightfield` (Task 7), use the kit only for `materialAt` and `blendAt` (passing the existing entity is not in the contract), and record it.
+**Settled (3j #4, 3h C4):** `createTerrain(world, { …, material: 'rally-ground' })` sets the heightfield collider's material (friction 0.8). `terrain.grid` is what Task 15b's terrain mesh reads.
 
 - [ ] **Step 1: Failing test.** Append to `test/lh-world.test.mjs`:
 
@@ -1563,18 +1586,23 @@ View tasks must not change any golden (overview §5.5). Each view task ends with
 
 **Files:**
 - Create: `test/render.browser.mjs`
-- Modify: `src/render.js`, `src/game.view.js`, `src/main.js`, `package.json` (`test:e2e` list)
+- Modify: `src/render.js`, `src/render/trackView.js` (sky and fog lines), `src/game.view.js`, `src/main.js`, `package.json` (`test:e2e` list)
 
 **Interfaces:**
 - Consumes:
   - `defineView({ scenes, render })` and `boot(game, view, { canvas, … })`;
-  - `view.gfx = { renderer, scene, camera, lights, resize, size }`, where boot renders once per frame after the view halves' `frame`;
-  - `createLightRig` presets via `lights.set(name)`; `lights.sun` and `lights.hemi` (§4.6).
+  - `view.gfx = { renderer, scene, camera, lights, resize, size, post }`, where boot renders once per frame after the view halves' `frame`;
+  - the light rig (3e): options `{ sky, hemiSky, ground, hemi, sun: { color, intensity, map, box, offset, near, far, bias, normalBias }, fog, presets }`, presets `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog }`; `lights.set(name)`, `lights.follow(x, z)`, `lights.sun`, `lights.hemi`.
+  - `camera.userData.lhFov`: the base FOV after 3e's portrait rule (`fov` landscape, `fovPortrait` portrait).
 - Produces:
   - `RENDER` (Rally's render config);
   - `new Renderer(gfx)` with `setWorld`, `setCar`, `setSurface`, `sync`, `updateCamera`. Its `resize()` and `render()` are removed.
 
-**Decision:** Rally positions its own sun from the car (`lights.sun.position`, `sun.target`), because its low snow sun needs a second offset that presets cannot carry. The rig provides the lights, the shadow map and the preset intensities. `shading: 'standard'` keeps today's `MeshStandardMaterial` look and cost (D5).
+**Decision:** every Rally look is a light-rig preset. A preset may move the sun offset (3e), so the snow pad and the winter theme carry the low raking sun (`[34, 15, 22]`) and the rest the day sun (`[25, 45, 18]`); a preset also carries the sky (background and fog colour), hemisphere and sun intensities and the fog distances. `setLook(name)` is `lights.set(name)`, and the rig owns `scene.background` and `scene.fog`, so `TrackView` stops writing them.
+- The rig's `follow(x, z)` puts the sun at `offset.y` above y 0 and aims it at y 0. Rally's sun follows the car's height too (hilly tracks), so after `follow(p.x, p.z)` Rally adds `p.y` to `sun.position.y` and sets `sun.target.position.y = p.y`. The result is today's `p + offset` aimed at `p`, exactly. (Integrator request 6 asks 3e for an optional `y`.)
+- The camera base is 3e's default, `fov: 60, fovPortrait: 64`. Rally's absolute FOVs become adds over `camera.userData.lhFov` when Task 16 adopts 3g's rigs (title −5, chase +2 + speed, mounts +12): landscape is today's numbers, portrait is **4° wider** than today (user playtest item, Task 22). Until Task 16 the old camera code still writes absolute FOVs.
+- Rally has no post pass, so `view.gfx.post` stays `null` (a future one would set `view.gfx.post = pass` in the stage half's `enter` and `null` in `exit`, never replace `gfx.render`).
+- `shading: 'standard'` keeps today's `MeshStandardMaterial` look and cost (D5).
 
 - [ ] **Step 1: Failing test** `test/render.browser.mjs`:
 
@@ -1612,7 +1640,36 @@ for (const [name, settings, q] of [['pad', { v: 4, surface: 'gravel' }, { pad: '
 If `openGame` has no `query` option, append `?pad` to `site.url` for the pad case instead.
 
 - [ ] **Step 2: Run, expect FAIL:** `$BROWSER node --test test/render.browser.mjs`. Today `Renderer` makes its own `WebGLRenderer` on `#view`, and boot (with `render`) would make a second one, so expect `canvases: 1` to fail, or boot to throw because `render` is missing. If it passes as is, prove it can fail by temporarily adding `document.body.appendChild(document.createElement('canvas'))` in `main.js`, then revert.
-- [ ] **Step 3: `src/render.js`.** Replace the top of the file and the `Renderer` constructor, `setLook`, `resize` and `render`. Keep `geomFromPart`, `repaint`, `setWorld`, `setSurface`, `setCar`, `sync` and `updateCamera` as they are, except for the sun lines below.
+- [ ] **Step 2b: Failing test** `test/looks.test.mjs` (Node; the rig needs no WebGL): every preset reproduces today's `setLook`, and the lifted follow puts the sun where today's code did.
+
+```js
+// Rally's looks as light-rig presets (3e): the numbers today's Renderer.setLook wrote, and the sun at car + offset.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { createLightRig } from 'lion-hawk/view';
+import { RENDER } from '../src/render.js';
+
+const SKY = { 'pad-tarmac': 0x9fb8c8, 'pad-hardpack': 0xb4c4c9, 'pad-gravel': 0xb7c6cc, 'pad-snow': 0xc9d6e0, 'pad-ice': 0xc4d4de, summer: 0xa9c3d4, winter: 0xc9d6e0 };
+const LOW = new Set(['pad-snow', 'winter']);
+test('each look sets today\'s sky, fog, hemisphere, sun intensity and sun offset', () => {
+  const scene = new THREE.Scene(), L = createLightRig(scene, RENDER.lights), p = { x: 12, y: 37.5, z: -40 };
+  for (const [name, sky] of Object.entries(SKY)) {
+    L.set(name); L.follow(p.x, p.z); L.sun.position.y += p.y; L.sun.target.position.y = p.y;
+    const low = LOW.has(name), off = low ? [34, 15, 22] : [25, 45, 18];
+    assert.equal(scene.background.getHex(), new THREE.Color(sky).getHex(), name); assert.equal(scene.fog.color.getHex(), scene.background.getHex(), name);
+    assert.deepEqual([scene.fog.near, scene.fog.far], name.startsWith('pad-') ? [60, 330] : [150, 700], name);
+    assert.equal(L.hemi.intensity, low ? 0.85 : 1.1, name); assert.equal(L.sun.intensity, low ? 3.6 : 2.4, name);
+    assert.deepEqual(L.sun.position.toArray(), [p.x + off[0], p.y + off[1], p.z + off[2]], name);
+    assert.deepEqual(L.sun.target.position.toArray(), [p.x, p.y, p.z], name);
+  }
+  assert.equal(L.hemi.color.getHex(), new THREE.Color(0xdfeaf2).getHex());
+});
+```
+
+Run `$UNIT node --test --test-concurrency=4 test/looks.test.mjs` and expect FAIL (`RENDER` has no presets yet). If `createLightRig` is not exported from `lion-hawk/view`, import it from the subpath 3e documents and record it.
+
+- [ ] **Step 3: `src/render.js`.** Replace the top of the file and the `Renderer` constructor, `setLook`, `resize` and `render`. Keep `geomFromPart`, `repaint`, `setWorld`, `setSurface`, `setCar`, `sync` and `updateCamera` as they are, except for the look and sun changes below.
 
 ```js
 // Rally's 3D scene on the engine renderer (lion-hawk phase 3, overview §4.6): boot owns the WebGL renderer, the scene,
@@ -1623,15 +1680,25 @@ import ASSETS from './assets.json';
 import { SnowView } from './snowView.js';
 import { PadView, SURF_LOOK } from './render/padView.js';
 
-const SUN = { day: [25, 45, 18], low: [34, 15, 22] }; // sun offset from the car; snow gets a low raking sun
+// Looks as light-rig presets (3e): sky = background and fog colour; snow (the snow pad, winter) gets a low raking sun
+// and less sky fill so ruts and berms throw shadows. Pad looks keep the short pad fog, track themes the long hill fog.
+const SUN = { day: [25, 45, 18], low: [34, 15, 22] }; // sun offset from the car
+// Track themes (moved from trackView.js TRACK_LOOK, so render.js keeps loading track views lazily).
+const TRACK_LOOK = { summer: { sky: 0xa9c3d4, low: false, fog: [150, 700] }, winter: { sky: 0xc9d6e0, low: true, fog: [150, 700] } };
+const hex = n => '#' + n.toString(16).padStart(6, '0');
+const look = (sky, low, fog) => ({ sky: hex(sky), hemi: low ? 0.85 : 1.1, sun: { intensity: low ? 3.6 : 2.4, offset: low ? SUN.low : SUN.day }, fog });
 export const RENDER = {
   shading: 'standard', dpr: { touch: 2, desktop: 2 }, antialias: true, shadows: 'pcf', toneMapping: 'aces', exposure: 1.05,
-  camera: { fov: 62, fovPortrait: 62, near: 0.1, far: 1500 },
+  camera: { fov: 60, fovPortrait: 64, near: 0.1, far: 1500 }, // 3e's base: rig FOVs add over lhFov (Task 16)
   lights: {
-    sky: '#dfeaf2', ground: '#6b5d4a', hemi: 1.1,
-    sun: { color: '#fff1dc', intensity: 2.4, map: 2048, box: 30, offset: SUN.day },
+    sky: '#b7c6cc', hemiSky: '#dfeaf2', ground: '#6b5d4a', hemi: 1.1,
+    sun: { color: '#fff1dc', intensity: 2.4, map: 2048, box: 30, offset: SUN.day, near: 1, far: 120, bias: -0.0005, normalBias: 0 },
     fog: [60, 330],
-    presets: { day: { hemi: 1.1, sun: { intensity: 2.4 } }, low: { hemi: 0.85, sun: { intensity: 3.6 } } },
+    presets: {
+      day: look(0xb7c6cc, false, [60, 330]),
+      ...Object.fromEntries(Object.entries(SURF_LOOK).map(([k, v]) => [`pad-${k}`, look(v.sky, k === 'snow', [60, 330])])),
+      ...Object.fromEntries(Object.entries(TRACK_LOOK).map(([k, v]) => [k, look(v.sky, v.low, v.fog)])),
+    },
   },
 };
 ```
@@ -1642,29 +1709,21 @@ export class Renderer {
     this.gfx = gfx; this.r = gfx.renderer; this.scene = gfx.scene; this.cam = gfx.camera; this.lights = gfx.lights;
     this.camMode = 0; // 0 chase, 1 bumper, 2 bonnet
     this.orbit = false; // title screen: circle the car instead
-    const sun = this.lights.sun, sc = sun.shadow.camera;
-    sun.shadow.bias = -0.0005; sc.near = 1; sc.far = 120; sc.updateProjectionMatrix();
-    if (!sun.target.parent) this.scene.add(sun.target);
-    this.sunOffset = new THREE.Vector3(...SUN.day);
     this.view = null; this.worldToken = 0;
     this.camPos = new THREE.Vector3(0, 4, -8); this.camLook = new THREE.Vector3();
     this.tmpQ = new THREE.Quaternion(); this.tmpV = new THREE.Vector3();
     this.setSurface('gravel');
   }
 
-  setLook({ sky, low }) { // on a look change only: preset intensities, sun angle, sky and fog
-    this.sunOffset.set(...(low ? SUN.low : SUN.day));
-    this.lights.set(low ? 'low' : 'day');
-    if (this.scene.background?.isColor) this.scene.background.set(sky); else this.scene.background = new THREE.Color(sky);
-    this.scene.fog = new THREE.Fog(sky, 60, 330);
-  }
+  setLook(name) { this.lights.set(name); } // a RENDER.lights preset: sky, fog, hemisphere, sun intensity and offset
 ```
 
-At the end of `updateCamera`, keep the two sun lines but write them through `this.lights.sun`:
+`setSurface(key)` calls `this.setLook(`pad-${key}`)`. In `setWorld`, the track branch calls `this.setLook('day')` before the import and `this.setLook(this.view.theme)` once the view exists (replacing the `look`/`fog` juggling). In `src/render/trackView.js`, delete `TRACK_LOOK`, `this.look` and the constructor's `scene.background = …` and `scene.fog = …` lines (the rig owns them); `this.theme` stays and names the preset.
+
+At the end of `updateCamera`, the sun follows the car through the rig, lifted to the car's height (today's `p + offset`, aimed at `p`):
 
 ```js
-    const sun = this.lights.sun;
-    sun.position.set(p.x, p.y, p.z).add(this.sunOffset); sun.target.position.set(p.x, p.y, p.z);
+    const L = this.lights; L.follow(p.x, p.z); L.sun.position.y += p.y; L.sun.target.position.y = p.y;
 ```
 
 Delete `resize(w, h)` and `render()`.
@@ -1676,9 +1735,9 @@ Delete `resize(w, h)` and `render()`.
   - Delete `renderer.render()` from `frame`: boot renders after the halves.
   - `return defineView({ scenes: { stage, ...overlayHalves() }, render: RENDER });`
 - [ ] **Step 5: `src/main.js`:** pass `canvas: document.getElementById('view')` in boot's options.
-- [ ] **Step 6: Run, expect PASS:** `$BROWSER node --test test/render.browser.mjs`. Then `$BROWSER node --test test/e2e.browser.mjs` (4/4) and `$BROWSER node test/mobile.mjs`.
+- [ ] **Step 6: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/looks.test.mjs` (mutation: change `SUN.low` to `[34, 16, 22]`, expect FAIL on `pad-snow`, restore). Then `$BROWSER node --test test/render.browser.mjs`, `$BROWSER node --test test/e2e.browser.mjs` (4/4) and `$BROWSER node test/mobile.mjs`.
 - [ ] **Step 7: Unit suite, goldens bit-exact:** `$UNIT npm test`.
-- [ ] **Step 8: Commit:** `git add src/render.js src/game.view.js src/main.js test/render.browser.mjs package.json && git commit -m "feat(rally): draw through the engine renderer and light rig"`
+- [ ] **Step 8: Commit:** `git add src/render.js src/render/trackView.js src/game.view.js src/main.js test/render.browser.mjs test/looks.test.mjs package.json && git commit -m "feat(rally): draw through the engine renderer; looks as light-rig presets"`
 
 ---
 
@@ -1692,7 +1751,7 @@ Delete `resize(w, h)` and `render()`.
 - Consumes: `view.assets.preload(keys) → Promise` (resolves after `warm`), `view.assets.has`, `view.assets.get(key) → { scene }`, `view.assets.clone(key) → Object3D` (materials compiled by name), `view.materials.get(id, opts)` (§4.7, §4.8).
 - Produces: `Renderer.setCar(car, assets, mc)`; `PadView` constructor `(scene, world, kit)` where `kit = { assets, mc }`. `MODELS = ['hatchback-sports', 'sedan-sports', 'cone']`.
 
-**Contract issue:** §4.6 says boot builds `view.assets` from `baked/manifest.json`, "imported by the game's view entry", but not how the manifest reaches boot. This plan passes it as `render.manifest` (with `render.assetsBase: './assets/'`). If 3e/3f chose another field (for example `boot(..., { manifest })`), use theirs and record it.
+**Settled (3j #6, 3e):** boot reads the manifest from `defineView({ render: { assets: { manifest, base } } })` (`decoders` optional; Rally's GLBs need only meshopt, which the engine's loader provides). `assets` sits under `render`, not at the top level.
 
 - [ ] **Step 1: Failing test.** Append to `test/lh-rules.test.mjs`:
 
@@ -1755,7 +1814,7 @@ The rest is unchanged for now. Task 14 swaps the material and Task 15 the instan
 - [ ] **Step 5: `src/game.view.js`.**
   - `import MANIFEST from '../baked/manifest.json';`
   - `export const MODELS = ['hatchback-sports', 'sedan-sports', 'cone'];`
-  - `render: { ...RENDER, manifest: MANIFEST, assetsBase: './assets/' }` in `defineView`.
+  - `render: { ...RENDER, assets: { manifest: MANIFEST, base: './assets/' } }` in `defineView`.
   - In stage `enter`, after `renderer ??= …`:
 
     ```js
@@ -1781,17 +1840,19 @@ The rest is unchanged for now. Task 14 swaps the material and Task 15 the instan
 ### Task 14: Materials from the compiler
 
 **Files:**
-- Modify: `src/render/trackView.js`, `src/render/padView.js`
+- Modify: `src/render/trackView.js`, `src/render/padView.js`, `src/snowView.js`
 
 **Interfaces:**
-- Consumes: `view.materials.get(id, { instanced, vertexColors, map })` (§4.8); `materialOf(key)` (`src/surface.js`).
+- Consumes: `view.materials.get(id, { instanced, vertexColors, map, wind })` and `view.materials.extend(material, name, patch)` (3f C3, C4); `materialOf(key)` (`src/surface.js`).
 - Produces: no new interface. Track and pad views take every standard-look material from the compiler.
 
-**Decision (judgment):** these stay raw three.js materials, each with a one-line comment saying why:
-- the grass-cover shader (wind and fade `onBeforeCompile`, game-specific);
-- the snow view;
-- the gate banner face (a per-gate canvas texture with an emissive map);
-- the pad's painted lines (`MeshBasicMaterial`, transparent).
+**Decision (user ruling 2026-10-14: fully on the engine):** no raw three.js material stays. The four that today carry their own shader code or textures move onto the compiler too:
+- the grass-cover tufts: `mc.get('rally-grass', { instanced: true, vertexColors: true, wind: { fade, amp } })` (3f C3's WIND feature); the shrink between `COVER.fade` radii goes in through `mc.extend(material, 'rally-cover-fade', patch)` (3f C4) if WIND's `fade` is not the same curve;
+- the snow view's displaced surface: `mc.extend` on `mc.get('rally-packed')` carrying the snow vertex/fragment patch (game-only GLSL is what `extend` is for);
+- the gate banner face: `mc.get('gate-banner', { map })` with its canvas texture (emissive through `mc.extend` if the look has no emissive map);
+- the pad's painted lines: a compiler material (`mc.get('pad-stripe', { map, transparent })` or `mc.extend`).
+
+If one of these cannot reproduce today's look or cost on the engine (compare `SHOTS` screenshots and the program count), **stop that step**, file an integrator request for the compiler change with the measured numbers (screenshot pair, programs before/after, `mc.made()` growth), and resume on the engine patch. Do not keep a raw material. A known case: per-gate banner textures key one compiled material each (`map.uuid`), so a track rebuild leaks them unless the compiler can release map-keyed materials; measure `mc.made().length` over five rebuilds and file it if it grows.
 
 The detail and pad-surface textures become module-level singletons. The compiler's cache key includes `map.uuid`, so a per-track texture would leak one compiled material per rebuild. The road keeps its polygon offset by setting it on the `rally-road` material; that id has no other user.
 
@@ -1821,9 +1882,8 @@ Set `RALLY_PROGRAMS_MAX` to the Task 1 `track-summer` programs + 2 in the run co
     - markers: `this.mc.get('marker', { instanced: true, vertexColors: true })`;
     - gate posts: `this.mc.get('gate-post')`;
     - banner edges: `this.mc.get('gate-banner')`;
-    - the banner face stays raw, wrapped in `this.mat(...)` (comment);
-    - the cover material stays raw (comment).
-  - `dispose()` disposes only `this.materials` (raw ones) and `this.textures` (banners).
+    - the banner face and the cover tufts through the compiler as in the decision above;
+  - `dispose()` disposes only `this.textures` (banners); compiler materials are the compiler's.
 - [ ] **Step 4: `src/render/padView.js`.**
   - Ground: `this.groundMat = null`. In `setSurface(key)`:
 
@@ -1833,31 +1893,36 @@ Set `RALLY_PROGRAMS_MAX` to the Task 1 `track-summer` programs + 2 in the run co
 
     Here `surfaceTextureOf` caches one texture per `(key, repeat)` at module level. Delete the roughness lines; roughness is the material's `look`.
   - Props: `this.kit.mc.get('pad-prop')`. Stripes: `this.kit.mc.get('pad-stripe')`. Cones: `this.kit.mc.get('cone', { instanced: true, vertexColors: true })`.
-  - The paint material stays raw (comment).
-  - `dispose()` removes the root and disposes geometries only, plus the raw paint material.
+  - The paint lines through the compiler as in the decision above. `src/snowView.js`: its material through `mc.extend` (the view passes `kit.mc`).
+  - `dispose()` removes the root and disposes geometries only.
   - Import `materialOf` from `../surface.js`.
 - [ ] **Step 5: Run, expect PASS:**
   - `RALLY_PROGRAMS_MAX=<before+2> $BROWSER node --test test/render.browser.mjs`;
   - `$BROWSER node --test test/e2e.browser.mjs`;
   - `SHOTS=$SCRATCH/shots-T16 $BROWSER node test/mobile.mjs`. Compare a pad and a track shot with `$SCRATCH/shots-T15` by eye: same palette, ice glossy, tarmac darker.
   - `$UNIT npm test` (goldens bit-exact).
-- [ ] **Step 6: Commit:** `git add src/render && git commit -m "feat(rally): track and pad materials from the engine material compiler"`
+- [ ] **Step 6: Commit:** `git add src/render src/snowView.js && git commit -m "feat(rally): every material from the engine material compiler"`
 
 ---
 
-### Task 15: Props and the car from the transform pool; instancing through the engine
+### Task 15: The car drawn by view sync (wheels as part poses); props from the transform pool; instancing through the engine
 
 **Files:**
-- Modify: `src/render.js` (`sync`), `src/render/padView.js`, `src/render/trackView.js`
+- Modify: `src/vehicle.js` (`createBody`, `step`: wheel part poses), `src/render.js` (`setCar` goes; `carView`, `sync`), `src/game.view.js` (the car hook), `src/render/padView.js`, `src/render/trackView.js`, `test/lh-world.test.mjs`, `test/render.browser.mjs`
 
 **Interfaces:**
-- Consumes: `e.xf.p` and `e.xf.q` (pool accessors on the current slot, §4.4); `createInstances({ geometry, material, max, castShadow, receiveShadow }) → { mesh, set(i, p, q, s), commit() }` (§4.9).
-- Produces: no new interface.
+- Consumes:
+  - `e.xf.p` and `e.xf.q` (pool accessors on the current slot, §4.4); `createInstances({ geometry, material, max, castShadow, receiveShadow }) → { mesh, set(i, p, q, s), commit() }` (§4.9);
+  - `spawn({ …, model, partXf: [names] })` and `e.partXf[name] = { p, q }` (3c Task 10b): part poses swapped with the body's;
+  - view sync's part poses (3g Task 13b): each named part's centre (its bounding-box centre, measured after the create hooks) drawn at `p` in the body frame, turned by `q` from rest, interpolated with the body; `view.sync.on('#car', { create })`, `view.sync.objectOf(e)`.
+- Produces: `WHEEL_PARTS` (from `src/vehicle.js`); `carView(sync, mc, carOf)` (from `src/render.js`), the car's create hook.
 
-**Decision:** Rally draws its car and props from the pool's **current** slot, not interpolated, as today.
-- The wheel state (`w.center`, `w.steer`, `w.spin`) is per step and is not in the pool. Interpolating the body alone would slide the body against its wheels by up to one 240 Hz step.
-- The car entity is `draw: false` (Task 9). Props have no `model`, so view sync draws neither.
-- This goes in the notes as a field note candidate: "per-step attachments (wheels) need pool slots or an alpha-free draw path".
+**Decision:** the car is drawn by the engine's view sync, interpolated like every entity, wheels included (user ruling 2026-10-14; closes integrator request 7). Props are drawn from the pool's current slot, as today.
+- The car entity gets `model: cfg.model` (its baked sidecar is in `baked/phys.json`; the inline colliders win over the sidecar's, 3c) and `partXf: WHEEL_PARTS`, and loses `draw: false`.
+- `Vehicle.step` writes each wheel's part pose at the end of the step, from the per-step wheel state: `p` is the hub in the body frame, `{ x: local.x, y: local.y − max(0, travel − w.x), z: local.z }` (today's `w.center`, which is `o + down · max(0, t − radius)` with `o = p + q · local`, in the body frame), and `q = Ry(w.steer) ⊗ Rx(w.spin)` (today's `steerQ · spinQ`). The sim only writes them; goldens stay bit-exact (part poses are not in the digest).
+- View sync interpolates body and wheels with one alpha, so they cannot slide against each other. A wheel turning more than half a turn per 240 Hz step would draw backwards; Rally's top wheel speed (about 180 rad/s) is far below that (750 rad/s).
+- Today's car shaping becomes static decoration in a `sync.on('#car', { create })` hook (`carView`): the body (and the sedan's spoiler, its child) go into a shell scaled by `cfg.body.scale` and offset as in `setCar`; each wheel node is scaled by `cfg.radius / 0.3` and gets the tyre material; everything casts shadows. The wheels are the GLB's own four wheel nodes (the back wheels' meshes equal the fronts'), and sync measures each hub after the hook: the old `geomFromPart(part, true)` recentring, done by the engine.
+- Props have no `model`, so view sync does not draw them; Rally instances them through `createInstances` as below.
 
 - [ ] **Step 1: Failing check.** Append to `test/lh-rules.test.mjs`:
 
@@ -1870,7 +1935,32 @@ test('the views read poses from the pool, not from Rapier (no per-frame Rapier v
 });
 ```
 
-- [ ] **Step 2: Run, expect FAIL** (`render.js` `sync` reads `b.translation()`, and the views do too).
+Append to `test/lh-world.test.mjs` (with `import { WHEEL_PARTS } from '../src/vehicle.js';`):
+
+```js
+const qmul = (a, b) => ({ x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+  z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z });
+const axis = (x, y, z, t) => ({ x: x * Math.sin(t / 2), y: y * Math.sin(t / 2), z: z * Math.sin(t / 2), w: Math.cos(t / 2) });
+test('the car is drawn by view sync: model, wheel part poses (hub in the body frame, Ry(steer) Rx(spin)), no draw: false', () => {
+  const sim = benchSim({ car: 'awd', cones: false }), car = sim.car, e = car.e, c = car.cfg;
+  assert.equal(e.model, c.model); assert.equal(e.draw, undefined);
+  assert.deepEqual(Object.keys(e.partXf), WHEEL_PARTS);
+  car.input.steer = 0.5; car.input.throttle = 1;
+  for (let i = 0; i < 240; i++) sim.step();
+  car.wheels.forEach((w, i) => {
+    const P = e.partXf[WHEEL_PARTS[i]], q = qmul(axis(0, 1, 0, w.steer), axis(1, 0, 0, w.spin));
+    assert.deepEqual([P.p.x, P.p.y, P.p.z], [w.local.x, w.local.y - Math.max(0, c.travel - w.x), w.local.z], `wheel ${i} hub`);
+    for (const k of ['x', 'y', 'z', 'w']) assert.ok(Math.abs(P.q[k] - q[k]) < 1e-12, `wheel ${i} q.${k}`);
+  });
+  assert.ok(car.wheels[0].steer !== 0 && car.wheels[2].spin !== 0, 'the test steered and rolled');
+});
+```
+
+If `benchSim` drives input another way (Task 6's helper), set steer and throttle through it; the assertions stay.
+
+In `test/lh-world.test.mjs`'s Task 9 test, replace `assert.equal(car.e.draw, false);` with `assert.equal(car.e.model, cfg.model);`.
+
+- [ ] **Step 2: Run, expect FAIL** (`render.js` `sync` reads `b.translation()`, and the views do too; the car has no `partXf`).
 - [ ] **Step 3: `src/render/trackView.js` markers.** Add `import { createInstances } from 'lion-hawk/view';`. In `buildMarkers`:
 
 ```js
@@ -1901,85 +1991,304 @@ In `sync`, the LOD focus without a camera becomes `sim?.car?.e.xf.p`.
   }
 ```
 
-- [ ] **Step 5: `src/render.js` `sync`.** Read the car from `car.e.xf`. Hoist `steerQ`, `spinQ`, `Y` and `X` into the constructor (`this.steerQ` etc.). Replace `b.translation()` and `b.rotation()` with `xf.p` and `xf.q`. In `sync`, the snow view's `p` becomes `xf.p`.
-- [ ] **Step 6: Run, expect PASS:**
-  - `$UNIT node --test --test-concurrency=4 test/lh-rules.test.mjs`;
+- [ ] **Step 5: `src/vehicle.js`.** `export const WHEEL_PARTS = ['wheel-front-left', 'wheel-front-right', 'wheel-back-left', 'wheel-back-right'];` (the wheel order: front pair, then rear, left first; Rally's left is +x, as the baked nodes). In `createBody`'s spawn, replace `draw: false,` with `model: c.model, partXf: WHEEL_PARTS,`. At the end of `step()`, after the impulses and drag:
+
+```js
+    // The wheels' part poses for view sync (3c partXf, 3g Task 13b): the hub in the body frame and Ry(steer) Rx(spin),
+    // interpolated with the body by the engine. Written only; nothing in the sim reads them.
+    for (let i = 0; i < 4; i++) {
+      const w = this.wheels[i], P = this.e.partXf[WHEEL_PARTS[i]];
+      P.p.x = w.local.x; P.p.y = w.local.y - Math.max(0, c.travel - w.x); P.p.z = w.local.z;
+      const sy = Math.sin(w.steer / 2), cy = Math.cos(w.steer / 2), sx = Math.sin(w.spin / 2), cx = Math.cos(w.spin / 2);
+      P.q.x = cy * sx; P.q.y = sy * cx; P.q.z = -sy * sx; P.q.w = cy * cx;
+    }
+```
+
+  `step()` must also write them where it returns early, if it does (read it first); a wheel's pose is always the step's last.
+- [ ] **Step 6: `src/render.js`.** `setCar` (Task 13), `carGroup`, `wheelMeshes`, `oldWheels` and the car lines of `sync` go. Add, exported:
+
+```js
+// The car's static shaping for view sync (Task 15): a create hook, once per car entity. Body (and spoiler) in a shell scaled to
+// the real car's track and wheelbase; wheels scaled to the car's radius in tyre material. View sync measures each wheel's hub
+// after this and poses it from the sim's part poses (3g Task 13b), interpolated with the body.
+export function carView(sync, mc, carOf) {
+  return sync.on('#car', {
+    create(e, obj) {
+      const car = carOf(e); if (!car) return;
+      const cfg = car.cfg, [sx, sy, sz] = cfg.body.scale, shell = new THREE.Group(), ws = cfg.radius / 0.3;
+      const tyre = mc.get('tyre', { vertexColors: true });
+      for (const n of [...obj.children]) if (!n.name.startsWith('wheel')) shell.add(n);
+      shell.scale.set(sx, sy, sz);
+      shell.position.set(0, -cfg.comHeight + cfg.radius - 0.3 * sy, car.zMid);
+      obj.add(shell);
+      for (const n of obj.children) if (n.name.startsWith('wheel')) { n.scale.setScalar(ws); n.traverse((o) => { if (o.isMesh) o.material = tyre; }); }
+      obj.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    },
+  });
+}
+```
+
+  `Renderer.sync(sim)` keeps the snow view (its `p` becomes `car.e.xf.p`) and the track/pad view sync; it no longer poses a car. Add `setSync(sync) { this.drawn = sync; }`.
+- [ ] **Step 7: `src/game.view.js`.** In stage `enter`, after the preload is set up and once per view: `renderer.setSync(view.sync); offCar ??= carView(view.sync, view.materials, (e) => (s.sim.car.e === e ? s.sim.car : null));` (with `let offCar = null` beside `renderer`; `s` is the stage state the view already reads). The hook must be registered before the car is first drawn (view sync measures the wheel hubs once, after the create hooks), which stage `enter` is. Drop the `renderer.setCar(...)` call from the `newWorld || carRev` branch: a new car is a new entity (Task 9), and sync makes its object and runs the hook. In stage `exit`, `offCar?.(); offCar = null;`. Append to `test/render.browser.mjs`, after the settle in the drive test:
+
+```js
+      const car = await game.page.evaluate(() => { const en = window.engine, e = en.world.with('partXf')[0], o = e && en.view.sync.objectOf(e);
+        return o && { tag: e.tags.has('car'), wheels: ['wheel-front-left', 'wheel-front-right', 'wheel-back-left', 'wheel-back-right'].filter((n) => o.getObjectByName(n)).length }; });
+      assert.deepEqual(car, { tag: true, wheels: 4 }, 'the car and its four wheels are drawn by view sync');
+```
+- [ ] **Step 8: Run, expect PASS:**
+  - `$UNIT node --test --test-concurrency=4 test/lh-rules.test.mjs test/lh-world.test.mjs`;
   - `$BROWSER node --test test/render.browser.mjs`;
   - `$BROWSER node --test test/e2e.browser.mjs`;
-  - a markers check by eye: `SHOTS=$SCRATCH/shots-T17 $BROWSER node test/mobile.mjs iPad`, track scene, posts upright along the road;
+  - a markers and car check by eye: `SHOTS=$SCRATCH/shots-T17 $BROWSER node test/mobile.mjs iPad`, track scene, posts upright along the road; the car's wheels on their hubs, steering on the front pair, the same track width as `$SCRATCH/shots-T15`;
   - `$UNIT npm test` (goldens bit-exact).
-- [ ] **Step 7: Commit:** `git add src && git commit -m "feat(rally): props and car drawn from the transform pool with engine instancing"`
+- [ ] **Step 9: Mutation.** In the part-pose loop, use `Rx(spin) ⊗ Ry(steer)` (swap the two factors): expect the new `lh-world` test to FAIL on a front wheel's `q`. Restore.
+- [ ] **Step 10: Commit:** `git add src test && git commit -m "feat(rally): the car drawn by view sync with wheel part poses; props from the pool with engine instancing"`
 
 ---
 
-### Task 16 (judgment): The cameras as an allocation-free module
+### Task 15b: The terrain mesh from `lion-hawk/kits/terrain` (3-LOD chunk streaming adopted; 3j #9)
 
 **Files:**
-- Create: `src/render/camera.js`, `test/camera.test.mjs`, `test/goldens/camera.json`
-- Modify: `src/render.js` (`updateCamera` delegates)
+- Create: `test/helpers/chunk-oracle.mjs`, `test/terrain-mesh.test.mjs`
+- Modify: `src/render/trackView.js` (chunks, LOD and their constants go; `colorAt`, `drop` and the uv attribute stay as Rally's callbacks)
 
 **Interfaces:**
-- Consumes: `golden` (`lion-hawk/test`), a `THREE.PerspectiveCamera`.
-- Produces: `createRallyCamera(cam) → { update(car, { orbit, mode, dt }) }`, where `car` is `{ p, q, v, zFront }` (plain objects).
+- Consumes: `createTerrainMesh(terrain, { compiler, chunkCells, lods, lodFar, hysteresis, skirt, visFar, evict, colorAt(x, z, out, ny), attributes, drop(x, z, lod), material, budgetMs, moveEps, now })` → `{ group, update(camera), dispose(), stats: { chunks, builds, buildMs, lastUpdateMs, pending } }` (3h Task 9); `world.terrain` (Task 11, its `grid`).
+- Produces: `TrackView.terrainMesh`; `TrackView.stats` is the kit's `stats` (same `builds`, `buildMs`, `lastUpdateMs`, plus `coverMs` written by the cover code as today). From `trackView.js`: `roadDistance(track) → Uint8Array` (the old `buildRoadDistance`, now a function) and `terrainMeshOptions(track, theme, roadDist, noise) → options` (every kit option except `compiler`, `material` and `now`), so the Node parity test drives exactly what the view does (`TrackView` itself needs a DOM for its canvas textures).
 
-**Decision (expected):** keep Rally's own camera rather than `createChaseRig` and `createMountRig`.
-- The chase blends body heading with travel direction and widens the FOV with speed. Those are tuned feel the rig's `{ distance, height, lag, lookAhead }` does not express.
-- The Kenney cars have no `sock-*` empties for a mount rig.
-- The camera code moves into a module with scratch vectors (no `new` per frame).
-- Record this in "Decisions" and as a field note candidate.
+**Settled (3j #9, 3h Task 9):** Rally adopts the kit with its own numbers. The kit options cover what Rally's chunks do: `chunkCells: 64` (`CHUNK`), `lods: [1, 2, 4]` (`LOD_STEP`), `lodFar: [150, 400]` (`LOD_FAR`), `hysteresis: 12` (`HYST`), `visFar: 760` (`VIS_FAR`), `evict: [300, 720]` (`EVICT`), `skirt: 2` (`SKIRT`), `budgetMs: 3` (`BUILD_MS`), `moveEps: 2`, `drop(x, z, lod)` (the road sink, `DROP[lod] × (1 − smooth(4.5, 7, d))` for `d < 7`), `colorAt(x, z, out, ny)` (palette, noise, slope by `ny`, shoulder), `attributes: { uv: { size: 2, at } }` (`x / 8`, `z / 8`, the detail map) and `material` (Task 14's compiler material with the detail map, passed as a three.js material). The first `update` is unbudgeted, as Rally's `updateLod(spawn, Infinity)` was.
 
-- [ ] **Step 1: Failing test** `test/camera.test.mjs`. This is a characterisation golden over a scripted 4 s trajectory through all four modes, run in Node: three's math needs no WebGL.
+- [ ] **Step 1: The oracle.** Create `test/helpers/chunk-oracle.mjs`: a verbatim copy of today's `src/render/trackView.js` chunk code at e03ed71 (the constants `CHUNK` … `BUILD_MS`, `PAL`, `smooth`, `mix3`, and the bodies of `buildRoadDistance`, `chunkIndex`, `buildChunk` and `updateLod`), turned into functions over a plain state object `o = { track, theme, noise, roadDist, lodIndex, chunks, stats, lastLod, pending, root }`, with `performance.now` replaced by `o.now`. Change nothing else; the header says "oracle: do not edit".
+- [ ] **Step 2: Failing test** `test/terrain-mesh.test.mjs`:
 
 ```js
-// Rally's cameras (chase with travel-direction blend and speed FOV, title orbit, bumper, bonnet): a characterisation
-// golden of camera position, look direction and FOV along a scripted trajectory. Re-bless only for a deliberate change.
+// 3j #9: Rally's terrain through 3h's createTerrainMesh, against today's chunk code (test/helpers/chunk-oracle.mjs):
+// along a scripted camera path, every frame shows the same chunks at the same LODs, and every chunk's vertices
+// (position, normal, colour, uv) and triangles equal today's.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import R from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { golden, checksum } from 'lion-hawk/test';
-import { createRallyCamera } from '../src/render/camera.js';
+import { createTerrainMesh } from 'lion-hawk/kits/terrain';
+import { benchSim } from './helpers/bench.mjs';
+import { generateTrack } from '../src/gen/track.js';
+import { noise2 } from '../src/gen/noise.js';
+import { TrackWorld } from '../src/world/trackWorld.js';
+import { roadDistance, terrainMeshOptions } from '../src/render/trackView.js';
+import { oracle } from './helpers/chunk-oracle.mjs';
+await R.init();
 
-function trace() {
-  const cam = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 1500), rig = createRallyCamera(cam), out = [];
-  const car = { p: { x: 0, y: 0.5, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 }, v: { x: 0, y: 0, z: 0 }, zFront: 1.2 };
-  const d = new THREE.Vector3();
-  for (let i = 0; i < 240; i++) {
-    const t = i / 60, yaw = 0.4 * Math.sin(t), sp = 25 * Math.min(1, t / 2);
-    car.q.y = Math.sin(yaw / 2); car.q.w = Math.cos(yaw / 2);
-    car.v.x = Math.sin(yaw + 0.3 * Math.sin(3 * t)) * sp; car.v.z = Math.cos(yaw + 0.3 * Math.sin(3 * t)) * sp;
-    car.p.x += car.v.x / 60; car.p.z += car.v.z / 60;
-    const mode = i < 60 ? 'orbit' : i < 180 ? 0 : i < 210 ? 1 : 2;
-    rig.update(car, { orbit: mode === 'orbit', mode: mode === 'orbit' ? 0 : mode, dt: 1 / 60 });
-    if (i % 10 === 9) { cam.getWorldDirection(d); out.push(checksum({ p: cam.position.toArray(), d: d.toArray(), fov: cam.fov })); }
-  }
-  return out;
+const near = (a, b, what) => { assert.equal(a.length, b.length, what); for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-6) assert.fail(`${what}[${i}]: ${a[i]} vs ${b[i]}`); };
+const material = new THREE.MeshStandardMaterial({ vertexColors: true });
+for (const theme of ['summer', 'winter']) {
+  test(`${theme}: the kit's chunks equal today's, frame by frame along the road`, () => {
+    const track = generateTrack(`tm-${theme}`, { kind: 'loop', theme }), sim = benchSim({ world: new TrackWorld(track), car: 'awd' });
+    const opts = terrainMeshOptions(track, theme, roadDistance(track), noise2(`${track.seed}|look`));
+    const mesh = createTerrainMesh(sim.world.terrain, { ...opts, compiler: { get: () => material }, material, now: () => 0 }); // unbudgeted, as the oracle below
+    const old = oracle(track, theme), L = track.layout, cam = { position: { x: 0, y: 0, z: 0 } };
+    for (let i = 0; i < L.n; i += 25) {
+      cam.position.x = L.x[i]; cam.position.z = L.z[i];
+      mesh.update(cam); old.updateLod(L.x[i], L.z[i], Infinity);
+      const shown = mesh.group.children.filter(m => m.visible).map(m => {
+        const g = m.geometry, p = g.attributes.position;
+        return { key: `${p.getX(0)},${p.getZ(0)}`, g };
+      });
+      const want = old.chunks.filter(c => c.mesh?.visible);
+      assert.equal(shown.length, want.length, `frame ${i}: chunks shown`);
+      for (const c of want) {
+        const k = shown.find(s => s.key === `${c.x0},${c.z0}`), og = c.mesh.geometry;
+        assert.ok(k, `frame ${i}: chunk ${c.cx},${c.cz} missing`);
+        assert.equal(k.g.attributes.position.count, og.attributes.position.count, `frame ${i}: chunk ${c.cx},${c.cz} LOD`);
+        for (const a of ['position', 'normal', 'color', 'uv']) near(k.g.attributes[a].array, og.attributes[a].array, `${a} ${c.cx},${c.cz}`);
+        assert.equal(k.g.index.count / 3, og.index.count / 3, `triangles ${c.cx},${c.cz}`);
+      }
+      for (const m of mesh.group.children) assert.equal(m.receiveShadow, true);
+    }
+    mesh.dispose();
+  });
 }
-test('camera trace golden', () => { golden(new URL('./goldens/camera.json', import.meta.url), trace()); });
 ```
 
-The no-allocation check is a source scan, added in Step 5 once `update` has been rewritten.
+If the kit differs from today's chunks in any way this test sees (vertex or skirt order, a value, a LOD choice, `receiveShadow`), stop: file an integrator request for 3h with the first differing frame, chunk and values, and resume on the engine patch (constraint 18). Do not keep Rally's chunk code.
 
-- [ ] **Step 2: Bless against today's code first** (the characterisation step):
-  1. Write `src/render/camera.js` as a **direct move** of today's `Renderer.updateCamera` body. Allocations stay as they are, and it reads `car.p/q/v/zFront` where the old code read the body (`zFront` = `car.wheels[0].local.z`).
-  2. `$UNIT -E LH_BLESS=1 node --test --test-concurrency=4 test/camera.test.mjs`
-  3. Make `Renderer.updateCamera(sim, dt)` call `this.camRig.update({ p: xf.p, q: xf.q, v: b.linvel(), zFront: car.wheels[0].local.z }, { orbit: this.orbit, mode: this.camMode, dt })`, with the sun lines kept after it.
-  4. Commit the golden with the moved code: `git add src/render/camera.js src/render.js test/camera.test.mjs test/goldens/camera.json && git commit -m "refactor(rally): cameras moved into render/camera.js with a characterisation golden"`
-- [ ] **Step 3: Rewrite `update` with scratch objects** (the goal of this task). All `THREE.Vector3`/`Quaternion` values are created in `createRallyCamera`. `clone()` becomes `copy()` into scratch, and `new THREE.Vector3(0, 2.4, 0)` becomes a constant `UP24`. The orbit angle and `chaseDir` live in the closure (`chaseDir` with a `hasChase` flag in place of `null`). The arithmetic order is kept operation for operation, so the golden holds.
-- [ ] **Step 4: Run, expect PASS (golden unchanged):** `$UNIT node --test --test-concurrency=4 test/camera.test.mjs`. Prove the golden can fail by changing the chase distance 6.8 → 6.9: expect FAIL, then restore.
-- [ ] **Step 5: Allocation scan.** Add to `test/camera.test.mjs`:
+- [ ] **Step 3: Run, expect FAIL** (`terrainMeshOptions` is not exported): `$UNIT node --test --test-concurrency=4 test/terrain-mesh.test.mjs`
+- [ ] **Step 4: `src/render/trackView.js`.** Add `import { createTerrainMesh } from 'lion-hawk/kits/terrain';`.
+  - Delete `CHUNK`, `LOD_STEP`, `LOD_FAR`, `HYST`, `VIS_FAR`, `EVICT`, `SKIRT`, `BUILD_MS`, `chunkIndex`, `buildChunk`, `updateLod`, `this.chunks`, `this.lodIndex`, `this.lastLod`, `this.pending` and the chunk loop. Keep `DROP`, `PAL` and the colour arithmetic. `buildRoadDistance()` becomes the exported `roadDistance(track)`; the constructor keeps `this.roadDist = roadDistance(track)` (the road and cover use it).
+  - Export `terrainMeshOptions(track, theme, roadDist, noise)`:
 
 ```js
+// 3h's terrain mesh with Rally's chunk numbers (3j #9): 64 m chunks, three LODs with hysteresis, skirts, a 3 ms build
+// budget, far LOD eviction, the road sink (coarse LODs sink under the road) and the detail-map uv. colorAt is the old
+// buildChunk colour block: two-tone ground by broad noise, fine variation, earth/rock on slopes (by ny), road shoulder.
+export function terrainMeshOptions(track, theme, roadDist, noise) {
+  const T = track.terrain, P = PAL[theme], c = [0, 0, 0], e = [0, 0, 0];
+  const dAt = (x, z) => { const gx = Math.round(x - T.x0), gz = Math.round(z - T.z0); // as the old dAt, clamped
+    return roadDist[(gz < 0 ? 0 : gz >= T.nz ? T.nz - 1 : gz) * T.nx + (gx < 0 ? 0 : gx >= T.nx ? T.nx - 1 : gx)] / 10; };
+  return {
+    chunkCells: 64, lods: [1, 2, 4], lodFar: [150, 400], hysteresis: 12, skirt: 2, visFar: 760, evict: [300, 720], budgetMs: 3, moveEps: 2,
+    drop: (x, z, lod) => { const d = dAt(x, z); return DROP[lod] && d < 7 ? DROP[lod] * (1 - smooth(4.5, 7, d)) : 0; },
+    colorAt(x, z, out, ny) {
+      const d = dAt(x, z), big = noise(x / 70, z / 70), fine = noise(x / 6.5, z / 6.5);
+      mix3(c, P.a, P.b, 0.5 + 0.6 * big);
+      const sl = smooth(P.slope[0], P.slope[1], ny);
+      if (sl > 0) { mix3(e, P.earth, P.rock, 0.5 + 0.5 * fine); mix3(c, c, e, sl); }
+      if (d < 8) mix3(c, c, P.shoulder, (1 - smooth(4.5, 7, d)) * 0.7);
+      const k = 1 + 0.07 * fine;
+      out[0] = c[0] * k; out[1] = c[1] * k; out[2] = c[2] * k; return out;
+    },
+    attributes: { uv: { size: 2, at: (x, z, out) => { out[0] = x / 8; out[1] = z / 8; return out; } } },
+  };
+}
+```
+
+  - In the constructor, after `this.roadDist` and the material:
+
+```js
+    this.terrainMesh = createTerrainMesh(world.terrain, { ...terrainMeshOptions(track, this.theme, this.roadDist, this.noise), compiler: this.mc, material: this.terrainMat });
+    this.root.add(this.terrainMesh.group);
+    this.stats = this.terrainMesh.stats;
+    this.focus = { position: { x: track.spawn.x, y: 0, z: track.spawn.z } };
+    this.terrainMesh.update(this.focus); // the first update is unbudgeted: the spawn's chunks are there on frame one
+```
+
+  - `update(camera)` / `sync`: where the old code called `this.updateLod(p.x, p.z)`, set `this.focus.position.x = p.x; this.focus.position.z = p.z;` and call `this.terrainMesh.update(this.focus)` (no allocation per frame).
+  - `dispose()`: `this.terrainMesh.dispose()` before the root is removed.
+- [ ] **Step 5: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/terrain-mesh.test.mjs`.
+- [ ] **Step 6: Mutation.** In `terrainLook`'s `drop`, change `smooth(4.5, 7, d)` to `smooth(4.5, 7.5, d)`: expect FAIL on `position` at a coarse LOD. Restore. Then pass `hysteresis: 0`: expect FAIL on a chunk's LOD at some frame. Restore.
+- [ ] **Step 7: Browser and goldens:**
+  - `$BROWSER node --test test/render.browser.mjs` and `$BROWSER node --test test/e2e.browser.mjs`;
+  - `SHOTS=$SCRATCH/shots-T15b $BROWSER node test/mobile.mjs iPad`: compare a track shot with `$SCRATCH/shots-T17` by eye (same ground colours, no road poking through, no cracks);
+  - `$UNIT npm test` (goldens bit-exact).
+- [ ] **Step 8: Commit:** `git add src/render/trackView.js test/terrain-mesh.test.mjs test/helpers/chunk-oracle.mjs && git commit -m "feat(rally): terrain chunks through lion-hawk's terrain mesh (3-LOD streaming, Rally's numbers)"`
+
+---
+
+### Task 16: The cameras on 3g's chase and mount rigs (3j #9)
+
+**Files:**
+- Create: `src/render/camera.js`, `test/camera.test.mjs`
+- Modify: `src/render.js` (`updateCamera` delegates; `camPos`, `camLook`, `chaseDir`, `orbitA` go)
+
+**Interfaces:**
+- Consumes (3g): `createChaseRig(camera, { style: 'travel' })` → `{ follow(pose, dt), orbit(pose, dt), … }` with pose `{ p, q, v }`; `createMountRig(camera, { socket: { p, look }, fovAdd })` → `{ fovAdd, set(socket), follow(pose) }`; the FOV base `camera.userData.lhFov` (3e).
+- Produces: `createRallyCamera(cam) → { chase, mount, update(car, { orbit, mode, dt }) }`, where `car` is `{ p, q, v, zFront }` (plain objects); `mode` 0 chase, 1 bumper, 2 bonnet; `orbit` the title shot.
+
+**Settled (3j #9, 3g Tasks 5–6):** Rally keeps no camera maths. Title → `chase.orbit(pose, dt)`; chase → `chase.follow(pose, dt)`; bumper → `mount.set({ p: [0, 0.05, zFront + 0.9] })`, bonnet → `mount.set({ p: [0, 0.62, 0.35] })`, then `mount.follow(pose)`, with `fovAdd: 12`. The travel defaults are today's numbers (distance 6.8, height 2.4, lag 3.5, lookAhead 3, lookHeight 0.6, ease 8, lookEase 12, blendFrom 3, blendSpan 20, blendMax 0.55, fovAdd 2, fovSpeed 0.25, fovMax 10, orbitRadius 9, orbitHeight 3.2, orbitLook 0.4, orbitSpeed 0.12, orbitStart 0.6, orbitFovAdd −5), so Rally passes only `style`. The sockets are plain body-space offsets: the Kenney cars need no `sock-*` empties. FOVs add over `lhFov` (60 landscape, so today's 55 / 62 + speed / 72; 64 portrait, so 4° wider: a playtest item). Rally does not write `mc.time`.
+
+- [ ] **Step 1: Failing test** `test/camera.test.mjs`. The oracle is a verbatim copy of today's `Renderer.updateCamera` camera part (`render.js:152-185` at e03ed71, sun lines dropped) with the FOV base made explicit; 3g's own test already pins the rigs, so this pins Rally's wiring: the mode mapping, the per-car bumper socket and the ease kept across mode switches.
+
+```js
+// Rally's four camera modes on 3g's rigs (3j #9), frame by frame against today's updateCamera, title -> chase ->
+// bumper -> bonnet -> chase, with a car change (zFront) in between; portrait adds 4 degrees everywhere.
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
+import { createRallyCamera } from '../src/render/camera.js';
+
+function oldCamera(cam, base) { // games/rally/src/render.js:152-185 at e03ed71; FOV numbers as base + (today − 60)
+  const s = { camPos: new THREE.Vector3(0, 4, -8), camLook: new THREE.Vector3(), chaseDir: null, orbitA: undefined };
+  return (car, orbit, camMode, dt) => {
+    const p = car.p, q = car.q, v = car.v;
+    const cp = new THREE.Vector3(p.x, p.y, p.z), bq = new THREE.Quaternion(q.x, q.y, q.z, q.w);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bq); fwd.y = 0; fwd.normalize();
+    const vel = new THREE.Vector3(v.x, 0, v.z);
+    if (orbit) {
+      s.orbitA = (s.orbitA ?? Math.atan2(-fwd.x, -fwd.z) + 0.6) + dt * 0.12;
+      s.camPos.set(p.x + 9 * Math.sin(s.orbitA), p.y + 3.2, p.z + 9 * Math.cos(s.orbitA));
+      s.camLook.set(p.x, p.y + 0.4, p.z);
+      cam.position.copy(s.camPos); cam.lookAt(s.camLook);
+      cam.fov = base - 5; cam.updateProjectionMatrix();
+      s.chaseDir = null;
+    } else if (camMode === 0) {
+      const sp = vel.length(), dir = fwd.clone();
+      if (sp > 3) dir.lerp(vel.normalize(), Math.min(0.55, (sp - 3) / 20)).normalize();
+      if (!s.chaseDir) s.chaseDir = dir.clone();
+      s.chaseDir.lerp(dir, 1 - Math.exp(-dt * 3.5)).normalize();
+      const want = cp.clone().addScaledVector(s.chaseDir, -6.8).add(new THREE.Vector3(0, 2.4, 0));
+      s.camPos.lerp(want, 1 - Math.exp(-dt * 8));
+      const look = cp.clone().addScaledVector(s.chaseDir, 3).add(new THREE.Vector3(0, 0.6, 0));
+      s.camLook.lerp(look, 1 - Math.exp(-dt * 12));
+      cam.position.copy(s.camPos); cam.lookAt(s.camLook);
+      cam.fov = base + 2 + Math.min(10, sp * 0.25); cam.updateProjectionMatrix();
+    } else {
+      const off = camMode === 1 ? new THREE.Vector3(0, 0.05, car.zFront + 0.9) : new THREE.Vector3(0, 0.62, 0.35);
+      cam.position.copy(cp).add(off.applyQuaternion(bq));
+      const look = cp.clone().add(new THREE.Vector3(0, 0.3, 20).applyQuaternion(bq));
+      cam.up.set(0, 1, 0).applyQuaternion(bq); cam.lookAt(look); cam.up.set(0, 1, 0);
+      cam.fov = base + 12; cam.updateProjectionMatrix();
+    }
+  };
+}
+
+for (const [name, base] of [['landscape', 60], ['portrait (4 degrees wider than today)', 64]]) {
+  test(`${name}: title, chase, bumper, bonnet, chase and a car change match today's cameras frame by frame`, () => {
+    const a = new THREE.PerspectiveCamera(base, 16 / 9, 0.1, 1500), b = a.clone();
+    a.position.set(0, 4, -8); a.userData.lhFov = base;
+    const rig = createRallyCamera(a), ref = oldCamera(b, base), Y = new THREE.Vector3(0, 1, 0);
+    const car = { p: { x: 0, y: 0.5, z: 0 }, q: new THREE.Quaternion(), v: { x: 0, y: 0, z: 0 }, zFront: 1.2 };
+    let yaw = 0.3;
+    for (let i = 0; i < 360; i++) {
+      const dt = i % 4 ? 1 / 60 : 1 / 45, orbit = i < 40, mode = i < 120 ? 0 : i < 170 ? 1 : i < 220 ? 2 : i < 260 ? 1 : 0;
+      if (i === 240) car.zFront = 1.35; // a car change while on the bumper
+      if (!orbit) { const sp = Math.min(30, (i - 40) * 0.3); yaw += 0.01; car.v.x = Math.sin(yaw + 0.3) * sp; car.v.z = Math.cos(yaw + 0.3) * sp; car.p.x += car.v.x * dt; car.p.z += car.v.z * dt; }
+      car.q.setFromAxisAngle(Y, yaw);
+      ref(car, orbit, mode, dt); rig.update(car, { orbit, mode, dt });
+      assert.ok(a.position.distanceTo(b.position) < 1e-9, `position at frame ${i} (mode ${orbit ? 'title' : mode})`);
+      assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `rotation at frame ${i}`);
+      assert.ok(Math.abs(a.fov - b.fov) < 1e-12, `fov at frame ${i}: ${a.fov} vs ${b.fov}`);
+    }
+  });
+}
 test('update() allocates nothing (no `new` or clone() inside it)', () => {
   const s = readFileSync(new URL('../src/render/camera.js', import.meta.url), 'utf8');
-  const body = s.slice(s.indexOf('update('));
-  assert.equal(/\bnew\s|\.clone\(\)/.test(body), false);
+  assert.equal(/\bnew\s|\.clone\(\)/.test(s.slice(s.indexOf('update('))), false);
 });
 ```
 
-Run it and expect PASS. Before Step 3, the same test would have failed; note it in the commit message.
-- [ ] **Step 6: Browser and goldens:** `$BROWSER node --test test/e2e.browser.mjs`; `$UNIT npm test`.
-- [ ] **Step 7: Commit:** `git add src/render/camera.js test/camera.test.mjs && git commit -m "perf(rally): cameras allocate nothing per frame"`
+- [ ] **Step 2: Run, expect FAIL** (`Cannot find module '../src/render/camera.js'`): `$UNIT node --test --test-concurrency=4 test/camera.test.mjs`
+- [ ] **Step 3: Write `src/render/camera.js`.**
+
+```js
+// Rally's cameras on lion-hawk's rigs (3g, 3j #9): the travel chase rig gives the chase (heading blended toward travel,
+// speed FOV) and the title orbit; the mount rig gives the bumper and bonnet views. FOVs add over camera.userData.lhFov.
+import { createChaseRig, createMountRig } from 'lion-hawk/view';
+
+export function createRallyCamera(cam) {
+  const chase = createChaseRig(cam, { style: 'travel' });
+  const BUMPER = { p: [0, 0.05, 0] }, BONNET = { p: [0, 0.62, 0.35] };
+  const mount = createMountRig(cam, { socket: BUMPER, fovAdd: 12 });
+  let socket = null, zFront = NaN;
+  return {
+    chase, mount,
+    // car: { p, q, v, zFront } (zFront: the front axle's body z, for the bumper socket); mode 0 chase, 1 bumper, 2 bonnet.
+    update(car, { orbit, mode, dt }) {
+      if (orbit) { chase.orbit(car, dt); return; }
+      if (mode === 0) { chase.follow(car, dt); return; }
+      if (car.zFront !== zFront) { zFront = car.zFront; BUMPER.p[2] = zFront + 0.9; socket = null; }
+      const want = mode === 1 ? BUMPER : BONNET;
+      if (socket !== want) { mount.set(want); socket = want; }
+      mount.follow(car);
+    },
+  };
+}
+```
+
+- [ ] **Step 4: `src/render.js`.** In the constructor, `this.camRig = createRallyCamera(this.cam); this.camCar = { p: null, q: null, v: null, zFront: 0 };`, and drop `camPos`, `camLook`, `tmpQ`, `tmpV` if nothing else uses them. `updateCamera(sim, dt)` becomes:
+
+```js
+  updateCamera(sim, dt) {
+    const car = sim.car, xf = car.e.xf, c = this.camCar, o = this.drawn?.objectOf(car.e); // the car as view sync drew it this frame
+    c.p = o ? o.position : xf.p; c.q = o ? o.quaternion : xf.q; c.v = car.body.linvel(); c.zFront = car.wheels[0].local.z; // velocity is not in the pool
+    this.camRig.update(c, { orbit: this.orbit, mode: this.camMode, dt });
+    const p = xf.p, L = this.lights; L.follow(p.x, p.z); L.sun.position.y += p.y; L.sun.target.position.y = p.y;
+  }
+```
+
+- [ ] **Step 5: Run, expect PASS:** `$UNIT node --test --test-concurrency=4 test/camera.test.mjs`. Mutation: in `camera.js` set the bumper to `zFront + 0.8`: expect FAIL at frame 120 (`position`). Restore. Then drop the `socket = null` on a car change: expect FAIL after frame 240. Restore.
+- [ ] **Step 6: Browser and goldens:** `$BROWSER node --test test/e2e.browser.mjs`; `SHOTS=$SCRATCH/shots-T16 $BROWSER node test/mobile.mjs` (portrait shots: the view is 4° wider; note it, it is expected); `$UNIT npm test`.
+- [ ] **Step 7: Commit:** `git add src/render/camera.js src/render.js test/camera.test.mjs && git commit -m "feat(rally): cameras on lion-hawk's chase and mount rigs"`
 
 ---
 
@@ -2181,7 +2490,7 @@ test('offline after the first visit', async t => {
   - Run `npx lion-hawk dev --port 8741` in the background for ~10 s.
   - `curl -s localhost:8741/ | grep -c '<canvas id="view"'` must give 1.
   - `curl -sI localhost:8741/assets/models/cone.glb | head -1` must give 200.
-  - Stop it. If it works, `git rm dev.mjs`. If not, keep `dev.mjs`, record why under "Contract issues", and skip the delete.
+  - Stop it, then `git rm dev.mjs`. If `lion-hawk dev` does not serve Rally, stop this step, file an integrator request with the failing request and output, and resume on the engine patch. Do not keep `dev.mjs`.
 - [ ] **Step 6: Commit:** `git add -A package.json dev.mjs test/offline.browser.mjs docs && git commit -m "build(rally): lion-hawk dev replaces dev.mjs; offline test; size and load record"`
 
 ---
@@ -2204,34 +2513,23 @@ test('offline after the first visit', async t => {
   - outcome;
   - the re-bless table (Tasks 7–9);
   - the R1 and R3 records;
-  - decisions (ids, cone hull, camera kept, car drawn from curr, raw shader materials, `weld: false`, terrain mesh kept; see below);
+  - decisions (ids, cone hull, the car drawn by view sync with wheel part poses (3c `partXf`, 3g Task 13b), every material through the compiler (requests filed, if any); the 3g rigs and 3h terrain mesh adopted with today's numbers; weld on, triangle parity; looks as light presets);
   - contract issues as raised;
   - field note candidates;
-  - user items: an iPad `?fps` run, a feel playtest after the re-blessings (hull strikes, posts, cones on the pad), and a rebuild before any deploy.
+  - user items: an iPad `?fps` run, a feel playtest after the re-blessings (hull strikes, posts, cones on the pad), a **portrait camera check: every camera mode is 4° wider in portrait than today** (3e's portrait base 64 under 3g's rigs; landscape unchanged), and a rebuild before any deploy.
 - [ ] **Step 4: Commit:** `git add package.json docs && git commit -m "chore(rally): 0.4.0 on lion-hawk phase 3"`
 
 ---
 
-## Terrain mesh: not adopted (decision recorded in Task 22's notes)
-
-Rally keeps its chunked terrain view (`TrackView.buildChunk`, `updateLod`), and does not switch to `createTerrainMesh`. §4.10's options (`chunks`, `lods`, `colorAt`, `material`) have no hook for any of these:
-- sinking coarse LODs under the road (`DROP`), which stops the road poking through;
-- the detail map;
-- the LOD distances with hysteresis;
-- the per-frame build budget;
-- skirts.
-
-Rally's mesh already reads the same heights the kit's heightfield uses. Field note candidate: "`createTerrainMesh` needs `dropAt(x, z, lod)`, `map`, `lodFar` and a build budget for Rally to adopt it."
-
 ## Done when
 
-- `$UNIT npm test` in `games/rally` passes. That covers all `test/*.test.mjs` and the scripts (`gen-*`, `physics`, `snow`, `markers`, `verge`, `track`, `wild`, `game`). It includes the new `materials`, `surface`, `lh-world`, `lh-rules`, `lh-checks`, `bake` and `camera` tests.
+- `$UNIT npm test` in `games/rally` passes. That covers all `test/*.test.mjs` and the scripts (`gen-*`, `physics`, `snow`, `markers`, `verge`, `track`, `wild`, `game`). It includes the new `materials`, `surface`, `lh-world`, `lh-rules`, `lh-checks`, `bake`, `looks`, `terrain-mesh` and `camera` tests.
 - The browser suites pass, one at a time: `test:e2e` (e2e 4/4 plus render, built), `test:mobile` (all checks, ≥ today's 797), and `test:offline` against `$SCRATCH/rally-after`.
 - The workspace `npm test` in `games/` passes.
 - Goldens:
-  - `stage-autopilot.json` and `stage-scene.json` were re-blessed at most three times (Tasks 7, 8, 9), each under §5.5, with feel within tolerance and recorded in the notes;
-  - they are bit-exact through Tasks 3, 4, 5, 6, 10, 11 and every view task;
-  - `camera.json` was blessed once (Task 16 Step 2).
+  - `stage-autopilot.json` and `stage-scene.json` were re-blessed at most three times (Tasks 7, 8, 9), plus at most once in Task 6 for the scene-load pause only, each under §5.5, with feel within tolerance and recorded in the notes;
+  - they are bit-exact through Tasks 3, 4, 5, 10, 11 and every view task;
+  - the camera and terrain mesh match today's code frame by frame (`test/camera.test.mjs`, `test/terrain-mesh.test.mjs`); no camera golden.
 - §1.3: `test/lh-rules.test.mjs` passes:
   - no `assets.json`, `new RAPIER.World`, `ColliderDesc` or literal friction, density or restitution in `src/` outside the registry;
   - `lh-allow` appears only on `massProps` and the wheel ray.
@@ -2248,27 +2546,30 @@ The notes file is `$W/games/rally/docs/plans/2026-10-13-phase-3j-rally-notes.md`
 - Decisions;
 - Contract issues;
 - **Field note candidates** (the integrator numbers them from #110). Seeded with:
-  - per-step attachments (wheels) vs pool interpolation;
-  - `createChaseRig` cannot express Rally's travel-blend chase or speed FOV;
-  - `createTerrainMesh` hooks;
-  - light-rig presets cannot move the sun;
+  - the light rig's `follow(x, z)` ignores the followed point's height (Rally lifts the sun itself; integrator request 6);
   - compiler cache keyed by `map.uuid` leaks with per-instance textures;
   - a `cone` collider shape.
 
-## Contract issues
+## Contract issues (all settled at the reconciliation pass)
 
-1. **Rounded box.** §4.3 inline and sidecar entries have no rounded box. Rally's hull is a `roundCuboid` (0.2 m edges). This plan uses `{ shape: 'box', half, round }` and asks 3c to map `round` to `ColliderDesc.roundCuboid`. Fallback: a 56-point hull (Task 9), with a new golden cause and a user playtest.
-2. **Rapier in the declaration file.** §4.1's example imports Rapier in the game declaration file, which constraint 1 forbids in the sim tree. Rally injects it instead: `rallyGame({ rapier })`, with the entry and tests importing Rapier.
-3. **Base ids.** §4.2 does not say whether a game entry may reuse a base id. Rally avoids the question with `rally-*` surface ids.
-4. **Terrain collider material.** §4.10 `createTerrain` has no collider material for its heightfield entity. Rally passes `material: 'rally-ground'`.
-5. **Check arguments.** §4.4 `checks.determinism` and `checks.zeroAlloc` take no start `args`, and `input` is unspecified. Rally passes `args`, and `input` as a policy function.
-6. **The manifest.** §4.6/§4.7 do not say how boot receives the asset manifest. Rally passes `render.manifest` and `render.assetsBase`.
-7. **`<!--APP-->`.** §4.3 does not say what replaces `<!--APP-->`. Rally assumes an inline `<script>` holding the bundle.
-8. **Game-plan notes.** Overview §5.2 puts notes in "the sub-plan's own `…-notes.md`", but a game plan cannot write to the engine repo. Rally's notes live under `games/rally/docs/plans/`, and the integrator copies them.
+Each is ruled in `docs/plans/2026-10-13-phase-3-contract-issues.md` ("3j Rally"); the tasks above already follow the rulings.
+1. **Rounded box** (3j #1): `{ shape: 'box', half, round }` → Rapier `roundCuboid` (3c). No hull fallback (Task 9).
+2. **Rapier injected** (3j #2, D9): `rallyGame({ rapier })` → `defineGame({ physics: { rapier } })`; the entry and tests import Rapier.
+3. **Game ids** (3j #3): games may use their own ids; Rally's are `rally-*`.
+4. **Terrain collider material** (3j #4, 3h C4): `createTerrain(world, { …, material: 'rally-ground' })` (Task 11).
+5. **Check arguments** (3j #5, 3c): `checks.determinism`/`checks.zeroAlloc` take `args` and an `input` that is `(step) → snapshot`, a policy name or a constant; `zeroAlloc` reports `growth` (Task 10).
+6. **The manifest** (3j #6, 3e): `render: { assets: { manifest, base } }` (Task 13).
+7. **`<!--APP-->`** (3j #7, 3d, D1): a bare marker, replaced by an inline `<script type="module">` with an ESM bundle; a marker inside `<script>` fails the build (Task 4).
+8. **Game-plan notes** (3j #8): Rally's notes live under `games/rally/docs/plans/`; the integrator copies them.
+9. **Own camera and terrain mesh** (3j #9): adopted 3g's travel chase rig, title orbit and mount rig (Task 16) and 3h's `createTerrainMesh` (Task 15b). Nothing of either is kept game-side.
+10. **Also settled for Rally:** physics pauses during scene loads (3c CI-16; Task 6 pauses Rally's systems with it); light presets may move the sun offset (3e; Task 12); the bake welds, so parity is by triangles (3d (a); Task 3); `sw.js` uses `__PRECACHE__` (Task 4); the registry hash excludes `look`/`game`/`tire` and has no fixed literal (3b #6; Task 3).
 
 ## Integrator requests
 
 1. After Task 22, update `$W/games/package-lock.json` for Rally 0.4.0. A later prune of Rally's now-unused dependencies (`pngjs`, `@gltf-transform/core`, `esbuild` once `serve.mjs` no longer needs it directly) is also yours.
 2. Copy `games/rally/docs/plans/2026-10-13-phase-3j-rally-notes.md` into the engine's `docs/plans/`, and number its field note candidates from #110.
-3. Reconcile contract issues 1, 4, 5 and 6 with 3c, 3h and 3e/3f before 0.8.0 and 0.9.0 are tagged. Rally's tasks 9, 10, 11 and 13 depend on the answers.
+3. (Done at reconciliation: contract issues 1–9 are settled; see above.)
 4. Tell the 3j worktree when 0.8.0 and 0.9.0 are integrated (constraint 13 gates).
+5. **3b's `round` bound.** 3b's sidecar validator requires `round` < the smallest `half`. Rally's real hull has `half` y 0.04 (the inner core, as Rapier's `roundCuboid` takes it) and `round` 0.2, so the bound rejects a valid, playtested shape. 3c's `shapeDesc` only requires `round > 0`. Ask 3b to drop the upper bound (or bound it differently) before any check validates inline colliders with it.
+6. **3e light rig:** `follow(x, z, y = 0)` (sun at `y + offset.y`, aimed at `y`) would let Rally drop its two-line sun lift (Tasks 12, 16). Additive; until it lands Rally lifts the sun through `lights.sun` (which 3e allows for game looks).
+7. **Per-step attachments (Task 15): closed (2026-10-14).** The engine draws Rally's car: 3c's `partXf` (Task 10b) carries per-step part poses swapped with the body's, and 3g's view sync (Task 13b) interpolates them onto the model's named parts. Rally writes its wheels' part poses in `Vehicle.step` and keeps only static shaping in a create hook (Task 15). Needs both engine tasks on `phase-3` before Task 15 (they are in 0.8.0 and 0.9.0).

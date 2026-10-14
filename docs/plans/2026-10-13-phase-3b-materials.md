@@ -18,7 +18,7 @@
   4. deep-freeze;
   5. precompute per-material collider values;
   6. parse pairs;
-  7. hash the canonical JSON.
+  7. hash the canonical JSON of what sidecars and colliders depend on: ids in index order, each material's effective `phys` values and each pair's `friction`/`restitution` (ruling 6; not `look`, `game` or cues).
   Lookups a step may call (`get`, `index`, `collider`, `pair`) are Map or array reads that allocate nothing after a pair's first call.
 - `src/defs/sidecar.js` holds `validateCollider` (shared by sidecars and inline colliders), `validateSidecar`, `validatePhys` and `materialRefs` (the T-14 helper for 3c's `checks.materials`). Validators return their input unchanged or throw on the first error, naming the model and the path.
 
@@ -65,7 +65,7 @@ GLOBAL CONSTRAINTS (phase 3)
 - **Determinism.** The registry has no step behaviour, so constraint 2's `checks.determinism` test and headless replay belong to 3c, which spawns colliders from it. Here determinism means three things, each pinned by a test:
   - the order of `ids` is fixed;
   - the base hash is a pinned literal;
-  - the hash does not depend on declaration order.
+  - the hash does not depend on key order inside entries or on pair-key orientation, but does depend on the order of `ids` (terrain stores indices; ruling 6).
 - **Allocation.** `get`, `has`, `index`, `byIndex`, `density`, `collider` and a repeated `pair(a, b)` allocate nothing. Only the first `pair(a, b)` of an ordered pair builds its frozen result, a bounded, retained cache entry.
 - **Error format** (overview §4.2): `materials: '<id>'.<block>.<field> <problem> (got <value>)`. Sidecar errors: `sidecar: <model>: <path> <problem> (got <value>)`. `phys.json` envelope errors: `phys: <field> <problem> (got <value>)`. `<value>` is shown with strings quoted, `NaN`/`undefined` spelled out, objects as JSON, and anything over 60 characters cut to 57 plus `...`.
 - **Green after every task:** the task's own test files. Task 7 runs the whole engine suite.
@@ -84,7 +84,7 @@ The five inputs most likely to bite, each pinned by a test:
 
 1. **`extends` merge depth and isolation.** Nested `look.fur`/`look.subsurface` objects must merge and arrays must replace. Two-level chains must see overrides of base entries, and the caller's objects must never be frozen or mutated. Pinned by Task 2, "extends deep-merges per block…" and "resolved materials are frozen copies…", and by the shallow-merge mutation step.
 2. **Pair order dependence.** M-8's tie rule gives `sound`/`fx` to `a`, and tyre data comes from `b` (the ground). So `pair(a, b)` and `pair(b, a)` can differ, and a cache keyed by the unordered pair would return the wrong one. Pinned by Task 3, "an sg tie takes the cues of a…", and by two mutation steps (`<=` tie, unordered cache key).
-3. **Hash stability.** The hash must not depend on key order or pair-key orientation, must change with any resolved value (including `game`), and is pinned for the base library. A drift here fails every game's `checks.materials` and `bake --check`. Pinned by Task 4 and the unsorted-keys mutation step.
+3. **Hash stability and scope (ruling 6).** The hash must not depend on key order or pair-key orientation. It must change with `ids` and their order, any effective `phys` value and any pair `friction`/`restitution`, and must not change with `look`, `game`, `tire`, cues (`sound`/`fx`) or other live-read blocks. It is pinned for the base library. A drift here fails every game's `checks.materials` and `bake --check`. Pinned by Task 4 and its two mutation steps (unsorted keys, whole-table hash).
 4. **Validation edges and messages.** Inclusive range ends (friction 2 and restitution 1 pass; fill 0 and sg 0 fail), `NaN` and strings in numeric fields, unknown block versus unknown field, cycles including self-`extends`, and `paint-`/`|` ids. Pinned by Task 2, "validation names…" and "range edges…".
 5. **Sidecar versus inline colliders.** Baked entries require `p`, `q` and `part`; inline ones may omit them. `'ball'` is rejected with a hint (overview §4.4's example uses it), and so are `paint-*` materials. Hull limits are 4–64 points; mesh indices must be in range; quaternions must be unit. Pinned by Task 5, "inline colliders…" and "collider errors…", and by Task 6, "sidecar errors…".
 
@@ -98,7 +98,7 @@ The five inputs most likely to bite, each pinned by a test:
 | `test/materials-base.test.mjs` (create) | The base library's ids, order, freezing, tyre data and fluids. |
 | `test/materials.test.mjs` (create) | Registry construction, `extends`, overrides, ids and indices, density and collider values, validation. |
 | `test/materials-pairs.test.mjs` (create) | `pair()` defaults, entries, ordering, caching, bad tables. |
-| `test/materials-hash.test.mjs` (create) | `canonicalJson`, the pinned base hash, order independence and sensitivity. |
+| `test/materials-hash.test.mjs` (create) | `canonicalJson`, the pinned base hash, order independence and what the hash covers (ruling 6). |
 | `test/sidecar-collider.test.mjs` (create) | `validateCollider` for every shape, baked and inline. |
 | `test/sidecar.test.mjs` (create) | `validateSidecar`, `validatePhys`, `materialRefs`, and the purity of the three modules. |
 | `docs/plans/2026-10-13-phase-3b-materials-notes.md` (create) | Outcome, decisions and field note candidates. |
@@ -116,7 +116,7 @@ export function canonicalJson(value) → string
 export function defineMaterials(entries = {}, { pairs = {} } = {}) → Registry
 // Registry (frozen):
 //   ids: frozen string[]                 base library in spec order, then game entries in key order
-//   hash: string                         8 lowercase hex digits
+//   hash: string                         8 lowercase hex digits over ids (in order), effective phys and pair friction/restitution only
 //   get(id) → frozen material ({ id, look?, phys?, tire?, dirtRate?, coverage?, aero?, magnet?, fluid?, sound?, fx?, game? })
 //   has(id) → boolean
 //   index(id) → 0..254;  byIndex(i) → id
@@ -128,6 +128,7 @@ export const SIDECAR_VERSION;   // 1
 export const SHAPES;            // frozen ['box', 'sphere', 'capsule', 'cylinder', 'hull', 'mesh']
 export const MAX_HULL_POINTS;   // 64
 export function validateCollider(entry, { where = 'collider', path = 'collider', materials, parts, inline = false } = {}) → entry
+//   entry: { shape, ...shape fields, p?, q?, part?, material }; a box may carry optional `round` (> 0: Rapier roundCuboid's border radius, added OUTSIDE `half`, 3c/3j)
 export function validateSidecar(sidecar, { model = '?', materials } = {}) → sidecar
 export function validatePhys(phys, { materials } = {}) → phys
 export function materialRefs(phys) → { [materialId]: ['<model>.colliders[i]', ...] }   // keys sorted
@@ -337,7 +338,7 @@ git commit -m "feat(materials): the 18-material base library (M-2)"
 - A game entry whose id is a base id is **merged over** the base entry in place: same index, and `extends` sees the merged version. It may not `extends` anything (it throws). Tractor's `grass` tweak and `leaf extends grass` need this.
 - Resolved materials carry their `id`.
 - `PHYS_DEFAULTS` follow Rapier's own defaults (friction 0.5, restitution 0), so a material without a `phys` block behaves as an untouched Rapier collider.
-- `game` and `look.wear` are not schema-checked, but must be plain JSON data, because the registry hashes and freezes them.
+- `game` and `look.wear` are not schema-checked, but must be plain JSON data, because the registry clones and freezes them (ruling 7). Neither is hashed (ruling 6).
 - Ids may not contain `|` (pair keys use it) or start with `paint-` (bake slots, A-4).
 - `byIndex(i)` returns the id string. `materialAt` returns ids, and terrain stores indices.
 - In this task, `defineMaterials` accepts the `pairs` option and ignores it; Task 3 parses it.
@@ -511,7 +512,7 @@ const str = v => typeof v === 'string' && v.length > 0 ? null : 'must be a non-e
 const oneOf = list => v => list.includes(v) ? null : `must be one of ${list.map(x => `'${x}'`).join(', ')}`;
 const colour = v => (typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) || (Number.isInteger(v) && v >= 0 && v <= 0xffffff) ? null : "must be a colour ('#rgb', '#rrggbb' or 0xrrggbb)";
 const curve = v => Array.isArray(v) && v.length >= 2 && v.every(p => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1])) ? null : 'must be a list of at least 2 [angle, value] pairs';
-const plainData = v => { // JSON values only, so the registry hashes and freezes the same everywhere
+const plainData = v => { // JSON values only, so the registry clones and freezes the same everywhere
   if (v === null || typeof v === 'string' || typeof v === 'boolean' || finite(v)) return null;
   if (Array.isArray(v)) { for (const x of v) if (plainData(x)) return 'must be plain JSON data'; return null; }
   if (isPlain(v)) { for (const x of Object.values(v)) if (plainData(x)) return 'must be plain JSON data'; return null; }
@@ -793,14 +794,19 @@ git commit -m "feat(materials): pair table and M-8 pair resolution"
 
 ### Task 4: Canonical JSON and the registry hash
 
-**Decision:** the hashed object is `{ materials: { <id>: resolved material }, pairs: { '<a>|<b>' with a <= b: entry } }`, written as canonical JSON (keys sorted at every level) and hashed with the engine's `fnv` (FNV-1a over UTF-16 code units). It is rendered as 8 lowercase hex digits. The base library's hash is pinned at `f327bcae`.
+**Decision (ruling 6):** the hash covers only what sidecars and colliders depend on, so a `look` or `game` tweak needs no re-bake. The hashed object is `{ materials: [[<id>, { friction, restitution, sg, fill }], ...] in index order, pairs: { '<a>|<b>' with a <= b: { friction?, restitution? } } }`:
+- `materials` is an array, so the ids **and their order** count. Each value is the effective `phys` that `collider()`/`density()` read: `PHYS_DEFAULTS` filled in, and `sg` from `sgOf` (0 for a fluid without `phys.sg`). Spelling out a default does not change the hash.
+- `pairs` keeps only an entry's `friction` and `restitution`; an entry with neither is left out.
+- Not hashed: `look`, `game`, `tire`, `dirtRate`, `coverage`, `aero`, `magnet`, `fluid` (beyond its effect on `sg`), `sound`, `fx`, and pair `tire`/`sound`/`fx`. Kits and the view read these live from the registry. Cost: a stale `look` baked into a GLB is not caught by `checks.materials`.
+
+It is written as canonical JSON (keys sorted at every level) and hashed with the engine's `fnv` (FNV-1a over UTF-16 code units), rendered as 8 lowercase hex digits. The base library's hash is pinned at `2f4f4f95`.
 
 **Files:**
 - Modify: `src/defs/materials.js`
 - Test: `test/materials-hash.test.mjs`
 
 **Interfaces:**
-- Consumes: `fnv` from `src/core/rng.js`; `parsePairs`' `table` (Task 3).
+- Consumes: `fnv` from `src/core/rng.js`; `list`, `sgOf`, `PHYS_DEFAULTS` (Task 2); `parsePairs`' `table` (Task 3).
 - Produces: `canonicalJson(value) → string`; `Registry.hash`.
 
 - [ ] **Step 1: Write the failing test.** Create `test/materials-hash.test.mjs`:
@@ -816,21 +822,39 @@ test('3b: canonicalJson sorts keys at every level and refuses non-JSON values', 
   assert.throws(() => canonicalJson({ a: () => 1 }), /cannot hash/);
 });
 test('3b: the registry hash is 8 hex digits and pinned for the base library', () => {
-  assert.equal(defineMaterials().hash, 'f327bcae'); // changes only when the base library or the hash rule changes (every phys.json re-bakes)
+  assert.equal(defineMaterials().hash, '2f4f4f95'); // changes only when ids, phys, pair contact values or the hash rule change (every phys.json re-bakes)
 });
-test('3b: the hash ignores declaration order but sees every value', () => {
-  const a = defineMaterials({ x: { extends: 'steel' }, y: { game: { k: 1 } } }, { pairs: { 'rubber|ice': { friction: 0.1 }, 'x|y': { sound: 's' } } });
-  const b = defineMaterials({ y: { game: { k: 1 } }, x: { extends: 'steel' } }, { pairs: { 'y|x': { sound: 's' }, 'ice|rubber': { friction: 0.1 } } });
-  assert.match(a.hash, /^[0-9a-f]{8}$/);
-  assert.equal(a.hash, b.hash);
-  const variants = [
-    defineMaterials({ x: { extends: 'steel', phys: { friction: 0.61 } }, y: { game: { k: 1 } } }, { pairs: { 'rubber|ice': { friction: 0.1 }, 'x|y': { sound: 's' } } }),
-    defineMaterials({ x: { extends: 'steel' }, y: { game: { k: 2 } } }, { pairs: { 'rubber|ice': { friction: 0.1 }, 'x|y': { sound: 's' } } }),
-    defineMaterials({ x: { extends: 'steel' }, y: { game: { k: 1 } } }, { pairs: { 'rubber|ice': { friction: 0.11 }, 'x|y': { sound: 's' } } }),
-    defineMaterials({ x: { extends: 'steel' }, y: { game: { k: 1 } } }, { pairs: { 'rubber|ice': { friction: 0.1 } } }),
-    defineMaterials({ x: { extends: 'aluminium' }, y: { game: { k: 1 } } }, { pairs: { 'rubber|ice': { friction: 0.1 }, 'x|y': { sound: 's' } } }),
-  ];
-  for (const v of variants) assert.notEqual(v.hash, a.hash);
+test('3b: the hash sees ids, their order, phys and pair friction/restitution; not key order, look, game or cues (ruling 6)', () => {
+  const ENTRIES = { x: { extends: 'steel', phys: { friction: 0.6, restitution: 0.2 } }, y: { look: { color: '#808080' }, game: { k: 1 } } };
+  const PAIRS = { 'rubber|ice': { friction: 0.1, sound: 'squeal' }, 'x|y': { restitution: 0.4, sound: 's' }, 'steel|ice': { fx: 'frost' } };
+  const make = (edit = () => {}) => { const e = structuredClone(ENTRIES), p = structuredClone(PAIRS); edit(e, p); return defineMaterials(e, { pairs: p }).hash; };
+  const h = make();
+  assert.match(h, /^[0-9a-f]{8}$/);
+  const reordered = defineMaterials(
+    { x: { phys: { restitution: 0.2, friction: 0.6 }, extends: 'steel' }, y: { game: { k: 1 }, look: { color: '#808080' } } },
+    { pairs: { 'ice|steel': { fx: 'frost' }, 'y|x': { sound: 's', restitution: 0.4 }, 'ice|rubber': { sound: 'squeal', friction: 0.1 } } });
+  assert.equal(reordered.hash, h, 'key order and pair orientation');
+  const same = {
+    'game': (e) => { e.y.game.k = 2; },
+    'look': (e) => { e.y.look.color = '#ff0000'; },
+    'material cue': (e) => { e.x.sound = 'clang'; },
+    'material tyre': (e) => { e.x.tire = { mu: 0.9 }; },
+    'pair cue': (e, p) => { p['x|y'].sound = 't'; },
+    'pair tyre': (e, p) => { p['rubber|ice'].tire = { mu: 0.2 }; },
+    'cue-only pair removed': (e, p) => { delete p['steel|ice']; },
+  };
+  for (const [what, edit] of Object.entries(same)) assert.equal(make(edit), h, what);
+  const differs = {
+    'ids order': () => defineMaterials({ y: ENTRIES.y, x: ENTRIES.x }, { pairs: PAIRS }).hash,
+    'new id': () => make(e => { e.z = {}; }),
+    'phys.friction': () => make(e => { e.x.phys.friction = 0.61; }),
+    'phys.fill': () => make(e => { e.x.phys.fill = 0.5; }),
+    'extends (sg)': () => make(e => { e.x.extends = 'aluminium'; }),
+    'pair friction': () => make((e, p) => { p['rubber|ice'].friction = 0.11; }),
+    'pair restitution': () => make((e, p) => { p['x|y'].restitution = 0.5; }),
+    'pair removed': () => make((e, p) => { delete p['rubber|ice']; }),
+  };
+  for (const [what, hashOf] of Object.entries(differs)) assert.notEqual(hashOf(), h, what);
 });
 ```
 
@@ -857,10 +881,17 @@ const hex8 = s => fnv(s).toString(16).padStart(8, '0');
   (c) Directly before `  return Object.freeze({` inside `defineMaterials` (that is, after Task 3's pair section), insert, followed by one blank line:
 
 ```js
-  // 5. Hash (overview §4.2): 8-hex FNV-1a of the canonical JSON of the resolved table and the pairs.
+  // 5. Hash (overview §4.2, ruling 6): only what sidecars and colliders depend on. Per material in index order (so ids
+  //    and their order count), the effective phys values collider()/density() read; per pair, its friction/restitution.
+  //    look, game, tire, dirtRate, coverage, aero, magnet, sound and fx are read live, so changing them needs no re-bake.
+  const contact = e => Object.fromEntries(['friction', 'restitution'].filter(k => e[k] !== undefined).map(k => [k, e[k]]));
   const hash = hex8(canonicalJson({
-    materials: Object.fromEntries(list.map(m => [m.id, m])),
-    pairs: Object.fromEntries([...table].map(([norm, { entry }]) => [norm, entry])),
+    materials: list.map(m => [m.id, {
+      friction: m.phys?.friction ?? PHYS_DEFAULTS.friction,
+      restitution: m.phys?.restitution ?? PHYS_DEFAULTS.restitution,
+      sg: sgOf(m), fill: m.phys?.fill ?? PHYS_DEFAULTS.fill,
+    }]),
+    pairs: Object.fromEntries([...table].map(([norm, { entry }]) => [norm, contact(entry)]).filter(([, c]) => Object.keys(c).length)),
   }));
 ```
 
@@ -868,7 +899,10 @@ const hex8 = s => fnv(s).toString(16).padStart(8, '0');
 
 - [ ] **Step 4: Run it and expect PASS.** Unit run with `test/materials-hash.test.mjs test/materials-pairs.test.mjs test/materials.test.mjs`: 17 pass, 0 fail. If the pinned literal differs, stop. Either Task 1's data or the canonical form differs from this plan, so diff them against the plan before you touch the literal. Report it in the notes; never just paste the new value.
 
-- [ ] **Step 5: Prove the order test red by mutation.** In `canonicalJson`, change `Object.keys(v).sort()` to `Object.keys(v)`. Run `test/materials-hash.test.mjs` and expect 3 failures: the `canonicalJson` sorting test, the pinned literal, and "the hash ignores declaration order…". Revert, then run again and expect 3 pass.
+- [ ] **Step 5: Prove the hash tests red by mutation.**
+  1. In `canonicalJson`, change `Object.keys(v).sort()` to `Object.keys(v)`. Run `test/materials-hash.test.mjs` and expect 3 failures: the `canonicalJson` sorting test, the pinned literal (`fill` sorts before `friction`), and "the hash sees ids…" (pair orientation). Revert.
+  2. Replace the `materials:` and `pairs:` lines of the hashed object with the whole resolved table, `materials: Object.fromEntries(list.map(m => [m.id, m])), pairs: Object.fromEntries([...table].map(([norm, { entry }]) => [norm, entry])),`. Expect 2 failures: the pinned literal and "the hash sees ids…" (`game`/`look`/cue edits change it; the ids-order swap does not). Revert.
+  3. Run again and expect 3 pass.
 
 - [ ] **Step 6: Commit.**
 
@@ -890,6 +924,7 @@ git commit -m "feat(materials): canonical JSON and the 8-hex registry hash"
 - **Hulls take 4–64 points**, matching the bake's cap.
 - **Typed arrays are accepted** for number lists (procedural inline hulls).
 - **Quaternions** must be unit to within 1e-3.
+- **`box` takes an optional `round`** (border radius, > 0 and below the smallest `half`) for Rapier's roundCuboid (3j #1; 3c builds it). Other shapes reject it as an unknown field.
 
 **Files:**
 - Create: `src/defs/sidecar.js`
@@ -926,6 +961,8 @@ test('3b: every collider shape validates and is returned unchanged (overview §4
   assert.deepEqual([...SHAPES], ['box', 'sphere', 'capsule', 'cylinder', 'hull', 'mesh']);
   const m = defineMaterials();
   for (const c of EVERY) assert.equal(validateCollider(c, { ...opts, materials: m }), c, c.shape);
+  const rounded = { ...EVERY[0], half: [1, 0.04, 2], round: 0.2 }; // Rally's thin core: round may exceed half
+  assert.equal(validateCollider(rounded, { ...opts, materials: m }), rounded, 'a box may carry round (roundCuboid, 3j #1)');
 });
 test('3b: collider errors name the prefix, the path and the field', () => {
   bad(0, c => { c.half = [1, 0, 1]; }, 'sidecar: cart: c.half must be 3 numbers > 0 (got [1,0,1])');
@@ -942,6 +979,9 @@ test('3b: collider errors name the prefix, the path and the field', () => {
   bad(0, c => { c.material = 'unobtainium'; }, "sidecar: cart: c.material names an unknown material (got 'unobtainium')");
   bad(0, c => { c.material = 'paint-body'; }, "sidecar: cart: c.material is a paint slot; colliders take its base material (A-4) (got 'paint-body')");
   bad(0, c => { c.shape = 'ball'; }, "sidecar: cart: c.shape unknown shape (use 'sphere') (got 'ball')");
+  bad(0, c => { c.round = 0; }, 'sidecar: cart: c.round must be a number > 0 (got 0)');
+  bad(0, c => { c.round = Infinity; }, 'sidecar: cart: c.round must be a number > 0 (got Infinity)');
+  bad(1, c => { c.round = 0.1; }, 'sidecar: cart: c.round unknown field for a sphere (got 0.1)');
   bad(0, c => { c.shape = 'cone'; }, "sidecar: cart: c.shape unknown shape (one of box, sphere, capsule, cylinder, hull, mesh) (got 'cone')");
 });
 test('3b: a full hull of exactly 64 points passes; 4 is the minimum', () => {
@@ -988,7 +1028,7 @@ const vec3 = v => nums(v) && v.length === 3;
 const quat = v => nums(v) && v.length === 4 && Math.abs(Math.hypot(v[0], v[1], v[2], v[3]) - 1) < 1e-3;
 const name = v => typeof v === 'string' && v.length > 0;
 
-const SHAPE_FIELDS = { box: ['half'], sphere: ['r'], capsule: ['halfHeight', 'r'], cylinder: ['halfHeight', 'r'], hull: ['points'], mesh: ['vertices', 'indices'] };
+const SHAPE_FIELDS = { box: ['half', 'round'], sphere: ['r'], capsule: ['halfHeight', 'r'], cylinder: ['halfHeight', 'r'], hull: ['points'], mesh: ['vertices', 'indices'] };
 const COMMON = ['shape', 'p', 'q', 'part', 'material'];
 
 // One collider entry. where: the message prefix ('sidecar: tractor', "spawn 'pig'"); path: 'colliders[2]'.
@@ -1011,7 +1051,12 @@ export function validateCollider(c, { where = 'collider', path = 'collider', mat
   if (materials && !materials.has(c.material)) fail('material', 'names an unknown material', c.material);
   const pos = k => { if (!finite(c[k]) || c[k] <= 0) fail(k, 'must be a number > 0', c[k]); };
   switch (c.shape) {
-    case 'box': if (!vec3(c.half) || !Array.prototype.every.call(c.half, x => x > 0)) fail('half', 'must be 3 numbers > 0', c.half); break;
+    case 'box':
+      if (!vec3(c.half) || !Array.prototype.every.call(c.half, x => x > 0)) fail('half', 'must be 3 numbers > 0', c.half);
+      // round: optional border radius, Rapier roundCuboid (3c; Rally's hull, 3j #1). Rapier adds it OUTSIDE half, so it may
+      // exceed half (Rally: half y 0.04, round 0.2).
+      if (c.round !== undefined && (!finite(c.round) || c.round <= 0)) fail('round', 'must be a number > 0', c.round);
+      break;
     case 'sphere': pos('r'); break;
     case 'capsule': case 'cylinder': pos('halfHeight'); pos('r'); break;
     case 'hull': {
@@ -1112,19 +1157,19 @@ test('3b: sidecar errors name the model and the path', () => {
   bad(s => { s.bounds.max = [1, -1, 2]; }, 'sidecar: cart: bounds.max must be 3 numbers, each >= min (got [1,-1,2])');
 });
 test('3b: validatePhys checks the envelope and every model, with the model id in the message (D2)', () => {
-  const phys = { v: 1, engine: '0.8.0', materials: 'f327bcae', models: { cart: good(), crate: { v: 1, parts: ['crate'], colliders: [{ shape: 'box', half: [0.5, 0.5, 0.5], p: O, q: I, part: 'crate', material: 'wood' }] } } };
+  const phys = { v: 1, engine: '0.8.0', materials: '2f4f4f95', models: { cart: good(), crate: { v: 1, parts: ['crate'], colliders: [{ shape: 'box', half: [0.5, 0.5, 0.5], p: O, q: I, part: 'crate', material: 'wood' }] } } };
   assert.equal(validatePhys(phys, { materials: defineMaterials() }), phys);
   const bad = (edit, message) => { const p = structuredClone(phys); edit(p); throwsExactly(() => validatePhys(p, { materials: defineMaterials() }), message); };
   bad(p => { p.v = 0; }, 'phys: v must be 1 (got 0)');
   bad(p => { p.engine = '0.8'; }, "phys: engine must be a version like 0.8.0 (got '0.8')");
-  bad(p => { p.materials = 'F327BCAE'; }, "phys: materials must be an 8-hex registry hash (got 'F327BCAE')");
+  bad(p => { p.materials = '2F4F4F95'; }, "phys: materials must be an 8-hex registry hash (got '2F4F4F95')");
   bad(p => { p.models = []; }, 'phys: models must be an object (got [])');
   bad(p => { p.extra = 1; }, 'phys: extra unknown field (got 1)');
   bad(p => { p.models.crate.colliders[0].material = 'cardboard'; }, "sidecar: crate: colliders[0].material names an unknown material (got 'cardboard')");
   assert.equal(validatePhys({ ...phys, materials: '00000000' }).materials, '00000000', 'a stale hash is the caller\'s check, not a schema error');
 });
 test('3b: materialRefs lists every material a phys.json names, and where (T-14)', () => {
-  const phys = { v: 1, engine: '0.8.0', materials: 'f327bcae', models: { cart: good() } };
+  const phys = { v: 1, engine: '0.8.0', materials: '2f4f4f95', models: { cart: good() } };
   assert.deepEqual(materialRefs(phys), {
     rubber: ['cart.colliders[1]', 'cart.colliders[3]'],
     steel: ['cart.colliders[0]', 'cart.colliders[2]'],
@@ -1249,7 +1294,7 @@ Expected: everything passes. The count is the `phase-3` base count plus 30: 4 ba
 cd /home/smiller/projects/four43/lion-hawk-engine-3b && node -e "import('./src/defs/materials.js').then(({ defineMaterials }) => { const m = defineMaterials(); console.log(m.ids.length, m.hash, m.pair('rubber', 'ice')) })"
 ```
 
-Expected: `18 f327bcae` and a frozen pair with friction `0.2236…`, restitution 0.6, ice's tyre, sound `'scrape'` and fx `'frost'`.
+Expected: `18 2f4f4f95` and a frozen pair with friction `0.2236…`, restitution 0.6, ice's tyre, sound `'scrape'` and fx `'frost'`.
 
 - [ ] **Step 3: Write the notes file** `docs/plans/2026-10-13-phase-3b-materials-notes.md`. Sections:
   - **Outcome:** the commits, the test counts and the base hash.
@@ -1257,7 +1302,7 @@ Expected: `18 f327bcae` and a frozen pair with friction `0.2236…`, restitution
   - **Contract issues:** copy the section below, with anything new.
   - **Integrator requests:** copy the section below.
   - **Field note candidates:** for the integrator to number from #110. Seed it with:
-    1. The material hash covers `look` and `game`, so a colour tweak invalidates `phys.json` (see Contract issue 6).
+    1. The material hash covers only ids (in order), effective `phys` and pair `friction`/`restitution`, so a `look`/`game` tweak needs no re-bake, but a stale `look` baked into a GLB is not caught by `checks.materials` (Contract issue 6).
     2. M-8 pairs are order-dependent. Kits must pass the moving body as `a` and the ground as `b`.
 
 - [ ] **Step 4: Commit.**
@@ -1270,7 +1315,7 @@ git commit -m "docs(materials): phase 3b notes"
 ## Done when
 
 - `test/materials-base`, `materials`, `materials-pairs`, `materials-hash`, `sidecar-collider` and `sidecar` (30 tests) pass. The whole engine suite passes at its base count plus 30, under the memory-capped run.
-- `defineMaterials().hash === 'f327bcae'`.
+- `defineMaterials().hash === '2f4f4f95'`.
 - Every mutation step above was seen red, then reverted.
 - The notes file exists, with its "Field note candidates" section.
 - Merge point: the integrator merges `phase-3-materials` into `phase-3` with `--no-ff` as part of Wave A (3b + 3c + 3d → 0.8.0) and applies the integrator requests below. 3b bumps no version.
@@ -1281,9 +1326,9 @@ File: `docs/plans/2026-10-13-phase-3b-materials-notes.md`. Sections: Outcome, De
 
 ## Contract issues
 
-1. **`pair()` caching (§4.2).** The overview says "cached per unordered pair". But the M-8 tie rule (cues to `a`) and the tyre rule (`b`'s first) make the result order-dependent. Decision: cache per **ordered** pair. Kits pass the moving body as `a` and the ground as `b`.
-2. **`'ball'` vs `'sphere'` (§4.4 vs §4.3).** §4.4's spawn example uses `shape: 'ball'`; §4.3 says inline entries have exactly the sidecar shape (`sphere`). Decision: only `'sphere'`. `'ball'` throws `unknown shape (use 'sphere')`. 3c's and the games' fixtures should use `sphere`.
-3. **Validator signatures are unspecified (§3.1, §4.3).** Decision:
+1. **`pair()` caching (§4.2).** The overview says "cached per unordered pair". But the M-8 tie rule (cues to `a`) and the tyre rule (`b`'s first) make the result order-dependent. Decision: cache per **ordered** pair. Kits pass the moving body as `a` and the ground as `b`. Accepted.
+2. **`'ball'` vs `'sphere'` (§4.4 vs §4.3).** §4.4's spawn example uses `shape: 'ball'`; §4.3 says inline entries have exactly the sidecar shape (`sphere`). Ruled: `'sphere'` everywhere; `'ball'` throws `unknown shape (use 'sphere')`; the §4.4 example is wrong. 3c's and the games' fixtures use `sphere`.
+3. **Validator signatures are unspecified (§3.1, §4.3).** Accepted:
    - `validateSidecar(s, { model, materials }) → s`;
    - `validatePhys(phys, { materials }) → phys`, which does not compare the hash.
    Also added (not public, imported from `src/defs/sidecar.js` by 3c and 3d):
@@ -1291,15 +1336,16 @@ File: `docs/plans/2026-10-13-phase-3b-materials-notes.md`. Sections: Outcome, De
    - `materialRefs(phys)`;
    - `SHAPES`, `MAX_HULL_POINTS`.
    In `materials.js`: `PHYS_DEFAULTS`, `MAX_MATERIALS`, `canonicalJson`.
-4. **A game entry with a base id (§4.2 is silent).** Decision: it merges over the base entry in place (same index) and may not `extends`.
-5. **Resolved shape (§4.2):**
+4. **A game entry with a base id (§4.2 is silent).** Accepted: it merges over the base entry in place (same index) and may not `extends`.
+5. **Resolved shape (§4.2), accepted:**
    - `byIndex(i)` returns the id;
    - a resolved material carries `id`;
    - `pair()` returns `null` for absent `tire`/`sound`/`fx`;
    - a pair `tire` entry merges over the ground's tyre;
    - softer-material cues fall back to the harder one's.
-6. **The hash covers the whole resolved table (§4.2), as written.** A `look` or `game` change alters it, so `checks.materials` and `bake --check` fail until a re-bake, even though no sidecar changed. Implemented as specified. If the controller prefers it, hash only `ids` + `phys` + pairs: a one-line change in Task 4 plus the pinned literal.
-7. **`game` and `look.wear` must be plain JSON data (D6 says "not validated").** This is needed for hashing and freezing. No other checks.
+6. **What the hash covers (§4.2 says the whole resolved table).** Ruled: only what sidecars depend on: ids and their order, each material's effective `phys` (defaults filled, fluid `sg` 0) and each pair's `friction`/`restitution`. Not `look`, `game`, `tire`, cues or other live-read blocks, so a look tweak needs no re-bake. Cost: a stale `look` in a baked GLB is not caught by `checks.materials` (the view reads `look` live). Base hash `2f4f4f95` (was `f327bcae` under the whole-table rule). Task 4.
+7. **`game` and `look.wear` must be plain JSON data (D6 says "not validated").** Accepted. This is needed for cloning and freezing. No other checks.
+8. **`round` on box colliders (3j #1).** Ruled: 3c builds Rapier's roundCuboid for it. 3b's schema accepts an optional `round` on `box` only, > 0 and below the smallest `half`; any other shape rejects it as an unknown field (Task 5).
 
 ## Integrator requests
 
@@ -1314,5 +1360,5 @@ export { SIDECAR_VERSION, validateSidecar, validatePhys } from './defs/sidecar.j
 2. **`CHANGELOG.md`** (0.8.0, Wave A):
    - material registry (`defineMaterials`, base library of 18, `extends`, pairs, validation, hash);
    - sidecar schema (`validateSidecar`, `validatePhys`).
-3. **`docs/spec.md`:** record Contract issues 1, 2, 4 and 5 as clarifications of M-2/M-8 and §6.2 once the controller rules on them.
+3. **`docs/spec.md`:** record Contract issues 1, 2, 4, 5, 6 and 8 (all ruled) as clarifications of M-2/M-8, §4.2's hash and §6.2.
 4. **No purity-root change is needed.** `test/purity.test.mjs` already scans `src/defs`.

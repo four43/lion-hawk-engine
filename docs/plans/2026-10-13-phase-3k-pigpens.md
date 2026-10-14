@@ -99,10 +99,11 @@ The five input or failure modes most likely to bite, and the test that pins each
      - a shut gate is one `gate` entity, and opening it removes it;
      - no pig crosses a shut gate in 120 s;
      - an eaten snack leaves `h.find('food')` and no pig keeps its id.
-5. **Hand orbit against the tool gesture.**
-   - With `bindGesture` and `uncapped` adopted, a Hand drag must orbit without pressing, tapping or driving.
+5. **Hand orbit against the tool gesture, and camera feel.**
+   - With 3g's orbit rig (`rig.bindGesture`) and `bindPointer({ uncapped: true })` adopted, a Hand drag must orbit without pressing, tapping or driving.
    - Pinned by `test/flow-orbit.test.mjs` (Task 18): `pressing` is false after an orbit move, and a later `press` does not drive.
-   - The e2e orbit and drive tests pin it in Chromium.
+   - The camera must sit where 2.1.0's did. `test/rig.test.mjs` (Task 18) compares the rig with Pig Pens' options against today's `rig.js`, kept as a test fixture: framing, pan, drive chase, release, clamps and ray.
+   - The e2e orbit, Hand-drag turn and drive tests pin it in Chromium.
 
 ---
 
@@ -115,34 +116,34 @@ Paths are relative to `games/pig-pens/` in the four43 worktree.
 | `assets/models/{nature-kit,graveyard-kit,food-kit,car-kit,cube-pets}/…` | create | Vendored Kenney sources (33 GLBs, 4 `Textures/colormap.png`, each kit's `License.txt`), file names unchanged |
 | `assets/models/SOURCES.json` | create | Pinned sha256 per vendored file and its origin in the Kenney 3.7.0 pack |
 | `game.config.js` | create | CLI config: id, `outEnv: 'PIGPENS_OUT'`, bake (per-model files, renames, palette, anim tables), build |
-| `src/defs/materials.js` | create | Material registry (`defineMaterials`): physics values reproducing 2.1.0 contacts, look-only model materials |
+| `src/defs/materials.js` | create | Material registry (`defineMaterials`): physics values reproducing 2.1.0 contacts, look-only model materials, `pigHide` (mud coverage) |
 | `baked/**` | create (bake output, committed, D2) | `phys.json`, `manifest.json`, `models/*.glb`, `models/{pig,chick}.anim.json` |
 | `src/sim.js` | modify | `createSim(world, opts)`, `think`/`settle`, entities via `world.spawn`, `GROUPS`, materials in place of literal friction |
 | `src/chickens.js` | modify | birds and fox as entities; `world.place`; group names |
 | `src/tractor.js` | modify | tractor entity with `massProps` (lh-allow), then the vehicle kit |
 | `src/game.sim.js` | modify | `physics: { rapier, gravity, groups }`, `defs: { materials, models }` |
 | `src/game/farm.js` | modify | `createSim(ctx.world)`, `farm.think`/`farm.settle` systems, orbit move clears the Hand target |
-| `src/game.view.js` | modify | `defineView({ render })`, preload, tilt-shift post, sync hooks, audio service |
+| `src/game.view.js` | modify | `defineView({ scenes, render: { assets, lights, … } })`, preload, tilt-shift as `gfx.post`, the orbit rig, sync hooks, audio service |
 | `src/main.js` | modify | `boot(..., { canvas, timer })`, `?shading`, `?fps` |
 | `src/view/world.js` | modify | content onto `view.gfx.scene`, compiler materials, `createInstances`, no lights or renderer |
 | `src/farm3d.js` | modify | coop, gates, eggs, grain, feathers and day/night on the engine lights; chickens, fox and tractor moved out |
 | `src/view/models.js` | create | geometry helpers over `view.assets` (model and part geometry, box/colour/merge helpers, `lerpM`) |
 | `src/view/pigs3d.js` | create | pig crowd: anim tables, interpolation, pig skin (mud and eyelids) |
-| `src/view/pigSkin.js` | create | pig mud and eyelid material (moved from `world.js`) |
+| `src/view/pigSkin.js` | create | pig material: the compiler's `pigHide` with `COVERAGE_INSTANCED` mud, plus the eyelid patch through `mc.extend` |
 | `src/view/flock3d.js` | create | chickens (fur via the compiler), fox and dog on `AnimationMixer` |
-| `src/view/tractor3d.js` | create | `sync.on('model:tractor')`: model frame, wheels, headlight; `sync.on('#food')` snacks |
-| `src/view/rig.js` | modify | pose math kept; pointer gestures on engine `bindGesture`; `makeProject` |
-| `src/view/hud.js` | modify | selection compare without a per-frame string |
+| `src/view/tractor3d.js` | create | `sync.on('model:tractor')`: model frame, paint, headlight (the wheels are drawn by sync from the kit's part poses); `sync.on('#food')` snacks |
+| `src/view/rig.js` | modify | Pig Pens' options on the engine's `createOrbitRig` (3g C9); `cameraMode`; `makeProject`; the pose math and gestures are deleted |
+| `src/view/hud.js` | modify | selection compare without a per-frame string; `rig.orbit.orbiting` |
 | `src/view/fps.js` | create | `?fps` readout (median frame ms, Rapier step ms) for the iPad run |
-| `src/devices.js` | modify | `bindPointer({ uncapped: true })`, gesture and wheel devices, orbit `move` |
+| `src/devices.js` | modify | `bindPointer({ uncapped: true })`, rays and `orbiting` from the orbit rig, orbit `move` |
 | `src/sound.js` | modify | synth on the engine audio service (#67) |
 | `src/gfx.js`, `src/fur.js`, `src/tiltshift.js`, `bake.mjs`, `build.py` | delete | replaced by the engine |
 | `src/assets.json` | move → `test/fixtures/assets-v2.1.0.json` | the parity test's reference |
 | `pwa/sw.js` | modify | `const PRECACHE = __PRECACHE__;` |
-| `template.html` | modify | Get out ≥ 44 px |
+| `template.html` | modify | a bare `<!--APP-->` (3d); Get out ≥ 44 px |
 | `package.json` | modify | scripts (`bake`, `build`), version 2.2.0 |
 | `test/farmSim.mjs` | create | headless farm handle for tests and the tuning scripts |
-| `test/split.test.mjs`, `test/materials.test.mjs`, `test/vendor.test.mjs`, `test/bake.test.mjs`, `test/assets-parity.test.mjs`, `test/world.test.mjs`, `test/migration.test.mjs`, `test/checks.test.mjs`, `test/feel.test.mjs`, `test/feel.mjs`, `test/feel-baseline.json`, `test/flow-orbit.test.mjs`, `test/hud.test.mjs`, `test/perf.browser.mjs`, `test/offline.browser.mjs` | create | as named in the tasks |
+| `test/split.test.mjs`, `test/materials.test.mjs`, `test/vendor.test.mjs`, `test/bake.test.mjs`, `test/assets-parity.test.mjs`, `test/world.test.mjs`, `test/migration.test.mjs`, `test/checks.test.mjs`, `test/feel.test.mjs`, `test/feel.mjs`, `test/feel-baseline.json`, `test/flow-orbit.test.mjs`, `test/rig.test.mjs`, `test/fixtures/rig-v2.1.0.js`, `test/hud.test.mjs`, `test/perf.browser.mjs`, `test/offline.browser.mjs` | create | as named in the tasks |
 | `test/golden.test.mjs`, `test/golden-farm.test.mjs`, `test/sim.test.mjs`, `test/pick.test.mjs`, `test/purity.test.mjs`, `test/e2e.browser.mjs`, `test/serve.mjs` and the tuning scripts (`day`, `door`, `food`, `night`, `fieldsweep`, `hose`, `scenarios`, `gates_fox`, `grain`, `tractor`, `headless`) | modify | engine path, new APIs |
 | `docs/phase-3k-notes.md` | create | the notes draft (see "Notes") |
 
@@ -181,7 +182,7 @@ Facts verified on 2026-10-13 against `~/Downloads/Kenney Game Assets All-in-1 3.
 - **Every file exists.**
   - Nature Kit `.glb` files sit in `Nature Kit/Models/GLTF format/`. They carry no textures, only factor colours.
   - The other kits sit in `<Kit>/Models/GLB format/`. They reference an external `Textures/colormap.png`.
-  - Those four colormaps differ (md5 485dedc9…, 5d05c98a…, 451b163d…, f9a72b72…). So the kits get one subfolder each, and the bake needs per-model files (Contract issue C1).
+  - Those four colormaps differ (md5 485dedc9…, 5d05c98a…, 451b163d…, f9a72b72…). So the kits get one subfolder each, and the bake needs per-model files (C1, settled: 3d's per-model `file`; per-kit textures resolve per file, and the output GLBs are self-contained).
 - **All 33 match `src/assets.json`.**
   - A gltf-transform probe with the old bake's node keying matched per-node vertex and triangle counts for every model.
   - The pets differ only in part order, which the old bake sorted.
@@ -321,7 +322,7 @@ const pairR = (a, b) => Math.max(MATERIALS.collider(a).restitution, MATERIALS.co
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
 test('the game ids are registered after the base library', () => {
-  for (const id of ['pasture', 'fencing', 'pet', 'petGrip', 'bird', 'foxPelt', 'snack', 'paintwork', 'plumage', 'leaf', 'petal', 'crop', 'hay', 'produce', 'stone', 'scenery'])
+  for (const id of ['pasture', 'fencing', 'pet', 'petGrip', 'bird', 'foxPelt', 'snack', 'paintwork', 'plumage', 'pigHide', 'leaf', 'petal', 'crop', 'hay', 'produce', 'stone', 'scenery'])
     assert.ok(MATERIALS.has(id), id);
   assert.equal(MATERIALS.ids.indexOf('steel'), 0); // base library first (§4.2)
   assert.match(MATERIALS.hash, /^[0-9a-f]{8}$/);
@@ -340,10 +341,11 @@ test('densities: snacks 500 kg/m³; the grip swap keeps a pig\'s density so worl
   assert.equal(MATERIALS.density('petGrip'), MATERIALS.density('pet'));
   assert.ok(MATERIALS.density('pet') > 0 && MATERIALS.density('bird') > 0 && MATERIALS.density('foxPelt') > 0); // dynamic bodies need it (spawn throws otherwise)
 });
-test('plumage is the fur material; scenery and the model materials carry no physics overrides', () => {
+test('plumage is the fur material; pigHide takes mud; scenery and the model materials carry no physics overrides', () => {
   const p = MATERIALS.get('plumage');
   assert.deepEqual({ length: p.look.fur.length, shells: p.look.fur.shells, density: p.look.fur.density }, { length: 0.07, shells: 10, density: 34 });
-  for (const id of ['scenery', 'leaf', 'petal', 'crop', 'hay', 'produce', 'stone']) assert.equal(MATERIALS.get(id).phys?.friction, MATERIALS.get(MATERIALS.get(id).extends ?? id).phys?.friction, id);
+  assert.equal(MATERIALS.get('pigHide').coverage.mud, 1); // the pig crowd's mud (3f COVERAGE_INSTANCED, Task 15)
+  for (const id of ['scenery', 'pigHide', 'leaf', 'petal', 'crop', 'hay', 'produce', 'stone']) assert.equal(MATERIALS.get(id).phys?.friction, MATERIALS.get(MATERIALS.get(id).extends ?? id).phys?.friction, id);
 });
 ```
 
@@ -373,6 +375,7 @@ export default defineMaterials({
   paintwork: { extends: 'steel', phys: { friction: 0.4, restitution: 0 } },          // the tractor (mass from massProps, D3)
   // look-only model materials
   plumage:   { extends: 'fur', look: { fur: { length: 0.07, shells: 10, density: 34 } } }, // chicken shells (fur.js's len/density)
+  pigHide:   { extends: 'pet', coverage: { mud: 1 } },                              // the pig crowd's skin: mud through COVERAGE_INSTANCED (Task 15)
   leaf:      { extends: 'grass' },
   petal:     { extends: 'grass' },
   crop:      { extends: 'grass' },
@@ -402,7 +405,8 @@ export default defineMaterials({
 - Consumes:
   - §4.3 game config and output;
   - the CLI `lion-hawk bake [--game <dir>] [--check]`;
-  - Contract issue **C1**: the per-model `file`. If the integrator rules otherwise, follow the ruling.
+  - 3d's per-model `bake.models.<id>.file`, relative to `bake.src` (C1 settled).
+  - The registry hash (3b ruling 6) covers only ids and their order, each material's effective `phys`, and pairs. It does not cover `look`, `game` or `coverage`. So `bake --check` flags a change to ids or physics, but a look-only edit needs no re-bake (the view reads `look` live from the registry). No test hardcodes a hash literal; the base-library hash is changing.
 - Produces:
   - `baked/phys.json` (`{ v, engine, materials, models }`);
   - `baked/manifest.json`;
@@ -517,7 +521,7 @@ export default {
 - Consumes:
   - `baked/manifest.json`;
   - `baked/models/*.glb` (EXT_meshopt_compression, read with gltf-transform plus three's `meshopt_decoder.module.js`, which has `decodeGltfBuffer`);
-  - `*.anim.json` (§4.3 layout; Contract issue **C2** on the 12-float order);
+  - `*.anim.json` (§4.3 layout; the 12-float order is 3f C7, written by 3d: C2 settled);
   - `src/assets.json` (Task 20 moves it to `test/fixtures/assets-v2.1.0.json` and updates this path).
 - Produces: the regression guard for every later re-bake.
 
@@ -601,7 +605,8 @@ for (const id of Object.keys(MAN.models)) {
 }
 
 // anim.json: { v, fps, parts: [names], clips: { clip: { dur, frames, data: base64 Float32 frames×parts×12 } } } (§4.3).
-// C2: the 12 floats are taken as the column-major mat4 without its last row: elements 0,1,2, 4,5,6, 8,9,10, 12,13,14.
+// 3f C7: the 12 floats are the column-major mat4 without its last row: elements 0,1,2, 4,5,6, 8,9,10, 12,13,14. Rows are
+// the parts, then any sock-<name> rows (3d C2); t.parts lists the part rows.
 const COLS = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14];
 const table = id => JSON.parse(readFileSync(new URL(`baked/${MAN.models[id].anim}`, root), 'utf8'));
 const frame = (t, clip, f, k) => { const c = t.clips[clip], d = new Float32Array(Buffer.from(c.data, 'base64').buffer.slice(0)), o = (f * t.parts.length + k) * 12, m = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]; COLS.forEach((e, j) => { m[e] = d[o + j]; }); return m; };
@@ -634,7 +639,7 @@ for (const id of ['pig', 'chick']) {
   - Run: `$UNIT node --test --test-concurrency=4 test/assets-parity.test.mjs`
   - Expected: PASS. A FAIL here is a bake or contract mismatch, not a test to loosen:
     - a palette difference: `palette: 'vertex'` did not apply, or a rename merged two materials before the palette bake;
-    - a frame or posed-bounds difference: C2's layout, or the table omits a node transform. Write it up as a contract issue and stop.
+    - a frame or posed-bounds difference: the table departs from 3f C7's layout, or omits a node transform. Write it up as a contract issue and stop.
 - [ ] **Step 3: Prove it red.**
   - In `game.config.js`, map `cob` to `food-kit/apple.glb`, re-bake, and run. Expect FAIL on `cob: triangles`.
   - `git checkout game.config.js baked/`.
@@ -974,7 +979,8 @@ test('checks.zeroAlloc: retained heap growth under 64 KB over 10000 steps', () =
   - §4.1 `defineGame({ defs: { materials, models }, physics: { rapier, gravity, groups } })`;
   - §4.4 `ctx.world`, `world.spawn/despawn/place/setMaterial/groups.mask/rapier/R/own`, `h.find`;
   - §4.5 combine rules, `massProps` (D3).
-  - Inline colliders use `shape: 'sphere' | 'box' | 'cylinder'` with `r`, `half`, `halfHeight`, `p`, `q` and `material` (Contract issue **C3**).
+  - Inline colliders use `shape: 'sphere' | 'box' | 'cylinder'` with `r`, `half`, `halfHeight`, `p`, `q` (`[x, y, z, w]`) and `material`. The shape is `'sphere'` only: `'ball'` throws (3b ruling 2, 3c; C3 settled).
+  - 3c: the World does not step Rapier while a scene loads (`engine.loading.active`), but game systems in `physics.world` still run. Pig Pens' scenes declare no load, so `farm.think`/`farm.settle` always run around a real step. If a load is ever added, `farm.think` and `farm.settle` must skip while `engine.loading.active`.
 - Produces:
   - `createSim(world, opts)`;
   - `GROUPS`;
@@ -1391,12 +1397,16 @@ wc -c < $SCRATCH/pp-today/index.html; gzip -9 -c $SCRATCH/pp-today/index.html | 
 - Modify: `src/tractor.js`, `src/game/farm.js`
 
 **Interfaces:**
-- Consumes (§4.10):
-  - `createVehicle(world, e, { wheels: [{ at, radius, front, suspension: { rest, stiffness, compression, relaxation, travel, maxForce } }], rayGroups })`;
+- Consumes (§4.10, 3h Task 4's stable names; C4 settled):
+  - `createVehicle(world, e, { wheels: [{ at, radius, front, part, suspension: { rest, stiffness, compression, relaxation, travel, maxForce } }], rayGroups, forward: 'x' })`;
   - `car.set(i, { steer, engine, brake, slip })`;
-  - `car.controller`, `car.wheels[i]`.
-  - The kit's update runs before `lh.physics.step` under the system name `lh.vehicle.update`, and the kit's rays exclude the chassis's own colliders (Contract issue **C4**).
-- Produces: `tractor.car`. The record keeps `vc` (= `car.controller`) for the view's wheel reads.
+  - `car.controller`, `car.wheels[i]` (`.suspension`, `.steering`);
+  - **Wheel part poses (3h Task 6b, on 3c Task 10b's `partXf`).** A wheel's `part` names its baked GLB node. The kit adds the names to `e.partXf` and writes `e.partXf[part] = { p, q }` every step, in the chassis frame: `p` is the hub (`at` moved `suspension` down the ray), `q` is `Ry(steer) · R(axle, −rotation)` (axle +z for `forward: 'x'`). `lh.world.swap` keeps the previous pose. Bad or repeated names throw.
+  - `VEHICLE_SYSTEM` (`'lh.kit.vehicle'`), imported from the kit, never spelled out. It is one system per engine in `physics.world`, `before: ['lh.physics.step']`. Game controls sit `before: [VEHICLE_SYSTEM]`.
+  - **Chassis.** The game spawns it (Task 9's `tractor` entity: dynamic body, two inline boxes, `massProps`, 3c groups). The kit never adds, edits or reads its colliders, mass or groups. Rapier's controller already leaves the chassis's own colliders out of the wheel rays, so the kit takes no predicate.
+  - **Axes.** Up +y, suspension ray (0, −1, 0). `forward: 'x'` (the default) gives forward +x and axle +z, which are Rapier's defaults and what Pig Pens passes today. `steer` > 0 turns left.
+  - **Ray groups.** `rayGroups: { member, filter }` follows 3c, except that `member: []` means every group (ray filter only).
+- Produces: `tractor.car`, and `tractor.e.partXf` with the four wheel node names in `W` order (Task 17 draws the wheels from it). The record keeps `vc` (= `car.controller`).
 
 - [ ] **Step 1: The test is the bit-exact goldens plus `sim.test.mjs`'s tractor facts.** Add one failing assertion to `test/world.test.mjs`:
 
@@ -1404,13 +1414,18 @@ wc -c < $SCRATCH/pp-today/index.html; gzip -9 -c $SCRATCH/pp-today/index.html | 
 test('the tractor drives on the vehicle kit (lion-hawk/kits/vehicle)', () => {
   const sim = farmSim({ pigs: 24, seed: 2 }); assert.ok(sim.tractor.car?.controller, 'tractor.car from createVehicle');
   assert.equal(sim.tractor.vc, sim.tractor.car.controller);
+  const { e, car, W } = sim.tractor;
+  assert.deepEqual(Object.keys(e.partXf), ['wheel-front-left', 'wheel-front-right', 'wheel-back-left', 'wheel-back-right'], 'the wheels name their GLB nodes');
+  for (let i = 0; i < 60; i++) sim.step();
+  W.forEach((w, i) => { const P = e.partXf[w.name];
+    assert.deepEqual([P.p.x, P.p.y, P.p.z], [w.cx, w.cy + 0.12 - car.wheels[i].suspension, w.cz], `${w.name}: the kit writes the hub`); });
 });
 ```
 
   Run `$UNIT node --test --test-concurrency=4 test/world.test.mjs`. Expect FAIL: `tractor.car from createVehicle`.
 
 - [ ] **Step 2: Implement.**
-  - In `src/tractor.js`, import `{ createVehicle } from 'lion-hawk/kits/vehicle'`.
+  - In `src/tractor.js`, import `{ createVehicle } from 'lion-hawk/kits/vehicle'`. Also delete the `rayGroups` mask and the `own` set of chassis collider handles that follow the wheel loops: the kit builds the mask and needs no own-collider predicate.
   - Replace everything from `const vc = world.rapier.createVehicleController(body);` through the `own` line with:
 
 ```js
@@ -1423,9 +1438,10 @@ test('the tractor drives on the vehicle kit (lion-hawk/kits/vehicle)', () => {
   ];
   for (const w of W) { w.cx = w.mz * S; w.cy = w.my * S; w.cz = -w.mx * S; w.radius = w.r * S; }
   const car = createVehicle(world, e, {
-    wheels: W.map(w => ({ at: [w.cx, w.cy + 0.12, w.cz], radius: w.radius, front: w.front,
+    wheels: W.map(w => ({ at: [w.cx, w.cy + 0.12, w.cz], radius: w.radius, front: w.front, part: w.name, // the baked node: the kit writes its pose
       suspension: { rest: TP.suspRest, stiffness: TP.stiffness, compression: TP.compression, relaxation: TP.relaxation, travel: 0.3, maxForce: 1e6 } })),
     rayGroups: { member: ['ground', 'static', 'pig', 'food', 'dog', 'chick', 'fox', 'tractor'], filter: ['ground', 'static'] },
+    forward: 'x', // chassis faces +x, axle +z: Rapier's defaults, as 2.1.0's addWheel
   });
   const vc = car.controller;
 ```
@@ -1435,14 +1451,19 @@ test('the tractor drives on the vehicle kit (lion-hawk/kits/vehicle)', () => {
 
 ```js
       for (let i = 0; i < 4; i++) car.set(i, { steer: W[i].front ? this.steer : 0, engine: W[i].front ? 0 : force / 2, brake, slip: TP.slip });
-      // the kit's lh.vehicle.update runs the controller before lh.physics.step (after farm.think)
+      // the kit's VEHICLE_SYSTEM runs the controller before lh.physics.step (after farm.think)
 ```
 
-  - In `farm.js`, change `farm.think`'s options to `{ stage: 'physics.world', before: ['lh.vehicle.update', 'lh.physics.step'] }`.
+  - In `farm.js`, import `{ VEHICLE_SYSTEM } from 'lion-hawk/kits/vehicle'` and change `farm.think`'s options to `{ stage: 'physics.world', before: [VEHICLE_SYSTEM, 'lh.physics.step'] }`.
 
 - [ ] **Step 3: Run, expect PASS: the full unit suite with goldens unchanged.**
-  - A golden change here is not a §5.5 cause. If one appears, check three things in this order: the kit's wheel axle and direction (Pig Pens uses (0,−1,0) and (0,0,1)), the kit's own-collider filter, and the update order.
-  - If none of them explains it, stop and write it up for the integrator (C4).
+  - A golden change here is not a §5.5 cause. If one appears, check these in order:
+    - the kit's axes (`forward: 'x'`: suspension (0, −1, 0), axle (0, 0, 1));
+    - the chassis exclusion (Rapier's own, in place of 2.1.0's `c => !own.has(c.handle)` predicate);
+    - the kit re-applying slip and side stiffness every step (`side` stays Rapier's default);
+    - the update order (`farm.think` before `VEHICLE_SYSTEM`; 2.1.0 ran `updateVehicle` inside `think`).
+  - If none of them explains it, stop and write it up for the integrator, naming 3h's stable-names block.
+  - The wheel `part`s write `e.partXf` only; they must not move a golden. If one moves, stop as above.
 - [ ] **Step 4: Commit:** `git commit -am "feat(pig-pens): the tractor on the lion-hawk vehicle kit"`
 
 ---
@@ -1455,11 +1476,12 @@ test('the tractor drives on the vehicle kit (lion-hawk/kits/vehicle)', () => {
 **Interfaces:**
 - Consumes:
   - §4.6 `defineView({ scenes, render })` and `boot(game, view, { canvas, timer, … })`;
-  - `view.gfx = { renderer, scene, camera, lights, resize, size, render }`;
-  - `createTiltShift(renderer, opts)` → `{ render(scene, camera, focus), params }` (today's API, made generic);
+  - `view.gfx = { renderer, scene, camera, lights, resize, size, post, render }`;
+  - `createTiltShift(renderer, opts)` → `{ render(scene, camera, focus = params.focus), setSize, dispose, params }` (today's API, made generic; a `gfx.post` pass as is);
   - §4.7 `view.assets.preload(keys)` and `view.wait`.
-  - The manifest reaches boot as `defineView({ assets: { manifest, base } })` (Contract issue **C6**).
-  - A post pass replaces `view.gfx.render` (Contract issue **C5**).
+  - The manifest reaches boot as `defineView({ scenes, render: { assets: { manifest, base } } })` (3e; C6 settled). `assets` sits under `render`, never at the top level.
+  - The post pass is 3e's `gfx.post` seam (C5 settled): `view.gfx.post = pass` in `enter`, `view.gfx.post = null` in `exit`, where a pass is `{ render(scene, camera), dispose?() }`. `gfx.render()` draws through `post.render(scene, camera)` when it is set. The game owns the pass (clearing `post` disposes nothing) and never replaces `view.gfx.render`.
+  - Light rig options (3e): `{ sky, hemiSky, ground, hemi, sun: { color, intensity, map, box: n | [x, z], offset, near, far, bias, normalBias }, fog }`; a preset is `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog }`. Flat `sun: '#…'` or `sunIntensity` throw. `hemiSky` defaults to `#eef7ff`, which is Pig Pens' hemisphere colour today.
 - Produces:
   - `pigPensView({ tilt, shading })`;
   - `MODEL_KEYS`;
@@ -1468,7 +1490,7 @@ test('the tractor drives on the vehicle kit (lion-hawk/kits/vehicle)', () => {
 **Decisions:**
 - **Shading.** It defaults to `'lambert'` until Task 22 measures (D5 and R1: today's look and cost). `?shading=physical|standard|lambert` overrides it for the measurement.
 - **DPR.** It stays 2 on touch and desktop (today's `min(dpr, 2)`, not the engine's touch default of 1.5). Task 22 may lower it on the measured numbers.
-- **Day and night.** These stay game code: `updateSky` writes `lights.hemi`, `lights.sun`, the background and the fog, because the sun moves to the moon position at night and a preset change may not move it (§4.6). The light rig makes the lights.
+- **Day and night.** These stay game code. `updateSky` writes `lights.hemi`, `lights.sun`, the background and the fog every frame along a continuous sun path (azimuth and elevation by time of day, then the moon). A preset may move the sun offset (3e), but a two-preset blend cannot trace that path, so presets would change the look. The light rig makes the lights. Pig Pens never calls `lights.follow`, so the shadow box stays centred on the origin, as today.
 
 - [ ] **Step 1: Write the failing e2e assertion.** Add to the first desktop test in `test/e2e.browser.mjs`, after `expectScene`:
 
@@ -1502,11 +1524,14 @@ let sound = null, tilts = new WeakMap(); // one synth and one tilt-shift per pag
   - `pigPensView` becomes `export function pigPensView({ tilt = true, shading = 'lambert' } = {})`. Its `defineView` call:
 
 ```js
-  return defineView({ scenes: { farm }, assets: { manifest: MANIFEST, base: './assets/' },
+  return defineView({ scenes: { farm },
     render: {
+      assets: { manifest: MANIFEST, base: './assets/' }, // 3e: under render (C6 settled)
       shading, dpr: { touch: 2, desktop: 2 }, antialias: true, shadows: 'pcf', toneMapping: 'none', exposure: 1,
       camera: { fov: 48, fovPortrait: 64, near: 0.3, far: 400 },
-      lights: { sky: SKY, ground: '#b9a27c', hemi: 1.3, sun: { color: '#fff3dc', intensity: 2.1, map: 2048, box: 38, offset: [-26, 46, 22] }, fog: [70, 170] },
+      // today's world.js lights: hemisphere #eef7ff / #b9a27c, sun 2048 map, box ±38 × ±36, near 5, far 120
+      lights: { sky: SKY, hemiSky: '#eef7ff', ground: '#b9a27c', hemi: 1.3,
+        sun: { color: '#fff3dc', intensity: 2.1, map: 2048, box: [38, 36], offset: [-26, 46, 22], near: 5, far: 120, bias: -0.0006, normalBias: 0.03 }, fog: [70, 170] },
     } });
 ```
 
@@ -1517,11 +1542,8 @@ let sound = null, tilts = new WeakMap(); // one synth and one tilt-shift per pag
       const doc = view.doc, gfx = view.gfx, canvas = gfx.renderer.domElement, s = engine.scene.state;
       sound ??= new Sound();
       let fx = tilts.get(gfx.renderer); if (!fx) tilts.set(gfx.renderer, fx = createTiltShift(gfx.renderer, { on: tilt })); fx.params.on = tilt;
-      const sun = gfx.lights.sun; sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03; sun.shadow.camera.near = 5; sun.shadow.camera.far = 120;
-      if (!gfx.scene.background?.isColor) gfx.scene.background = new THREE.Color(SKY);
-      // C5: the tilt-shift post pass draws the frame instead of the plain render; restored on exit
-      const plain = gfx.render; gfx.render = () => fx.render(gfx.scene, gfx.camera, rig.cam.dist);
-      offs.push(() => { gfx.render = plain; });
+      // 3e's gfx.post seam (C5): boot's gfx.render() draws through the tilt-shift pass; the pass is ours (one per renderer, reused)
+      gfx.post = fx; offs.push(() => { if (gfx.post === fx) gfx.post = null; });
       const first = !rig.ready; attach(gfx.camera, canvas); if (first) { fitCam(); applyCam(); }
       view.project = project;
       view.wait(view.assets.preload(MODEL_KEYS).then(() => {
@@ -1533,10 +1555,13 @@ let sound = null, tilts = new WeakMap(); // one synth and one tilt-shift per pag
     },
 ```
 
+  `enter` starts with `offs = []`, and today's closing `offs = [bindGestures(…), off, …]` becomes `offs.push(…)`, so the `gfx.post` reset above is kept.
+
   The resize closure, the `win.addEventListener('resize', …)`, `new THREE.WebGLRenderer` and `new THREE.PerspectiveCamera` all go: `gfx.resize` is the engine's (portrait FOV 64 below aspect 0.9 is in `render.camera`).
 
-  - `frame` drops `world.draw(...)`; boot renders through `gfx.render` (step 4 of §4.6).
-  - `exit` calls `world?.dispose()`.
+  - `frame` drops `world.draw(...)` and sets the focus instead: `const post = view.gfx.post; if (post?.params) post.params.focus = rig.cam.dist;` (after `applyCam()`). Boot calls `gfx.render()` after the halves' `frame`, so the focus applies to the same frame (3e Task 2).
+  - `exit` runs the `offs` (which clear `gfx.post`) and calls `world?.dispose()`. The tilt-shift pass is not disposed on exit: it is kept per renderer in `tilts` and reused on the next `enter`.
+  - The shadow settings, the background colour and `sun.shadow.*` writes from today's `world.js` are all light-rig options now (above); `enter` writes none of them.
   - The `view.perf` hook reads `view.gfx.renderer.info`.
 
 - [ ] **Step 3: `src/view/world.js`.**
@@ -1710,36 +1735,50 @@ export const sceneryMaterials = mc => ({ plain: mc.get('scenery', { vertexColors
 - Consumes:
   - `sampleAnimTable(table, clip, t, partIndex, outMatrix4)`, with `table = assets.get('pig').anim` (§4.7; it wraps `t` cyclically, as `gfx.js`'s `sampleAnim` did);
   - `world.xfPrev(e, out)` and `e.xf.p` for interpolation (E-11);
-  - `partGeometry`.
-- Produces: `createPigs({ root, assets, sim, world })` → `{ update(dt, alpha), meshes, dispose }`.
+  - `partGeometry`;
+  - 3f (C7 settled): `mc.get('pigHide', { instanced: true, vertexColors: true })`, then `mc.coverage(material).material`. For an instanced material this is the one cached `COVERAGE_INSTANCED` variant. It reads a per-instance `instanceCoverage` vec4 (dirt, rust, snow, mud) that the instancing owner (here the game's crowd) adds to the geometry and writes. It seeds the mud noise by `gl_InstanceID` and takes the mud height in object space (`y / 1.5`);
+  - `mc.extend(material, 'eyelids', patch(shader, inject))` (3f C4): a cached clone that runs the engine patches, then the game's. Its program key is `lh:<features>|x:eyelids`.
+- Produces: `createPigs({ root, assets, mc, sim, world })` → `{ update(dt, alpha), meshes, dispose }`.
 
-**Decision: pig mud stays game-owned.** The pig skin (mud blotches that creep up from the legs, closed eyelids at night) stays a game material, `pigSkin.js`, moved verbatim. The compiler's `COVERAGE` is per entity (`mc.coverage` is a per-entity clone), and 48 pigs are one instanced draw per part. Contract issue **C7** asks for instanced coverage; until then the look and the program are unchanged.
+**Decision: pig mud is the compiler's `COVERAGE_INSTANCED`; the eyelids are a `mc.extend` patch.** 2.1.0's game-owned pig material goes.
+- **Mud.** The crowd owns `instanceCoverage`. It writes lane w from `p.mud`, the herd sim's mud level, which the hose rinses. Pig Pens' pigs carry no `e.coverage`: their mud is not 3h's `coverageKit`. Lanes x–z stay 0, and `pigHide` accepts only mud.
+- **Eyelids.** The eyelid patch reads `aEye` (per vertex, on the body's face) and `aSleep`, a per-instance float.
+- **Look changes for the playtest list:**
+  - the blotch pattern is seeded by instance index, not by `p.seed`;
+  - the noise hash constants are the compiler's;
+  - the mud height runs from each part's own (node-local) `y`, not from the world height over `scale × 1.5`.
+  - The level and the colours are 2.1.0's.
 
-- [ ] **Step 1: Write** `src/view/pigSkin.js`: the material from `world.js` lines 147–181, moved verbatim, plus a cache key:
+- [ ] **Step 1: Write** `src/view/pigSkin.js`: the eyelid half of `world.js` lines 147–181 (the `vEye`/`vSleep` lines and the closed-lid block), as an `mc.extend` patch over the compiler's coverage material. The mud lines are dropped, because `COVERAGE` draws the mud:
 
 ```js
-// The pig skin (moved from world.js, phase 3k T15): Lambert with vertex colours plus per-instance mud (blotchy noise that
-// creeps up from the legs, aMud = mud, seed, scale, sleep) and closed eyelids at night (aEye on the face vertices).
-// Game-owned until the compiler's COVERAGE takes per-instance values (contract issue C7).
-import * as THREE from 'three';
-
-export function pigSkin() {
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
-  m.onBeforeCompile = sh => {
-    // ← the body of world.js:148-181 (pigMat.onBeforeCompile), unchanged
-  };
-  m.customProgramCacheKey = () => 'pig-skin';
-  return m;
+// The pig skin (phase 3k T15; 3f C4/C6): the compiler's pigHide material with per-instance mud (COVERAGE_INSTANCED,
+// instanceCoverage.w) plus a game patch for closed eyelids at night (aEye on the face vertices, aSleep per instance).
+export function pigSkin(mc) {
+  const mud = mc.coverage(mc.get('pigHide', { instanced: true, vertexColors: true })).material;
+  return mc.extend(mud, 'eyelids', (sh, inject) => {
+    sh.vertexShader = inject(sh.vertexShader, 'common', 'attribute vec3 aEye; attribute float aSleep; varying vec3 vEye; varying float vSleep;');
+    sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', 'vEye = aEye; vSleep = aSleep;');
+    sh.fragmentShader = inject(sh.fragmentShader, 'common', 'varying vec3 vEye; varying float vSleep;');
+    sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', `if (vEye.x > 0.5 && vSleep > 0.5) {
+  // closed eye: pink lid with a little curved lash line (world.js, unchanged)
+  vec3 lid = vec3(0.70, 0.27, 0.42);
+  float line = 0.38 + 0.9 * (vEye.y - 0.5) * (vEye.y - 0.5);
+  float lash = 1.0 - smoothstep(0.045, 0.075, abs(vEye.z - line));
+  diffuseColor.rgb = mix(lid, vec3(0.06, 0.06, 0.08), lash * step(0.08, vEye.y) * step(vEye.y, 0.92));
+}`);
+  });
 }
 ```
 
-  The comment line marks where the 34 moved lines go. The implementer pastes them without edits; the reviewer diffs them against `world.js` at the parent commit.
+  - The eyelid block must run after the compiler's mud, so a sleeping muddy pig still shows its lids, as in 2.1.0. If `inject` puts the game's `color_fragment` text before the engine's, pass `'after'` explicitly or patch at `clipping_planes_fragment`, and record which.
+  - If `mc.extend` over the coverage variant loses `COVERAGE_INSTANCED` (Step 4's program check shows `x:eyelids` without `COVERAGE`), stop and report it to the integrator as a 3f issue. Do not fall back to a game-owned skin.
 
 - [ ] **Step 2: Write** `src/view/pigs3d.js`:
 
 ```js
 // The pig crowd (phase 3k T15, A-11): one InstancedMesh per pig part, posed from the baked anim table with a blend on
-// clip changes, interpolated between steps from the World's transform pool (E-11), on the game's pig skin. Moved from
+// clip changes, interpolated between steps from the World's transform pool (E-11), on the compiler's pig skin (pigSkin.js). Moved from
 // world.js; pickAnim and the tumble/rest pose are unchanged.
 import * as THREE from 'three';
 import { sampleAnimTable } from 'lion-hawk/view';
@@ -1747,7 +1786,7 @@ import { partGeometry, lerpM } from './models.js';
 import { pigSkin } from './pigSkin.js';
 import { ST } from '../sim.js';
 
-export function createPigs({ root, assets, sim, world }) {
+export function createPigs({ root, assets, mc, sim, world }) {
   const table = assets.get('pig').anim, names = table.parts, N = sim.pigs.length, UP = new THREE.Vector3(0, 1, 0);
   const geos = names.map(n => partGeometry(assets, 'pig', n));
   // eyelids: tag the eye vertices (flat white and grey patches on the face) with (flag, u, v), as world.js did
@@ -1759,9 +1798,11 @@ export function createPigs({ root, assets, sim, world }) {
     }
     g.setAttribute('aEye', new THREE.BufferAttribute(eye, 3)); }
   for (const g of geos) if (!g.attributes.aEye) g.setAttribute('aEye', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+  // the instancing owner's per-instance attributes: instanceCoverage (3f COVERAGE_INSTANCED; lane w = mud) and aSleep (eyelids)
   const mud = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4); mud.setUsage(THREE.DynamicDrawUsage);
-  for (const g of geos) g.setAttribute('aMud', mud);
-  const mat = pigSkin();
+  const sleep = new THREE.InstancedBufferAttribute(new Float32Array(N), 1); sleep.setUsage(THREE.DynamicDrawUsage);
+  for (const g of geos) { g.setAttribute('instanceCoverage', mud); g.setAttribute('aSleep', sleep); }
+  const mat = pigSkin(mc);
   const meshes = geos.map(g => { const m = new THREE.InstancedMesh(g, mat, N); m.castShadow = m.receiveShadow = true; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); root.add(m); return m; });
   const anim = sim.pigs.map(() => ({ name: 'idle', t: Math.random(), prev: 'idle', prevT: 0, blend: 1, rest: 0, phase: Math.random() * 10 }));
   function pickAnim(p, s) { /* world.js:191-205, unchanged */ }
@@ -1788,11 +1829,11 @@ export function createPigs({ root, assets, sim, world }) {
         if (s.blend < 1) { sampleAnimTable(table, s.prev, s.prevT, k, PB); lerpM(PB, PM, s.blend, PM); }
         meshes[k].setMatrixAt(p.i, TMP.multiplyMatrices(W, PM));
       }
-      mud.setXYZW(p.i, p.mud, p.seed, p.scale, s.rest > 0.6 ? 1 : 0);
+      mud.setXYZW(p.i, 0, 0, 0, p.mud); sleep.setX(p.i, s.rest > 0.6 ? 1 : 0);
     }
-    mud.needsUpdate = true; for (const m of meshes) m.instanceMatrix.needsUpdate = true;
+    mud.needsUpdate = true; sleep.needsUpdate = true; for (const m of meshes) m.instanceMatrix.needsUpdate = true;
   }
-  return { update, meshes, anim, dispose() { for (const g of geos) g.dispose(); mat.dispose(); } };
+  return { update, meshes, anim, dispose() { for (const g of geos) g.dispose(); } }; // the material is the compiler's (shared, cached)
 }
 ```
 
@@ -1800,16 +1841,19 @@ export function createPigs({ root, assets, sim, world }) {
 
 - [ ] **Step 3: `world.js`.**
   - Delete the pet block (lines 131–233) and `updatePigs`.
-  - Construct `const pigs = createPigs({ root, assets, sim, world: engineWorld })`. `buildWorld` gains `engineWorld`; game.view passes `engine.world`.
+  - Construct `const pigs = createPigs({ root, assets, mc, sim, world: engineWorld })`. `buildWorld` gains `engineWorld`; game.view passes `engine.world`.
   - The Zzz code reads `pigs.anim[p.i].rest` where it read `animState[p.i].rest`.
   - `update(dt, s, frame)` gains `alpha` and calls `pigs.update(dt, alpha)`; `game.view.js` frame passes `alpha`.
 
-- [ ] **Step 4: Run.** Before Step 2's code is wired, add this e2e assertion to the first desktop test and run e2e. Expect FAIL with `0`: 2.1.0's pig material has no cache key.
+- [ ] **Step 4: Run.** Before Step 2's code is wired, add this e2e assertion to the first desktop test and run e2e. Expect FAIL with `0`: 2.1.0's pig material has no compiler cache key.
 
 ```js
-    const skins = await game.page.evaluate(() => window.engine.view.gfx.scene.getObjectsByProperty('isInstancedMesh', true).filter(m => m.material.customProgramCacheKey?.() === 'pig-skin').length);
-    assert.equal(skins, 6, 'one pig-skin crowd per pig part (body, Group, four legs)');
+    const skins = await game.page.evaluate(() => window.engine.view.gfx.scene.getObjectsByProperty('isInstancedMesh', true)
+      .filter(m => /COVERAGE/.test(m.material.customProgramCacheKey?.() ?? '') && /x:eyelids/.test(m.material.customProgramCacheKey()) && m.geometry.attributes.instanceCoverage).length);
+    assert.equal(skins, 6, 'one compiler pig-skin crowd per pig part (body, Group, four legs): COVERAGE_INSTANCED mud plus the eyelid patch');
 ```
+
+  Mutation check: write `p.mud` into lane x instead of w, and confirm by hand on the scratch build (`?pigs=6`, hose off) that the pigs show no mud. `pigHide` accepts only mud. Restore it.
 
   After the wiring: unit suite unchanged, then e2e PASS.
 
@@ -1825,14 +1869,14 @@ export function createPigs({ root, assets, sim, world }) {
 
 **Interfaces:**
 - Consumes:
-  - `mc.furGeometry(geometry, mask)`: geometry with group 0 = base and group 1 = shells (§4.8);
-  - `mc.get('plumage', { instanced: true, vertexColors: true })`: the `FUR` material for group 1;
-  - `mc.get('pet', { instanced: true, vertexColors: true })` for group 0 and the other parts (Contract issue **C8**);
+  - 3f's `mc.furGeometry(geometry, mask, { shells })` (C8 settled; 3f C10): `mask(i)` is a 0..1 strand-length factor per vertex, and `shells` is 1..32 (the registry's `look.fur.shells`, 10 for `plumage`). The result has groups `[base → material 0, shells → material 1]`, plus `furNormal`, `furMask` and `furShell`;
+  - `mc.get('plumage', { instanced: true, vertexColors: true })`: the `FUR` material for group 1 (shell 0 draws untouched);
+  - `mc.get('pet', { instanced: true, vertexColors: true })` for group 0 and the other parts;
   - `assets.clone('dog' | 'fox')`, `assets.get(k).clips` and `THREE.AnimationMixer` (A-11);
   - `sampleAnimTable` for the chick.
 - Produces: `createFlock3d({ root, assets, mc, sim, spawnFeathers })` → `{ update(dt) }`. Feathers stay in `farm3d.js`; the fox's feather spit calls the `spawnFeathers` it is given.
 
-**Decision: the bare face is trimmed by vertex mask.** 2.1.0 trimmed the chicken's face per fragment with a `bare` box and a 0.14 fade. The compiler's `look.fur` has `length, shells, density, tint` only. Pig Pens zeroes the fur mask on the face's own vertices (front-facing normal inside the old bare box), so the face is bare without the fade. It goes on the playtest list, and C8 asks for a trim box.
+**Decision: the bare face is trimmed by the 0..1 mask (3f C10).** 2.1.0 trimmed the chicken's face per fragment: strand length × `clamp(distance outside the bare box / 0.14, 0, 1)`. The compiler has no trim box. Pig Pens computes that same factor per vertex, from the part's own positions against the same box and fade, and passes it as the mask. So the face is bare and fades back in over 0.14 m, interpolated per vertex instead of per fragment. That goes on the playtest list.
 
 - [ ] **Step 1: Write the failing e2e assertion** (desktop test 1):
 
@@ -1855,11 +1899,12 @@ export function createPigs({ root, assets, sim, world }) {
 ```js
 // Chickens, the fox and the dog (phase 3k T16). Chickens: two instanced crowds (white adults, yellow chicks) on the baked
 // chick anim table; body and wings carry shell fur from the material compiler (look.fur on `plumage`), the face kept bare by
-// the mask (C8). Fox and dog: cloned models on AnimationMixer (A-11), as single animals need no table.
+// the 0..1 mask (3f C10). Fox and dog: cloned models on AnimationMixer (A-11), as single animals need no table.
 import * as THREE from 'three';
 import { sampleAnimTable } from 'lion-hawk/view';
 import { partGeometry, lerpM } from './models.js';
 import { CST, FST } from '../chickens.js';
+import MATERIALS from '../defs/materials.js';
 
 const l2s = c => Math.round(255 * Math.max(0, Math.min(1, c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)));
 const s2l = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
@@ -1872,17 +1917,19 @@ export function createFlock3d({ root, assets, mc, sim, spawnFeathers }) {
   const base = mc.get('pet', { instanced: true, vertexColors: true }), fur = mc.get('plumage', { instanced: true, vertexColors: true });
   // plumage test on sRGB 0..255 colours (as farm3d.js): white-ish/yellow body and wing feathers
   const plume = (wing, r, g) => r >= 250 && g >= (wing ? 140 : 170);
-  const BARE = [[-0.47, 0.4, 0.5], [0.47, 0.96, 1]]; // 2.1.0's face box: front-facing vertices inside it get no fur
-  const bare = (pos, nrm, i) => nrm.getZ(i) > 0.9 && pos.getX(i) > BARE[0][0] && pos.getX(i) < BARE[1][0] && pos.getY(i) > BARE[0][1] && pos.getY(i) < BARE[1][1] && pos.getZ(i) > BARE[0][2];
+  // 2.1.0's face trim (fur.js): full length from FADE metres outside the bare box, none inside it; now a 0..1 mask (3f C10)
+  const BARE = [[-0.47, 0.4, 0.5], [0.47, 0.96, 1]], FADE = 0.14, SHELLS = MATERIALS.get('plumage').look.fur.shells;
+  const out = (v, k) => Math.max(BARE[0][k] - v, v - BARE[1][k], 0);
+  const trim = (pos, i) => Math.min(1, Math.hypot(out(pos.getX(i), 0), out(pos.getY(i), 1), out(pos.getZ(i), 2)) / FADE);
   function partSet(adult) {
     return names.map(name => {
-      const g = partGeometry(assets, 'chick', name), col = g.attributes.color, wing = name.startsWith('wing'), pos = g.attributes.position, nrm = g.attributes.normal;
+      const g = partGeometry(assets, 'chick', name), col = g.attributes.color, wing = name.startsWith('wing'), pos = g.attributes.position;
       const src = Array.from({ length: col.count }, (_, i) => [l2s(col.getX(i)), l2s(col.getY(i)), l2s(col.getZ(i))]);
       if (adult) src.forEach(([r, gg], i) => { if (!plume(wing, r, gg)) return; // white laying hens (Kenney's chick is yellow)
         const sh = wing ? 0.8 + 0.2 * Math.min(1, (gg - 150) / 57) : 0.9 + 0.1 * Math.min(1, (gg - 170) / 40);
         col.setXYZ(i, s2l(248 * sh), s2l(246 * sh), s2l(240 * sh)); });
       const furry = name === 'body' || wing;
-      const geo = furry ? mc.furGeometry(g, i => plume(wing, src[i][0], src[i][1]) && !bare(pos, nrm, i) ? 1 : 0) : g;
+      const geo = furry ? mc.furGeometry(g, i => plume(wing, src[i][0], src[i][1]) ? trim(pos, i) : 0, { shells: SHELLS }) : g;
       const m = new THREE.InstancedMesh(geo, furry ? [base, fur] : base, NB); m.castShadow = true; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       for (let i = 0; i < NB; i++) { m.setColorAt(i, tint.setRGB(1, 1, 1)); m.setMatrixAt(i, ZERO); }
       root.add(m); return m;
@@ -1951,7 +1998,13 @@ export function createFlock3d({ root, assets, mc, sim, spawnFeathers }) {
   - `farm3d.js` deletes the chickens and fox (lines 116–171 and 187–211) and the `furGeo`/`furMaterial` import.
   - `update(dt)` calls `flock3d.update(dt)`; `buildFarmExtras` constructs `createFlock3d({ root: scene, assets, mc, sim, spawnFeathers })` after the feathers block.
   - `world.js` deletes the dog meshes, `updateDog` and `DOG_ANIM`.
-- [ ] **Step 4: Run.** The unit suite is unchanged. Then e2e: expect PASS. Playtest notes: the chicken face trim and the mixer's frame interpolation (it was table-sampled).
+- [ ] **Step 3b: Feathers on 3h's particle pool** (forwarded by 3h; judgment).
+  - In `farm3d.js`, replace the feather block (`featherMesh`, `fea`, `updateFeathers`) with a pool: `createParticles({ max: 360, shape: 'quad', geometry: fGeo, material: <the Lambert double-sided feather material>, floor: () => 0.02 })` from `lion-hawk/kits/fx/view`.
+  - `spawnFeathers` keeps its signature. It draws the same velocities and tint, and calls `emit(x, y, z, vx, vy, vz, life, 1, color, g, drag)`.
+  - Pick `g` and `drag` so a feather thrown from 1 m lands within ±20% of 2.1.0's time, with a slow fall close to 2.1.0's 0.45 m/s cap. Record the two numbers and both landing times in the notes.
+  - Cost: 3h drops the sideways sine flutter. Landed feathers lie flat, as today. Both go on the playtest list.
+  - If the pool cannot get within ±20%, do NOT keep the game's feather code (user, 2026-10-14: every game fully on the engine). Stop this step and file an integrator request for a `createParticles` option (for example a terminal fall speed or flutter) with the two landing times; 3h's owner adds it as an engine patch, and this step resumes on it. Record a field-note candidate.
+- [ ] **Step 4: Run.** The unit suite is unchanged. Then e2e: expect PASS. Playtest notes: the chicken face trim, the feathers' fall, and the mixer's frame interpolation (it was table-sampled).
 - [ ] **Step 5: Commit:** `git commit -am "feat(pig-pens): chickens with compiler fur on the anim table; dog and fox on AnimationMixer"` (and `git add src/view/flock3d.js`)
 
 ---
@@ -1966,9 +2019,10 @@ export function createFlock3d({ root, assets, mc, sim, spawnFeathers }) {
 - Consumes (§4.9):
   - `view.sync.on(match, { create(e, obj, view), frame(e, obj, alpha, view), remove(e, obj) })` → `off`;
   - `sync` draws `model` entities with `draw !== false` as `assets.clone(model)`, and sets pose (lerp/nlerp) and `scale = e.scale ?? 1` before the hook's `frame`;
-  - the tractor entity (`model: 'tractor'`), `tractor.vc`;
+  - the tractor entity (`model: 'tractor'`) and its wheel part poses (Task 12: `e.partXf[w.name]`, written by the kit);
+  - view sync's part poses (3g Task 13b): each named node's centre (its bounding-box centre, measured once after the create hooks) is drawn at `p` in the body frame, turned by `q` from rest, interpolated with the body; a missing node throws; `draw: 'instanced'` refuses `partXf`;
   - snacks (`tags: ['food']`, `model: kind`).
-- Produces: `bindTractorAndSnacks(sync, { sim, lightsNight })` → `off()`.
+- Produces: `bindTractorAndSnacks(sync, { sim, night })` → `off()`.
 
 - [ ] **Step 1: Write the failing e2e assertion** (the iPhone landscape drive test, after driving):
 
@@ -1977,21 +2031,46 @@ export function createFlock3d({ root, assets, mc, sim, spawnFeathers }) {
     assert.ok(tr >= 0 && tr < 0.5, `the synced tractor object sits on its body: ${tr}`);
 ```
 
-  Run e2e. Expect FAIL: `-1` (the tractor is drawn by `farm3d.js`).
+  And the wheels are drawn from the kit's part poses: sample twice, 250 ms apart, while the drive test still holds the throttle (before its release). Each drawn hub sits on the body · `p`, and each wheel's rest orientation (`conj(P.q)` · the node's turn relative to the body) stays put while `P.q` rolls, so `q` drives the drawn turn:
+
+```js
+    const wheelPoses = () => game.page.evaluate(() => {
+      const en = window.engine, e = en.world.with('partXf').find(x => x.tags.has('tractor')), o = e && en.view.sync.objectOf(e);
+      if (!o) return null;
+      const Q = o.quaternion.constructor, V = o.position.constructor, inv = o.getWorldQuaternion(new Q()).invert();
+      return Object.keys(e.partXf).map(n => {
+        const node = o.getObjectByName(n), P = e.partXf[n]; node.geometry.computeBoundingBox();
+        const hub = node.localToWorld(node.geometry.boundingBox.getCenter(new V())), want = o.localToWorld(new V(P.p.x, P.p.y, P.p.z));
+        const rest = new Q(P.q.x, P.q.y, P.q.z, P.q.w).invert().multiply(inv.clone().multiply(node.getWorldQuaternion(new Q())));
+        return { name: n, hub: hub.distanceTo(want), rest: rest.toArray(), q: [P.q.x, P.q.y, P.q.z, P.q.w] };
+      });
+    });
+    const a = await wheelPoses(); await game.page.waitForTimeout(250); const b = await wheelPoses();
+    assert.deepEqual(a?.map(w => w.name), ['wheel-front-left', 'wheel-front-right', 'wheel-back-left', 'wheel-back-right'], 'the tractor wheels have part poses');
+    const dot = (x, y) => Math.abs(x.reduce((s, v, k) => s + v * y[k], 0));
+    b.forEach((w, i) => {
+      assert.ok(a[i].hub < 0.02 && w.hub < 0.02, `${w.name}: the drawn hub sits on the kit's p: ${a[i].hub}, ${w.hub}`);
+      assert.ok(1 - dot(a[i].rest, w.rest) < 2e-3, `${w.name}: the drawn wheel turns by the kit's q`);
+    });
+    assert.ok(1 - dot(a[2].q, b[2].q) > 0.01, 'a rear wheel rolled between the samples');
+```
+
+  The `2e-3` allows one step's roll (sync draws between the previous and current pose). Run e2e. Expect FAIL: `-1` (the tractor is drawn by `farm3d.js`).
 
 - [ ] **Step 2: Write** `src/view/tractor3d.js`:
 
 ```js
 // The tractor and thrown snacks through the engine's view sync (phase 3k T17, E-6/E-11): sync clones the model, poses it
 // from the transform pool (interpolated) and removes it on despawn; these hooks add the model frame (Kenney's tractor
-// faces +z, the chassis +x, scale 1.6), the red paint, the wheels from the vehicle controller and the night headlight,
-// and give each snack its centred pivot and its shrink as it is eaten.
+// faces +z, the chassis +x, scale 1.6), the red paint and the night headlight, and give each snack its centred pivot and
+// its shrink as it is eaten. The wheels are view sync's: the vehicle kit writes their part poses (e.partXf) every step,
+// and sync turns each wheel node about its bounding-box centre, measured after this create hook.
 import * as THREE from 'three';
 import { TP } from '../tractor.js';
 
 const FOOD_SCALE = { apple: 1.7, carrot: 0.75, cabbage: 1.35, cob: 1.0 };
 export function bindTractorAndSnacks(sync, { sim, night }) {
-  const S = TP.scale, tr = sim.tractor, T = new THREE.Quaternion(), R = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0);
+  const S = TP.scale, tr = sim.tractor;
   const offs = [];
   offs.push(sync.on('model:tractor', {
     create(e, obj) {
@@ -2001,17 +2080,10 @@ export function bindTractorAndSnacks(sync, { sim, night }) {
       const body = inner.getObjectByName('body'); body.geometry = body.geometry.clone();
       const c = body.geometry.attributes.color; for (let i = 0; i < c.count; i++) { const r = c.getX(i), g = c.getY(i), b = c.getZ(i); if (b > r * 1.1 && r > 0.08) { const l = 0.3 * r + 0.6 * g + 0.1 * b; c.setXYZ(i, Math.min(1, l * 3.4), l * 0.42, l * 0.32); } }
       c.needsUpdate = true;
-      // each wheel turns about its own centre: a pivot at the centre, the wheel node attached under it (keeps its offset)
-      obj.userData.wheels = tr.W.map(w => { const pivot = new THREE.Group(); pivot.position.set(w.mx, w.my, w.mz); inner.add(pivot); pivot.updateMatrixWorld(true); pivot.attach(inner.getObjectByName(w.name)); return pivot; });
       obj.traverse(o => { if (o.isMesh) o.castShadow = true; });
       const head = new THREE.SpotLight('#fff2cc', 0, 26, 0.55, 0.5, 1.2); head.position.set(1.7, 1.25, 0); head.target.position.set(9, 0, 0); obj.add(head, head.target); obj.userData.head = head;
     },
     frame(e, obj) {
-      obj.userData.wheels.forEach((pivot, i) => {
-        const w = tr.W[i], susp = tr.vc.wheelSuspensionLength(i) ?? TP.suspRest, rot = tr.vc.wheelRotation(i) ?? 0, st = tr.vc.wheelSteering(i) ?? 0;
-        pivot.position.y = w.my + (0.12 - susp) / S;                          // chassis y = model y (rotY keeps y)
-        pivot.quaternion.copy(T.setFromAxisAngle(Y, st)).multiply(R.setFromAxisAngle(X, rot)); // chassis rotZ(-rot) is model rotX(rot)
-      });
       obj.userData.head.intensity = (tr.driven ? 60 : 0) * night();
     },
   }));
@@ -2024,38 +2096,50 @@ export function bindTractorAndSnacks(sync, { sim, night }) {
 ```
 
 - [ ] **Step 3: Wire it.**
-  - `game.view.js` enter: `offs.push(bindTractorAndSnacks(view.sync, { sim: s.sim, night: () => world?.night ?? 0 }))`. `world.night` returns `extras.night`.
+  - `game.view.js` enter: `offs.push(bindTractorAndSnacks(view.sync, { sim: s.sim, night: () => world?.night ?? 0 }))`. `world.night` returns `extras.night`. It must be registered before the tractor is first drawn: sync measures the wheel hubs once, after the create hooks registered by then, and `create`'s axis fix (`inner`'s turn and scale) is part of that measure.
   - `farm3d.js` deletes the tractor block (lines 213–239) and `updateTractor`.
   - `world.js` deletes `foodMeshes`, `FOOD_SCALE` and `updateFoods`.
 - [ ] **Step 4: Run.**
   - The unit suite is unchanged. Then e2e: PASS, including the drive tests.
-  - By hand on the scratch build: the wheels turn and steer about their centres. If a wheel orbits its centre, the pivot's `w.mx` is wrong for the baked node; record the measured centre.
+  - By hand on the scratch build (playtest list): the wheels sit, turn and steer about their hubs where 2.1.0's hand-set pivots (`W`'s `mx, my, mz`) put them. The hub is now the node's bounding-box centre. If a wheel orbits or sits off its arch, compare `getObjectByName(w.name)`'s box centre (inside `inner`) with `(w.mx, w.my, w.mz)` and record both in the notes.
+- [ ] **Step 4b: Mutation.** In Task 12's `createVehicle` call, drop `part: w.name`: expect Step 1's wheel assertion to FAIL (no part poses). Restore.
 - [ ] **Step 5: Commit:** `git commit -am "feat(pig-pens): tractor and snacks drawn by the engine's view sync"` (and `git add src/view/tractor3d.js`)
 
 ---
 
-## Task 18: Camera gestures on bindGesture, uncapped presses, and pressing during an orbit
+## Task 18: The camera on the engine orbit rig, uncapped presses, and pressing during an orbit
 
 **Files:**
-- Modify: `src/view/rig.js`, `src/devices.js`, `src/game/farm.js`
-- Create: `test/flow-orbit.test.mjs`
+- Modify: `src/view/rig.js`, `src/devices.js`, `src/game/farm.js`, `src/game.view.js`, `src/view/hud.js`, `test/e2e.browser.mjs`
+- Create: `test/flow-orbit.test.mjs`, `test/rig.test.mjs`, `test/fixtures/rig-v2.1.0.js` (the oracle: today's `rig.js`)
 
 **Interfaces:**
-- Consumes:
-  - `bindGesture(engine, el, { drag, pinch, uncapped, tapMove, filter })` → `{ update, dispose }` (0.7.x, #59);
-  - `bindPointer({ uncapped: true })` (#56);
-  - `makeProject(camera, canvas)` (§4.9).
+- Consumes (3g Tasks 7–8; C9 settled, Pig Pens adopts the rig):
+  - `createOrbitRig(camera, { target, distance, min, max, pitch, yaw, pitchMin, pitchMax, bounds, ground, canvas, chase, fit })` → `{ state, limits, gesture, orbiting, fit(aspect?), apply(), update(dt, raw), panBy(dx, dy), chase(pose, dt), release({ pitch, distance }), ray(cx, cy, out?), bindGesture(engine, el, { mode, tapMove }) }`.
+    - `state` `{ tx, ty, tz, yaw, pitch, dist, chaseOff }` and `limits` `{ pitchMin, pitchMax, min, max, bounds }` are live.
+    - The defaults are Pig Pens' own: `min 2.5`, `max 80`, `pitchMin 0.28`, `pitchMax 1.48`, `ground 0`. The chase defaults are `lag 2.5, recentre 0.8, lead 0.5, leadMin -1, leadMax 3, follow 5, pitch 0.42, near 9, far 22, ease 2`. `release()` defaults to `{ pitch: 0.7, distance: 18 }` (2.1.0's `afterDrive`).
+    - `rig.bindGesture(engine, canvas, { mode, tapMove })` returns a device that `rig.update(dt, raw)` drives. It is never added to boot's devices. `mode()` (`'orbit' | 'chase' | 'none'`) is asked when a drag starts and again on every move.
+    - The one-finger drag orbits (`orbiting = true`) or turns the chase offset. Two fingers pinch, turn and pan (while driving, they turn the chase offset). Mouse right-drag orbits, middle-drag pans, the wheel zooms, and there is no context menu. A capturing `pointerdown` resets `orbiting`.
+  - `makeProject(camera, canvas)` (3g Task 4) for `view.project`.
+  - `bindPointer({ uncapped: true })` (#56).
 - Produces:
-  - `rig.downTool`;
-  - `gestureDevices(engine, canvas)` → devices;
+  - `ORBIT` (Pig Pens' rig options), `cameraMode(state, downTool)`, `createRig(camera, canvas)`, `attach(camera, canvas)` → the page's orbit rig, and `bindCamera(engine, canvas)` → `off`;
+  - `rig` `{ orbit, project, camera, canvas, downTool, pressAt }`;
   - the `tool` command's Hand `move` with `orbit: true`, sent once per orbit.
 
-**Decision: `createOrbitRig` is not adopted (Contract issue C9).** Its contract (`{ update, bindGesture, ray }`) exposes no pose. Pig Pens needs to read and write yaw, pitch, distance and target for its drive chase, aspect framing, clamps and the Hand's orbit hand-off. The pose math stays in `rig.js`; the pointer tracking (#59) and `project` move to the engine.
+**Decision: adopt 3g's `createOrbitRig`; delete Pig Pens' camera port.** `rig.js` keeps only Pig Pens' options and the tool hand-off. Gone: `cam`, `applyCam`, `fitCam`, `panBy`, `chase`, `afterDrive`, `ray`, `project` and `bindGestures`. 3g's oracle test pins the rig's pose math to 2.1.0's `rig.js`. This task pins Pig Pens' options and gestures against today. Known gesture differences, all from 3g Task 8, go on the playtest list:
+- a chase drag now waits `ORBIT_PX` (10 px) before it moves;
+- the first orbit step includes the threshold distance (about 0.06 rad);
+- pinch zoom is `dist₀ / scale` from the pinch start (2.1.0 multiplied per move by `d / max(10, d′)`);
+- gestures apply in `rig.update` at the frame (after `chase`), not at the pointer event;
+- a mouse right-drag still orbits while driving, and the chase pulls it back.
 
-- [ ] **Step 1: Write the failing test** `test/flow-orbit.test.mjs`:
+- [ ] **Step 1: Write the failing tests.**
+  - Save the oracle before anything changes: `git show HEAD:games/pig-pens/src/view/rig.js | sed "s#'../game/farm.js'#'../../src/game/farm.js'#" > test/fixtures/rig-v2.1.0.js`.
+  - Write `test/flow-orbit.test.mjs`:
 
 ```js
-// Phase 3k final pass: a Hand drag that became an orbit (the view's bindGesture) tells the sim once with an orbit `move`,
+// Phase 3k final pass: a Hand drag that became an orbit (the view's orbit rig) tells the sim once with an orbit `move`,
 // so `pressing` turns off at once and a later press cannot drive (2e carry-over: pressing stayed true during an orbit).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -2071,7 +2155,51 @@ test('Hand down on the tractor presses; an orbit move clears it; the press that 
 });
 ```
 
-  Run `$UNIT node --test --test-concurrency=4 test/flow-orbit.test.mjs`. Expect FAIL: `pressing during an orbit` (true !== false).
+  - Write `test/rig.test.mjs`, the feel-parity test against today's `rig.js`:
+
+```js
+// Phase 3k T18 (3g C9): the engine orbit rig with Pig Pens' options puts the camera exactly where 2.1.0's rig.js did:
+// start framing (landscape and portrait), pan, 90 frames of drive chase with a held offset, release, clamps and the tool ray.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import * as OLD from './fixtures/rig-v2.1.0.js';
+import { createRig, cameraMode } from '../src/view/rig.js';
+
+const canvas = (w, h) => ({ clientWidth: w, clientHeight: h, getBoundingClientRect: () => ({ left: 0, top: 0, width: w, height: h }) });
+const same = (a, b, what) => {
+  assert.ok(a.position.distanceTo(b.position) < 1e-9, `${what}: position`);
+  assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `${what}: rotation`);
+};
+for (const [w, h] of [[1280, 720], [390, 844]]) {
+  test(`orbit rig = 2.1.0 rig.js at ${w}×${h}: fit, pan, chase, release, clamps, ray`, () => {
+    const a = new THREE.PerspectiveCamera(48, w / h), b = new THREE.PerspectiveCamera(48, w / h), cv = canvas(w, h);
+    Object.assign(OLD.rig.cam, { pitch: 0.92 }); OLD.rig.chaseOff = 0; OLD.rig.gesture = null; // the oracle is module state
+    const rig = createRig(a, cv); OLD.attach(b, cv); OLD.fitCam(); OLD.applyCam(); rig.update(); same(a, b, 'start framing');
+    rig.panBy(30, -12); OLD.panBy(30, -12); rig.update(); OLD.applyCam(); same(a, b, 'pan');
+    rig.state.chaseOff = OLD.rig.chaseOff = 0.3; const t = { x: 3, z: -2, yaw: 1, fwd: 4 };
+    for (let i = 0; i < 90; i++) { t.x += 0.1; t.yaw += 0.01; rig.chase(t, 1 / 60); OLD.chase(t, 1 / 60); rig.update(1 / 60); OLD.applyCam(); same(a, b, `chase ${i}`); }
+    rig.release(); OLD.afterDrive(); rig.update(); OLD.applyCam(); same(a, b, 'release (afterDrive)');
+    rig.state.dist = OLD.rig.cam.dist = 500; rig.state.tx = OLD.rig.cam.tx = 100; rig.update(); OLD.applyCam(); same(a, b, 'clamps');
+    const r1 = rig.ray(200, 300), r0 = OLD.ray(200, 300); r1.forEach((v, k) => assert.ok(Math.abs(v - r0[k]) < 1e-9, `ray[${k}]`));
+  });
+}
+test('cameraMode: driving chases, a Hand drag orbits, other tools leave the camera alone (2.1.0 bindGestures)', () => {
+  assert.equal(cameraMode({ driving: true }, 'hand'), 'chase'); assert.equal(cameraMode({ driving: true }, 'feed'), 'chase');
+  assert.equal(cameraMode({ driving: false }, 'hand'), 'orbit'); assert.equal(cameraMode({ driving: false }, 'shoo'), 'none');
+});
+```
+
+  - In `test/e2e.browser.mjs`, in the desktop Hand test, add the one-finger feel check. A 200 px Hand drag turns the view by about today's amount: 2.1.0 counted from the threshold, and the rig counts from the down point.
+
+```js
+    const yaw = () => game.page.evaluate(() => window.engine.view.orbit.state.yaw);
+    const y0 = await yaw(); await game.touch.drag(1, { from: [600, 400], to: [800, 400] }); await frames(game);
+    const turned = y0 - await yaw(); assert.ok(turned >= (200 - 10) * 0.006 - 1e-6 && turned <= 200 * 0.006 + 1e-6, `Hand drag turned ${turned} rad`);
+```
+
+  - If the e2e helper has no `touch.drag`, use the down, move, up calls the existing pinch test uses.
+  - Run `$UNIT node --test --test-concurrency=4 test/flow-orbit.test.mjs test/rig.test.mjs`. Expect FAIL: `pressing during an orbit` (true !== false), and `createRig is not a function`.
 
 - [ ] **Step 2: Sim.** In `farm.js` `api.pointer`, change the `move` branch to:
 
@@ -2079,69 +2207,82 @@ test('Hand down on the tractor presses; an orbit move clears it; the press that 
       if (ph === 'move') { if (g.tool === 'hand' && d.orbit) g.target = null; else if (g.down) move(e, s, g, d); } // the view turned the Hand into an orbit: nothing to press
 ```
 
-- [ ] **Step 3: View, `rig.js`.**
-  - Delete `bindGestures` and `project`.
-  - Import `bindGesture` and `makeProject` from `lion-hawk/view`.
-  - Add `downTool: 'hand'` to `rig`, and in `attach` set `rig.project = makeProject(camera, canvas)`. `game.view.js` uses `view.project = rig.project`.
-  - Append:
+- [ ] **Step 3: View, `rig.js`.** Replace the whole module with:
 
 ```js
-// Camera gestures on the engine's bindGesture (#59), on uncapped time (#56): one finger (Hand: orbit after ORBIT_PX;
-// driving: the chase offset), two fingers pinch/turn/pan, right-drag orbit, middle-drag pan, the wheel zooms. The tool
-// gesture is bindPointer's; the two agree through rig.orbiting, which the view sets here and devices.js reads.
-export function gestureDevices(canvas) {
-  const cam = rig.cam;
-  let kind = null, lx = 0, ly = 0, d0 = 0, r0 = 0, px = 0, py = 0;
-  const one = engine => ({ dx, dy, phase }) => {
-    const s = engine.scene.state;
-    if (phase === 'start') { kind = s.driving ? 'chase' : rig.downTool === 'hand' ? 'orbit' : null; if (kind === 'orbit') rig.orbiting = true; lx = 0; ly = 0; return; }
-    if (phase === 'end') { kind = null; return; }
-    if (kind === 'orbit' && s.driving) kind = null; // a Hand gesture begun before the drive must not orbit it
-    const mx = dx - lx, my = dy - ly; lx = dx; ly = dy;
-    if (kind === 'chase') { rig.chaseOff -= mx * 0.006; cam.pitch += my * 0.004; }
-    else if (kind === 'orbit') { cam.yaw -= mx * 0.006; cam.pitch += my * 0.005; }
-  };
-  const two = engine => ({ scale, rotate, panX, panY, phase }) => {
-    if (phase === 'start') { d0 = cam.dist; r0 = 0; px = 0; py = 0; return; }
-    cam.dist = d0 / Math.max(0.1, scale);
-    const da = rotate - r0; r0 = rotate;
-    if (engine.scene.state.driving) rig.chaseOff += da; else { cam.yaw += da; panBy(panX - px, panY - py); }
-    px = panX; py = panY;
-  };
-  const drag = (engine, f) => { let x = 0, y = 0; return ({ dx, dy, phase }) => { if (phase === 'start') { x = 0; y = 0; return; } f(dx - x, dy - y); x = dx; y = dy; }; };
-  const wheel = () => { const on = e => { e.preventDefault(); cam.dist *= Math.exp(e.deltaY * 0.0012); }, menu = e => e.preventDefault();
-    canvas.addEventListener('wheel', on, { passive: false }); canvas.addEventListener('contextmenu', menu);
-    return { update() {}, dispose() { canvas.removeEventListener('wheel', on); canvas.removeEventListener('contextmenu', menu); } }; };
-  return [
-    engine => bindGesture(engine, canvas, { drag: one(engine), pinch: two(engine), tapMove: ORBIT_PX }),
-    engine => bindGesture(engine, canvas, { filter: { button: [2] }, tapMove: 0, drag: drag(engine, (mx, my) => { cam.yaw -= mx * 0.006; cam.pitch += my * 0.005; }) }),
-    engine => bindGesture(engine, canvas, { filter: { button: [1] }, tapMove: 0, drag: drag(engine, (mx, my) => panBy(mx, my)) }),
-    wheel,
-  ];
+// The camera rig (lion-hawk 2e P6, #59; on the engine's createOrbitRig since 3k T18, 3g C9): Pig Pens' target, bounds and
+// framing are options; the pose, clamps, drive chase, release, ray and camera gestures are the engine's. One per page (module
+// level), like the renderer. The gesture device only moves the camera: tools are `tool` commands from bindPointer on the
+// same canvas (devices.js), and the two agree on the Hand's orbit through rig.orbit.orbiting (#52). Nothing here calls the sim.
+import { createOrbitRig, makeProject } from 'lion-hawk/view';
+import { ORBIT_PX } from '../game/farm.js';
+
+// 2.1.0's rig.js values; min 2.5, max 80, pitch 0.28..1.48, ground 0 and the chase tuning are the rig's defaults
+export const ORBIT = {
+  target: { x: 0, y: 0.5, z: 1 }, distance: 46, pitch: 0.92, bounds: { x: [-34, 34], z: [-30, 30] },
+  fit: { portrait: { yaw: Math.PI / 2, dist: 60, tx: -3, tz: -9 }, landscape: { yaw: 0, dist: 46, tx: -1, tz: -4 } },
+};
+export const rig = { orbit: null, project: null, camera: null, canvas: null, downTool: 'hand', pressAt: null };
+
+// the one-finger drag: driving turns the chase, a Hand drag orbits past ORBIT_PX, other tools leave the camera alone
+export const cameraMode = (s, downTool) => s.driving ? 'chase' : downTool === 'hand' ? 'orbit' : 'none';
+
+// framed by the canvas aspect, as 2.1.0's fitCam (on phones the long axis of the pens runs up the screen)
+export function createRig(camera, canvas) {
+  const o = createOrbitRig(camera, { ...ORBIT, bounds: { ...ORBIT.bounds }, canvas });
+  o.fit(canvas.clientWidth / canvas.clientHeight); return o;
+}
+// once per page: the first scene entry frames by aspect, later ones keep the pose (2.1.0's rig.ready)
+export function attach(camera, canvas) {
+  if (!rig.orbit) Object.assign(rig, { orbit: createRig(camera, canvas), project: makeProject(camera, canvas), camera, canvas });
+  rig.orbit.update(); return rig.orbit;
+}
+// the camera gestures (#59); rig.orbit.update drives them, so they are not boot devices
+export function bindCamera(engine, canvas) {
+  const dev = rig.orbit.bindGesture(engine, canvas, { mode: () => cameraMode(engine.scene.state, rig.downTool), tapMove: ORBIT_PX });
+  return () => dev.dispose();
 }
 ```
 
-- [ ] **Step 4: Devices.** In `devices.js`:
-  - In `toolAt`, on `'down'` set `rig.downTool = tool; rig.orbiting = false; rig.pressAt = { x: cx, y: cy };`. These lines were `bindGestures`' pointerdown work.
-  - Add a per-gesture `let orbitSent = false;` (reset on `'down'`).
+- [ ] **Step 4: `game.view.js` and `hud.js`.**
+  - Import `{ rig, attach, bindCamera }` from `./view/rig.js`.
+  - In `enter`, replace `const first = !rig.ready; attach(gfx.camera, canvas); if (first) { fitCam(); applyCam(); }` and `view.project = project;` with:
+
+    ```js
+    view.orbit = attach(gfx.camera, canvas); view.project = rig.project;
+    ```
+
+  - Replace `bindGestures(engine, canvas)` in `offs` with `bindCamera(engine, canvas)`.
+  - In the events switch, change `afterDrive()` to `rig.orbit.release()`.
+  - In `frame`, use `rig.orbit.chase(t, dt)` for `chase(t, dt)`, and `rig.orbit.update(dt, view.rawDt)` for `applyCam()`. The tilt focus becomes `post.params.focus = rig.orbit.state.dist`.
+  - In `exit`, use `if (view.project === rig.project) view.project = undefined; view.orbit = undefined;`.
+  - In `hud.js`, change `rig.orbiting` to `rig.orbit?.orbiting`. `rig.canvas`, `rig.camera` and `rig.pressAt` keep their names.
+
+- [ ] **Step 5: Devices.** In `devices.js`:
+  - Import `{ rig }` only.
+  - `if (!rig.ready) return null;` becomes `if (!rig.orbit) return null;`.
+  - In `toolAt`, on `'down'`, set `rig.downTool = tool; rig.pressAt = { x: cx, y: cy }; orbitSent = false;`. These lines were `bindGestures`' pointerdown work; the rig itself resets `orbiting` on its capturing `pointerdown`.
+  - Add a per-gesture `let orbitSent = false;`.
+  - Every `ray(cx, cy)` becomes `rig.orbit.ray(cx, cy)` (a fresh array per call, #72).
   - Replace the Hand block with:
 
 ```js
     if (tool === 'hand') {
-      if (phase === 'move') { if (rig.orbiting && !orbitSent) { orbitSent = true; return { ray: ray(cx, cy), orbit: true }; } return null; } // once: the sim drops the press target
-      if (rig.orbiting && phase === 'press') return null;
-      if (rig.orbiting && phase === 'tap') return { ray: ray(cx, cy), orbit: true };
+      const orbiting = rig.orbit.orbiting;
+      if (phase === 'move') { if (orbiting && !orbitSent) { orbitSent = true; return { ray: rig.orbit.ray(cx, cy), orbit: true }; } return null; } // once: the sim drops the press target
+      if (orbiting && phase === 'press') return null;
+      if (orbiting && phase === 'tap') return { ray: rig.orbit.ray(cx, cy), orbit: true };
     }
 ```
 
-  - In `devices(doc)`, pass `uncapped: true` to `bindPointer` (#56), and append `...gestureDevices($('c'))`.
-  - Delete `bindGestures(engine, canvas)` from `game.view.js`'s `offs`.
+  - In `devices(doc)`, pass `uncapped: true` to `bindPointer` (#56). Do not add the camera gestures to the device list: `bindCamera` owns them.
 
-- [ ] **Step 5: Run.**
-  - Unit suite: `flow-orbit` PASS, goldens unchanged.
-  - e2e: PASS for the right-drag test, the pinch test and "a Hand press that became a drive does not orbit".
+- [ ] **Step 6: Run.**
+  - Unit suite: `flow-orbit` and `rig` PASS, goldens unchanged. Mutation check: in `ORBIT`, change `target.z` to 0 and expect `rig.test` to FAIL on `start framing`. Restore it.
+  - e2e: PASS for the right-drag test, the pinch test, "a Hand press that became a drive does not orbit" and the new Hand-drag turn.
   - The e2e `holdUntil` comment about capped time changes to "uncapped since 3k (#56): about 0.75 s of real time".
-- [ ] **Step 6: Commit:** `git commit -am "feat(pig-pens): camera gestures on bindGesture with uncapped presses; an orbit clears the Hand's press"` (and `git add test/flow-orbit.test.mjs`)
+  - `rg -n "applyCam|fitCam|afterDrive|bindGestures|rig\.cam\b|rig\.ready" src` must print nothing.
+- [ ] **Step 7: Commit:** `git commit -am "feat(pig-pens): the camera on the engine orbit rig, uncapped presses; an orbit clears the Hand's press"` (and `git add test/flow-orbit.test.mjs test/rig.test.mjs test/fixtures/rig-v2.1.0.js`)
 
 ---
 
@@ -2151,7 +2292,7 @@ export function gestureDevices(canvas) {
 - Modify: `src/sound.js`, `src/game.view.js`
 
 **Interfaces:**
-- Consumes (§4.9, #67): `view.audio = createAudio({ doc, flags })` → `{ ctx, master, unlocked, onUnlock, mute, … }`. It unlocks on the first capturing `pointerdown`/`keydown`/`touchend`, suspends while hidden, honours `?mute`, and puts a limiter on the master bus.
+- Consumes (§4.9, #67, 3g Task 1): `view.audio = createAudio({ doc, flags })` → `{ ctx, master, unlocked, muted, onUnlock, onGesture, mute, … }`. `ctx` and `master` are `null` until the first gesture. It unlocks on `pointerdown`/`pointerup`/`click`/key (iOS) and re-arms until the context runs. It suspends while hidden, honours `?mute`, and puts a limiter on the master bus.
 - Produces: `new Sound(audio)`.
 
 - [ ] **Step 1: Write the failing e2e assertion** (desktop test 1, after the first click):
@@ -2188,11 +2329,15 @@ export class Sound {
 **Files:**
 - Delete: `src/gfx.js`, `src/fur.js`, `src/tiltshift.js`, `bake.mjs`, `build.py`
 - Move: `src/assets.json` → `test/fixtures/assets-v2.1.0.json`
-- Modify: `test/assets-parity.test.mjs`, `test/models.test.mjs` (fixture path), `test/serve.mjs`, `pwa/sw.js`, `test/purity.test.mjs`
+- Modify: `test/assets-parity.test.mjs`, `test/models.test.mjs` (fixture path), `test/serve.mjs`, `pwa/sw.js`, `test/purity.test.mjs`, `template.html`
 - Create: `test/offline.browser.mjs`
 
 **Interfaces:**
-- Consumes: `lion-hawk build --game <dir> --out <dir> [--e2e]`, which writes `index.html`, `assets/models/*`, the PWA files and `sw.js` with `__VERSION__` and `__PRECACHE__` stamped, and prints the size report (§4.3).
+- Consumes: `lion-hawk build --game <dir> --out <dir> [--e2e]`, which writes `index.html`, `assets/models/*`, the PWA files and `sw.js` with `__VERSION__` and `__PRECACHE__` stamped, and prints the size report (§4.3). The programmatic form is `import { build } from 'lion-hawk/build'`, `build({ game, out, env, site, mode, e2e, entry, log }) → Promise<{ out, version, hash, files, sizes }>`. It has no `report` member; the CLI is enough here.
+- 3d facts this task depends on:
+  - The bundle is `format: 'esm'`.
+  - The template must carry a **bare** `<!--APP-->`, which becomes an inline `<script type="module">…</script>`. A marker inside `<script>…</script>` fails the build with a hint. Today's `template.html` has `<script><!--APP--></script>`.
+  - `sw.js` needs `__PRECACHE__`; `__VERSION__` is stamped from the game version.
 - Produces: `servePigPens()` serving a `lion-hawk build` output; the offline check (R3).
 
 - [ ] **Step 1: Write the failing test** `test/offline.browser.mjs`:
@@ -2251,7 +2396,9 @@ export async function servePigPens() {
 
   `os.tmpdir()` follows `$TMPDIR`; set `TMPDIR=$SCRATCH` in the `BROWSER` runs. In `e2e.browser.mjs`, delete `ENTRY`/`PIGPENS_ENTRY` and call `servePigPens()`.
 
-- [ ] **Step 3: `pwa/sw.js`.**
+- [ ] **Step 3: `template.html` and `pwa/sw.js`.**
+  - In `template.html`, replace `<script><!--APP--></script>` with a bare `<!--APP-->` on its own line (3d). `rg -n "<script>\s*<!--APP-->" template.html` must print nothing.
+  - Task 11's R3 baseline used today's template and an iife bundle, so it is unaffected.
   - Replace the `PRECACHE` line with `const PRECACHE = __PRECACHE__; // stamped by lion-hawk build: ./, the manifest, the icons and every assets/models/* (D1)`.
   - Update the header comment: "The game is one HTML file plus its baked models beside it (D1)".
 - [ ] **Step 4: Delete and move.**
@@ -2412,7 +2559,7 @@ export function createFps(doc) {
 - **Unit suite.** `npm test` in `games/pig-pens` passes. The test files are:
   - `bake`, `vendor`, `materials`, `assets-parity`, `models`;
   - `world`, `migration`, `checks`, `feel`;
-  - `golden`, `golden-farm`, `flow`, `flow-orbit`, `pick`, `sim`, `invariants`, `purity`, `hud`.
+  - `golden`, `golden-farm`, `flow`, `flow-orbit`, `rig`, `pick`, `sim`, `invariants`, `purity`, `hud`.
   
   `split.test.mjs` existed from Task 5 to Task 9 only.
 - **Browser suites.** `test/e2e.browser.mjs` (today's 6 tests, with the added assertions) and `test/offline.browser.mjs` (1) pass on engine 0.9.x. `npm test` in `games/` passes.
@@ -2435,20 +2582,18 @@ Notes file: `docs/plans/2026-10-13-phase-3k-pigpens-notes.md` in the engine repo
   - restitution between animals halved (0.15 → 0.075), and thrown-pig friction on fences 0.45 → 0.37;
   - the tractor at 1400 kg (was effectively 1438.5);
   - corn draws all four cobs;
-  - the chicken face trimmed by the vertex mask (no fade);
+  - the chicken face trimmed by the 0..1 mask: 2.1.0's fade, interpolated per vertex instead of per fragment;
+  - pig mud through the compiler's `COVERAGE_INSTANCED`: blotches seeded by instance, the compiler's noise, height from part-local `y`;
+  - camera gestures on 3g's orbit rig: a chase drag waits 10 px, the first orbit step includes the threshold, pinch zoom from the pinch start, gestures applied at the frame;
   - dog and fox on mixers;
   - pigs interpolated between steps;
   - audio unlocks on Escape too;
   - Get out at 44 px;
+  - the tractor wheels drawn by view sync from the kit's part poses: the hub is each node's bounding-box centre, not 2.1.0's hand-set pivots; check by eye that they match (Task 17);
   - the shading tier and DPR as shipped.
 - **Unused dependencies left in `package.json`:** `esbuild` (still used by nothing after Task 20), `pngjs`. The integrator may prune them with the lock.
 - **Field note candidates** (the integrator numbers them from #110):
-  - instanced `COVERAGE` (C7);
-  - a fur trim box (C8);
-  - an orbit rig with pose access (C9);
-  - a post-pass seam in boot (C5);
-  - per-model bake files (C1);
-  - anim-table layout (C2);
+  - C1–C9 were settled at reconciliation (see "Contract issues"); record only what execution found that differs from those rulings;
   - herd feel metrics are chaotic at ±1 (Task 10);
   - the `checks.*` return shapes found in Task 8.
 
@@ -2456,27 +2601,35 @@ Notes file: `docs/plans/2026-10-13-phase-3k-pigpens-notes.md` in the engine repo
 
 ## Contract issues
 
-Each is the smallest decision that lets 3k proceed; the controller reconciles them.
+All nine were settled at the reconciliation pass (contract-issues "## 3k Pig Pens"). The plan above follows the rulings; none is open.
 
-- **C1 (§4.3 bake input).**
-  - The issue: "model id = file basename" in one flat `src` cannot vendor Pig Pens. Four Kenney kits each reference their own different `Textures/colormap.png`, and the game's ids (`fence`, `cob`, …) are not the file names.
-  - Decision: `bake.models.<id>.file` names the source relative to `bake.src` (subfolders allowed); without `file`, the id is the basename as specified.
-- **C2 (§4.3 anim.json).** The 12 floats per part are unspecified. Pig Pens' parity test assumes the column-major mat4 without its last row: elements 0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, in model space, like `bake.mjs`'s tables.
-- **C3 (§4.4 inline colliders).** The `spawn` example writes `{ shape: 'ball' }`, but §4.3 says inline entries use exactly the sidecar shape (`sphere`, `r`). Pig Pens uses `sphere`.
-- **C4 (§4.10 vehicle kit).**
-  - Pig Pens orders `farm.think` before the kit's update by name and assumes `lh.vehicle.update`.
-  - It also assumes the kit's rays exclude the chassis's own colliders, and that wheels use Rapier's default axes: suspension (0, −1, 0) and axle (0, 0, 1).
-- **C5 (§4.6 boot render).** There is no seam for a post pass. Pig Pens replaces `view.gfx.render` with its tilt-shift and restores it on exit, which assumes boot calls `view.gfx.render()` through the property each frame.
-- **C6 (§4.6/§4.7 manifest).** It is not said how the game's `baked/manifest.json` reaches the `createAssets` that boot makes. Pig Pens passes `defineView({ assets: { manifest, base: './assets/' } })`.
-- **C7 (§4.8 COVERAGE).** `mc.coverage` is per entity (a material clone), which cannot serve an instanced crowd. Pig Pens' pig mud stays a game material until coverage takes a per-instance attribute (e.g. `instanceCoverage`, vec4).
-- **C8 (§4.8 FUR).**
-  - The group-to-material mapping of `furGeometry` is unspecified. Pig Pens assumes group 0 is drawn with a plain material and group 1 with the `FUR` material (`[mc.get('pet'), mc.get('plumage')]`).
-  - `look.fur` has no trim region, so Pig Pens trims the chicken face through the mask.
-- **C9 (§4.9 createOrbitRig).** The rig exposes no pose (yaw, pitch, distance, target), clamps or drive chase. Pig Pens keeps its pose math and adopts `bindGesture` and `makeProject` only.
+- **C1 (§4.3 bake input): settled by 3d C5.** `bake.models.<id>.file` names the source relative to `bake.src` (subfolders allowed). Per-kit textures resolve per file, and the output GLBs are self-contained. Without `file`, the id is the basename. Used in Tasks 1 and 3.
+- **C2 (§4.3 anim.json): settled by 3f C7 (3d C2).** The 12 floats are `Matrix4.elements` without the bottom row (0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14). The rows are the parts, then the `sock-<name>` rows. Task 4 checks that layout.
+- **C3 (§4.4 inline colliders): settled (3b ruling 2, 3c).** `'sphere'` only, and `'ball'` throws. Task 9.
+- **C4 (§4.10 vehicle kit): settled by 3h's stable names.** The system is `VEHICLE_SYSTEM = 'lh.kit.vehicle'` (imported), and game controls sit `before: [VEHICLE_SYSTEM]`. The game spawns and owns the chassis. Rapier excludes the chassis from the wheel rays. `forward: 'x'` gives axle +z and suspension (0, −1, 0). Task 12.
+- **C5 (§4.6 boot render): settled by 3e's `gfx.post`.** `view.gfx.post = pass` in `enter` and `null` in `exit`; a pass is `{ render(scene, camera), dispose?() }`. The game owns it and never replaces `view.gfx.render`. Task 13.
+- **C6 (§4.6/§4.7 manifest): settled by 3e.** `defineView({ scenes, render: { assets: { manifest, base } } })`. Task 13.
+- **C7 (§4.8 COVERAGE): settled by 3f C6.** Pig mud is `mc.coverage(instanced pigHide)`: the `COVERAGE_INSTANCED` variant, reading `instanceCoverage`, which the crowd (the instancing owner) writes. The eyelids go through `mc.extend`. Task 15.
+- **C8 (§4.8 FUR): settled by 3f C10.** `furGeometry(g, mask, { shells })`, where the mask is a 0..1 length factor. The groups are base → material 0 and shells → material 1. The face is trimmed by the mask. Task 16.
+- **C9 (§4.9 createOrbitRig): settled by 3g Tasks 7–8.** Pig Pens adopts the rig (live `state`/`limits`, `fit`, `chase`, `release`, `ray`, `bindGesture({ mode, tapMove })`) and deletes its own camera port. Task 18.
+- **Also settled:**
+  - Lambert ships until the user's iPad `?fps` runs compare tiers (Task 22).
+  - The registry hash covers no `look` or `game` (3b ruling 6).
+  - Physics pauses during scene loads (3c); Pig Pens declares none.
 
 ## Integrator requests
 
 1. **Refresh `games/package-lock.json`** after Pig Pens' `package.json` changes: the scripts in Task 3 and version 2.2.0 in Task 23. Later, prune the unused `esbuild` and `pngjs` from Pig Pens.
-2. **The workspace rule.** `games/test/workspace.test.mjs`'s "engine source does not import three or Rapier yet" contradicts D9 once 3e lands (engine view modules import three). It belongs to the integrator (`games/test/**`).
+2. **The workspace rule** is settled: "engine imports no three" is narrowed to the sim roots (3e request; contract-issues "## 3k Pig Pens"). The integrator lands the `games/test/workspace.test.mjs` change before 3e.
 3. **The shared lock.** Pig Pens' browser runs need the shared lock file `/tmp/claude-1000/lion-hawk-browser.lock`, and `TMPDIR=$SCRATCH` for `servePigPens`' build dir, so no build lands outside the scratchpad.
 4. **Notes.** Copy `games/pig-pens/docs/phase-3k-notes.md` to `docs/plans/2026-10-13-phase-3k-pigpens-notes.md`, and number its field-note candidates.
+5. **Exports Pig Pens imports at 0.9.0:**
+   - `lion-hawk/view`: `createOrbitRig`, `makeProject`, `createTiltShift`, `sampleAnimTable`, `disposeTree`;
+   - `lion-hawk/kits/vehicle`: `createVehicle` (with the wheel `part` option, 3h Task 6b), `VEHICLE_SYSTEM`;
+   - `lion-hawk/kits/fx/view`: `createParticles`;
+   - `lion-hawk/build`.
+   
+   These come from 3d, 3e, 3f, 3g and 3h's own export requests. A missing one stops the task that imports it.
+   
+   No new export names for part poses, but 0.9.0 must carry the feature: 3c Task 10b (`partXf`, swapped by `lh.world.swap`), 3g Task 13b (view sync draws part poses; 3g Integrator request 7) and 3h Task 6b (the wheel `part`). Without them Tasks 12 and 17 stop.
+6. **The desktop e2e opening is unchanged.** Task 18 adds one Hand-drag assertion to the desktop Hand test only, so the frame-rate probe that copies the opening needs no change.

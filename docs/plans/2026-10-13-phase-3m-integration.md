@@ -1316,10 +1316,8 @@ Phase 3a: engine carry-overs.
 ```
 
   Correct each bullet against the merged 3a notes ("Rulings") before committing; the notes win.
-- [ ] **Step 6: Spec** (3a request 3): apply 3a's Task 10 steps 1 and 3 (header line and part B) verbatim.
-  - If the user has approved D1–D9 (ask the controller), apply step 2 (part A) too.
-  - Otherwise, add a Requests row `3a-R3A: D1–D9 into spec.md, waiting on the user` and apply it at the first gate after approval.
-  - Commit `docs(spec): 0.7.3 carry-overs` (or `docs(spec): phase 3 deltas D1–D9 and the 0.7.3 carry-overs`).
+- [ ] **Step 6: Spec** (3a request 3): apply 3a's Task 10 steps 1, 2 and 3 (header line, part A and part B) verbatim. The user approved D1–D9 on 2026-10-14 (contract-issues "User decisions (2026-10-14)"), so part A is not gated.
+  - Commit `docs(spec): phase 3 deltas D1–D9 and the 0.7.3 carry-overs`.
 - [ ] **Step 7: Field notes** (3a request 4): Procedure F with plan 3a.
   - #95, #100, #105, #107, #108 and #109 become `done (0.7.3, 3a): <outcome>`.
   - 3a's four candidates become #110–#113.
@@ -1363,6 +1361,7 @@ git -C /home/smiller/projects/four43/lion-hawk-engine worktree list
 - [ ] **Step 1: Merge in order.** For each branch, run Procedure M (steps 1–5): `phase-3-materials` (3b), then `phase-3-world` (3c), then `phase-3-bake` (3d). Use the messages `chore(merge): phase 3b materials registry, base library and sidecar schema`, `chore(merge): phase 3c World, Rapier wrapper and checks`, `chore(merge): phase 3d bake, build and dev CLI`.
   - If 3c's Task 17 or 3d's Task 16 did not run on its branch (their preconditions), run it now as that plan's request: the plan's own code, executed on `phase-3-integrate` after its predecessor's merge. Commit it with the plan's subject.
   - After 3c's merge, also land 3c request 1, the `test/engine.test.mjs:232` line, if the branch did not carry it.
+  - The registry hash (contract-issues 3b #6) covers only ids/order, `phys` and pairs, not `look` or `game`. Read the base library's hash from the merged code (`node --input-type=module -e "console.log((await import('./src/defs/materials.js')).defineMaterials().hash)"`) and record it in the ledger; never copy a literal from a plan, since 3b's pinned value is set by 3b's own reconciliation. A later `look`-only registry change needs no re-bake; a `phys` or pair change makes every game's `bake --check` stale.
 - [ ] **Step 2: Watch the exports test fail first.** Bump to `0.8.0` (`npm version --no-git-tag-version 0.8.0` and `sed -i "s/ENGINE_VERSION = '0.7.[0-9]*'/ENGINE_VERSION = '0.8.0'/" src/version.js`), then run the Task 8 step 5 command. Expected: FAIL on the `0.8.0` rows (`lion-hawk/sim lacks defineMaterials`, `checks` undefined, `lion-hawk/bake` not exported, `bin` missing).
 - [ ] **Step 3: Exports.** Append to `src/index.sim.js`:
 
@@ -1396,7 +1395,7 @@ export { heightfieldDesc } from './sim/physics/heightfield.js';
 - [ ] **Step 10: Commit** `chore(release): lion-hawk 0.8.0`. Then run **Procedure G** for `0.8.0` (no game is buildable yet).
   - Expected: all six goldens are bit-exact. The games have not migrated, and `engine.state()` adds `world` only with entities, so no game test changes.
   - Tags: `v0.8.0` and `v-games-0.8.0`.
-- [ ] **Step 11: 3d request 2 (hygiene).** Run `node bin/lion-hawk.js bake --game test/fixtures/models/game` in `lion-hawk-engine-3m`. If `test/fixtures/models/game/baked/` changed, commit `chore(fixtures): re-bake the CLI fixture at 0.8.0` and publish it as part of the same freeze.
+- [ ] **Step 11: 3d request 2 (hygiene).** Run `node bin/lion-hawk.js bake --game test/fixtures/models/game` in `lion-hawk-engine-3m` (after 3d's Task 16 the fixture's `phys.json` records the real registry hash, whatever 3b's final hash rule gives). If `test/fixtures/models/game/baked/` changed, commit `chore(fixtures): re-bake the CLI fixture at 0.8.0` and publish it as part of the same freeze.
 
 ### Task 12: Cut 3f, 3g, 3h, 3i and the game worktrees; pickup
 
@@ -1526,7 +1525,7 @@ import('./test/helpers/scan.mjs').then(({ jsFiles, importsOf }) => {
   - Export the 3e names (step 5) in the same landing.
 - [ ] **Step 2: 3f** (Procedure M, `chore(merge): phase 3f assets, loader, anim tables and material compiler`).
   - Resolve the stubs `src/view/assets/index.js` and `src/view/materials/compiler.js` with `git checkout --theirs`.
-  - Rerun `test/render-pipeline.test.mjs` and `test/render-stubs.test.mjs` per 3e request 3.
+  - Rerun `test/render-pipeline.test.mjs` and `test/render-stubs.test.mjs` per 3e request 3, and 3f's Task 9 Step 1b stub-surface check (3e ruling #1: same export names and members as the stubs). The stub-shape cases for assets and the compiler are expected to fail now; they go with the file in step 3.
   - It may land early for 3g's Task 15.
 - [ ] **Step 3: 3g** (Procedure M, `chore(merge): phase 3g view sync, cameras, instancing, crowds and audio`).
   - Take 3g's `src/view/sync/index.js` and `src/view/audio/index.js` over the stubs.
@@ -1747,7 +1746,7 @@ Games merge in the order they finish. For the game being merged:
   - What the games retired: `assets.json`, `bake.mjs`, `build.py`, the hand-written `RAPIER.World` setups, `gfx.js`/`warm.js`/`matSplit.js`/`shadows.js`/`dispose.js`.
   - The game versions (Rally 0.4.0, Pig Pens 2.2.0, Tractor 1.9.0, Tractor NET_VERSION 4).
   - The out-of-scope list from overview §1.2, as "Not in 0.11".
-- [ ] **Step 3: Spec §8.4.** Under the table add: "Phase 3 (2026-10, engine 0.7.3–0.11.0) delivered rows 3–5, plus the terrain, vehicle (Rapier ray-cast), coverage and fx kits the games needed (rows 6–7 in part). Rally's tyre model as a kit backend, kit-herd, fields (row 8) and the shared build mode (row 9) remain. Plan: `docs/plans/2026-10-13-phase-3-overview.md`." If D1–D9 were still waiting at Task 9, they are applied by now or listed in the Hand-off.
+- [ ] **Step 3: Spec §8.4.** Under the table add: "Phase 3 (2026-10, engine 0.7.3–0.11.0) delivered rows 3–5, plus the terrain, vehicle (Rapier ray-cast), coverage and fx kits the games needed (rows 6–7 in part). Rally's tyre model as a kit backend, kit-herd, fields (row 8) and the shared build mode (row 9) remain. Plan: `docs/plans/2026-10-13-phase-3-overview.md`."
 - [ ] **Step 4: Overview status line.** Replace `Status: binding for the phase 3 sub-plans.` with `Status: done (0.11.0, <date>); the record of phase 3. Rulings: 2026-10-13-phase-3-contract-issues.md.`
 - [ ] **Step 5: Commit** `chore(release): lion-hawk 0.11.0` and `docs: phase 3 complete in spec §8.4 and the overview`.
 - [ ] **Step 6: Final full gate** (Procedure G steps 1–6, without tagging) with `--enforce rally,pig-pens,tractor-pickup`. Expected: `GATE PASS`:
@@ -1818,16 +1817,15 @@ git -C /home/smiller/projects/four43/four43-lh3 status --short site
     1. **Playtests.** Each game's list from its notes (feel samples near tolerance, per-metre dirt, the FOV changes, Rally's 4° wider portrait FOV, and the like), plus 3l's: solid tractors that honk on contact (debounced), and the two-device bump feel (contract-issues 3i #4, which decides on a clock-sync follow-up).
     2. **iPad frame-rate runs (R1).** For each game: the live release on four43.com versus the branch build in `/tmp/claude-1000/lion-hawk-phase3/3m/ipad/<game>`, with `?fps`, on the same route as the probe opening. Serving the build to the iPad over the LAN (for example `python3 -m http.server --bind 0.0.0.0 8740 -d /tmp/claude-1000/lion-hawk-phase3/3m/ipad/<game>`) opens a port, so it is the user's to run. A median frame time more than 10% worse means `shading: 'lambert'` for that game (D5), plus a field note with the numbers. Pig Pens ships Lambert until these runs (contract-issues 3k).
     3. **The Tractor 1.8.0 ↔ 1.9.0 room-code check** on real devices (R5c).
-    4. **D1–D9 approval**, if still pending.
-    5. **Merge and deploy decisions:**
+    4. **Merge and deploy decisions:**
        - how four43 pins the engine (the `file:` link needs the sibling checkout);
        - pushing engine `phase-3` and the tags;
        - whether engine `main` takes the phase branches;
        - merging `feat/lion-hawk-3` into `feat/lion-hawk` and then `gh-pages`;
        - running each game's `npm run build -- --site` (the user's own `--site` build) and deploying;
        - NET_VERSION 4 rollout timing (1.8.0 and 1.9.0 rooms do not mix).
-    6. **Pre-existing dirt** in `four43-lion-hawk` (`site/exp/piggie-game/*` modified, from Task 1 step 6) and the untracked files in the main four43 checkout. Both were left alone.
-    7. **Worktree clean-up** (eleven worktrees) once the user has merged what they want.
+    5. **Pre-existing dirt** in `four43-lion-hawk` (`site/exp/piggie-game/*` modified, from Task 1 step 6) and the untracked files in the main four43 checkout. Both were left alone.
+    6. **Worktree clean-up** (eleven worktrees) once the user has merged what they want.
   - **Parked:** the review's Minor findings and each plan's parked items.
 - [ ] **Step 3: Commit and publish** `docs: phase 3 complete; resume page and what needs the user`. Publish by fast-forward (docs only). Hand the page's "Needs the user" list to the controller.
 
@@ -1846,7 +1844,7 @@ git -C /home/smiller/projects/four43/four43-lh3 status --short site
   - no guarded path changed.
 - Engine guard tests pass at 0.11.0: `test/package-phase3.test.mjs` (every row live), `test/purity-phase3.test.mjs`, `test/field-notes.test.mjs`.
 - `docs/field-notes.md` is numbered without gaps from 1, with every phase 3 candidate numbered from #110, and #95, #100, #105–#109, #1, #2, #11 and #67 updated.
-- `CHANGELOG.md` has 0.7.3, 0.8.0, 0.9.0, 0.10.0, each 0.10.x and 0.11.0. `docs/spec.md` has 3a's part B, D1–D9 (or a recorded wait for the user) and the §8.4 note.
+- `CHANGELOG.md` has 0.7.3, 0.8.0, 0.9.0, 0.10.0, each 0.10.x and 0.11.0. `docs/spec.md` has 3a's parts A (D1–D9, approved 2026-10-14) and B, and the §8.4 note.
 - The final review's Critical and Important findings are closed. The hand-off page is committed and relayed. Nothing was pushed or deployed.
 
 ## Notes
@@ -1859,6 +1857,8 @@ The notes file is `docs/plans/2026-10-13-phase-3m-integration-notes.md` (Task 2)
 The integrator numbers its own candidates last, after the game plans' candidates, at Task 21.
 
 ## Contract issues
+
+Rulings (contract-issues "3m integration"): 1–6 all accepted as decided below. User decisions (2026-10-14): D1–D9 approved, so Task 9 writes 3a's part A with part B; execution is subagent-driven in this plan's parallel worktrees, in dependency waves with gated `--ff-only` merges; the reconciliation pass is committed (a `docs(plan)` commit, which Task 1 step 1 accepts) with no review gate before Task 1.
 
 1. **The integrator's four43 worktree and the scratch path are not named in §6.** Decision: `/home/smiller/projects/four43/four43-lh3` on `feat/lion-hawk-3` (same depth, so the link resolves), and `/tmp/claude-1000/lion-hawk-phase3/3m` (per the process note on per-plan scratch dirs).
 2. **Publishing `phase-3` while game worktrees consume it live.** §6 says only the integrator commits on the main checkout. Decision: merges happen on `phase-3-integrate` in a second worktree and reach `phase-3` only by `--ff-only` inside a freeze. A rollback is `reset --keep` to the previous local tag.

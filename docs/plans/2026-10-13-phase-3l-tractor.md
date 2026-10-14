@@ -92,14 +92,14 @@ New files:
 | `baked/` (generated, committed) | `phys.json`, `manifest.json`, `models/*.glb`, `models/*.anim.json` (D2). |
 | `src/sim/ground.js` | Replaces `sim/physics.js`: `GROUPS`, `DT`, `addGround(world, { terrain })` (0.8.0 heightfield / slab; 0.9.0 terrain kit), `rayFilter`. |
 | `src/sim/trains.js` | Part E: remote trains: spawn desc and attach hooks for the TRAIN kind, and `stepRemoteTrains(world)` from replicated input. |
-| `src/view/vehicles.js` | Part D: `sync.on('#tractor'|'#car')` hooks: model axis fix, wheels from the vehicle kit, paint by vertex colour (rainbow kept), away ghost. Replaces `render/vehicles3d.js`, `render/others3d.js`, `view/bodies.js`. |
+| `src/view/vehicles.js` | Part D: `sync.on('#tractor'|'#car')` hooks: model axis fix and the car's second wheel node (view sync draws the wheels from the kit's part poses, 3g Task 13b), the engine's paint through `view.materials.repaint` (3f Task 8b: shading kept, rainbow a hue ramp), away ghost on per-entity materials; `PAINTS`, `RAINBOW`, `PAINT_LOOK`, `paintValues`. Replaces `render/vehicles3d.js`, `render/others3d.js`, `view/bodies.js`. |
 | `src/view/pets.js` | Part D: Cube Pet part meshes from `assets.get(key)` + `sampleAnimTable`; replaces `render/gfx.js`'s `animM`/`sampleAnim`/`PET_ANIMS`. |
 | `src/view/riders.js` | Part E: other players' carried riders from train entity `riders` (slot riders placed in the drawn car; flying riders interpolated view-side, D8 `forecast` not needed). Read-only (#102). |
 | `test/helpers/world.mjs` | `testWorld({ terrain, sandbox })`: a headless World with Tractor's materials and groups, plus `step(pre)`. |
 | `test/helpers/feel.mjs` | The §5.5 feel samples: `courseRun(seed)`, `bumpRun()`. |
 | `test/feel-baseline.json` | Pre-swap feel samples (Task 1), then the post-swap rows appended by Tasks 10 and 12. |
 | `test/fixtures/assets-counts.json` | Per model, per part vertex and index counts read once from today's `src/assets.json` (Task 3), so the parity test outlives `assets.json`. |
-| `test/materials.test.mjs`, `test/bake.test.mjs`, `test/parity.test.mjs`, `test/build.hooks.test.mjs`, `test/ground.test.mjs`, `test/mass.test.mjs`, `test/split.test.mjs`, `test/checks.test.mjs`, `test/surface.test.mjs`, `test/kits.test.mjs`, `test/view.purity.test.mjs`, `test/view.sync.test.mjs`, `test/net.kinds.test.mjs`, `test/net.driven.test.mjs`, `test/net.bump.test.mjs`, `test/perf.browser.mjs`, `test/net.peers.browser.mjs` | New tests (one file each, named per task). |
+| `test/materials.test.mjs`, `test/bake.test.mjs`, `test/parity.test.mjs`, `test/build.hooks.test.mjs`, `test/ground.test.mjs`, `test/mass.test.mjs`, `test/split.test.mjs`, `test/checks.test.mjs`, `test/surface.test.mjs`, `test/kits.test.mjs`, `test/view.purity.test.mjs`, `test/view.rig.test.mjs`, `test/view.sync.test.mjs`, `test/net.kinds.test.mjs`, `test/net.driven.test.mjs`, `test/net.bump.test.mjs`, `test/perf.browser.mjs`, `test/net.peers.browser.mjs` | New tests (one file each, named per task). |
 
 Modified files (kept, rewritten in part):
 
@@ -107,15 +107,15 @@ Modified files (kept, rewritten in part):
 |---|---|
 | `package.json` | scripts `bake`, `build`, `dev`, `test:e2e` on the CLI; version 1.9.0 (Task 29); drops `pngjs`/`@gltf-transform/*` only if `models.mjs` no longer needs them (it does: they stay). |
 | `pwa/sw.js` | `__PRECACHE__` replaces the literal list. |
-| `template.html` | unchanged markup; keeps `<!--VOICE-->` and `<!--APP-->`. |
+| `template.html` | one markup change (Task 4): `<script><!--APP--></script>` becomes a bare `<!--APP-->` (3d's build writes the inline `<script type="module">` there and fails on a marker inside a `<script>`); keeps `<script><!--VOICE--></script>` (the game's own hook marker). |
 | `src/game.sim.js` | `physics`, `defs`, `net.world`, `reset()`; timer through `createEngine`'s option. |
 | `src/game/farm.js` | scene builds through `ctx.world`; `world.clear()` on rebuild; pre/post split; post system. |
 | `src/sim/game.js`, `tractor.js`, `hitch.js`, `trees.js`, `scenery.js`, `sandbox.js`, `dirt.js`, `road.js`, `terrain.js`, `bump.js`, `herd.js` (Part E: entity per animal), `tune.js` (defaults + reset) | onto the World, registry and kits. |
 | `src/net/kinds.js`, `bindings.js`, `protocol.js`, `host.js`, `guest.js`, `players.js`, `game/net.js` | Part E. |
-| `src/game.view.js`, `src/main.js`, `src/view/world.js`, `src/view/rig.js`, `src/view/hud.js`, `src/render/farm3d.js`, `animals3d.js`, `fx.js`, `gibs.js`, `camera.js`, `textures.js`, `hornMarks.js`, `src/ui/icons.js`, `src/ui/stickerArt.js`, `src/ui/debug.js`, `src/audio/sound.js`, `src/audio/voice.js` | Part D. |
+| `src/game.view.js`, `src/main.js`, `src/view/world.js`, `src/view/rig.js` (Task 14: a thin wrapper over the engine's `createChaseRig`, CI-10), `src/view/hud.js`, `src/render/farm3d.js`, `animals3d.js`, `fx.js` (on the fx kit's `createParticles`/`createMarks`), `gibs.js`, `textures.js`, `hornMarks.js`, `src/ui/icons.js`, `src/ui/stickerArt.js`, `src/ui/debug.js`, `src/audio/sound.js`, `src/audio/voice.js` | Part D. |
 | `test/*.test.mjs` that build a physics world (`tractor`, `hitch`, `pilot`, `bump`, `trees`, `yard`, `terrain`, `sandbox`, `game`, `dirt`, `golden`, `golden-farm`, `tape`, `tune`, `mp.*`, `assets`, `purity`, `serve.mjs`, `e2e.browser.mjs`) | moved onto the helpers; `assets.test.mjs` reads the baked GLBs. |
 
-Deleted: `bake.mjs`, `build.py`, `src/assets.json`, `src/net/bindings.js` (Task 22), `src/sim/physics.js`, `src/render/gfx.js`, `src/render/warm.js`, `src/render/matSplit.js`, `src/render/shadows.js`, `src/render/dispose.js`, `src/render/scene.js`, `src/render/dirtMat.js` (unless Task 16's gold fallback keeps it, see there), `src/render/vehicles3d.js`, `src/render/others3d.js`, `src/view/bodies.js`, `test/mp.harness.mjs`'s old-world half and the `TP_MP` switch (Task 22), `test/matSplit.test.mjs`, `test/shadows.test.mjs`, `test/warm.test.mjs`. `models.mjs` and `tools/glb.mjs` stay as authoring tools (overview §5.4).
+Deleted: `bake.mjs`, `build.py`, `src/assets.json`, `src/net/bindings.js` (Task 22), `src/sim/physics.js`, `src/render/gfx.js`, `src/render/warm.js`, `src/render/matSplit.js`, `src/render/shadows.js`, `src/render/dispose.js`, `src/render/scene.js`, `src/render/dirtMat.js` (unless Task 16's gold fallback keeps it, see there), `src/render/vehicles3d.js`, `src/render/others3d.js`, `src/render/camera.js` (Task 14, CI-10: the engine's chase rig), `src/view/bodies.js`, `test/mp.harness.mjs`'s old-world half and the `TP_MP` switch (Task 22), `test/matSplit.test.mjs`, `test/shadows.test.mjs`, `test/warm.test.mjs`. `models.mjs` and `tools/glb.mjs` stay as authoring tools (overview §5.4).
 
 ---
 
@@ -445,9 +445,9 @@ Expected: `baked/phys.json`, `baked/manifest.json`, 40 `.glb`, 8 `.anim.json`. A
 
 ### Task 4: Build with `lion-hawk build`: audio hooks, the precache list, the e2e server
 
-**Files:** create `build.hooks.js`, `test/build.hooks.test.mjs`; modify `pwa/sw.js`, `package.json` (scripts), `test/serve.mjs`, `README.md` (build lines); delete `build.py`.
+**Files:** create `build.hooks.js`, `test/build.hooks.test.mjs`; modify `template.html` (the `<!--APP-->` marker only), `pwa/sw.js`, `package.json` (scripts), `test/serve.mjs`, `README.md` (build lines); delete `build.py`.
 
-**Interfaces:** Consumes the CLI build (§4.3: `hooks.beforePage(ctx)`, `hooks.page(html, ctx) → html`, `__PRECACHE__`, `__VERSION__`) and the programmatic `build` from `lion-hawk/build` (contract issue CI-7: assumed `build({ game, out, e2e }) → Promise<{ report }>`). Produces `collectAudio({ root, ffmpeg, log }) → { voice, animals }`, `audioScript({ voice, animals }) → string`, `beforePage`, `page`.
+**Interfaces:** Consumes the CLI build (§4.3: `hooks.beforePage(ctx)`, `hooks.page(html, ctx) → html`, `__PRECACHE__`, `__VERSION__`) and the programmatic `build({ game, out, env, site, mode, e2e, entry, log }) → Promise<{ out, version, hash, files, sizes }>` from `lion-hawk/build` (3d Task 13; CI-7 settled: there is no `report` member, the size report goes to `log`; hooks get `ctx = { config, game, out, e2e, version, engine, log }`). The template's `<!--APP-->` is bare: 3d writes an inline `<script type="module">` there and fails the build on a marker inside a `<script>`. Produces `collectAudio({ root, ffmpeg, log }) → { voice, animals }`, `audioScript({ voice, animals }) → string`, `beforePage`, `page`.
 
 - [ ] **Step 1: Failing test** `test/build.hooks.test.mjs`:
 
@@ -458,7 +458,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { collectAudio, audioScript, page } from '../build.hooks.js';
+import { collectAudio, audioScript, beforePage, page } from '../build.hooks.js';
 
 const tree = () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-hooks-'));
@@ -486,6 +486,14 @@ test('audioScript is JSON (a clip can never close the script tag)', () => {
 test('sw.js takes the precache list and the version from the build', () => {
   const sw = fs.readFileSync(new URL('../pwa/sw.js', import.meta.url), 'utf8');
   assert.match(sw, /const PRECACHE = __PRECACHE__;/); assert.match(sw, /'tractor-pickup-__VERSION__'/);
+});
+test('the template has one bare <!--APP--> (3d writes the module script; a marker inside <script> fails the build)', () => {
+  const html = fs.readFileSync(new URL('../template.html', import.meta.url), 'utf8');
+  assert.equal(html.split('<!--APP-->').length, 2); assert.doesNotMatch(html, /<script\b[^>]*>\s*<!--APP-->/i);
+});
+test('an e2e build embeds no clips (ctx.e2e: speech and the synth fill in, no ffmpeg)', () => {
+  beforePage({ e2e: true, log: () => {} });
+  assert.equal(page('<script><!--VOICE--></script>', {}), '<script>window.__VOICE__={};window.__ANIMALS__={};</script>');
 });
 ```
 
@@ -526,15 +534,15 @@ export function collectAudio({ root = HERE, ffmpeg = hasFfmpeg(), log = console.
 }
 export const audioScript = ({ voice, animals }) => 'window.__VOICE__=' + JSON.stringify(voice) + ';window.__ANIMALS__=' + JSON.stringify(animals) + ';';
 let audio = null;
-export function beforePage() { audio = collectAudio(); }
+export function beforePage(ctx = {}) { audio = ctx.e2e ? null : collectAudio({ log: ctx.log ?? console.log }); } // 3d: --e2e sets ctx.e2e (no clips, no ffmpeg)
 export function page(html) {
   if (!html.includes('<!--VOICE-->')) throw new Error('build.hooks: the template has no <!--VOICE--> marker');
   return html.replace('<!--VOICE-->', () => audioScript(audio ?? { voice: {}, animals: {} }));
 }
 ```
-(`page()` without `beforePage()` embeds empty tables, which is what the tests and the e2e build want; the CLI always calls `beforePage` first.)
+(`page()` without clips embeds empty tables, which is what the tests and the e2e build want; the CLI always awaits `beforePage(ctx)` first.)
 
-- [ ] **Step 4: Precache list.** In `pwa/sw.js` replace the PRECACHE line with `const PRECACHE = __PRECACHE__; // lion-hawk build stamps the list: ./, the manifest, the icons and every assets/models file (D1)` and the header comment's first sentence with `// Offline support: the page, its model files (assets/models, D1), the icons and the Google Font.`
+- [ ] **Step 4: Template marker and precache list.** In `template.html` replace `<script><!--APP--></script>` with a bare `<!--APP-->` (3d's `fillTemplate` writes `<script type="module">…</script>` there; today's wrapped marker fails the build with "<!--APP--> sits inside a <script>"). Nothing else in the markup changes: the bundle becomes a module script, which runs after parsing, so the `<!--VOICE-->` script before it still sets `window.__VOICE__` first, and the service-worker line registers on `load` as before. In `pwa/sw.js` replace the PRECACHE line with `const PRECACHE = __PRECACHE__; // lion-hawk build stamps the list: ./, the manifest, the icons and every assets/models file (D1)` and the header comment's first sentence with `// Offline support: the page, its model files (assets/models, D1), the icons and the Google Font.`
 
 - [ ] **Step 5: Run** `UNIT test/build.hooks.test.mjs`. Expected: PASS.
 
@@ -577,7 +585,7 @@ This also closes the G7 minor "`serveTractor({ entry })` keeps an option only th
 
 - [ ] **Step 9: Retire build.py.** `git rm build.py`; `package.json` scripts: `"build": "lion-hawk build"`, `"dev": "lion-hawk dev"`, keep `"test"` and `"test:e2e"`; README: replace the `python3 build.py` lines with `npm run build -- --out <dir>` (or `TRACTOR_OUT=<dir> npm run build`) and `npm run bake`.
 
-- [ ] **Step 10: Commit** `git add build.hooks.js test/build.hooks.test.mjs pwa/sw.js test/serve.mjs test/e2e.browser.mjs package.json README.md docs/lh3-baseline.md && git commit -m "build(tractor): lion-hawk build with audio hooks and a precache list; build.py retired (D1, B-2)"`
+- [ ] **Step 10: Commit** `git add build.hooks.js test/build.hooks.test.mjs template.html pwa/sw.js test/serve.mjs test/e2e.browser.mjs package.json README.md docs/lh3-baseline.md && git commit -m "build(tractor): lion-hawk build with audio hooks and a precache list; build.py retired (D1, B-2)"`
 
 ---
 
@@ -678,7 +686,7 @@ export function testWorld() {
 }
 ```
 
-- [ ] **Step 4: Run** `UNIT test/ground.test.mjs`. Expected: PASS. If `world.heightfield` rejects `fixInternalEdges` (it is named for `heightfieldDesc` in §4.5 but not in `world.heightfield`'s argument list), drop the key and write "Contract issue CI-11" into the notes; the flag matters for wheel rays crossing triangle edges, so Task 12's kit must set it.
+- [ ] **Step 4: Run** `UNIT test/ground.test.mjs`. Expected: PASS. (`world.heightfield` forwards `fixInternalEdges` to `heightfieldDesc`: 3c, CI-11 settled. The flag matters for wheel rays crossing triangle edges, so Task 12's kit call sets it too.)
 
 - [ ] **Step 5: Prove the transpose test red.** Temporarily make `rowMajor` return `new Float32Array(heights)`; run `UNIT test/ground.test.mjs`; expected FAIL in "ray casts land on terrain.height…" with a hit/height mismatch over 1 m; restore.
 
@@ -957,7 +965,7 @@ const NONE = [];
 
 ### Task 8 (judgment): `createGame` on the scene's World, split into `pre` and `post`
 
-**Decision expected:** the physics step leaves `game.step` and becomes the engine's `lh.physics.step` (stage `physics.world`). `game.step(input)` splits at the old `phys.step()` line: `game.pre(input)` (horn, aim help, tractor, train, trees) runs in the farm scene's `step` hook; `game.post() → events` (herd, boops, dodges, flights, riders, barn pass, stop, dirt) runs in a farm scene system at stage `post`, followed by today's bridge, `sync.after`, sounds, bedtime and flow. A `stepped` flag set by `pre` and cleared by `post` makes `post` run once per stepped `pre` and never during a load (#90: systems keep running while a scene loads). Cost: two halves to keep in step; covered by `test/split.test.mjs`. The rejected alternative, calling `world.rapier.step()` inside `game.step`, would bypass the pool swap/read, the timer (#106) and the event drain.
+**Decision expected:** the physics step leaves `game.step` and becomes the engine's `lh.physics.step` (stage `physics.world`). `game.step(input)` splits at the old `phys.step()` line: `game.pre(input)` (horn, aim help, tractor, train, trees) runs in the farm scene's `step` hook; `game.post() → events` (herd, boops, dodges, flights, riders, barn pass, stop, dirt) runs in a farm scene system at stage `post`, followed by today's bridge, `sync.after`, sounds, bedtime and flow. A `stepped` flag set by `pre` and cleared by `post` makes `post` run once per stepped `pre` and never during a load (#90: `post`-stage systems keep running while a scene loads). `lh.physics.step` itself does not run during a load (3c, S-3; CI-16 settled): Rapier, the pool read and the contact events skip, so the old farm's bodies hold still for the load's frames, as in 1.8; nothing in Tractor relies on a step during a load. Cost: two halves to keep in step; covered by `test/split.test.mjs`. The rejected alternative, calling `world.rapier.step()` inside `game.step`, would bypass the pool swap/read, the timer (#106) and the event drain.
 
 **Files:** modify `src/sim/game.js`, `src/game/farm.js`, `src/game.sim.js`, `src/game.view.js` (the `?fps` Rapier line only), `src/main.js` (the `timer` moves to `boot`'s options); delete `src/sim/physics.js`; create `test/split.test.mjs`.
 
@@ -992,7 +1000,9 @@ test('the Rapier step happens between the halves: the body moves between pre and
 test('a load suspends both halves; the new farm steps both again', () => {
   const h = headless(tractorGame(), { args: { ...ARGS, seed: 15 } }); h.step(1); const log = spy(h);
   h.command('farm.new', {}); h.step(1); assert.equal(h.engine.loading.active, true);
+  const t = h.engine.scene.state.game.tractor.e, y = t.xf.p.y; // CI-16 (3c): Rapier does not step while the scene loads (one step in, the tractor is still settling onto the ground, so a step would move it)
   const before = log.length; h.step(1); assert.equal(log.length, before, 'no half ran during the load');
+  assert.equal(t.xf.p.y, y, 'no physics step during the load');
   h.untilLoaded(); const g2 = h.engine.scene.state.game; let n = 0; const P = g2.post; g2.post = () => (n++, P.call(g2));
   h.step(2); assert.equal(n, 2);
 });
@@ -1304,7 +1314,7 @@ test('the soft bump keeps its outcome (until Part E makes trains solid)', { time
 
 **Files:** modify `src/sim/ground.js`, `src/sim/game.js`, `test/ground.test.mjs`; create `test/kits.test.mjs`.
 
-**Interfaces:** Consumes `createTerrain(world, { nx, nz, cell, x0, z0, heights, materials })` from `lion-hawk/kits/terrain` (§4.10), imported as `terrainKit`. Produces `addGround(world, { terrain, materialAt }) → kit | e` (the kit object for the farm, the slab entity for the sandbox), `game.ground` (the kit), and the tractor's `materialAt` = `game.ground.materialAt`.
+**Interfaces:** Consumes `createTerrain(world, { nx, nz, cell, x0, z0, heights, materials, material, groups, fixInternalEdges })` → `{ entity, grid, heightAt, normalAt, materialAt, blendAt }` from `lion-hawk/kits/terrain` (3h Task 1; `materials` is a `Uint8Array` of registry indices per height sample or a function `(x, z) => id`; `material` is the heightfield collider's; CI-11 settled), imported as `terrainKit`. Produces `addGround(world, { terrain, materialAt }) → kit | e` (the kit object for the farm, the slab entity for the sandbox), `game.ground` (the kit), and the tractor's `materialAt` = `game.ground.materialAt`.
 
 - [ ] **Step 1: Failing test** `test/kits.test.mjs`:
 
@@ -1335,12 +1345,13 @@ test('the kit ground: heightAt equals terrain.height on grid points, materialAt 
 ```js
   if (terrain) { // the terrain kit (M-10): the heightfield (groups: ground) and materialAt over the road's surfaces
     const { n, size, step } = terrain.grid;
-    return terrainKit(world, { nx: n, nz: n, cell: step, x0: -size / 2, z0: -size / 2, heights: rowMajor(terrain.grid), materials: materialAt });
+    return terrainKit(world, { nx: n, nz: n, cell: step, x0: -size / 2, z0: -size / 2, heights: rowMajor(terrain.grid), materials: materialAt,
+      material: 'ground', groups: { member: ['ground'] }, fixInternalEdges: true }); // Task 5's collider exactly (CI-11, settled by 3c/3h)
   }
 ```
 with the signature `addGround(world, { terrain = null, materialAt = null } = {})`. In `game.js`: `const ground = addGround(world, { terrain, materialAt: road.materialAt });`, add `ground` to the `game` object, and `createTractor(world, { …, materialAt: ground.materialAt })`. `test/ground.test.mjs`'s heightfield test now passes `{ terrain: T, materialAt: () => 'route' }`.
 
-- [ ] **Step 4: Run** `UNIT test/kits.test.mjs test/ground.test.mjs test/golden.test.mjs`. Expected: PASS, goldens unchanged (the kit makes the same heightfield). If the goldens move, compare the kit's heightfield collider (friction: the kit's collider material must be `ground`, 0.6; flags: `FIX_INTERNAL_EDGES`) with Task 5's; a kit default that differs is CI-11 (the kit needs `material` and `fixInternalEdges` options): request it, and keep `world.heightfield` plus a game `materialAt` until it lands.
+- [ ] **Step 4: Run** `UNIT test/kits.test.mjs test/ground.test.mjs test/golden.test.mjs`. Expected: PASS, goldens unchanged (the kit makes the same heightfield). If the goldens move, compare the kit's heightfield collider (material `ground`, friction 0.6; `FIX_INTERNAL_EDGES`; groups) with Task 5's: any difference is a wrong option in the call above, not a missing kit feature (CI-11 is settled).
 
 - [ ] **Step 5: Commit** `git add -A src test && git commit -m "feat(tractor): farm ground on the terrain kit (heightfield and materialAt)"`
 
@@ -1350,15 +1361,17 @@ with the signature `addGround(world, { terrain = null, materialAt = null } = {})
 
 **Files:** modify `src/sim/tractor.js`, `src/sim/hitch.js`, `test/tractor.test.mjs`, `test/hitch.test.mjs` (wheel reads), `test/goldens/*.json` (re-bless), `test/feel-baseline.json`.
 
-**Interfaces:** Consumes `createVehicle(world, e, { wheels, rayGroups, terrain })` → `{ controller, wheels, set(i, o) }` (§4.10). Produces `t.car` / `c.car` (the kit vehicle); `t.vc` / `c.vc` stay as aliases of `car.controller` for read-only wheel queries (view, `sounds`, tests).
+**Interfaces:** Consumes `createVehicle(world, e, { wheels: [{ at, radius, front, part, suspension: { rest, stiffness, compression, relaxation, travel, maxForce } }], rayGroups: { member, filter }, forward: 'x' })` → `{ controller, entity, removed, wheels, set(i, { steer, engine, brake, slip, side }), update }` and `VEHICLE_SYSTEM = 'lh.kit.vehicle'` (stage `physics.world`, `before: ['lh.physics.step']`) from `lion-hawk/kits/vehicle` (3h Task 4 stable names). `forward: 'x'` is the kit's default and Rapier's (axle +z), which today's raw controllers use; `grip` stays `false` (bit-exact slip and side) and `tyre` unused. Produces `t.car` / `c.car` (the kit vehicle); `t.vc` / `c.vc` stay as aliases of `car.controller` for read-only wheel queries (`sounds`, tests).
+
+**Wheel part poses (3h Task 6b on 3c Task 10b's `partXf`; 3g Task 13b draws them; user ruling 2026-10-14).** Each kit wheel names its GLB node in `part`: the tractor's `TRACTOR_WHEELS[i].name` (`wheel-front-left` … `wheel-back-right`, the baked node names), each car's `CAR_WHEELS = ['wheel-left', 'wheel-right']` (side −1, +1; exported from `hitch.js`; `trailer.glb` has one `wheel` node, which Task 16's car hook clones and names). The kit adds the names to `e.partXf` and writes `e.partXf[part] = { p, q }` every step in the chassis frame: `p` = `at` moved `suspension` down (vehicles3d's `T(cx, cy + 0.12 − susp, cz)`, and `T(axleX, −susp, side · track)` for a car), `q` = `Ry(steer) · Rz(−rotation)` (`forward: 'x'`, axle +z). Part poses are view data: not in `world.digest()`, so they move no golden. Produces `CAR_WHEELS` (`hitch.js`).
 
 - [ ] **Step 1: Failing test** (append to `test/kits.test.mjs`):
 
 ```js
 import { testWorld } from './helpers/world.mjs';
 import { addGround, DT } from '../src/sim/ground.js';
-import { createTractor, TP } from '../src/sim/tractor.js';
-import { createTrain } from '../src/sim/hitch.js';
+import { createTractor, TP, TRACTOR_WHEELS } from '../src/sim/tractor.js';
+import { createTrain, TR, CAR_WHEELS } from '../src/sim/hitch.js';
 test('the train runs on the vehicle kit: wheels touch the ground, the controller is the kit\'s, tuning is read live', () => {
   const { world, step } = testWorld(); addGround(world);
   const t = createTractor(world, { x: 0, z: 0, yaw: 0 }), tr = createTrain(world, t);
@@ -1369,6 +1382,19 @@ test('the train runs on the vehicle kit: wheels touch the ground, the controller
   try { step(1, () => { t.setInput(1, 0); t.step(DT); tr.step(DT, { parked: false }); }); assert.ok(Math.abs(t.vc.wheelFrictionSlip(0) - TP.slip * 1) < 1e-9); }
   finally { TP.slip = slip; }
 });
+test('each kit wheel names its GLB node: the kit writes e.partXf at vehicles3d\'s hub, rolled about the axle', () => {
+  const { world, step } = testWorld(); addGround(world);
+  const t = createTractor(world, { x: 0, z: 0, yaw: 0 }), tr = createTrain(world, t), near = (a, b, m) => assert.ok(Math.abs(a - b) < 1e-9, `${m}: ${a} vs ${b}`);
+  step(120, () => { t.setInput(1, 0); t.step(DT); tr.step(DT, { parked: false }); });
+  assert.deepEqual(Object.keys(t.e.partXf), TRACTOR_WHEELS.map(w => w.name), 'the tractor wheels name their GLB nodes');
+  TRACTOR_WHEELS.forEach((w, i) => { const P = t.e.partXf[w.name]; // vehicles3d: T(cx, cy + 0.12 - susp, cz)
+    near(P.p.x, w.cx, w.name); near(P.p.y, w.cy + 0.12 - t.car.wheels[i].suspension, w.name); near(P.p.z, w.cz, w.name); });
+  const q = t.e.partXf['wheel-back-left'].q, a = -t.vc.wheelRotation(2); // a rear wheel: no steer, Rz(-rot)
+  assert.ok(Math.abs(a) > 0.5, 'the rear wheels rolled'); near(q.x, 0, 'rear q.x'); near(q.y, 0, 'rear q.y'); near(q.z, Math.sin(a / 2), 'rear q.z'); near(q.w, Math.cos(a / 2), 'rear q.w');
+  for (const c of tr.cars) { assert.deepEqual(Object.keys(c.e.partXf), CAR_WHEELS, `car ${c.index}`);
+    CAR_WHEELS.forEach((n, i) => { const P = c.e.partXf[n]; // vehicles3d: T(axleX, -susp, side · track)
+      near(P.p.x, TR.axleX, n); near(P.p.y, -c.car.wheels[i].suspension, n); near(P.p.z, (i ? 1 : -1) * TR.track, n); }); }
+});
 ```
 
 - [ ] **Step 2: Run** `UNIT test/kits.test.mjs`. Expected: FAIL, `t.car` undefined.
@@ -1377,8 +1403,8 @@ test('the train runs on the vehicle kit: wheels touch the ground, the controller
 
 ```js
   const W = TRACTOR_WHEELS.map(w => ({ ...w }));
-  const car = createVehicle(world, e, { rayGroups: { member: [...GROUPS], filter: ['ground', 'static'] },
-    wheels: W.map(w => ({ at: [w.cx, w.cy + 0.12, w.cz], radius: w.radius, front: w.front,
+  const car = createVehicle(world, e, { forward: 'x', rayGroups: { member: [...GROUPS], filter: ['ground', 'static'] },
+    wheels: W.map(w => ({ at: [w.cx, w.cy + 0.12, w.cz], radius: w.radius, front: w.front, part: w.name, // the baked node: the kit writes its pose
       suspension: { rest: TP.suspRest, stiffness: TP.stiffness, compression: TP.compression, relaxation: TP.relaxation, travel: TP.travel, maxForce: 1e6 } })) });
   const vc = car.controller;
 ```
@@ -1393,13 +1419,13 @@ test('the train runs on the vehicle kit: wheels touch the ground, the controller
       }
       // the kit runs updateVehicle before lh.physics.step (3l Task 13): the impulses below act on this step's velocities, before the wheels
 ```
-with `const wheelSet = { steer: 0, engine: 0, brake: 0, slip: 0, side: 0 };` made once per tractor (no allocation per step). The object gains `car,`. `hitch.js` likewise: per car `const car = createVehicle(world, e, { rayGroups: { member: [...GROUPS], filter: ['ground', 'static'] }, wheels: [-1, 1].map(side => ({ at: [TR.axleX, 0, side * TR.track], radius: TR.wheelR, front: false, suspension: { rest: TR.suspRest, stiffness: 22, compression: 2.2, relaxation: 2.8, travel: 0.4, maxForce: 1e5 } })) }), vc = car.controller;` and in `createTrain.step` replace `for (let i = 0; i < 2; i++) c.vc.setWheelBrake(i, parked ? 20 : 0.2); c.vc.updateVehicle(dt, undefined, rayGroups);` with `for (let i = 0; i < 2; i++) { carSet.brake = parked ? 20 : 0.2; carSet.slip = 2.5; carSet.side = 1.2; c.car.set(i, carSet); }` (`const carSet = { steer: 0, engine: 0, brake: 0, slip: 2.5, side: 1.2 };` once per train). Cars return `{ e, body, vc, car, … }`.
+with `const wheelSet = { steer: 0, engine: 0, brake: 0, slip: 0, side: 0 };` made once per tractor (no allocation per step). The object gains `car,`. `hitch.js` likewise (with `export const CAR_WHEELS = ['wheel-left', 'wheel-right']; // the kit's wheel parts, side -1 then +1 (Task 16's car hook names the nodes)`): per car `const car = createVehicle(world, e, { forward: 'x', rayGroups: { member: [...GROUPS], filter: ['ground', 'static'] }, wheels: [-1, 1].map((side, k) => ({ at: [TR.axleX, 0, side * TR.track], radius: TR.wheelR, front: false, part: CAR_WHEELS[k], suspension: { rest: TR.suspRest, stiffness: 22, compression: 2.2, relaxation: 2.8, travel: 0.4, maxForce: 1e5 } })) }), vc = car.controller;` and in `createTrain.step` replace `for (let i = 0; i < 2; i++) c.vc.setWheelBrake(i, parked ? 20 : 0.2); c.vc.updateVehicle(dt, undefined, rayGroups);` with `for (let i = 0; i < 2; i++) { carSet.brake = parked ? 20 : 0.2; carSet.slip = 2.5; carSet.side = 1.2; c.car.set(i, carSet); }` (`const carSet = { steer: 0, engine: 0, brake: 0, slip: 2.5, side: 1.2 };` once per train). Cars return `{ e, body, vc, car, … }`.
 
 - [ ] **Step 4: Run** `UNIT test/kits.test.mjs test/tractor.test.mjs test/hitch.test.mjs test/pilot.test.mjs test/mass.test.mjs`. Expected: PASS (behaviour thresholds unchanged; one that fails is a feel change: stop and report).
 
 - [ ] **Step 5: Feel and re-bless 2.** `UNIT test/feel.test.mjs test/checks.test.mjs` (PASS required; outside tolerance: stop and report, §5.5-4). Then `LH_BLESS=1 UNIT test/golden.test.mjs`; append the feel row "post vehicle kit (Task 13)"; notes "Re-bless 2 (vehicle kit order)" with the metric table and CI-6.
 
-- [ ] **Step 6: Prove the live-tuning check.** Temporarily copy `TP.slip` into a const at the top of `createTractor` and use the const in `step`; run `UNIT test/kits.test.mjs`; expected FAIL; restore.
+- [ ] **Step 6: Prove the live-tuning check.** Temporarily copy `TP.slip` into a const at the top of `createTractor` and use the const in `step`; run `UNIT test/kits.test.mjs`; expected FAIL; restore. Then drop `part: w.name` from the tractor's wheels: expected FAIL "the tractor wheels name their GLB nodes"; restore. Part poses are not in the digest: if adding `part` moves a golden, stop and report it against 3c Task 10b.
 
 - [ ] **Step 7: Run** `UNIT test/` (all PASS) and **commit** `git add -A src test && git commit -m "feat(tractor): tractor and trailers on the vehicle kit; re-bless 2 (wheel update order)"`
 
@@ -1408,11 +1434,11 @@ with `const wheelSet = { steer: 0, engine: 0, brake: 0, slip: 0, side: 0 };` mad
 **Decision expected:** the tractor's and the cars' dirt moves onto `coverageKit` (3h): dirt is `e.coverage.dirt`, gained as the ground material's `dirtRate` × metres moved (spec §3.2), cleaned by `washes` at `1 / washTime`. Today's dirt is per second, times the speed fraction `speed / P.vmax` on gravel and grass, and a flat 0.6/s in mud even standing still. The per-metre rates are chosen to equal today's build-up at normal driving speed, Medium power (`vmax` 9 m/s; most play is on Medium):
 - `route`: 0.006 / 9 per metre and `meadow`: 0.004 / 9 per metre. These are **exact** at every speed up to Medium's top speed, because today's rate is linear in speed there; Low power now dirties 1.5× faster and High 0.75× as fast as before;
 - `mudhole`: 0.6 / 4.5 per metre (mud's top speed on Medium is 9 × 0.5 = 4.5 m/s): equal at mud top speed; slower in mud dirties less, and a tractor standing in mud no longer gets dirtier.
-The yard wash cleans 3× as fast as a sprinkler today (`WASH_RATE`); the kit has one `washTime`, so the game adds the extra 2× for the yard wash in `post()` (which runs after the kit). Riders' splash dirt (`stepRiderDirt`) stays game-side (animals are not pose entities). These go into the playtest list: dirt on Low/High power, standing in mud, the look of a muddy run.
+The yard wash cleans 3× as fast as a sprinkler today (`WASH_RATE`). The kit has one `washTime`; under the user ruling of 2026-10-14 (games move fully onto the engine) the game does not add the extra cleaning itself: Integrator request 5 asks 3h for a per-wash time (`washes: [fn | { at: fn, washTime }]`), and this task's kit call uses it. If the patch has not landed when the task starts, stop here and resume on it. Riders' splash dirt (`stepRiderDirt`) stays game-side (animals are not pose entities). These go into the playtest list: dirt on Low/High power, standing in mud, the look of a muddy run.
 
 **Files:** modify `src/defs/materials.js` (surfaces get `dirtRate`; the game blocks drop `dirt`/`scaled`), `src/sim/tractor.js`, `src/sim/hitch.js` (entities get `coverage: { dirt: 0 }`; `game.dirt.tractor` and `car.dirt` become accessors onto it), `src/sim/game.js` (the dirt block shrinks to the riders, the yard-wash extra and the `washed`/`mud-enter` events), `src/game/farm.js` (installs the kit for the farm scene), `src/sim/dirt.js`, `test/materials.test.mjs`, `test/surface.test.mjs`, `test/dirt.test.mjs`.
 
-**Interfaces:** Consumes `coverageKit(ctx, { materialAt, washes, washTime, layer })`, `COVERAGE_SYSTEM` (`lion-hawk/kits/coverage`). Produces `DIRT_RATES` (exported from `src/defs/materials.js` for the tests), `game.dirt.tractor` (get/set onto `tractor.e.coverage.dirt`), `car.dirt` (get/set onto `car.e.coverage.dirt`); `stepDirt` is deleted; `stepRiderDirt`, `DIRT = { splash, washTime }` and `WASH_RATE` stay.
+**Interfaces:** Consumes `coverageKit(engineOrCtx, { materialAt, washes, washTime, layer }) → { off }` and `COVERAGE_SYSTEM = 'lh.kit.coverage'` (`lion-hawk/kits/coverage`, 3h Task 7 and C5): `dirtRate` × metres moved (prev → curr pool pose) on `layer(groundId)`, scaled by what the entity's own material accepts (`coverageMaterial`, else its first collider's; a material with no `coverage` block accepts everything, which is Tractor's case: its chassis and car materials have none). A ctx scopes the kit to the farm scene. `dirtRate` is not in the registry hash (3b), so `baked/phys.json` does not change. Produces `DIRT_RATES` (exported from `src/defs/materials.js` for the tests), `game.dirt.tractor` (get/set onto `tractor.e.coverage.dirt`), `car.dirt` (get/set onto `car.e.coverage.dirt`); `stepDirt` is deleted; `stepRiderDirt`, `DIRT = { splash, washTime }` and `WASH_RATE` stay.
 
 - [ ] **Step 1: Failing test** (append to `test/dirt.test.mjs`):
 
@@ -1443,14 +1469,13 @@ test('a Medium drive on the route dirties the tractor as the old per-second rule
   - `game.js`: `game.dirt` becomes `{ get tractor() { return tractor.e.coverage.dirt; }, set tractor(v) { tractor.e.coverage.dirt = v; } }`. In `post()` the dirt block becomes:
 
 ```js
-      // dirt (T-15, T-16): the coverage kit (run before this system) added dirtRate × metres and the sprinkler/wash cleaning; the yard
-      // wash cleans 3× as fast (WASH_RATE): the extra 2× is here. Riders get the splash from a car in mud (game-side).
-      const M = world.materials, yardWash = (x, z) => inWash(farm.yard, x, z), extra = (WASH_RATE - 1) * DT / DIRT.washTime;
+      // dirt (T-15, T-16): the coverage kit (run before this system) added dirtRate × metres and the sprinkler and yard-wash cleaning (the
+      // wash at its own washTime, WASH_RATE × faster). Riders get the splash from a car in mud (animals are not entities: game rule).
+      const M = world.materials, yardWash = (x, z) => inWash(farm.yard, x, z);
       let anyWash = road.inSprinkler(tractor.x, tractor.z) || yardWash(tractor.x, tractor.z);
-      if (yardWash(tractor.x, tractor.z)) game.dirt.tractor = Math.max(0, game.dirt.tractor - extra);
       for (const c of train.cars) {
         const p = c.body.translation(), w = road.inSprinkler(p.x, p.z) ? 1 : yardWash(p.x, p.z) ? WASH_RATE : 0, under = M.get(game.ground.materialAt(p.x, p.z)).game;
-        anyWash ||= w > 0; if (w === WASH_RATE) c.dirt = Math.max(0, c.dirt - extra);
+        anyWash ||= w > 0;
         for (const sl of load.slots) if (sl.car === c.index && sl.landed) sl.animal.dirt = stepRiderDirt(sl.animal.dirt, { carInMud: under.surface === 'mud', speed: tractor.speed, washing: w }, DT);
       }
 ```
@@ -1461,7 +1486,8 @@ test('a Medium drive on the route dirties the tractor as the old per-second rule
 ```js
       coverageKit(ctx, { layer: () => 'dirt', washTime: DIRT.washTime, // one dirt level per thing (T-16); every ground dirties it
         materialAt: (x, z) => ctx.state.game?.ground.materialAt(x, z) ?? 'route',
-        washes: [(x, z) => { const g = ctx.state.game; return !!g && (g.road.inSprinkler(x, z) || inWash(g.farm.yard, x, z)); }] });
+        washes: [(x, z) => !!ctx.state.game?.road.inSprinkler(x, z), // the sprinkler: clean in DIRT.washTime
+          { at: (x, z) => { const g = ctx.state.game; return !!g && inWash(g.farm.yard, x, z); }, washTime: DIRT.washTime / WASH_RATE }] }); // the yard wash: 3× (Integrator request 5)
 ```
   and the post system is registered with `{ stage: 'post', after: [COVERAGE_SYSTEM] }`. The sandbox gets no kit (it never had dirt).
 
@@ -1477,11 +1503,11 @@ test('a Medium drive on the route dirties the tractor as the old per-second rule
 
 **Rule for every task in Part D:** goldens and in-run tapes must not move (overview §5.5: a view-only change that moves a checksum is a bug). Each task ends with `UNIT test/` all green, including `test/golden.test.mjs` without `LH_BLESS`. Two small sim-side edits are part of Part D and are data only: Task 16 gives the tractor and car entities `model`, `scale` and a `car` field (game data, E-4); none of them enters `engine.state()`, a checksum or the World digest (ids, pool, velocities).
 
-### Task 14: `defineView({ render })`, the light rig and night
+### Task 14: `defineView({ render })`, the light rig and night, the chase camera on the engine rig
 
-**Files:** modify `src/game.view.js`, `src/main.js`, `src/ui/show.js` (its `VIEW` import), `src/ui/debug.js` (`createFpsMeter` reads `view.gfx.renderer`); create `src/view/size.js`, `test/view.purity.test.mjs`; delete `src/render/scene.js`.
+**Files:** modify `src/game.view.js`, `src/main.js`, `src/ui/show.js` (its `VIEW` import), `src/ui/debug.js` (`createFpsMeter` reads `view.gfx.renderer`; the camera rows write `CAM` from `view/rig.js`), `src/view/rig.js` (rewritten over `createChaseRig`); create `src/view/size.js`, `test/view.purity.test.mjs`, `test/view.rig.test.mjs`; delete `src/render/scene.js`, `src/render/camera.js`.
 
-**Interfaces:** Consumes `defineView({ scenes, render })`, `boot(game, view, { canvas, timer, … })`, `view.gfx = { renderer, scene, camera, lights, resize, size }`, `lights.follow(x, z)`, `lights.lerp(a, b, k)` (§4.6). Produces `RENDER` (exported from `game.view.js`), `setNight(lights, k)`, `VIEW` (`src/view/size.js`: `{ w, h }`, written by the drive half each frame from `view.gfx.size`).
+**Interfaces:** Consumes `defineView({ scenes, render })`, `boot(game, view, { canvas, timer, … })`, `view.gfx = { renderer, scene, camera, lights, resize, size }`, `lights.follow(x, z)`, `lights.lerp(a, b, k)`, `lights.set(k)` (§4.6; 3e Task 3: options `{ sky, hemiSky, ground, hemi, sun: { color, intensity, map, box, offset, near, far, bias, normalBias }, fog, presets }`, presets `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog }`; a flat `sun: '#…'` or `sunIntensity` throws), `createChaseRig(camera, opts)` → `{ opts, yaw, follow(pose, dt), snap(pose), shake(a), blendFrom(q, time = 1) }` heading style (3g Task 5, CI-10) and `makeProject(camera, canvas)` → `project(p, out?)` with `project.ndc(x, y, z, out?)` (3g Task 4). Produces `RENDER` (exported from `game.view.js`), `setNight(lights, k)`, `rig` and `CAM` (`src/view/rig.js`), `VIEW` (`src/view/size.js`: `{ w, h }`, written by the drive half each frame from `view.gfx.size`).
 
 - [ ] **Step 1: Failing test** `test/view.purity.test.mjs` (Review Focus 5; it guards every later view task):
 
@@ -1509,11 +1535,78 @@ test('no view-side file writes the sim', () => {
 test('the view declares the engine render pipeline', async () => {
   const { RENDER } = await import('../src/game.view.js');
   assert.equal(RENDER.shading, 'standard'); assert.deepEqual(RENDER.dpr, { touch: 1.5, desktop: 2 }); assert.equal(RENDER.camera.fovPortrait, 64);
+  const { createLightRig } = await import('lion-hawk/view'), THREE = await import('three');
+  createLightRig(new THREE.Scene(), RENDER.lights).dispose(); // 3e's names (CI-8): a flat sun colour or sunIntensity throws
+  assert.equal(RENDER.lights.hemiSky, '#eef7ff'); assert.equal(RENDER.lights.presets.night.sun.color, '#9fb4ff');
 });
 ```
 (`game.view.js` imports three at module level; under Node it loads the dev three copy, which is fine.)
 
-- [ ] **Step 2: Run** `UNIT test/view.purity.test.mjs`. Expected: FAIL in "declares the engine render pipeline" (`RENDER` undefined); the first test must already PASS (2g left no view write; if it fails, fix the line it names: that is a #102 regression).
+And the feel-parity test for the chase camera, `test/view.rig.test.mjs` (CI-10: Tractor adopts 3g's rig; its oracle is 1.8's camera, so the feel cannot drift):
+
+```js
+// The chase camera on the engine rig (3l Task 14, CI-10): Tractor's feel frame by frame against 1.8's render/camera.js + view/rig.js
+// (copied below at e03ed71; the shake is left out: 1.8's used Math.random, the engine's is a counter hash). V-1..V-3, X-12, F-10, C-2, M-77.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { rig, CAM } from '../src/view/rig.js';
+
+function oldRig(camera) { // render/camera.js createChaseCam + view/rig.js follow/blendFrom at e03ed71, CAM and LAG inlined
+  const C = { D: 12, H: 10.2, AHEAD: 11, portrait: 1.25 }, tgt = new THREE.Vector3(), pos = new THREE.Vector3(), showQ = new THREE.Quaternion(), chaseQ = new THREE.Quaternion();
+  let yaw = null, blend = 1;
+  return {
+    get yaw() { return yaw; },
+    follow(dt, s) {
+      const want = s.fwd > 2 ? s.velYaw : s.yaw; if (yaw === null) yaw = want;
+      let d = want - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); yaw += d * Math.min(1, dt * 3);
+      const fx = Math.sin(yaw), fz = Math.cos(yaw); tgt.set(s.x + fx * C.AHEAD, s.y + 0.8, s.z + fz * C.AHEAD);
+      const k = camera.aspect < 0.9 ? C.portrait : 1; pos.set(s.x - fx * C.D * k, s.y + C.H * k, s.z - fz * C.D * k);
+      camera.position.lerp(pos, Math.min(1, dt * 6)); camera.lookAt(tgt);
+      if (blend < 1) { blend = Math.min(1, blend + dt); const b = blend * blend * (3 - 2 * blend); chaseQ.copy(camera.quaternion); camera.quaternion.slerpQuaternions(showQ, chaseQ, b); }
+    },
+    blendFrom(q) { showQ.copy(q); blend = 0; },
+  };
+}
+const canvas = { getBoundingClientRect: () => ({ left: 10, top: 20, width: 800, height: 600 }) };
+const same = (a, b, at) => { assert.ok(a.position.distanceTo(b.position) < 1e-9, `position at ${at}`); assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `rotation at ${at}`); };
+
+test('the engine rig is 1.8\'s chase: a new farm, a slide, the show hand-back, landscape and portrait', () => {
+  for (const aspect of [1.6, 0.6]) {
+    const a = new THREE.PerspectiveCamera(60, aspect), b = new THREE.PerspectiveCamera(60, aspect), old = oldRig(b);
+    const s = { x: 3, y: 0, z: -2, yaw: 0.4, fwd: 0, velYaw: 0.4 };
+    rig.attach(a, { canvas, tractor: { yaw: 0.4 } }); rig.snap(s); old.follow(1, s); same(a, b, 'the new farm'); // 1.8: follow(1, pose) on a fresh cam
+    for (let i = 0; i < 300; i++) {
+      s.x += Math.sin(s.yaw) * 0.2; s.z += Math.cos(s.yaw) * 0.2; s.yaw += 0.015; s.fwd = i < 100 ? 1 : 6; s.velYaw = s.yaw + 0.35; s.y = Math.sin(i / 40);
+      if (i === 150) { const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.3, 2, 0)); rig.blendFrom(q); old.blendFrom(q); } // F-10
+      const dt = i % 4 ? 1 / 60 : 1 / 30; rig.follow(s, dt); old.follow(dt, s); same(a, b, `frame ${i}`);
+    }
+    assert.ok(Math.abs(rig.yaw - old.yaw) < 1e-12, 'the stick heading');
+  }
+});
+test('the ?tune camera rows write the shared CAM live, and a new farm keeps them', () => {
+  const c = new THREE.PerspectiveCamera(60, 1.6); rig.attach(c, { canvas, tractor: { yaw: 0 } });
+  assert.deepEqual([CAM.distance, CAM.height, CAM.lookAhead, CAM.portrait, CAM.portraitAspect], [12, 10.2, 11, 1.25, 0.9]); // 1.8's CAM.D, H, AHEAD, portrait
+  const was = CAM.distance; CAM.distance = 16;
+  try { rig.attach(c, { canvas, tractor: { yaw: 0 } }); rig.snap({ x: 0, y: 0, z: 0, yaw: 0 }); assert.ok(Math.abs(c.position.z + 16) < 1e-9); }
+  finally { CAM.distance = was; }
+});
+test('the stick heading is the tractor\'s before the first follow, then the rig\'s (C-2, #81); shake settles', () => {
+  const c = new THREE.PerspectiveCamera(60, 1.6); rig.attach(c, { canvas, tractor: { yaw: 1.2 } });
+  assert.equal(rig.yaw, 1.2); const pose = { x: 0, y: 0, z: 0, yaw: 0.3 }; rig.snap(pose); assert.equal(rig.yaw, 0.3);
+  const at = c.position.clone(); rig.shake(0.35); rig.follow(pose, 1 / 60); assert.ok(c.position.distanceTo(at) > 1e-6, 'boop shake');
+  for (let i = 0; i < 60; i++) rig.follow(pose, 1 / 60); assert.ok(c.position.distanceTo(at) < 0.01, 'settled');
+});
+test('rig.project and rig.toNdc give 1.8\'s numbers (S-1, #73, M-77)', () => {
+  const c = new THREE.PerspectiveCamera(60, 800 / 600); rig.attach(c, { canvas, tractor: { yaw: 0 } }); rig.snap({ x: 0, y: 0, z: 0, yaw: 0 });
+  c.updateMatrixWorld(); const v = new THREE.Vector3(2, 1, 6).project(c), p = rig.project([2, 1, 6]), n = rig.toNdc(2, 1, 6);
+  assert.ok(Math.abs(p.x - (10 + (v.x + 1) / 2 * 800)) < 1e-6 && Math.abs(p.y - (20 + (1 - v.y) / 2 * 600)) < 1e-6 && Math.abs(p.z - v.z) < 1e-9); assert.equal(p.onScreen, true);
+  assert.ok(Math.abs(n.nx - v.x) < 1e-9 && Math.abs(n.ny - v.y) < 1e-9 && Math.abs(n.nz - v.z) < 1e-9); assert.equal(n.behind, false);
+  assert.equal(rig.toNdc(0, 0, -40).behind, true); assert.equal(rig.project([0, 0, -40]).onScreen, false);
+});
+```
+
+- [ ] **Step 2: Run** `UNIT test/view.purity.test.mjs test/view.rig.test.mjs`. Expected: FAIL in "declares the engine render pipeline" (`RENDER` undefined) and in every `view.rig` test (`CAM` is not exported by today's `view/rig.js`; `rig.snap` is not a function); the first purity test must already PASS (2g left no view write; if it fails, fix the line it names: that is a #102 regression).
 
 - [ ] **Step 3: Implement.** `src/view/size.js`:
 
@@ -1530,11 +1623,11 @@ In `src/game.view.js` add, above `tractorView`:
 export const RENDER = Object.freeze({
   shading: 'standard', dpr: { touch: 1.5, desktop: 2 }, antialias: true, shadows: 'pcf', toneMapping: 'none', exposure: 1,
   camera: { fov: 60, fovPortrait: 64, near: 0.3, far: 500 },
-  lights: { sky: '#bfe6f5', ground: '#b9a27c', hemi: 1.3, sun: { color: '#fff3dc', intensity: 2.1, map: 2048, box: 30, offset: [-26, 46, 22] }, fog: [90, 220],
-    presets: { day: { sky: '#bfe6f5', sun: '#fff3dc', hemi: 1.3, sunIntensity: 2.1 }, dusk: { sky: '#f4a76b', sun: '#ffa860', hemi: 0.8, sunIntensity: 1.125 },
-      night: { sky: '#1b2440', sun: '#9fb4ff', hemi: 0.3, sunIntensity: 0.15 } } },
+  lights: { sky: '#bfe6f5', hemiSky: '#eef7ff', ground: '#b9a27c', hemi: 1.3, sun: { color: '#fff3dc', intensity: 2.1, map: 2048, box: 30, offset: [-26, 46, 22] }, fog: [90, 220],
+    presets: { dusk: { sky: '#f4a76b', hemi: 0.8, sun: { color: '#ffa860', intensity: 1.125 } },
+      night: { sky: '#1b2440', hemi: 0.3, sun: { color: '#9fb4ff', intensity: 0.15 } } } }, // 3e's field names (CI-8): day is the base look; a preset's sun is nested
 });
-// k 0 = day, 0.5 = sunset, 1 = night (render/scene.js setNight, moved): two lerps through dusk
+// k 0 = day, 0.5 = sunset, 1 = night (render/scene.js setNight, moved): two lerps through dusk (3e's lights.set(k) is the same blend)
 export const setNight = (lights, k) => k < 0.5 ? lights.lerp('day', 'dusk', k * 2) : lights.lerp('dusk', 'night', k * 2 - 1);
 ```
 and `defineView({ scenes: …, render: RENDER })`. `pageOf(doc)` becomes `pageOf(view)`:
@@ -1548,11 +1641,38 @@ function pageOf(view) {
 }
 ```
 (every `pageOf(view.doc)` / `pageOf(doc)` call passes `view`; `menuHalves(doc => picturesOf(pageOf(doc)), net)` becomes `menuHalves(view => picturesOf(pageOf(view)), net)` and `src/view/menus.js` passes `view` where it passed `view.doc` to that callback). In the drive half's `frame`: replace `page.follow(v0.x, v0.z);` with `page.lights.follow(v0.x, v0.z);`, `page.setNight(page.nightK)` with `setNight(page.lights, page.nightK)`, delete `page.renderer.render(page.scene, page.camera);` (boot renders once after every half's frame, §4.6), and add `VIEW.w = view.gfx.size.w; VIEW.h = view.gfx.size.h;` at the top. The `?fps` meter's draw-time split moves: `perf.tick(...)` keeps its arguments but its draw time is now measured from the previous frame's end (record it in the notes as the G4 minor "sim ms is approximate", now "draw ms is the previous frame's").
-`src/main.js`: `boot(tractorGame(), tractorView({…}), { canvas: document.getElementById('c'), timer: …, seed, scene, args, devices })`. `src/ui/show.js`: `import { VIEW } from '../view/size.js';`. `git rm src/render/scene.js`. **Chase camera (judgment, CI-10):** Tractor keeps `render/camera.js` and `view/rig.js` (velocity heading in a slide, the portrait distance X-12, shake, the F-10 blend and the `?tune` camera rows are game feel `createChaseRig` does not take); only `rig.project` changes to `makeProject(view.gfx.camera, canvas)` from `lion-hawk/view` (S-1).
+`src/main.js`: `boot(tractorGame(), tractorView({…}), { canvas: document.getElementById('c'), timer: …, seed, scene, args, devices })`. `src/ui/show.js`: `import { VIEW } from '../view/size.js';`. `git rm src/render/scene.js`.
+**Chase camera (CI-10, ruled: adopt 3g's rig).** 3g's heading style carries everything 1.8's camera did (velocity heading in a slide, the X-12 portrait distance below `portraitAspect` 0.9, shake, live `?tune` opts, the F-10 `blendFrom`), so Tractor's own port goes: `git rm src/render/camera.js`, and `src/view/rig.js` becomes a thin per-page wrapper:
 
-- [ ] **Step 4: Run** `UNIT test/view.purity.test.mjs test/golden.test.mjs test/show.test.mjs test/menus.view.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS; e2e 14/14. **(judgment)** If the light presets' field names differ from 3e's (the contract elides them), use 3e's names and keep the values; record CI-8 if 3e has no separate hemisphere sky colour (today's hemi sky is `#eef7ff`, the background `#bfe6f5`).
+```js
+// The camera rig (lion-hawk 3l Task 14, CI-10): the engine's chase rig, heading style (V-1..V-3, X-12, F-10), and view.project, one per
+// page. CAM is the rig's opts object, shared by every farm's rig, so a ?tune value outlives a new farm. rig.yaw is the heading the stick
+// is read against (C-2, #81): the chase rig's, or before its first follow or snap the tractor's. Nothing here writes the sim.
+import { createChaseRig, makeProject } from 'lion-hawk/view';
+export const CAM = {}; // filled with the heading defaults by the first createChaseRig (distance 12, height 10.2, lookAhead 11, portrait 1.25, …)
+const NDC = { nx: 0, ny: 0, nz: 0, behind: false }; let proj = null;
+export const rig = {
+  camera: null, chase: null, tractor: null,
+  get yaw() { return rig.chase?.yaw ?? rig.tractor?.yaw ?? 0; },
+  attach(camera, { canvas, tractor }) { // a fresh chase per farm (main.js build); the page's camera and canvas never change
+    if (rig.camera !== camera || !proj) proj = makeProject(camera, canvas);
+    rig.camera = camera; rig.tractor = tractor; rig.chase = createChaseRig(camera, CAM);
+  },
+  follow(pose, dt) { rig.chase.follow(pose, dt); }, // pose { x, y, z, yaw, fwd, velYaw: atan2(v.x, v.z) }
+  snap(pose) { rig.chase.snap(pose); },             // a new farm: straight behind; cancels a blend and a shake
+  shake(a) { rig.chase?.shake(a); },                // boop 0.35, bump 0.25
+  blendFrom(q) { rig.chase?.blendFrom(q, 1); },     // F-10: the show's last camera turn, eased out over 1 s
+  project: (p, out) => proj(p, out),                // engine.view.project (S-1, #73): one stable function for the page
+  toNdc: (x, y, z) => proj.ndc(x, y, z, NDC),       // M-77 (hud.js arrows and finder): { nx, ny, nz, behind }, one reused object
+};
+```
+Callers in `game.view.js`: `built()`'s `rig.follow(1, chaseIn)` becomes `rig.snap(chaseIn)`; the drive half's `rig.follow(dt, chaseIn)` becomes `rig.follow(chaseIn, dt)`; `rig.shake` and `rig.blendFrom` calls stay. `src/ui/debug.js`: `import { CAM } from '../view/rig.js';` and `VIEW_ROWS = [['cam dist', 'distance', 4, 20, 0.5], ['cam height', 'height', 4, 22, 0.5], ['cam ahead', 'lookAhead', 2, 24, 0.5]]` (the panel is built after `build()` has attached the rig, so `CAM` is filled). `hud.js` and `devices.js` keep `rig.toNdc` and `rig.yaw`. Feel changes: none in the chase path (the parity test pins it); the shake is a counter hash instead of `Math.random` (same amplitude and 0.25 s fade; 3g's field note).
 
-- [ ] **Step 5: Commit** `git add -A src test && git commit -m "feat(tractor): engine renderer and light rig (defineView render); night as preset lerps"`
+- [ ] **Step 4: Run** `UNIT test/view.purity.test.mjs test/view.rig.test.mjs test/golden.test.mjs test/show.test.mjs test/menus.view.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS; e2e 14/14. (CI-8 is settled: the lights use 3e's field names, with `hemiSky` `#eef7ff` apart from the background `#bfe6f5`.)
+
+- [ ] **Step 5: Prove the parity test bites.** Temporarily pass `{ ...CAM }` instead of `CAM` in `attach` (a copy per farm); run `UNIT test/view.rig.test.mjs`; expected FAIL in "the ?tune camera rows…" (`CAM` stays empty). Then temporarily `rig.chase = createChaseRig(camera, { ...CAM, ease: 5 })`; expected FAIL in "1.8's chase" at the first frame; restore.
+
+- [ ] **Step 6: Commit** `git add -A src test && git commit -m "feat(tractor): engine renderer and light rig (defineView render), night as preset lerps; the chase camera on the engine rig"`
 
 ### Task 15: Models from `baked/` through `engine.assets`; Cube Pet parts and anim tables
 
@@ -1664,7 +1784,7 @@ export function posePart(kind, clip, t, index, out) {
 }
 export const hasClip = (kind, clip) => !!kind.table.clips[clip];
 ```
-In `src/game.view.js`: `import MANIFEST from '../baked/manifest.json' with { type: 'json' }; export const MODELS = Object.freeze(Object.keys(MANIFEST.models));` and in the drive half's `enter`, replace `build(s, engine.scene.args);` with `view.wait(view.assets.preload(MODELS).then(() => { if (engine.scene.state === s && !w) build(s, engine.scene.args); }));` so the first farm draws once every model is loaded and every compiled material is warm (A-10). (Boot's assets need the manifest: pass it as `RENDER.assets = { manifest: MANIFEST, base: './assets/' }` if 3e/3f read it from the render config; otherwise as boot's option. CI-12 asks which.)
+In `src/game.view.js`: `import MANIFEST from '../baked/manifest.json' with { type: 'json' }; export const MODELS = Object.freeze(Object.keys(MANIFEST.models));` and in the drive half's `enter`, replace `build(s, engine.scene.args);` with `view.wait(view.assets.preload(MODELS).then(() => { if (engine.scene.state === s && !w) build(s, engine.scene.args); }));` so the first farm draws once every model is loaded and every compiled material is warm (A-10). Boot's assets get the manifest from the render config (3e; CI-12 settled): add `assets: { manifest: MANIFEST, base: './assets/' }` to `RENDER` (under `render`, never a top-level `defineView` key; `render.assets.decoders` only if 3f's loader needs one for the baked GLBs, 3f C1).
 
 - [ ] **Step 4: Run** `UNIT test/view.models.test.mjs test/view.purity.test.mjs`. Expected: PASS.
 
@@ -1674,49 +1794,123 @@ In `src/game.view.js`: `import MANIFEST from '../baked/manifest.json' with { typ
 
 ### Task 16 (judgment): The tractor and cars drawn by view sync; `view/bodies.js` and `vehicles3d.js` retire
 
-**Decision expected:** the tractor and car entities get `model` (`'tractor'`, `'trailer'`), `scale` (`TP.scale` / 1) and `e.car` (the kit vehicle, read-only for the wheels). View sync draws them (interpolated from the pool, E-11); `sync.on('#tractor')` and `sync.on('#car')` hooks add what sync cannot know: the Kenney axis fix (model +z is chassis +x), wheels from the kit's wheel state, paint by vertex colour (the rainbow paint varies along the tractor, which one material colour cannot do, so paint-* materials stay the base material and the hook recolours a per-train geometry copy), and the away ghost. `coverageView(sync, compiler)` feeds `uCoverage` from `e.coverage`. `paint` is not set on entities (sync would make per-colour material clones).
+**Decision expected:** the tractor and car entities get `model` (`'tractor'`, `'trailer'`) and `scale` (`TP.scale` / 1). View sync draws them (interpolated from the pool, E-11), **wheels included**: the vehicle kit writes each wheel's part pose (`e.partXf`, Task 13) and sync turns each named node about its bounding-box centre, interpolated with the body (3g Task 13b; as 3j Task 15 and 3k Tasks 12/17). `sync.on('#tractor')` and `sync.on('#car')` hooks add what sync cannot know, with no wheel code: in `create` the Kenney axis fix (model +z is chassis +x) and, for a car, a second wheel node (`trailer.glb` has one `wheel`; the hook clones it and names the two `CAR_WHEELS`); in `frame`, on a change only, the paint and the away ghost. Sync measures each hub once after the create hooks registered by then, so `trainViews` is registered in the drive half's `enter`, before any train is drawn. The ghost writes only the train's own materials: every train material carries a `coverage` block (`chassis`, `bed`, and the paint slots on the `chassis` base), so `coverageView` gives each train per-entity clones (3f `mc.coverage`: `userData.lhShared === false`, same program) before its first frame; a shared compiled material would ghost every train, so `ghost` throws on one. The paint is the engine's (3f Task 8b): compiled `paint-body`/`paint-trim` materials keep each vertex's shading, and `rainbow` is a hue ramp along the model's z. When a train's paint pair changes, the hook calls `view.materials.repaint(obj, paintValues(paintOf(e)))`. `e.paint` is not set. The paint is the player's progress (or, for a remote train, its roster row), which the view reads, and the view writes no entity (#102). `coverageView(sync, compiler)` feeds `uCoverage` from `e.coverage`. `repaint` changes coverageView's per-entity clones in place, so the order of the two hooks does not matter.
 
-**Files:** create `src/view/vehicles.js`, `test/view.sync.test.mjs`; modify `src/sim/tractor.js`, `src/sim/hitch.js`, `src/sim/game.js` (entity fields only), `src/game.view.js`, `src/view/world.js`, `src/view/hud.js` (`tractorAt`), `src/ui/icons.js` (`paintable` import); delete `src/view/bodies.js`, `src/render/vehicles3d.js`, `src/render/dirtMat.js` (see Task 17 for gold).
+**User ruling 2026-10-14 (games fully on the engine): closed.** 1.8's per-train vertex recolour (`paintable`) does not move into the game. 3f Task 8b gives the engine a `PAINT` feature: the paint colour times the source vertex's relative brightness, the hue ramp, and one program per feature set, plus `mc.repaint`. That closes Integrator request 6. The paint test below checks the engine's drawn colours at every paint vertex of the baked tractor against 1.8's `paintable`, copied in as the oracle. This task needs engine 0.9.0 with 3f Task 8b, 3e accepting `render.paint` (3e Task 7; 3f Integrator request 2) and the part poses (3c Task 10b, 3g Task 13b, 3h Task 6b). If the paint pieces are missing when the task starts, do the rest (sync draw, wheels, coverage, away ghost), stop before the paint, and resume on the patch; if the part poses are missing, stop and file it (no game wheel code).
 
-**Interfaces:** Consumes `view.sync.on(match, hooks) → off`, `view.sync.objectOf(e)`, `coverageView(sync, compiler)` (`lion-hawk/kits/coverage/view`). Produces `PAINTS`, `paintable(meshes) → { paint({ body, trim }) }`, `wheelMatrix(rest, c, dy, steer, rot, out)`, `carWheelMatrix(rest, c, susp, side, rot, out)`, `trainViews(sync, { paintOf, awayOf }) → off`.
+**Files:** create `src/view/vehicles.js`, `test/view.sync.test.mjs`, `test/helpers/assets.mjs`; modify `src/sim/tractor.js`, `src/sim/hitch.js`, `src/sim/game.js` (entity fields only), `src/game.view.js` (`RENDER.paint`, the hooks), `src/view/world.js`, `src/view/hud.js` (`tractorAt`), `src/ui/icons.js`, `src/ui/menus.js`, `src/ui/roster.js` (the `PAINTS` import), `test/view.models.test.mjs` (`fakeAssets` moves out); delete `src/view/bodies.js`, `src/render/vehicles3d.js`, `src/render/dirtMat.js` (see Task 17 for gold).
 
-- [ ] **Step 1: Failing test** `test/view.sync.test.mjs`:
+**Interfaces:** Consumes `view.sync.on(match, hooks) → off`, `view.sync.objectOf(e)`, view sync's part poses (3g Task 13b: each `e.partXf` name is a node found by `getObjectByName` after the create hooks; its bounding-box centre is drawn at `p` in the body frame, turned by `q` from rest; a missing node throws), `CAR_WHEELS` and the kit's wheel `part`s (Task 13) and `coverageView(sync, compiler)` (`lion-hawk/kits/coverage/view`), whose per-entity clones (3f `mc.coverage`, `userData.lhShared === false`) the ghost writes. From 3f Task 8b it consumes `view.materials.repaint(root, paint) → root`, the paint values (a colour, or `{ hue: { axis, from, to, s, l } }`), `render.paint = { base, shade }`, and, in tests, `createMaterialCompiler(registry, { paint })` (`lion-hawk/view`). Produces:
+- `PAINTS`: CSS colours for the UI, with `rainbow: null` as in 1.8;
+- `RAINBOW`;
+- `PAINT_LOOK`;
+- `paintValues({ body, trim }) → { body, trim }` (engine paint values);
+- `trainViews(sync, { materials, paintOf, awayOf }) → off`;
+- `fakeAssets(keys)` (`test/helpers/assets.mjs`).
+
+- [ ] **Step 1: Failing test.** Move `fakeAssets` from `test/view.models.test.mjs` (Task 15) into `test/helpers/assets.mjs` as `export async function fakeAssets(keys)`, unchanged, and have the models test import it from there. Then write `test/view.sync.test.mjs`:
 
 ```js
-// The train's view hooks (3l Task 16): wheel matrices match the old vehicles3d maths; paint keeps each vertex's shading; rainbow varies.
+// The train's view hooks (3l Task 16): create only shapes the model (view sync draws the wheels from the kit's part poses); the away ghost
+// stays on its own train; the engine paint (3f PAINT, repaint) draws 1.8's paintable colours at every paint vertex of the baked tractor.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { wheelMatrix, carWheelMatrix, paintable, PAINTS } from '../src/view/vehicles.js';
-import { TP } from '../src/sim/tractor.js';
-import { TR } from '../src/sim/hitch.js';
+import { createMaterialCompiler } from 'lion-hawk/view';
+import MATERIALS from '../src/defs/materials.js';
+import { fakeAssets } from './helpers/assets.mjs';
+import { coverageView } from 'lion-hawk/kits/coverage/view';
+import { trainViews, paintValues, PAINTS, RAINBOW, PAINT_LOOK } from '../src/view/vehicles.js';
+import { TRACTOR_WHEELS } from '../src/sim/tractor.js';
+import { CAR_WHEELS } from '../src/sim/hitch.js';
 
-const close = (a, b, msg) => a.elements.forEach((v, i) => assert.ok(Math.abs(v - b.elements[i]) < 1e-9, `${msg} [${i}] ${v} vs ${b.elements[i]}`));
-test('a tractor wheel at 0.12 m of suspension, no steer, no roll, sits at its rest pose', () => {
-  const rest = new THREE.Matrix4().makeTranslation(0.4, 0.3, 0.7), c = new THREE.Vector3(0.4, 0.3, 0.7), out = new THREE.Matrix4();
-  close(wheelMatrix(rest, c, 0, 0, 0, out), rest, 'rest');
+// view sync's hook order (3g): each entity's create hooks, then its frame hooks; a match is '#tag' or a predicate
+function fakeSync() {
+  const hooks = [], is = (m, e) => typeof m === 'function' ? m(e) : e.tags.has(m.slice(1));
+  return { on(m, h) { hooks.push([m, h]); return () => {}; },
+    create(e, o) { for (const [m, h] of hooks) if (is(m, e)) h.create?.(e, o); }, frame(e, o) { for (const [m, h] of hooks) if (is(m, e)) h.frame?.(e, o, 1); } };
+}
+// two tractors and two cars from the baked models, as sync clones them (shared compiled materials), through the hooks as wired in game.view.js
+async function trains({ cover = true } = {}) {
+  const A = await fakeAssets(['tractor', 'trailer']), mc = createMaterialCompiler(MATERIALS, { paint: PAINT_LOOK }), sync = fakeSync(), away = new Set();
+  trainViews(sync, { materials: mc, paintOf: () => ({ body: 'red', trim: 'yellow' }), awayOf: e => away.has(e.id) }); if (cover) coverageView(sync, mc);
+  const ents = [['tractor', 'tractor'], ['tractor', 'tractor'], ['car', 'trailer'], ['car', 'trailer']].map(([tag, model], i) => ({ id: i + 1, tags: new Set([tag]), model, coverage: { dirt: 0 } }));
+  const objs = ents.map(e => { const o = A.get(e.model).scene.clone(true); mc.apply(o); sync.create(e, o); return o; });
+  return { objs, away, frame: () => ents.forEach((e, i) => sync.frame(e, objs[i])) };
+}
+const mats = o => { const out = []; o.traverse(m => { if (m.isMesh) out.push(...[].concat(m.material)); }); return out; };
+test('create only shapes the model: the axis fix, one node per kit wheel part; no wheel code in the hooks (view sync draws the wheels)', async () => {
+  const { objs } = await trains();
+  assert.equal(objs[0].children.length, 1, 'the model sits under the axis-fix group');
+  for (const w of TRACTOR_WHEELS) assert.ok(objs[0].getObjectByName(w.name)?.isMesh, w.name);
+  for (const n of CAR_WHEELS) assert.ok(objs[2].getObjectByName(n)?.isMesh, n);
+  assert.doesNotMatch(trainViews.toString(), /wheelRotation|wheelSteering|wheelSuspensionLength|matrixAutoUpdate|e\.car\b/, 'no per-frame wheel code');
 });
-test('the old chain M·T(cx, cy + 0.12 - susp, cz)·Ry(st)·Rz(-rot)·modelRot equals modelRot · wheelMatrix (chassis vs model space)', () => {
-  const S = TP.scale, m = new THREE.Vector3(0.415, 0.325, 0.735), susp = 0.2, st = 0.3, rot = 1.1;
-  const modelRot = new THREE.Matrix4().makeRotationY(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(S, S, S));
-  const old = new THREE.Matrix4().makeTranslation(m.z * S, m.y * S + 0.12 - susp, -m.x * S).multiply(new THREE.Matrix4().makeRotationY(st)).multiply(new THREE.Matrix4().makeRotationZ(-rot)).multiply(modelRot).multiply(new THREE.Matrix4().makeTranslation(-m.x, -m.y, -m.z));
-  const now = modelRot.clone().multiply(wheelMatrix(new THREE.Matrix4(), m, (0.12 - susp) / S, st, rot, new THREE.Matrix4()));
-  close(now, old, 'chain');
+test('ghosting one train leaves the other trains\' materials opaque (per-entity clones from coverageView)', async () => {
+  const { objs, away, frame } = await trains();
+  away.add(2); away.add(4); frame();
+  objs.forEach((o, i) => { const on = i === 1 || i === 3;
+    for (const m of mats(o)) { assert.equal(m.userData.lhShared, false, `train ${i + 1}: ${m.name} is its own`); assert.equal(m.transparent, on, `train ${i + 1} ${m.name}`); assert.equal(m.opacity, on ? 0.45 : 1); } });
+  away.clear(); frame();
+  for (const o of objs) for (const m of mats(o)) assert.ok(!m.transparent && m.opacity === 1, 'un-ghosted');
 });
-test('car wheels: T(axleX, -susp, side·track)·Rz(-rot) for a wheel centred at its origin', () => {
-  const out = carWheelMatrix(new THREE.Matrix4(), new THREE.Vector3(), 0.3, -1, 0.5, new THREE.Matrix4());
-  close(out, new THREE.Matrix4().makeTranslation(TR.axleX, -0.3, -TR.track).multiply(new THREE.Matrix4().makeRotationZ(-0.5)), 'car wheel');
+test('ghosting a train on shared compiled materials throws instead of ghosting every train', async () => {
+  const { objs, away, frame } = await trains({ cover: false });
+  away.add(2); assert.throws(frame, /tractor: ghost needs per-entity materials/);
+  for (const m of mats(objs[0])) assert.equal(m.opacity, 1, 'the other tractor stays opaque');
 });
-test('paint keeps relative shading per area; rainbow varies along z; unpainted vertices are untouched', () => {
-  const geo = n => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => (i % 3 === 2 ? i / 3 / n * 2 - 1 : 0)), 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => 0.2 + 0.6 * ((i / 3 | 0) / n)), 3)); return g; };
-  const body = geo(8), trim = geo(8), glass = geo(4), keep = glass.attributes.color.array.slice();
-  const p = paintable([{ geometry: body, area: 1 }, { geometry: trim, area: 2 }]);
-  p.paint({ body: 'blue', trim: 'rainbow' });
-  const c = body.attributes.color, blue = new THREE.Color(PAINTS.blue);
-  assert.ok(c.getX(7) > c.getX(0), 'brighter source vertex stays brighter'); assert.ok(Math.abs(c.getZ(7) / c.getX(7) - blue.b / blue.r) < 1e-6, 'hue is the paint');
-  const t = trim.attributes.color; assert.notDeepEqual([t.getX(0), t.getY(0), t.getZ(0)], [t.getX(7), t.getY(7), t.getZ(7)], 'rainbow varies');
-  assert.deepEqual([...glass.attributes.color.array], [...keep]);
+test('paintValues: colours by name (red for an unknown name), rainbow as the hue ramp along the model z; the compiler look', () => {
+  assert.deepEqual(paintValues({ body: 'blue', trim: 'rainbow' }), { body: PAINTS.blue, trim: RAINBOW });
+  assert.deepEqual(RAINBOW, { hue: { axis: [0, 0, 1], from: -1, to: 1, s: 0.75, l: 0.5 } });
+  assert.equal(paintValues({ body: 'mauve', trim: 'red' }).body, PAINTS.red);
+  assert.deepEqual(PAINT_LOOK, { base: 'chassis', shade: [0.25, 0.85, 1.1] });
+  assert.equal(PAINTS.rainbow, null, 'the UI keeps drawing its own rainbow gradient');
+});
+// Tractor 1.8's paintable (render/vehicles3d.js at 1.8.0), the oracle. rows: [{ area 1 body | 2 trim, pos (model space), col (linear) }].
+// Each paint vertex gets the paint, or the rainbow hue at its model z, times 0.25 + 0.85 × its brightness over its area's brightest, at most 1.1.
+function paintable18(rows, { body, trim }) {
+  const top = [0, 0, 0], c = new THREE.Color();
+  const lum = rows.map(r => Array.from({ length: r.col.length / 3 }, (_, i) => 0.3 * r.col[i * 3] + 0.6 * r.col[i * 3 + 1] + 0.1 * r.col[i * 3 + 2]));
+  rows.forEach((r, j) => lum[j].forEach(l => { top[r.area] = Math.max(top[r.area], l); }));
+  return rows.map((r, j) => lum[j].flatMap((l, i) => {
+    const name = r.area === 1 ? body : trim, k = Math.min(1.1, 0.25 + 0.85 * l / top[r.area]);
+    if (name === 'rainbow') c.setHSL(((r.pos[i * 3 + 2] + 1) * 0.5) % 1, 0.75, 0.5); else c.set(PAINTS[name] ?? PAINTS.red);
+    return [c.r * k, c.g * k, c.b * k];
+  }));
+}
+// 3f's PAINT for a plain mesh in JS (chunks.js paint(): the vertex stage's vLhPaint), from lhPaint and the material's own uniforms
+const fract = x => x - Math.floor(x);
+function drawn(m, a, i, out) {
+  const sh = { vertexShader: THREE.ShaderLib.physical.vertexShader, fragmentShader: THREE.ShaderLib.physical.fragmentShader, uniforms: {} };
+  m.onBeforeCompile(sh, null);
+  const md = sh.uniforms.uPaintMode.value, ax = sh.uniforms.uPaintAxis.value, s = sh.uniforms.uPaintShade.value, k = Math.min(s.z, s.x + s.y * a.getW(i));
+  if (md.x > 1.5) return out.setHSL(fract(ax.x * a.getX(i) + ax.y * a.getY(i) + ax.z * a.getZ(i) + ax.w), md.y, md.z).multiplyScalar(k);
+  assert.ok(md.x > 0.5, 'every paint vertex is painted');
+  return out.copy(m.color).multiplyScalar(k);
+}
+test('the engine paint draws 1.8\'s paintable colours at every paint vertex of the baked tractor (the fenders and the roof share one top)', async () => {
+  const A = await fakeAssets(['tractor']), mc = createMaterialCompiler(MATERIALS, { paint: PAINT_LOOK }), obj = A.get('tractor').scene.clone(true);
+  mc.apply(obj); obj.updateMatrixWorld(true);
+  const inv = obj.matrixWorld.clone().invert(), rows = [];
+  obj.traverse(m => {
+    const area = m.isMesh && { 'paint-body': 1, 'paint-trim': 2 }[m.userData.lhMat?.[0]];
+    if (!area) return;
+    const g = m.geometry, M = new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld), v = new THREE.Vector3(), pos = [], col = [];
+    for (let i = 0; i < g.attributes.position.count; i++) {
+      v.fromBufferAttribute(g.attributes.position, i).applyMatrix4(M); pos.push(v.x, v.y, v.z);
+      col.push(g.attributes.color.getX(i), g.attributes.color.getY(i), g.attributes.color.getZ(i));
+    }
+    rows.push({ m, area, pos, col });
+  });
+  assert.deepEqual(rows.map(r => r.area).sort(), [1, 2, 2], 'paint-body on the body; paint-trim on the fenders and the roof');
+  const out = new THREE.Color();
+  for (const p of [{ body: 'red', trim: 'yellow' }, { body: 'blue', trim: 'rainbow' }, { body: 'rainbow', trim: 'white' }]) {
+    mc.repaint(obj, paintValues(p));
+    const want = paintable18(rows, p);
+    rows.forEach((r, j) => { const a = r.m.geometry.attributes.lhPaint; assert.ok(a, `${r.m.name}: apply wrote lhPaint`);
+      for (let i = 0; i < a.count; i++) { drawn(r.m.material, a, i, out);
+        ['r', 'g', 'b'].forEach((ch, k) => assert.ok(Math.abs(out[ch] - want[j][i * 3 + k]) < 1e-5, `${p.body}/${p.trim} ${r.m.name} vertex ${i} ${ch}: ${out[ch]} vs ${want[j][i * 3 + k]}`)); } });
+  }
 });
 ```
 
@@ -1726,111 +1920,79 @@ test('paint keeps relative shading per area; rainbow varies along z; unpainted v
 
 ```js
 // The train's drawing (3l Task 16; was render/vehicles3d.js, render/others3d.js and view/bodies.js). View sync clones each tractor and
-// car entity's model and poses it from the pool every frame (E-11, interpolated); these hooks add the Kenney axis fix (model +z is the
-// chassis +x), the wheels from the vehicle kit's read-only wheel state, the paint (W-3: paint-body / paint-trim vertex colours times
-// each vertex's brightness in its area, rainbow along the tractor) and the away ghost (M-39, M-40). Local and remote trains alike.
+// car entity's model and poses it from the pool every frame (E-11, interpolated), wheels included: the vehicle kit writes each wheel's
+// part pose (e.partXf) and sync turns the named node about its hub (3g Task 13b). These hooks add the Kenney axis fix (model +z is the
+// chassis +x) and the car's second wheel node at create, then, on a change only, the paint (W-3: the engine's shading-preserving paint
+// on the paint-body / paint-trim slots, rainbow a hue ramp along the tractor; 3f Task 8b) and the away ghost (M-39, M-40). Local and
+// remote trains alike.
 import * as THREE from 'three';
-import { TP } from '../sim/tractor.js';
-import { TR } from '../sim/hitch.js';
+import { CAR_WHEELS } from '../sim/hitch.js';
 
+// W-3: the paints as CSS colours for the UI (roster, menus, HUD), in unlock order; rainbow is null there (the UI draws its own gradient)
 export const PAINTS = { red: '#d8342c', yellow: '#f2c230', green: '#3f9b3a', blue: '#2f6fd6', pink: '#f07aa8', orange: '#f28a1e', purple: '#8a4fd0', white: '#f4f1ea', rainbow: null };
+// rainbow on the tractor (1.8's paintable): hue = fract((z + 1) / 2) along the model's z, saturation 0.75, lightness 0.5
+export const RAINBOW = Object.freeze({ hue: Object.freeze({ axis: Object.freeze([0, 0, 1]), from: -1, to: 1, s: 0.75, l: 0.5 }) });
+// the compiler's paint look (RENDER.paint): the paint base is chassis (it takes dirt); shade k = 0.25 + 0.85 × relative brightness, at most 1.1
+export const PAINT_LOOK = Object.freeze({ base: 'chassis', shade: Object.freeze([0.25, 0.85, 1.1]) });
+const COAT = Object.freeze({ ...PAINTS, rainbow: RAINBOW });
+// a { body, trim } pair of paint names → the engine's paint values (an unknown name paints red, as 1.8 did); on a change only
+export const paintValues = ({ body, trim }) => ({ body: COAT[body] ?? PAINTS.red, trim: COAT[trim] ?? PAINTS.red });
 const AXES = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-const T = new THREE.Matrix4(), RA = new THREE.Matrix4(), RB = new THREE.Matrix4(), box = new THREE.Box3();
-// model space: its rest pose, raised by dy, steered about y and rolled about the model x axis (the chassis z) around its centre c
-export function wheelMatrix(rest, c, dy, steer, rot, out) {
-  return out.makeTranslation(c.x, c.y + dy, c.z).multiply(RA.makeRotationY(steer)).multiply(RB.makeRotationX(rot)).multiply(T.makeTranslation(-c.x, -c.y, -c.z)).multiply(rest);
-}
-// car space (trailer.glb is drawn in car space): on the axle, down by the suspension, rolled about z
-export function carWheelMatrix(rest, c, susp, side, rot, out) {
-  return out.makeTranslation(TR.axleX, -susp, side * TR.track).multiply(RA.makeRotationZ(-rot)).multiply(T.makeTranslation(-c.x, -c.y, -c.z)).multiply(rest);
-}
-const f32 = a => { const n = a.count, s = a.itemSize, out = new Float32Array(n * s); for (let i = 0; i < n; i++) for (let k = 0; k < s; k++) out[i * s + k] = a.getComponent(i, k); return new THREE.BufferAttribute(out, s); };
-// meshes: [{ geometry (this train's own copy), area: 1 body | 2 trim, z?: Float32Array model-space z per vertex }]
-export function paintable(meshes) {
-  const top = [0, 0, 0], rows = meshes.map(m => {
-    const g = m.geometry; if (g.attributes.color.normalized || !(g.attributes.color.array instanceof Float32Array)) g.setAttribute('color', f32(g.attributes.color));
-    const c = g.attributes.color, lum = new Float32Array(c.count);
-    for (let i = 0; i < c.count; i++) { lum[i] = 0.3 * c.getX(i) + 0.6 * c.getY(i) + 0.1 * c.getZ(i); top[m.area] = Math.max(top[m.area], lum[i]); }
-    return { ...m, lum, z: m.z ?? null };
-  });
-  const col = new THREE.Color();
-  return {
-    paint({ body, trim }) {
-      for (const r of rows) {
-        const dst = r.geometry.attributes.color, pos = r.geometry.attributes.position, name = r.area === 1 ? body : trim;
-        for (let i = 0; i < dst.count; i++) {
-          const k = Math.min(1.1, 0.25 + 0.85 * r.lum[i] / top[r.area]);
-          if (name === 'rainbow') col.setHSL((((r.z ? r.z[i] : pos.getZ(i)) + 1) * 0.5) % 1, 0.75, 0.5); else col.set(PAINTS[name] ?? PAINTS.red);
-          dst.setXYZ(i, col.r * k, col.g * k, col.b * k);
-        }
-        dst.needsUpdate = true;
-      }
-    },
-  };
-}
-const TRACTOR_WHEELS_BY_NAME = ['wheel-front-left', 'wheel-front-right', 'wheel-back-left', 'wheel-back-right']; // TRACTOR_WHEELS order
+// the away ghost writes only this train's own materials: coverageView's per-entity clones (3f mc.coverage, lhShared false; every train
+// material has a coverage block). A shared compiled material is every train's, so ghosting it would ghost them all: that throws.
 function ghost(obj, on, shadowOf) {
-  obj.traverse(m => { if (!m.isMesh) return; m.castShadow = !on && shadowOf(m); for (const mat of [].concat(m.material)) { mat.transparent = on; mat.opacity = on ? 0.45 : 1; mat.depthWrite = !on; mat.needsUpdate = true; } });
+  obj.traverse(m => { if (!m.isMesh) return; m.castShadow = !on && shadowOf(m);
+    for (const mat of [].concat(m.material)) {
+      if (mat.userData.lhShared !== false) throw new Error(`tractor: ghost needs per-entity materials (mesh '${m.name}' has the shared '${mat.name}'): register coverageView, and give the registry material a coverage block`);
+      mat.transparent = on; mat.opacity = on ? 0.45 : 1; mat.depthWrite = !on; mat.needsUpdate = true; } });
 }
-// paintOf(e) → { body, trim } names; awayOf(e) → boolean (remote trains, Part E); local trains give false
-export function trainViews(sync, { paintOf, awayOf = () => false }) {
+// materials: view.materials (repaint, 3f Task 8b); paintOf(e) → { body, trim } names; awayOf(e) → boolean (remote trains, Part E); local
+// trains give false
+export function trainViews(sync, { materials, paintOf, awayOf = () => false }) {
   const state = new Map(); // entity id → per-train view state (made at create, dropped at remove)
   const offTractor = sync.on('#tractor', {
-    create(e, obj) {
+    create(e, obj) { // static shaping only, before sync measures the wheel hubs (the wheels are sync's, from e.partXf)
       const inner = new THREE.Group(); inner.quaternion.copy(AXES); while (obj.children.length) inner.add(obj.children[0]); obj.add(inner);
-      const wheels = e.car.wheels.map((_, i) => { const n = inner.getObjectByName(TRACTOR_WHEELS_BY_NAME[i]); n.matrixAutoUpdate = false; n.updateMatrix();
-        const rest = n.matrix.clone(); n.geometry.computeBoundingBox(); const c = box.copy(n.geometry.boundingBox).getCenter(new THREE.Vector3()).applyMatrix4(rest); return { n, rest, c }; });
-      const meshes = []; inner.traverse(m => { if (!m.isMesh) return; const a = { 'paint-body': 1, 'paint-trim': 2 }[m.material.name]; if (!a) return;
-        m.geometry = m.geometry.clone(); m.updateMatrix(); const p = m.geometry.attributes.position, z = new Float32Array(p.count), v = new THREE.Vector3();
-        for (let i = 0; i < p.count; i++) z[i] = v.fromBufferAttribute(p, i).applyMatrix4(m.matrix).z;
-        meshes.push({ geometry: m.geometry, area: a, z }); });
-      const st = { wheels, paint: paintable(meshes), painted: '', away: false, M: new THREE.Matrix4() };
-      state.set(e.id, st);
+      state.set(e.id, { body: '', trim: '', away: false }); // paint: the first frame repaints (lhPaint is model space, so the axis fix does not move the rainbow)
     },
     frame(e, obj) {
       const st = state.get(e.id); if (!st) return;
-      const p = paintOf(e), key = p.body + '/' + p.trim; if (key !== st.painted) { st.painted = key; st.paint.paint(p); }
+      const p = paintOf(e); if (p.body !== st.body || p.trim !== st.trim) { st.body = p.body; st.trim = p.trim; materials.repaint(obj, paintValues(p)); } // a change only: repaint allocates
       const away = awayOf(e); if (away !== st.away) { st.away = away; ghost(obj, away, m => !m.name.startsWith('wheel')); }
-      const vc = e.car.controller;
-      for (let i = 0; i < st.wheels.length; i++) { const w = st.wheels[i], susp = vc.wheelSuspensionLength(i) ?? TP.suspRest;
-        wheelMatrix(w.rest, w.c, (0.12 - susp) / TP.scale, vc.wheelSteering(i) ?? 0, vc.wheelRotation(i) ?? 0, w.n.matrix); w.n.matrixWorldNeedsUpdate = true; }
     },
-    remove(e) { state.delete(e.id); }, // the per-train painted geometries go with the object (sync's disposeTree)
+    remove(e) { state.delete(e.id); }, // per-entity materials go with the object (coverageView's remove, sync's disposeTree); geometry is the template's
   });
   const offCar = sync.on('#car', {
-    create(e, obj) {
-      const w0 = obj.getObjectByName('wheel'), w1 = w0.clone(); w0.parent.add(w1);
-      const ws = [w0, w1].map(n => { n.matrixAutoUpdate = false; n.updateMatrix(); const rest = n.matrix.clone(); n.geometry.computeBoundingBox(); return { n, rest, c: box.copy(n.geometry.boundingBox).getCenter(new THREE.Vector3()).applyMatrix4(rest) }; });
-      state.set(e.id, { ws, away: false });
+    create(e, obj) { // trailer.glb has one wheel node (centred, models.mjs); the kit's two wheel parts need a node each: CAR_WHEELS (side -1, +1)
+      const w0 = obj.getObjectByName('wheel'), w1 = w0.clone(); w0.parent.add(w1); w0.name = CAR_WHEELS[0]; w1.name = CAR_WHEELS[1];
+      state.set(e.id, { away: false });
     },
     frame(e, obj) {
       const st = state.get(e.id); if (!st) return; const away = awayOf(e); if (away !== st.away) { st.away = away; ghost(obj, away, m => m.name === 'bed'); }
-      const vc = e.car.controller;
-      for (let i = 0; i < 2; i++) { const w = st.ws[i]; carWheelMatrix(w.rest, w.c, vc.wheelSuspensionLength(i) ?? TR.suspRest, i ? 1 : -1, vc.wheelRotation(i) ?? 0, w.n.matrix); w.n.matrixWorldNeedsUpdate = true; }
     },
     remove(e) { state.delete(e.id); },
   });
   return () => { offTractor(); offCar(); state.clear(); };
 }
 ```
-Sim data (no checksum effect): in `createTractor`'s spawn desc add `model: 'tractor', scale: TP.scale` and after the kit `e.car = car;`; in `createCar` add `model: 'trailer'` and `e.car = car;` (`coverage` is already there, Task 13b).
-View: in `game.view.js`'s drive half `enter`, after preload: `offs.push(trainViews(view.sync, { paintOf: e => engine.scene.state.progress?.paint ?? engine.scene.args?.progress?.paint ?? START_PAINT }), coverageView(view.sync, view.materials))` (import `START_PAINT` from `../net/players.js`, `coverageView` from `lion-hawk/kits/coverage/view`; if `coverageView` returns no `off`, push `() => {}`). Delete `createBodies`, `bodies.*`, `vehSnap`, `w.vehicles` and the `progress` event's `w.vehicles.setPaint` (the hook reads the paint each frame). The chase input reads the drawn tractor: `const v0 = view.sync.objectOf(g.tractor.e)?.position ?? g.tractor.body.translation();` HUD's `tractorAt: () => view.sync.objectOf(engine.scene.state.game.tractor.e)?.position`. `ui/icons.js`'s `tractorPicture` imports `paintable, PAINTS` from `../view/vehicles.js` (it is rewritten in Task 17). `render/others3d.js` stays until Task 25. `git rm src/view/bodies.js src/render/vehicles3d.js`.
+Sim data (no checksum effect): in `createTractor`'s spawn desc add `model: 'tractor', scale: TP.scale`; in `createCar` add `model: 'trailer'` (`coverage` is already there, Task 13b; the wheel `part`s and `e.partXf` are Task 13's). No `e.car`: the view reads no controller.
+View: in `game.view.js`, `RENDER` gains `paint: PAINT_LOOK` (import `PAINT_LOOK`, `PAINTS` and `trainViews` from `./view/vehicles.js`). Boot then builds `view.materials` with the `chassis` paint base and 1.8's shade, which needs 3e to accept `render.paint` (3f Integrator request 2). In the drive half's `enter` itself (not in the preload's `then`: sync measures the wheel hubs after the create hooks registered when a train is first drawn): `offs.push(trainViews(view.sync, { materials: view.materials, paintOf: e => engine.scene.state.progress?.paint ?? engine.scene.args?.progress?.paint ?? START_PAINT }), coverageView(view.sync, view.materials))` (import `START_PAINT` from `../net/players.js`, `coverageView` from `lion-hawk/kits/coverage/view`; if `coverageView` returns no `off`, push `() => {}`). Delete `createBodies`, `bodies.*`, `vehSnap`, `w.vehicles` and the `progress` event's `w.vehicles.setPaint` (the hook reads the paint each frame). The chase input reads the drawn tractor: `const v0 = view.sync.objectOf(g.tractor.e)?.position ?? g.tractor.body.translation();` HUD's `tractorAt: () => view.sync.objectOf(engine.scene.state.game.tractor.e)?.position`. `ui/icons.js`'s `tractorPicture` imports `paintValues` from `../view/vehicles.js` (it is rewritten in Task 17); `ui/menus.js` and `game.view.js` import `PAINTS` from `../view/vehicles.js` / `./view/vehicles.js`, and `ui/roster.js`'s comment names it there. `render/others3d.js` stays until Task 25. `git rm src/view/bodies.js src/render/vehicles3d.js`.
 
-- [ ] **Step 4: Run** `UNIT test/view.sync.test.mjs test/view.purity.test.mjs test/golden.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS; goldens bit-exact (if not: the entity fields moved a checksum; remove them from whatever reads them into state and report). Manual look: `node test/serve.mjs`-style quick page (`npx lion-hawk dev`), drive W/A/S/D, paint screen through all paints including rainbow: wheels roll forward, steer at the front, bounce over the ramp; dirt appears in mud; paints match today's screenshots (take them from `$SCRATCH/tractor-old`).
+- [ ] **Step 4: Run** `UNIT test/view.sync.test.mjs test/view.models.test.mjs test/view.purity.test.mjs test/golden.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS; goldens bit-exact (if not: the entity fields moved a checksum; remove them from whatever reads them into state and report). Manual look: `node test/serve.mjs`-style quick page (`npx lion-hawk dev`), drive W/A/S/D, paint screen through all paints including rainbow: wheels roll forward, steer at the front, bounce over the ramp, on the trailer and wagon too; **the bbox hub matches the old pivots**: view sync now turns each wheel about its node's bounding-box centre, where 1.8 used `TRACTOR_WHEELS`' hand-set `(mx, my, mz)` and the car wheel's origin. In the console, for each tractor wheel compare `getObjectByName(w.name)`'s geometry bounding-box centre (in the model, inside the axis-fix group) with `(w.mx, w.my, w.mz)`, and for a car compare `wheel-left`'s centre with its origin; record all six in the notes. A wheel that wobbles, orbits its axle or sits off its arch, or a centre more than 5 mm off, is a playtest stop: report it (it is the GLB's, so the fix is a bake or engine one, not game wheel code); dirt appears in mud; paints match today's screenshots (take them from `$SCRATCH/tractor-old`), including dirt over the paint and the rainbow running front to back. Paint is now uniforms of one program: `renderer.info.programs.length` must not change through the paint screen (log it before and after).
 
-- [ ] **Step 5: Prove a wheel check bites.** Temporarily swap `makeRotationX(rot)` for `makeRotationX(-rot)` in `wheelMatrix`; run `UNIT test/view.sync.test.mjs`; expected FAIL "chain"; restore.
+- [ ] **Step 5: Prove the wheel, ghost and paint checks bite.** Temporarily delete the car hook's `w0.name = …; w1.name = …;`, run `UNIT test/view.sync.test.mjs`, expect FAIL "create only shapes the model…" (`wheel-left`), and restore. Delete the `lhShared` guard in `ghost`: expect FAIL "ghosting a train on shared compiled materials throws…" (no throw, and the other tractor turns transparent with it); restore. Then change `RAINBOW`'s `from: -1` to `from: 0`: expect FAIL in "paintValues…" and in "the engine paint draws…" on the rainbow pairs. Restore it, then change `PAINT_LOOK.shade` to `[0.25, 0.85, 1]`: expect FAIL in both tests (the brightest vertices are capped). Restore; PASS.
 
-- [ ] **Step 6: Commit** `git add -A src test && git commit -m "feat(tractor): train drawn by view sync hooks (wheels, paint, coverage); bodies.js and vehicles3d.js retire"`
+- [ ] **Step 6: Commit** `git add -A src test && git commit -m "feat(tractor): train drawn by view sync (wheels from kit part poses, engine paint, coverage, per-train ghost); bodies.js and vehicles3d.js retire"`
 
 ### Task 17: Animals, hats, icons and stickers on the assets; `gfx.js` and `assets.json` retire
 
-**Files:** modify `src/render/animals3d.js`, `src/ui/icons.js`, `src/ui/stickerArt.js`, `test/assets.test.mjs` (reads `baked/` through `test/view.models.test.mjs`'s loader, moved to `test/helpers/assets.mjs`); delete `src/render/gfx.js`, `src/assets.json`, `src/render/dirtMat.js`.
+**Files:** modify `src/render/animals3d.js`, `src/ui/icons.js`, `src/ui/stickerArt.js`, `src/game.view.js` (`picturesOf`), `src/view/menus.js` (`createStickerArt`), `test/assets.test.mjs` (reads `baked/` through `test/helpers/assets.mjs`'s `fakeAssets`, moved there in Task 16); delete `src/render/gfx.js`, `src/assets.json`, `src/render/dirtMat.js`.
 
-**Interfaces:** Consumes `petKind`, `posePart`, `view.assets.clone('hat-<id>')`, `mc.get(id, { vertexColors })`, `mc.coverage(material) → { material, uniforms: { uCoverage } }`, `snapshot(renderer, object, { size, camera }) → dataURL`. Produces `createAnimals3D(scene, herd, { assets, compiler })` (same `update(dt, game, view)`, `sing`), `renderIcons(renderer, assets, compiler)`, `tractorPicture(renderer, assets, compiler)`, `createStickerArt(renderer, assets, compiler)`.
+**Interfaces:** Consumes `petKind`, `posePart`, `view.assets.clone('hat-<id>')`, `mc.get(id, { vertexColors })`, `mc.coverage(material) → { material, uniforms: { uCoverage } }`, `snapshot(renderer, object, { size, camera, yaw, pitch, lights, crop, outline, out }) → dataURL` (3e Task 5: the object alone in a studio scene, the renderer's state restored, `''` when a crop finds nothing; `lights: false` turns the studio lights off so a picture brings 1.8's own; `crop`/`outline`/`out` are the stickers' die-cut), `view.materials.repaint(root, paint)` and `paintValues` (3f Task 8b, Task 16). Produces `createAnimals3D(scene, herd, { assets, compiler })` (same `update(dt, game, view)`, `sing`), `renderIcons(renderer, assets, compiler)`, `tractorPicture(renderer, assets, compiler)`, `createStickerArt(renderer, assets, compiler)`.
 
-- [ ] **Step 1: Failing test.** Move `fakeAssets` from `test/view.models.test.mjs` into `test/helpers/assets.mjs` (export it; the models test imports it). Rewrite `test/assets.test.mjs` onto it: each old assertion keeps its meaning against the baked models: statics present (`modelGeometry(A, k)` non-empty), tractor paint slots (`paint-body` on the `body` node, `paint-trim` on `fenders` and `roof`, none on glass/details/wheels: read `mesh.material.name`), barn parts by name with UVs on `walls`/`roof-gables`, hats on the head through the walk (as in Task 15 for all eight pets), eight pets with ≥ 5 parts and idle/walk/run clips, the sheep/duck/chicken/rock colour shares (read the merged `color` attribute through `modelGeometry`; colours are linear in the GLB, so convert with `THREE.Color.prototype.convertLinearToSRGB` before the 0..255 thresholds). Add: `test('no src module imports assets.json or render/gfx.js', …)` scanning `src/**` for `assets.json` and `render/gfx`.
+- [ ] **Step 1: Failing test.** Rewrite `test/assets.test.mjs` onto `fakeAssets` (`test/helpers/assets.mjs`, Task 16): each old assertion keeps its meaning against the baked models: statics present (`modelGeometry(A, k)` non-empty), tractor paint slots (`paint-body` on the `body` node, `paint-trim` on `fenders` and `roof`, none on glass/details/wheels: read `mesh.material.name`), barn parts by name with UVs on `walls`/`roof-gables`, hats on the head through the walk (as in Task 15 for all eight pets), eight pets with ≥ 5 parts and idle/walk/run clips, the sheep/duck/chicken/rock colour shares (read the merged `color` attribute through `modelGeometry`; colours are linear in the GLB, so convert with `THREE.Color.prototype.convertLinearToSRGB` before the 0..255 thresholds). Add: `test('no src module imports assets.json or render/gfx.js', …)` scanning `src/**` for `assets.json` and `render/gfx`, and `test('pictures go through the engine snapshot: no render target, pixel read or paintable under src/', …)` scanning `src/**` for `WebGLRenderTarget`, `readRenderTargetPixels` and `paintable(` (user ruling 2026-10-14: no game copy of `snapshot` or of the paint).
 
-- [ ] **Step 2: Run** `UNIT test/assets.test.mjs`. Expected: FAIL in the import scan (`render/animals3d.js`, `ui/icons.js`, `ui/stickerArt.js`, `render/farm3d.js` still import `gfx.js`).
+- [ ] **Step 2: Run** `UNIT test/assets.test.mjs`. Expected: FAIL in the import scan (`render/animals3d.js`, `ui/icons.js`, `ui/stickerArt.js`, `render/farm3d.js` still import `gfx.js`) and in the picture scan (`ui/icons.js` and `ui/stickerArt.js` keep their own render targets).
 
 - [ ] **Step 3: `render/animals3d.js`.** Replace the gfx/dirtMat imports with `import { petKind, posePart, hasClip } from '../view/pets.js';`. `createAnimals3D(scene, herd, { assets, compiler })`:
   - `const base = compiler.get('pet', { vertexColors: true }), gold = compiler.get('gold'); const kinds = Object.fromEntries(Object.entries(MODEL).map(([t, m]) => [t, petKind(assets, m)]));`
@@ -1840,46 +2002,92 @@ View: in `game.view.js`'s drive half `enter`, after preload: `offs.push(trainVie
   - the B-3 keeper meshes are deleted (the compiler's materials are warmed by `assets.preload`/`warm`, M-12).
   - `drop(i)` disposes `v.parts[0].material` (the coverage clone; the program is shared).
   The drive half creates it with `createAnimals3D(world, game.herd, { assets: view.assets, compiler: view.materials })` (`view/world.js`'s `buildWorld` gains `{ assets, compiler }`).
-- [ ] **Step 4: Icons and stickers.** `ui/icons.js`:
+- [ ] **Step 4: Icons, the paint picture and stickers on `snapshot`.** Each picture draws the posed baked model with the compiled materials, and the engine's `snapshot` (3e Task 5) renders it once to a data URL. 3e's code shows how the parameters map: the portraits and the paint picture keep 1.8's fixed cameras and their own lights (`lights: false`, with the lights inside the snapshotted group). The stickers use the studio, whose lights and yaw/pitch framing are 1.8's sticker rig (hemisphere 2.2 `#ffffff`/`#b9a27c`, sun 1.6 at (2, 5, 4), fov 28, fill 1.02), plus `crop` and `outline`. The paint picture paints a tractor clone with the engine paint (`repaint`, Task 16), once per paint pair. `ui/icons.js`:
 
 ```js
-// The slot bar and sticker card portraits and the paint screen's tractor (3l Task 17): posed models rendered once to data URLs
-// through the engine's snapshot (render-to-dataURL, §4.6), with the compiled materials.
+// The slot bar and sticker card portraits and the paint screen's tractor (3l Task 17; were hand-made render targets): posed baked
+// models drawn with the compiled materials, rendered once each to a data URL by the engine's snapshot (3e, §4.6). Each keeps 1.8's
+// fixed camera and light rig: the lights ride in the snapshotted group and the studio lights are off (lights: false).
 import * as THREE from 'three';
 import { snapshot } from 'lion-hawk/view';
 import { petKind, posePart } from '../view/pets.js';
 import { MODEL } from '../render/animals3d.js';
-import { paintable } from '../view/vehicles.js';
-const lit = scene => { scene.add(new THREE.HemisphereLight('#ffffff', '#b9a27c', 2.2)); const d = new THREE.DirectionalLight('#ffffff', 1.5); d.position.set(2, 4, 3); scene.add(d); return scene; };
+import { paintValues } from '../view/vehicles.js';
+// 1.8's picture lights: a hemisphere (sky #ffffff, ground #b9a27c, 2.2) and a white sun of the given intensity at sunAt (aimed at the origin)
+function stage(sun, sunAt) {
+  const g = new THREE.Group(), d = new THREE.DirectionalLight('#ffffff', sun); d.position.fromArray(sunAt);
+  g.add(new THREE.HemisphereLight('#ffffff', '#b9a27c', 2.2), d);
+  return g;
+}
+// { [type]: dataURL, golden: { [type]: dataURL } }, 256 px (the sticker card shows it big; the slot bar scales it down by CSS)
 export function renderIcons(renderer, assets, compiler) {
-  const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50); cam.position.set(1.9, 2.2, 3.1); cam.lookAt(0, 0.6, 0);
-  const out = { golden: {} }, mat = compiler.get('pet', { vertexColors: true }), gold = compiler.get('gold');
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50); cam.position.set(1.9, 2.2, 3.1); cam.lookAt(0, 0.6, 0); cam.updateMatrixWorld();
+  const out = { golden: {} }, mat = compiler.get('pet', { vertexColors: true }), gold = compiler.get('gold'), st = stage(1.5, [2, 4, 3]);
   for (const [type, model] of Object.entries(MODEL)) for (const golden of [false, true]) {
-    const k = petKind(assets, model), scene = lit(new THREE.Scene()), g = new THREE.Group(); g.rotation.y = -0.5;
-    for (const p of k.parts) { const m = new THREE.Mesh(p.geometry, golden ? gold : mat); m.matrixAutoUpdate = false; posePart(k, 'idle', 0, p.index, m.matrix); g.add(m); }
-    scene.add(g); (golden ? out.golden : out)[type] = snapshot(renderer, scene, { size: 256, camera: cam });
+    const k = petKind(assets, model), g = new THREE.Group(); g.rotation.y = -0.5;
+    for (const p of k.parts) { const m = new THREE.Mesh(p.geometry, golden ? gold : mat); m.matrixAutoUpdate = false; posePart(k, 'idle', 0, p.index, m.matrix); g.add(m); } // part geometry is in its node's own space
+    st.add(g);
+    (golden ? out.golden : out)[type] = snapshot(renderer, st, { size: 256, camera: cam, lights: false });
+    st.remove(g); // geometries and materials are shared (the template's, the compiler's): nothing to dispose
   }
   return out;
 }
+// W-3: the paint screen's picture: the tractor in a paint pair, three-quarter view, 480 × 360 (CI-13), cached per pair
 export function tractorPicture(renderer, assets, compiler) {
-  const cam = new THREE.PerspectiveCamera(28, 4 / 3, 0.1, 50), cache = new Map(), scene = lit(new THREE.Scene()), obj = assets.clone('tractor');
-  const meshes = []; obj.traverse(m => { const a = m.isMesh && { 'paint-body': 1, 'paint-trim': 2 }[m.material.name]; if (a) { m.geometry = m.geometry.clone(); meshes.push({ geometry: m.geometry, area: a }); } });
-  const p = paintable(meshes); scene.add(obj);
+  const cam = new THREE.PerspectiveCamera(28, 4 / 3, 0.1, 50), cache = new Map(), st = stage(1.6, [3, 5, 4]), obj = assets.clone('tractor');
+  st.add(obj); st.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(obj), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
-  obj.rotation.y = -0.6; cam.position.set(c.x + r * 0.2, c.y + r * 1.1, c.z + r * 3.6); cam.lookAt(c.x, c.y - r * 0.1, c.z);
-  return paint => { const key = paint.body + '/' + paint.trim; if (!cache.has(key)) { p.paint(paint); cache.set(key, snapshot(renderer, scene, { size: [480, 360], camera: cam })); } return cache.get(key); };
+  obj.rotation.y = -0.6; cam.position.set(c.x + r * 0.2, c.y + r * 1.1, c.z + r * 3.6); cam.lookAt(c.x, c.y - r * 0.1, c.z); cam.updateMatrixWorld();
+  return paint => {
+    const key = paint.body + '/' + paint.trim;
+    if (!cache.has(key)) { compiler.repaint(obj, paintValues(paint)); cache.set(key, snapshot(renderer, st, { size: [480, 360], camera: cam, lights: false })); }
+    return cache.get(key);
+  };
 }
 ```
-(`snapshot`'s `size` as a number or `[w, h]` is CI-13; if 3e takes only a number, render the tractor at 480 and crop is not needed: the paint screen scales it by CSS.) `ui/stickerArt.js` keeps its own render target (it needs the pixels to crop and to stamp the die-cut border synchronously, which a data URL cannot give without an async decode): replace its `ASSETS`/`geoFrom`/`PET_ANIMS`/`sampleAnim` uses with `petKind`/`posePart` and `compiler.get('pet' | 'gold')`, signature `createStickerArt(renderer, assets, compiler)`. The picture callers (`picturesOf` in `game.view.js`, `view/menus.js`) pass `view.assets, view.materials`.
+
+`ui/stickerArt.js` (user ruling 2026-10-14: its render target, pixel read, crop and die-cut border are `snapshot`'s `crop`, `outline` and `out`):
+
+```js
+// W-1: die-cut stickers (3l Task 17; was a hand-made render target, crop and border). The animal in the sticker's pose (one frame of
+// a clip) and camera angle, through the engine's snapshot: the studio lights and yaw/pitch framing are 1.8's sticker rig, crop:
+// true cuts to the animal, outline the thick white border that follows its shape. Each look is rendered once, then cached.
+import * as THREE from 'three';
+import { snapshot } from 'lion-hawk/view';
+import { petKind, posePart, hasClip } from '../view/pets.js';
+import { MODEL } from '../render/animals3d.js';
+
+// pose -> [clip, the moment in it as a part of its length]: a frame where the pose reads clearly
+export const POSE_FRAME = { idle: ['idle', 0.2], walk: ['walk', 0.25], run: ['run', 0.3], dance: ['dance', 0.35], eat: ['eat', 0.5], shake: ['gesture-negative', 0.4] };
+// view -> the animal turned by yaw (0 faces the camera) and the camera raised by pitch (rad)
+export const VIEW_ANGLES = [{ yaw: -0.55, pitch: 0.22 }, { yaw: 0.55, pitch: 0.22 }, { yaw: -1.05, pitch: 0.3 }, { yaw: 1.05, pitch: 0.3 }, { yaw: -0.3, pitch: 0.55 }];
+const N = 384, BORDER = 11; // render size and white border (px)
+
+export function createStickerArt(renderer, assets, compiler) {
+  const mat = compiler.get('pet', { vertexColors: true }), gold = compiler.get('gold'), cache = new Map(), info = {};
+  function render({ type, golden, pose, view }) {
+    const k = petKind(assets, MODEL[type]), [clip, at] = POSE_FRAME[pose] || POSE_FRAME.idle, name = hasClip(k, clip) ? clip : 'idle', v = VIEW_ANGLES[view] || VIEW_ANGLES[0];
+    const g = new THREE.Group(), t = at * k.table.clips[name].dur;
+    for (const p of k.parts) { const m = new THREE.Mesh(p.geometry, golden ? gold : mat); m.matrixAutoUpdate = false; posePart(k, name, t, p.index, m.matrix); g.add(m); }
+    const src = snapshot(renderer, g, { size: N, yaw: v.yaw, pitch: v.pitch, crop: true, outline: { px: BORDER, color: '#ffffff' }, out: info });
+    return src ? { src, w: info.w, h: info.h } : { src: '', w: 1, h: 1 }; // nothing drawn: 1.8's empty sticker
+  }
+  return {
+    // { src (PNG data URL), w, h } for a sticker { type, golden, pose, view }
+    get(s) { const key = `${s.type}|${!!s.golden}|${s.pose}|${s.view}`; if (!cache.has(key)) cache.set(key, render(s)); return cache.get(key); },
+  };
+}
+```
+The callers pass the engine's renderer, assets and compiler: `picturesOf` in `game.view.js` becomes `p.icons ??= renderIcons(p.renderer, view.assets, view.materials); p.tractorPic ??= tractorPicture(p.renderer, view.assets, view.materials);`, and `view/menus.js` makes `createStickerArt(p.renderer, view.assets, view.materials)`. Compare each with 1.8's screenshots (`$SCRATCH/tractor-old`): a sticker whose crop or border differs from 1.8's by more than 1 px stops the task, and the measured difference goes to the integrator as a request against 3e's `snapshot`. The portraits and the paint picture differ only by the shading tier (compiled `standard` versus 1.8's Lambert), which goes into the playtest list with Task 20's side-by-side.
 - [ ] **Step 5: Gold.** **(judgment)** With `shading: 'standard'` the `gold` registry material carries today's look (metalness 0.7, roughness 0.3, emissive). If Task 20 moves the game to `lambert`, gold loses its sheen (lambert has no metalness): CI-3 asks 3f for a per-material tier override; until then gold stays as `standard` only if the compiler allows it, otherwise the look change goes into the playtest list. `git rm src/render/dirtMat.js src/render/gfx.js src/assets.json`.
-- [ ] **Step 6: Run** `UNIT test/assets.test.mjs test/view.models.test.mjs test/hats.test.mjs test/view.purity.test.mjs test/golden.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS. Manual look: the slot bar icons, the sticker card, the book's stickers, the paint picture, a golden animal, a dirty pig, hats on riders through a drive.
+- [ ] **Step 6: Run** `UNIT test/assets.test.mjs test/view.models.test.mjs test/hats.test.mjs test/view.purity.test.mjs test/golden.test.mjs` then `BROWSER test/e2e.browser.mjs`. Expected: PASS. Manual look: the slot bar icons, the sticker card, the book's stickers, the paint picture in every unlocked pair (rainbow on body and on trim), a golden animal, a dirty pig, hats on riders through a drive.
 - [ ] **Step 7: Commit** `git add -A src test && git commit -m "feat(tractor): animals, hats, icons and stickers from the baked models; gfx.js and assets.json retire"`
 
 ### Task 18: The farm's 3D on compiled materials and instancing; hygiene from the engine
 
 **Files:** modify `src/render/farm3d.js`, `src/render/fx.js`, `src/render/gibs.js`, `src/view/world.js`; delete `src/render/matSplit.js`, `src/render/shadows.js`, `src/render/warm.js`, `src/render/dispose.js`, `test/matSplit.test.mjs`, `test/shadows.test.mjs`, `test/warm.test.mjs`.
 
-**Interfaces:** Consumes `createInstances({ geometry, material, max, castShadow, receiveShadow }) → { mesh, count, set, color, commit }`, `instancedShadows(root)`, `warm(renderer, scene, camera)`, `disposeTree(root, { keepShared })`, `createMarks({ max, width, material })` (kits fx), `modelGeometry`, `partGeometry`, `mc.get(id, { instanced, vertexColors, map })`. Produces `buildFarm3D(group, farm, road, terrain, items, props, { anisotropy, trees, assets, compiler })` (same returned `{ sprinklers, update }`), `createFx(group, groundY, { compiler })`, `createGibs(group, { compiler })`.
+**Interfaces:** Consumes `createInstances({ geometry, material, max, castShadow, receiveShadow }) → { mesh, count, set, color, commit }`, `instancedShadows(root)`, `warm(renderer, scene, camera)`, `disposeTree(root, { keepShared })`, `createParticles({ max, shape, geometry, material, gravity, drag, floor, bounce, friction })` → `emit(x, y, z, vx, vy, vz, life, size, color, g?, drag?)` and `createMarks({ max, width, length, material, heightAt, lift })` → `add(x, z, nx, nz, alpha)` (kits fx, 3h Tasks 10 and 11; CI-14 settled), `mc.extend(material, name, patch)` (3f C4), `modelGeometry`, `partGeometry`, `mc.get(id, { instanced, vertexColors, map })`. Produces `buildFarm3D(group, farm, road, terrain, items, props, { anisotropy, trees, assets, compiler })` (same returned `{ sprinklers, update }`), `createFx(group, groundY, { compiler })`, `createGibs(group, { compiler })`.
 
 - [ ] **Step 1: Failing test.** Add to `test/view.purity.test.mjs`:
 
@@ -1894,9 +2102,9 @@ test('the per-game GPU hygiene and geometry helpers are gone; the farm builds on
 - [ ] **Step 2: Run** `UNIT test/view.purity.test.mjs`. Expected: FAIL, `render/matSplit.js` exists.
 
 - [ ] **Step 3: Implement.**
-  - `farm3d.js`: `const matV = compiler.get('wood', { vertexColors: true }), matVI = compiler.get('wood', { vertexColors: true, instanced: true });` (one look for all vertex-coloured statics, as today's single `matV`; the compiler keys instanced and plain users apart, M-13, which replaces `splitShared`). Every `new THREE.InstancedMesh(geoFrom(Object.values(ASSETS[k])), matV, n)` → `createInstances({ geometry: modelGeometry(assets, k), material: matVI, max: n, castShadow: true, receiveShadow: <as today> }).mesh` (then `setMatrixAt` as today, and `.commit()` / `instanceMatrix.needsUpdate` where it set it); every `geoFrom(Object.values(ASSETS[k]))` on a plain mesh → `modelGeometry(assets, k)`; `geoFrom([ASSETS.wash.frame])` → `partGeometry(assets, 'wash', 'frame')` (and `canopy`, `brush`); the fence piece → `modelGeometry(assets, 'fence').clone().applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.05, 0.465))`. Barn: `part = n => partGeometry(assets, 'barn', n, { uv: true })`, walls and gables `compiler.get('wood', { map: planks })`, shingles `compiler.get('wood', { map: shingles })` (fading roof materials are cloned once: `.clone()` then `transparent = true`, as today's `fade`); trim `matV`. The ground, road ribbons, pond, ramps and the mud keep their game materials (world-UV textures and the rock blend are the game's look, survey "stays in the games"). Delete the `splitShared(scene, matV)` call and its import. The `performance.now()` sway in `update` is view time and stays.
-  - `fx.js`: the particle pool keeps its own motion (per-particle gravity, drag and ground height, which `createParticles` does not take: CI-14); its mesh becomes `createInstances({ geometry: new THREE.BoxGeometry(1, 1, 1), material: compiler.get('fx', …) })`: use `compiler.get('plastic', { instanced: true })` with `instanceColor` (white base, as today's `MeshLambertMaterial()`). Tire marks become `createMarks({ max: 400, width: 0.45, material: <today's MeshBasicMaterial> })` with `tireMark(x, z, yaw, alpha)` → `marks.add(x, z, Math.sin(yaw), Math.cos(yaw), alpha)` (the ground height: the kit's marks lie on y = 0 + offset; Tractor's farm is not flat, so if `createMarks` has no height callback, keep today's marks InstancedMesh and record CI-14).
-  - `gibs.js`: mesh from `createInstances({ geometry: BoxGeometry, material: compiler.get('wood', { instanced: true }), max: GIB.cap })`, colours through `instanceColor` as today; `stepGib` unchanged.
+  - `farm3d.js`: `const matV = compiler.get('wood', { vertexColors: true }), matVI = compiler.get('wood', { vertexColors: true, instanced: true });` (one look for all vertex-coloured statics, as today's single `matV`; the compiler keys instanced and plain users apart, M-13, which replaces `splitShared`). Every `new THREE.InstancedMesh(geoFrom(Object.values(ASSETS[k])), matV, n)` → `createInstances({ geometry: modelGeometry(assets, k), material: matVI, max: n, castShadow: true, receiveShadow: <as today> }).mesh` (then `setMatrixAt` as today, and `.commit()` / `instanceMatrix.needsUpdate` where it set it); every `geoFrom(Object.values(ASSETS[k]))` on a plain mesh → `modelGeometry(assets, k)`; `geoFrom([ASSETS.wash.frame])` → `partGeometry(assets, 'wash', 'frame')` (and `canopy`, `brush`); the fence piece → `modelGeometry(assets, 'fence').clone().applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.05, 0.465))`. Barn: `part = n => partGeometry(assets, 'barn', n, { uv: true })`, walls and gables `compiler.get('wood', { map: planks })`, shingles `compiler.get('wood', { map: shingles })` (fading roof materials are cloned once: `.clone()` then `transparent = true`, as today's `fade`); trim `matV`. The ground, road ribbons, pond, ramps and the mud go through the compiler too (user ruling 2026-10-14: no game-made materials where the engine provides them): `compiler.get(<registry id>, { map })` for each, with the world-UV mapping and the rock blend as `mc.extend(material, 'tp-worlduv' | 'tp-rockblend', patch)` game patches (3f C4). If a look cannot be expressed that way (compare screenshots against 1.8 at the e2e seed), stop the task and file an integrator request with the shader difference; do not keep a hand-made material. Delete the `splitShared(scene, matV)` call and its import. The `performance.now()` sway in `update` is view time and stays.
+  - `fx.js`: the particle pool and its motion go to the fx kit (3h Task 10 mapping, CI-14 settled): `const parts = createParticles({ max: 1200, gravity: 9.8, drag: 0.5, floor: groundY, material: compiler.get('plastic', { instanced: true }) })` and the game's `emit(x, y, z, vx, vy, vz, size, life, color, g, drag)` calls become `parts.emit(x, y, z, vx, vy, vz, life, size, color, g, drag)` (**life and size swap places**; `color === null` keeps `parts.color`, as today's `col`); the per-frame motion loop goes (the kit's `update(dt)` runs it). Tyre marks: `createMarks({ max: 400, width: 0.45, length: 0.9, heightAt: groundY, lift: 0.06, material: compiler.get(…) })` with `tireMark(x, z, yaw, alpha)` → `marks.add(x, z, Math.sin(yaw), Math.cos(yaw), alpha)` (3h Task 11; `heightAt` lays them on the hilly farm). The effect presets (stars, gravel, dust, mud splash, water, sparkles, confetti, rainbow trail and halo) stay game code: they are what the game emits, not a pool. A landed cube rests at `floor + size / 2` (1.8: `gy + 0.03`): playtest list.
+  - `gibs.js`: the gib pool becomes `createParticles({ max: GIB.cap, bounce: 0.35, friction: 0.65, floor: groundY, material: compiler.get('wood', { instanced: true }) })` (3h Task 10's gib settings); `stepGib`'s motion goes with it, the break pattern (which gibs, their speeds and colours) stays. If a gib's bounce or rest differs visibly from 1.8 (side-by-side at the e2e seed), stop and file the measured numbers as an integrator request against 3h; do not keep `stepGib`.
   - `view/world.js`: `buildWorld({ view, game, paint })` takes `view.gfx` and `view.assets`/`view.materials`; `instancedShadows(world)` from `lion-hawk/view`; `warm(view.gfx.renderer, view.gfx.scene, view.gfx.camera)` from `lion-hawk/view` replaces `warmShaders`; `dispose()` calls `disposeTree(world, { keepShared: true })` from `lion-hawk/view` (compiled materials and model geometries are shared across farms). Sandbox ground and markers keep their game materials (a plane and cones made in code).
   - `git rm src/render/matSplit.js src/render/shadows.js src/render/warm.js src/render/dispose.js test/matSplit.test.mjs test/shadows.test.mjs test/warm.test.mjs`.
 - [ ] **Step 4: Run** `UNIT test/` (all PASS, goldens unchanged) then `BROWSER test/e2e.browser.mjs`. Manual look as in 2g: boot, drive, honk, a route with trees (break one: gibs), the barn roof fade, the wash, a sprinkler, `?sandbox`, a new farm (old farm's GPU objects freed: `view.gfx.renderer.info.memory.geometries` returns to its first-farm value ± 2 after two new farms).
@@ -2021,7 +2229,9 @@ test('R3: the new build plays offline after the first visit (service worker prec
 
 **Design.**
 - Every replicated thing is a World entity with a `net` part (N-9): animals (`animal`, host), trees (`tree`, host), players (`player`, host), trains (`train`, owner, the tractor entity). The engine sends records on each kind's clock (`send`), keyframes every 2 s, relays owner records through the host (N-10), and applies received records through the built-in `net.frame` handler; the game's own `net.frame` handler still runs after it (the 3c `engine.builtin` seam) and only watches (the guest's watchdog, its deferred welcome, its M-56 repair at host keyframes).
-- Host entities are made by the host only: one bodiless entity per live herd animal and per roster row; the farm's tree entities (Task 7) gain a `net` part while hosting. A guest never spawns a host kind (E-7): replication spawns its copies, each holding its last record in `e.rec` with a counter `e.recSeq`, which the guest sync reads through `netStore(world)` (the `get`/`all` it read from its own `createStore` before).
+- Host entities are made by the host only: one bodiless entity per live herd animal and per roster row; the farm's tree entities (Task 7) gain a `net` part while hosting. A guest never spawns a host kind (E-7): replication spawns its copies, each holding its last record in `e.rec` with a counter `e.recSeq`, which the guest sync reads through `netStore(world)` (the `get`/`all` it read from its own `createStore` before). 3i never sets `e.rec`: Tractor's own kind hooks do (`spawned` and `apply` call `keep`, below), so a replica has `e.rec` from the moment it exists, including after a respawn.
+- **A guest's `world.clear()` (CI-15, decided by 3i):** the net part keeps the replicas across the clear and spawns them again from each one's newest record (`r.last`) through the same `spawn`/`spawned` hooks at its first call after the clear (normally that step's `lh.net.recv`): new `e.id`s, the same `(kind, netId)`, counted in `world.net.stats.respawned`. So after a guest's farm rebuild Tractor rebuilds only its own train (`localTrain`), never re-requests or waits for a host frame, and holds no replica entity across a clear: every lookup goes through `world.net.find(kind, netId)` (or `netStore`, which uses it) at the time of use. `createGame` calls `bindTrains(world, game)` before anything touches `world.net`, so the respawned trains attach to the new farm.
+- **Engine seams used as named by 3i/3g:** the E-7 guard is 3c's `world.net.guard(op, x, value)` with `('spawn', desc)`, `('despawn', e)`, `('add', e, value)`, `('remove', e)`, so `mirrorHost`'s `world.add(t.e, 'net', 'tree')` and `localTrain`'s `world.add(e, 'net', 'train')` / `world.remove(e, 'net')` go through it; `netFix` (snaps only) is 3g's convention (`dp = old − new`, `dq = q_old ⊗ q_new⁻¹`, drawn = offset ⊗ pose), faded by view sync over `world.net.tunables.train.smoothMs` (live, default 150): Tractor writes neither.
 - A train is the tractor entity with its trailer and wagon as linked body entities (3i Contract issue 1): `body`, `trailer`, `wagon` (`F.body()`, all three corrected by the net part, N-14), `input` (the pilot's output, so raw-input tests and the stick drive remotes alike), `mode`, `full`, `dirt` (its own field) and the riders. Remote trains are built by the kind's `spawn`/`spawned` hooks and stepped by `src/sim/trains.js` from their replicated input.
 - The host and guest syncs keep their JSON messages and game rules (hello/welcome, claims, trust-follow C-4, the barn lock M-70…M-73, repairs M-56/M-57, help, horn, regrow, rate and schema checks) and lose their trackers, stores, frame encoding and pass-on.
 
@@ -2076,10 +2286,11 @@ test('animalRecord fills an out object exactly as the old record did (carried: n
 });
 test('netStore reads the last record of each replicated entity by kind and id', () => {
   const g = testGame({ seed: 31 }), w = g.world, e = w.spawn({ tags: ['probe'], net: 'animal', netId: 9 }); e.rec = { type: 'cow' }; e.recSeq = 1;
-  const s = netStore(w); assert.deepEqual(s.get('animal', 9), { type: 'cow' }); assert.equal(s.get('animal', 8), null); assert.deepEqual([...s.all('animal')].map(([id]) => id), [9]);
+  const view = { with: (...a) => w.with(...a), net: { find: (k, id) => k === 'animal' && id === 9 ? e : undefined } }; // no session here: 3i's world.net.find stubbed
+  const s = netStore(view); assert.deepEqual(s.get('animal', 9), { type: 'cow' }); assert.equal(s.get('animal', 8), null); assert.deepEqual([...s.all('animal')].map(([id]) => id), [9]);
 });
 ```
-(The last test fakes a replicated entity by hand; real ones are made by replication in Task 22.)
+(The last test fakes a replicated entity by hand; real ones are made by replication in Task 22, which also checks that `e.rec` is set by the hooks on a real replica.)
 
 - [ ] **Step 2: Run** `UNIT test/net.kinds.test.mjs`. Expected: FAIL, `Cannot find module '../src/net/entities.js'`.
 
@@ -2108,7 +2319,9 @@ import { HATS } from '../sim/progress.js';
 const HAT_LIST = ['none', ...HATS.map(h => h.id)], TYPE_LIST = Object.keys(TYPES), ANIMS = ['idle', 'walk', 'run', 'eat', 'dance'], MODES = ['drive', 'show', 'held', 'wait'];
 export const LIMIT = { coord: 400, height: 50, animals: 256, trees: 1024, riders: 16 };
 const XZ = F.fixed(-LIMIT.coord, LIMIT.coord, 1 / 64), Y = F.fixed(-LIMIT.height, LIMIT.height, 1 / 256);
-const keep = (e, rec, world, s) => { e.rec = rec; e.s = s ?? null; e.recSeq = (e.recSeq ?? 0) + 1; }; // a guest's copy: its last record, the interp sample (view kinds) and a change counter (netStore)
+// a replica's last record, its interp sample (view kinds) and a change counter (netStore, riders.js). 3i never sets e.rec: these hooks
+// do, on spawn (also a CI-15 respawn after a guest's world.clear()) and on every apply (view kinds: every recv step, so count changes only)
+export const keep = (e, rec, world, s) => { e.s = s ?? null; if (e.rec !== rec) { e.rec = rec; e.recSeq = (e.recSeq ?? 0) + 1; } };
 export function animalRecord(a, out) {
   if (a.state === 'gone') return null; // not replicated: its entity is despawned
   const held = HELD.has(a.state), carried = held || a.state === 'carried'; // held: the host's own train has it (M-15)
@@ -2121,13 +2334,13 @@ export function animalRecord(a, out) {
 export const ANIMAL = kind({ name: 'animal', code: 1, authority: 'host', remote: 'view', max: LIMIT.animals, idMin: 0, idMax: MAX_ID, send: { hz: 15, key: 2 },
   fields: { type: F.oneOf(TYPE_LIST), golden: F.bool(), hidden: F.bool(), home: F.oneOf(['route', 'yard']), state: F.oneOf(['free', 'busy', 'carried']),
     owner: F.uint(1, MAX_PLAYERS), epoch: F.uint(4), x: XZ, y: Y, z: XZ, yaw: F.angle(), anim: F.oneOf(ANIMS), leader: F.id(), line: F.uint(1) },
-  record: (e, out) => animalRecord(e.animal, out), apply: keep,
+  record: (e, out) => animalRecord(e.animal, out), spawned: (e, world, rec) => keep(e, rec), apply: keep,
   newer: (old, rec) => rec.epoch >= old.epoch }); // M-26: lower ownership number, older data
 export const TREE = kind({ name: 'tree', code: 2, authority: 'host', remote: 'view', max: LIMIT.trees, idMin: 0, idMax: LIMIT.trees - 1, send: { hz: 15, key: 2 },
-  fields: { state: F.oneOf(['standing', 'broken', 'growing']) }, record: (e, out) => { out.state = e.tree.state; return out; }, apply: keep });
+  fields: { state: F.oneOf(['standing', 'broken', 'growing']) }, record: (e, out) => { out.state = e.tree.state; return out; }, spawned: (e, world, rec) => keep(e, rec), apply: keep });
 export const PLAYER = kind({ name: 'player', code: 3, authority: 'host', remote: 'view', max: MAX_PLAYERS, idMin: 1, idMax: MAX_PLAYERS, send: { hz: 15, key: 2 },
   fields: { coat: F.oneOf(PAINT_NAMES), trim: F.oneOf(PAINT_NAMES), away: F.bool(), join: F.uint(1), barn: F.bool() }, // coat: the body paint ('body' is reserved for F.body, 3i); join: which joining of that number; barn: this player's show has the barn (M-71)
-  record: (e, out) => { const p = e.player; out.coat = p.paint.body; out.trim = p.paint.trim; out.away = !!p.away; out.join = p.join ?? 0; out.barn = !!p.barn; return out; }, apply: keep });
+  record: (e, out) => { const p = e.player; out.coat = p.paint.body; out.trim = p.paint.trim; out.away = !!p.away; out.join = p.join ?? 0; out.barn = !!p.barn; return out; }, spawned: (e, world, rec) => keep(e, rec), apply: keep });
 export const RIDER = F.obj({ id: F.uint(2, MAX_ID), slot: F.uint(1, 11), flying: F.bool(), x: XZ, y: Y, z: XZ, yaw: F.angle(), hat: F.oneOf(HAT_LIST) }); // hat: the one its owner put on it (M-60)
 const BODY = { range: LIMIT.coord, height: LIMIT.height };
 export const TRAIN = kind({ name: 'train', code: 4, authority: 'owner', remote: 'driven', max: 1, idMin: 1, idMax: MAX_PLAYERS, send: { hz: 20, key: 2 },
@@ -2163,8 +2376,8 @@ export function unmirrorHost(world, game) {
   for (const e of m.animal.values()) world.despawn(e); for (const e of m.player.values()) world.despawn(e); m.animal.clear(); m.player.clear();
   for (const t of game.trees.list) if (t.e.net) world.remove(t.e, 'net');
 }
-export function netStore(world) {
-  const find = (kind, id) => { for (const e of world.with('net')) if (e.net === kind && e.netId === id && e.rec) return e; return null; };
+export function netStore(world) { // never cache what it returns across a world.clear(): replicas are respawned as new entities (CI-15)
+  const find = (kind, id) => { const e = world.net?.find(kind, id); return e?.rec ? e : null; };
   return {
     get: (kind, id) => find(kind, id)?.rec ?? null,
     *all(kind) { for (const e of world.with('net')) if (e.net === kind && e.rec) yield [e.netId, e.rec]; },
@@ -2182,7 +2395,7 @@ export function netStore(world) {
 
 ### Task 22 (judgment): Replication moves to the engine; the syncs keep messages and rules
 
-**Decision expected:** `netConfig()` declares `{ kinds: KINDS, world: true, … }` (the port's registry is the engine's), the syncs stop encoding, tracking, storing and passing on frames, and read replicated state through `netStore(world)` and the game's `net.frame` handler (which still runs after the engine's). The host mirrors its entities in `after()`; the guest's herd keeps its 100 ms interpolation buffer (M-25) fed from the animal records each time a host frame lands. Cost: replicated entities on a guest are cleared with the World when its farm rebuilds and come back with the next host frame (as #96 accepted for diffs during a build; CI-15 asks 3i whether clear() keeps the net store).
+**Decision expected:** `netConfig()` declares `{ kinds: KINDS, world: true, … }` (the port's registry is the engine's), the syncs stop encoding, tracking, storing and passing on frames, and read replicated state through `netStore(world)` and the game's `net.frame` handler (which still runs after the engine's). The host mirrors its entities in `after()`; the guest's herd keeps its 100 ms interpolation buffer (M-25) fed from the animal records each time a host frame lands. A guest's farm rebuild (`world.clear()`) keeps the replicas: 3i respawns them from their newest records (CI-15, decided by 3i; Part E design); the guest rebuilds only its own train.
 
 **Files:** modify `src/game/net.js`, `src/net/host.js`, `src/net/guest.js`, `src/net/players.js`, `src/net/protocol.js` (NET_VERSION already 4), `test/mp.*.mjs` (bindings option removed), `test/mp.engine.harness.mjs`; delete `src/net/bindings.js`, `test/mp.test.mjs`'s custom-kinds test (the `bindings` option is gone: the engine's kinds are the game's) — rewrite it on `netConfig({ kinds: [...KINDS, GATE, FLAG] })` if 3i allows extra kinds without entities; otherwise delete it with a note.
 
@@ -2228,7 +2441,7 @@ test('a guest sees the host\'s herd, trees and roster as replicated entities, an
     } catch (e) { warn('net message', e); }
   }
 ```
-  (`f.groups.get(k).records` is a `Map(id → rec)` or an array of pairs depending on 3i's decoded shape: iterate whichever `frameFromJson` returns, as the old `store.apply` changes did.) `useFarm` no longer replays a kept keyframe into a store: after the build, the next host frame refills the entities (CI-15). The welcome handler sets `world.net.self = m.you`.
+  (`f.groups.get(k).records` is a `Map(id → rec)` or an array of pairs depending on 3i's decoded shape: iterate whichever `frameFromJson` returns, as the old `store.apply` changes did.) `useFarm` no longer replays a kept keyframe into a store and does not ask for or wait on a host frame: after the build (`world.clear()` and the new farm) it calls `localTrain` for its own train only, and the net part respawns the host's replicas from their newest records at its next call (CI-15, decided by 3i). Nothing in the guest sync keeps a replica entity across the clear: `taken`, `repair`, `applyHerd`, `barnHolder` look up through `store` each time. The welcome handler sets `world.net.self = m.you`.
 - [ ] **Step 6: `net/players.js`.** `createPlayers()` keeps `map`, `ensure`, `drop`, `list` (the roster: paint, away, join) and `others()`; `push`, `sample`, `poseAt`, `derive`, `trainRecord` and the per-player `interp`/`fc` go (trains are entities from Task 23). `others()` becomes `others(world)`: one reused row per remote train entity (`world.with('net')`, `e.net === 'train' && e.netId !== world.net.self`) with `n, x, z, yaw, speed, held` from its body and `e.mode !== 'drive'`. `git rm src/net/bindings.js`.
 - [ ] **Step 7: Tests.** `test/mp.engine.harness.mjs` loses the `bindings` option; `test/mp.harness.mjs` re-exports as in Task 9. Tests that poked `sync.store`, `players.push`, `p.latest` or encoded frames by hand (`mp.test.mjs` "garbage, wrong kinds…" encodes frames with `REGISTRY`) now encode with `createRegistry(KINDS, { maxSender: MAX_PLAYERS })` from `lion-hawk/sim` and send through the hub, so the port and the built-in drop them (M-50 holds at the port, N-3).
 - [ ] **Step 8: Run** `UNIT test/net.kinds.test.mjs test/mp.animals.test.mjs test/mp.repair.test.mjs test/mp.barn.test.mjs test/mp.relay.test.mjs`. Expected: PASS for the herd, trees, roster, claims, repairs and the barn lock. Train-dependent checks (other trains drawn, carried riders, bumps) stay red until Task 23.
@@ -2250,6 +2463,8 @@ test('a guest sees the host\'s herd, trees and roster as replicated entities, an
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { engineWorld } from './mp.engine.harness.mjs';
+import { TRACTOR_WHEELS } from '../src/sim/tractor.js';
+import { CAR_WHEELS } from '../src/sim/hitch.js';
 const remote = (d, n) => d.engine.world.net.find('train', n);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -2269,6 +2484,15 @@ test('a remote train follows its owner\'s drive within 0.5 m (input-driven betwe
   assert.ok(dist(r.body.translation(), g.game.tractor.body.translation()) < 0.5);
   assert.ok(dist(r.trailer.body.translation(), g.game.train.cars[0].body.translation()) < 0.7, 'trailer');
   assert.ok(dist(r.wagon.body.translation(), g.game.train.cars[1].body.translation()) < 0.7, 'wagon');
+});
+test('a remote train turns its own wheels: the kit on the driven replica writes its part poses (rolled and steered), cars too', async () => {
+  const w = await engineWorld({ seed: 41 }); w.seconds(3);
+  const n = w.guests[0].engine.world.net.self, q0 = { ...remote(w.host, n).partXf['wheel-back-left'].q };
+  w.seconds(2, (d, i) => i === 1 ? { thr: 1, steer: 0.5, horn: false } : null);
+  const r = remote(w.host, n), q1 = r.partXf['wheel-back-left'].q, dot = Math.abs(q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w);
+  assert.deepEqual(Object.keys(r.partXf), TRACTOR_WHEELS.map(x => x.name)); assert.ok(1 - dot > 0.01, 'the replica\'s rear wheel rolled');
+  assert.ok(Math.abs(r.partXf['wheel-front-left'].q.y) > 0.01, 'the replica\'s front wheel steers (Ry(steer) from the replicated input)');
+  for (const c of [r.trailer, r.wagon]) assert.deepEqual(Object.keys(c.partXf), CAR_WHEELS);
 });
 test('the train leaves with its owner: three bodies and two joints are freed', async () => {
   const w = await engineWorld({ seed: 41 }); w.seconds(3);
@@ -2324,10 +2548,10 @@ export const TRAIN = kind({ name: 'train', code: 4, authority: 'owner', remote: 
   fields: { body: F.body(BODY), trailer: F.body(BODY), wagon: F.body(BODY), input: F.actions(DRIVE), mode: F.oneOf(MODES), full: F.bool(),
     dirt: F.list(F.fixed(0, 1, 1 / 100), 3, 3), riders: F.list(RIDER, LIMIT.riders) }, // M-68 dirt in its own field (F.body carries none)
   spawn: rec => spawnTrainDesc(rec),
-  spawned: (e, world) => attachRemoteTrain(e, world),
-  apply(e, rec, world, s) { e.mode = rec.mode; e.full = rec.full; e.dirt = rec.dirt; e.riders = rec.riders; e.rec = rec; e.recSeq = (e.recSeq ?? 0) + 1; void s; } });
+  spawned: (e, world, rec) => { keep(e, rec); attachRemoteTrain(e, world); }, // also the CI-15 respawn after a guest's world.clear()
+  apply(e, rec, world, s) { e.mode = rec.mode; e.full = rec.full; e.dirt = rec.dirt; e.riders = rec.riders; keep(e, rec, world, s); } });
 ```
-with `const BODY = { range: LIMIT.coord, height: LIMIT.height }`. (Bodies and input are the net part's: the override only keeps the game fields; per 3i, a driven input never comes through `apply`.)
+with `const BODY = { range: LIMIT.coord, height: LIMIT.height }`. (Bodies and input are the net part's: the override only keeps the game fields; per 3i, a driven input never comes through `apply`.) **Wheels on replicas:** `apply` writes no part poses. A remote train is `driven` (N-12): `attachRemoteTrain` puts the vehicle kit on its tractor and cars, and the kit writes their `e.partXf` every step from the replica's own wheels, spun and steered by the replicated input (pinned by "a remote train turns its own wheels"). A second writer in `apply` would run in `lh.net.recv` and be overwritten by `VEHICLE_SYSTEM` in the same step. If a train kind ever stops being `driven` (no kit on the replica), `apply` must write `partXf` from the record's motion instead.
 `src/net/entities.js`:
 
 ```js
@@ -2353,7 +2577,7 @@ Host and guest: carried riders (`applyCarried`, the host's `before` loop over `p
 
 **Files:** rewrite `src/sim/bump.js`; modify `src/sim/tractor.js` (tractor filter adds `'vehicle'`), `src/net/host.js`, `src/net/guest.js` (`bumper.drive` call), `test/bump.test.mjs`, `test/feel.test.mjs` (drop the soft-bump test), `test/helpers/feel.mjs` (`bumpRun` stays for the notes, unused by tests); create `test/net.bump.test.mjs`.
 
-**Interfaces:** Consumes `world.rapier.contactPair(c1, c2, cb)`. Produces `BUMP = { cool: 0.6 }`, `createBumper(world)` → `{ drive(game, events) }`: one `{ type: 'bump', other: n }` event when this device's tractor starts touching another player's tractor; none again until the two have been apart for `BUMP.cool` s of sim time. The view's existing `bump` handling (boing, short horn, shake) is the honk.
+**Interfaces:** Consumes `world.rapier.contactPair(c1, c2, cb)` on 3i's `driven` remotes (dynamic, solid bodies that take part in contacts like any local body; 3i provides no honk or debounce: both live here, contract issues "3i"). Produces `BUMP = { cool: 0.6 }`, `createBumper(world)` → `{ drive(game, events) }`: one `{ type: 'bump', other: n }` event when this device's tractor starts touching another player's tractor; none again until the two have been apart for `BUMP.cool` s of sim time. The view's existing `bump` handling (boing, short horn, shake) is the honk.
 
 - [ ] **Step 1: Failing tests.** Replace `test/bump.test.mjs`:
 
@@ -2445,7 +2669,7 @@ export function createBumper(world) {
 
 **Files:** create `src/view/riders.js`; modify `src/game.view.js` (drop `players.poseAt`, `netView`, `others3d`), `src/view/world.js`; delete `src/render/others3d.js`.
 
-**Interfaces:** Consumes `trainViews(sync, { paintOf, awayOf })` (Task 16: remote trains are tractor/car entities with `model`, drawn by the same hooks), `view.sync.objectOf(e)`, train entity fields `riders`, `rec` and `recSeq` (read-only), `createInterp` (lion-hawk/sim, view-side copy per remote player). Produces `createRiderPoses() → { update(world, sync, nowMs, out: Map) → Map }`: pose copies for animals other players carry (slot riders placed in the drawn car; riders in flight interpolated between the last two records by record time, D8's role for a non-colliding visual), the map `animals3d` draws in place of the sim's animals (as #79/#102).
+**Interfaces:** Consumes `trainViews(sync, { materials, paintOf, awayOf })` (Task 16: remote trains are tractor/car entities with `model`, drawn by the same hooks), `view.sync.objectOf(e)`, train entity fields `riders`, `rec` and `recSeq` (read-only), `createInterp` (lion-hawk/sim, view-side copy per remote player). Produces `createRiderPoses() → { update(world, sync, nowMs, out: Map) → Map }`: pose copies for animals other players carry (slot riders placed in the drawn car; riders in flight interpolated between the last two records by record time, D8's role for a non-colliding visual), the map `animals3d` draws in place of the sim's animals (as #79/#102).
 
 - [ ] **Step 1: Failing test.** Add to `test/view.purity.test.mjs`: `test('others3d and poseAt are gone; riders come from train entities', () => { assert.equal(existsSync(join(src, 'render/others3d.js')), false); assert.doesNotMatch(readFileSync(join(src, 'game.view.js'), 'utf8'), /poseAt|others3d/); })` and in `test/net.driven.test.mjs`: a guest train carrying 2 riders (use the farm debug `riders(e, 2)` on the guest) → on the host, `createRiderPoses().update(...)` gives 2 poses within 0.6 m of the guest's own rider positions (use a fake `sync.objectOf` returning `{ position: body.translation(), quaternion: body.rotation() }` of the host's remote car entities).
 - [ ] **Step 2: Run** `UNIT test/view.purity.test.mjs test/net.driven.test.mjs`. Expected: FAIL (`others3d.js` exists; `createRiderPoses` missing).
@@ -2509,7 +2733,7 @@ test('R5: under 80 ms latency and 2 % loss, 1 s after contact both peers hold ea
   assert.equal(snaps(), snaps0, 'no correction over snapAt (a snap) during the bump');
 });
 ```
-(`link` option names are `mp()`'s: use the names `lion-hawk/test` documents for latency and loss.) Run `UNIT test/net.bump.test.mjs`. Expected: PASS. **If it fails on distance or snaps:** this is the driven-feel risk R5 names: write the numbers into the notes, try `tune.nudge` 4…10 and `snapAt` 1.5…2.5 through `world.net.tunables.train` (N-17) and record each run; never loosen the 0.5 m or snapAt assertions. A failure that no tunable fixes goes to the user with the D8 fallback ready: `TRAIN.remote: 'view', follow: 'forecast'` is a one-line change that makes trains draw-only again (and the honk would then need the old soft-bump distance rule).
+(`link` option names are `mp()`'s: use the names `lion-hawk/test` documents for latency and loss.) Run `UNIT test/net.bump.test.mjs`. Expected: PASS. **If it fails on distance or snaps:** this is the driven-feel risk R5 names: write the numbers into the notes, try `tune.nudge` 4…10 and `snapAt` 1.5…2.5 through `world.net.tunables.train` (N-17) and record each run; never loosen the 0.5 m or snapAt assertions. A failure that no tunable fixes stops the task (user ruling 2026-10-14: no fallback to draw-only trains or a game-side bump): file an integrator request against 3i with the measured distances, snap counts and tunables tried (the clock-sync follow-up 3i parked is the likely fix), and resume on the engine patch. `remote: 'view'` for trains is not an option.
 - [ ] **Step 2: Tapes (NET_VERSION 4 cause).** Run `UNIT test/tape.test.mjs`. The in-run tapes (solo trip, guest without its host, a guest that boops, the checksum probes) must pass on the new wire; there are no stored tape files to re-record. Add one: `test('a guest whose train bumps the host\'s replays alone, bump event included', …)` recording the guest of Task 24's head-on run and asserting `replay(g, tape).checksum() === guest.h.checksum()` and that the replay's events include one `bump`.
 - [ ] **Step 3: Two pages** (R5 (b)). `test/net.peers.browser.mjs` with `peers(browser, url, 2, { render: 'manual', argsOf })` (lion-hawk/playwright, #107): host and guest pages, the guest turned to face the host (`window.engine.debug.trainAt`), both drive at each other with the stick; assert each page logs exactly one `bump` and that each page's World has the other's train as a dynamic body. Run `BROWSER test/net.peers.browser.mjs`. Expected: PASS.
 - [ ] **Step 4: The version message** (R5 (c)): `src/net/session.js` already maps Handshake's `version_mismatch` to "Update the game on both devices." Keep it (the overview's suggested wording is an example); add a `session.test.mjs` case that a refused join with `version_mismatch` shows that text. The real-device check (a 1.8.0 device given a 1.9.0 room code) is a user item in the notes.
@@ -2613,36 +2837,45 @@ Each item gets a test that fails before its fix (Step 1), then the fix (Step 3):
 ## Notes stub
 
 Notes file: `docs/plans/2026-10-13-phase-3l-tractor-notes.md` (engine repo; the controller creates it, implementers append). Sections: "What landed" (per task, commits), "Re-bless 1 (World)", "Re-bless 2 (vehicle kit order)", "Task 13b dirt rates", "NET_VERSION 4", "R1 / R3 numbers", "lh-allow lines", "Playtest list", "Contract issues (as met)", and **"Field note candidates"** (the integrator numbers them from #110). Candidates already known:
-- `createChaseRig` has no velocity heading, portrait distance, shake or live (`?tune`) options; Tractor keeps its own chase camera (Task 14/16 judgment).
-- `createParticles` has no per-particle gravity, drag or ground height; Tractor keeps its particle motion on `createInstances` (CI-14).
-- `snapshot` returns a data URL; die-cut stickers need pixels synchronously (Task 17).
-- Paint as one material colour cannot express a rainbow along the body; Tractor repaints vertex colours (Task 16).
-- The coverage kit's single `washTime` cannot express a faster wash; Tractor adds the yard wash's extra in game code (Task 13b).
+- Tractor's chase camera moved into 3g's `createChaseRig` (heading style); the shake is now a counter hash, not `Math.random` (Task 14, CI-10).
+- Tractor's fx cubes, gibs and tyre marks moved onto 3h's `createParticles`/`createMarks` (per-emit gravity and drag, `floor`, `heightAt`); landed cubes rest at `floor + size / 2` (Task 18, CI-14).
+- Paint as one material colour could not express 1.8's shaded paint or a rainbow along the body; the engine gained a `PAINT` feature (shading-preserving paint, hue-ramp paint value, `mc.repaint`) on one program per feature set (3f Task 8b; Tasks 16, 17; Integrator request 6, closed).
+- The coverage kit's single `washTime` could not express a faster wash; 3h gains a per-wash `washTime` (Integrator request 5, Task 13b).
 
 ## Contract issues
 
-Each is the smallest decision that lets the plan proceed; the controller reconciles.
+Each was the smallest decision that let the plan proceed; the controller's rulings (`2026-10-13-phase-3-contract-issues.md`, "## 3l Tractor") and the wave-1 reconciliation settled them. Status as of the reconciliation pass (2026-10-14):
 
-- **CI-2 (3d/3f) anim-table socket rows.** Task 15 reads the hat's frame from a `sock-hat` row if the anim table has one (3d's plan says it samples socket rows), and otherwise composes the parent part's frame with the sidecar socket. Either works; the fallback costs one matrix multiply per hat.
-- **CI-3 (3f) per-material shading tier.** Only if R1 moves Tractor to `lambert`: the gold animal needs `standard` for its metal look. Request a `look.tier` override; until then the look loss is a playtest item.
-- **CI-4 (3c) no `cone` collider shape.** Yard cones use a 17-point hull with `body.mass: 2`; physics changes slightly (counted in re-bless 1).
-- **CI-6 (overview §5.5) re-bless causes.** Two causes this plan needs are not in §5.5's list: the vehicle kit running `updateVehicle` after the scene step (Task 13) and the pre/post split around `lh.physics.step` (Task 8, folded into re-bless 1). Both follow the §5.5 procedure (feel samples first, tolerances fixed in advance).
-- **CI-7 (3d) programmatic build signature.** `test/serve.mjs` calls `build({ game, out, e2e: true })` from `lion-hawk/build`; adjust to 3d's real signature.
-- **CI-8 (3e) light presets.** The preset field names are elided in §4.6; Tractor's hemisphere sky (`#eef7ff`) differs from its background (`#bfe6f5`) and needs either a separate field or accepts the background colour.
-- **CI-10 (3g) chase rig.** See the field note candidate; Tractor keeps `render/camera.js` + `view/rig.js` (with `makeProject` for `view.project`).
-- **CI-11 (3c/3h) heightfield options.** `world.heightfield` and the terrain kit need `fixInternalEdges` and a collider `material` (Tractor's ground is `ground`, friction 0.6); Task 12 keeps `world.heightfield` + game `materialAt` until the kit takes them.
-- **CI-12 (3e/3f) where boot gets the manifest.** Tractor passes `RENDER.assets = { manifest, base: './assets/' }`; move it to a boot option if that is 3e's choice.
-- **CI-13 (3e) `snapshot` size.** Tractor needs 480×360 for the paint picture; it passes `size: [480, 360]`, or 480 square if only a number is accepted.
-- **CI-14 (3h) particles and marks.** `createParticles` lacks gravity/drag/ground per particle; `createMarks` lacks a ground height for a hilly farm. Tractor keeps its own fx motion and, if needed, its marks mesh.
-- **CI-15 (3i) replicated entities and `world.clear()` on a guest.** A guest's new farm clears the World; Tractor assumes 3i rebuilds its per-World state on the new serial and the next host frame respawns the replicas (as 3i's Task 5 says), accepting a gap of up to one keyframe (#96).
-- **CI-16 (3c) the World keeps stepping during a load.** `lh.physics.step` runs while the farm's `ctx.load` is active (#90: systems keep running), so the old farm's bodies coast for the load's frame; Tractor's `pre`/`post` are suspended. If 3c can skip the physics stage while the main scene loads, that matches 1.8 exactly; otherwise accepted (no golden crosses a load).
-- **CI-17 (4.4) quaternion format.** `spawn({ q })` and `place(e, …, { q })` are taken as `[x, y, z, w]` arrays (the sidecar format), and `spawn`'s rotation is set exactly from `q` (Task 6's pose test pins it).
+- **CI-2 (3d/3f) anim-table socket rows.** Accepted: 3d writes `sock-<name>` rows; Task 15 reads the hat's frame from the `sock-hat` row and keeps the sidecar-socket composition as a defensive fallback (one matrix multiply per hat).
+- **CI-3 (3f) per-material shading tier.** Deferred until the iPad R1 runs. Lambert through D5's tier is an engine option and acceptable; if R1 forces it, the gold animal's look (or `mc.extend`) is an engine request, not a game material.
+- **CI-4 (3c) no `cone` collider shape.** Accepted: yard cones are a 17-point hull with `body.mass: 2` (counted in re-bless 1).
+- **CI-6 (overview §5.5) re-bless causes.** Accepted: "vehicle-kit update order" (Task 13) and "pre/post split" (Task 8, in re-bless 1).
+- **CI-7 (3d) programmatic build.** Settled: `build({ game, out, env, site, mode, e2e, entry, log }) → { out, version, hash, files, sizes }`, no `report` member (Task 4). The template's `<!--APP-->` is bare; `sw.js` has `__PRECACHE__`.
+- **CI-8 (3e) light presets.** Settled: `{ sky, hemiSky, ground, hemi, sun: { color, intensity, offset }, fog }`; `hemiSky` `#eef7ff` apart from the background (Task 14).
+- **CI-10 (3g) chase rig.** Settled: Tractor adopts `createChaseRig` (heading style, `shake`, `blendFrom`, `portraitAspect`, live `opts`); `render/camera.js` is deleted and `view/rig.js` is a thin wrapper, pinned by `test/view.rig.test.mjs` against 1.8's camera (Task 14).
+- **CI-11 (3c/3h) heightfield options.** Settled: `world.heightfield` forwards `fixInternalEdges`; `createTerrain({ material, groups, fixInternalEdges })` (Tasks 5, 12).
+- **CI-12 (3e/3f) where boot gets the manifest.** Settled: `render: { assets: { manifest, base } }` (Task 15).
+- **CI-13 (3e) `snapshot` size.** Settled: `snapshot(renderer, object, { size: [480, 360], camera })` (Task 17); stickers use its `crop`/`outline`/`out`.
+- **CI-14 (3h) particles and marks.** Settled: `createParticles` (per-emit gravity/drag, `floor`, `bounce`, `friction`) and `createMarks` (`heightAt`, `lift`); Tractor's fx, gibs and marks move onto them (Task 18).
+- **CI-15 (3i) replicas and a guest's `world.clear()`.** Decided by 3i: replicas survive the clear and are respawned from their newest records through the kind hooks (new `e.id`s, same netIds, `stats.respawned`). Tractor rebuilds only its own train, does not re-request or wait for a host frame, and never holds a replica across a clear (`world.net.find`, Part E design; Task 22).
+- **CI-16 (3c) physics during a load.** Settled: 3c does not run `lh.physics.step` while a scene loads (S-3); Tractor relied on no step during a load, and `test/split.test.mjs` pins it (Task 8).
+- **CI-17 (§4.4) quaternion format.** Confirmed by 3c: `[x, y, z, w]` (Task 6's pose test pins it).
+- **3i `e.rec`.** 3i never sets `e.rec` on a replica; Tractor's kinds set it in their own `spawned` and `apply` hooks (`keep`, Task 21), which `netStore` and `riders.js` read.
+- **3h `dirtRate`.** Per metre, matched to 1.8's per-second rate at Medium speeds and pinned by `test/dirt.test.mjs` (Task 13b); playtest item.
+- **Part poses (3c Task 10b, 3g Task 13b, 3h Task 6b; user ruling 2026-10-14).** Adopted: each kit wheel names its GLB node in `part` (Task 13; `CAR_WHEELS` for the trailer's cloned wheel node, Task 16), view sync draws the wheels, and `vehicles.js` keeps no pivots or per-frame wheel code. Remote trains are driven and run the kit, so their wheels need no `apply` writer (Task 23). The bbox hub against 1.8's hand pivots is a playtest eyeball item (Task 16 Step 4).
+- **Away ghost on shared materials.** Fixed in Task 16: `ghost` writes only per-entity materials (coverageView's `mc.coverage` clones) and throws on a shared one, so ghosting one train never ghosts every train.
+- **Registry hash.** The engine's base hash literal is now `2f4f4f95` (3b); Tractor's tests read `MATERIALS.hash` and `phys.json`'s `materials` from code, never a literal.
 
 (The earlier CI-1 (a `spawn` hook for multi-body remotes), CI-5 (`coverageView` without `coverageKit`) and CI-9 (game-side car correction) are resolved by 3i's linked bodies and by Task 13b using the coverage kit.)
 
 ## Integrator requests
 
+User ruling (2026-10-14): Tractor moves fully onto the engine. A step that finds the engine short stops, files a request here with measured numbers, and resumes on the engine patch; it never keeps a game copy.
+
 1. **`games/package-lock.json`** after `games/tractor-pickup/package.json` changes (Task 3 adds `meshoptimizer` as a devDependency; Task 4 drops nothing): run `npm install` in `games/` on `feat/lion-hawk-3` and commit the lockfile.
 2. **`games/test/**`**: if any workspace test references `tractor-pickup/build.py`, `src/assets.json`, `TP_MP` or `test/mp.harness.mjs`'s old world, update it (this plan deletes them).
-3. **Engine requests from the contract issues** above that need engine changes: CI-11 (heightfield `fixInternalEdges` and `material` in `world.heightfield`/the terrain kit), CI-14 (particle gravity/drag/ground, marks ground height), CI-3 (only if R1 forces `lambert`), CI-16 (optional).
+3. **Engine requests still open:** CI-3 (a per-material tier, only if R1 forces `lambert` and the gold look is lost). CI-11, CI-14 and CI-16 are settled by 3c/3h and need nothing more.
 4. **Field notes**: number the "Field note candidates" from the notes file (from #110).
+5. **3h coverage kit: a per-wash time.** `washes` entries may be `{ at(x, z) → boolean, washTime }` beside plain functions, so Tractor's yard wash cleans in `DIRT.washTime / WASH_RATE` = 0.5 s while sprinklers take 1.5 s (1.8's numbers). Task 13b uses it and waits for it.
+6. **Closed (2026-10-14): paint that keeps vertex shading and varies along the body.** 3f Task 8b owns it, because paint is a material concern and 3g only forwards `e.paint` and `instanceColor`. It adds the `PAINT` feature: each `paint-body`/`paint-trim` vertex is the paint × (0.25 + 0.85 × its brightness over its slot's brightest, at most 1.1). It adds the paint value `{ hue: { axis: [0, 0, 1], from: -1, to: 1, s: 0.75, l: 0.5 } }` for rainbow, `createMaterialCompiler(…, { paint: { base, shade } })` and `mc.repaint(root, paint)`. Colours, hues and no paint are uniforms of one program per feature set. Task 16 (hooks) and Task 17 (`tractorPicture`) use it, and their tests compare it with 1.8's `paintable`. 3e accepts `render.paint` and passes it to the compiler (3e Task 7, reconciled 2026-10-14 for 3f Integrator request 2); the integrator only confirms it at the Wave B merge.
+7. **Part poses in 0.9.0.** Tasks 13, 16 and 23 need 3c Task 10b (`partXf`), 3g Task 13b (view sync draws part poses) and 3h Task 6b (the wheel `part`) on `phase-3`. Without them Task 16 stops (no game wheel code).

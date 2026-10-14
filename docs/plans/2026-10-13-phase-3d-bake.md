@@ -1837,6 +1837,7 @@ test('3d: --check reports a changed, added or removed source, the registry hash 
 **Interfaces:**
 - Produces `resolveOut({ cfg, out, env, site }) → absDir`, which throws `UsageError` (`build: pass --out or set $<outEnv>`, or `… is under site/exp/; only a deploy passes --site`).
 - Produces `fillTemplate(template, js)`, `stampPage(html, { id, version, engine, hash })` and `stampWorker(sw, { version, engine, hash, precache })`.
+- `fillTemplate` replaces the bare `<!--APP-->` marker with an inline `<script type="module">…</script>` holding the bundle (D1; contract-issues 3j ruling 7). The template has no `<script>` of its own around the marker; a marker inside one fails with a hint, because the page would nest script tags.
 
 - [ ] **Step 1: Failing test** `test/build-page.test.mjs`:
 ```js
@@ -1861,9 +1862,10 @@ test('3d: any path under site/exp/ is refused without --site (constraint 8); --s
   assert.equal(resolveOut({ cfg, out: '/w/four43/site/expo/x', env: {} }), '/w/four43/site/expo/x');
   assert.equal(resolveOut({ cfg, env: {}, site: true }), join('/w/four43/site/exp', 'tractor-pickup'));   // path only; nothing is written
 });
-test('3d: the template takes the bundle at <!--APP--> with </script escaped; a template without the marker fails', () => {
-  assert.equal(fillTemplate('<script><!--APP--></script>', 'a("</script>");$&'), '<script>a("<\\/script>");$&</script>');
+test('3d: <!--APP--> becomes an inline module script with </script escaped (D1); no marker, or one inside a <script>, fails', () => {
+  assert.equal(fillTemplate('<body><!--APP--></body>', 'a("</script>");$&'), '<body><script type="module">a("<\\/script>");$&</script></body>');
   assert.throws(() => fillTemplate('<script>/*BUNDLE*/</script>', 'x'), /build: the template has no <!--APP--> marker/);
+  assert.throws(() => fillTemplate('<script><!--APP--></script>', 'x'), /build: <!--APP--> sits inside a <script>; remove that tag \(the build writes <script type="module">\)/);
 });
 test('3d: B-5 stamps: a meta tag after <head>, and sw.js __VERSION__ and __PRECACHE__', () => {
   const html = stampPage('<html><head lang="en"><title>t</title></head></html>', { id: 'g', version: '1.2.3', engine: '0.8.0', hash: 'abc123def456' });
@@ -1895,9 +1897,11 @@ export function resolveOut({ cfg, out, env = process.env, site = false }) {
 and `tools/build/page.js`:
 ```js
 // The page (B-1, B-5): the template with the bundle at <!--APP-->, a build stamp meta tag, and the service worker stamp.
+// D1: the bare <!--APP--> marker becomes an inline <script type="module"> (ESM bundle, so a game may use top-level await).
 export function fillTemplate(template, js) {
   if (!template.includes('<!--APP-->')) throw new Error('build: the template has no <!--APP--> marker');
-  return template.replace('<!--APP-->', () => js.replace(/<\/script/gi, '<\\/script'));
+  if (/<script\b[^>]*>\s*<!--APP-->/i.test(template)) throw new Error('build: <!--APP--> sits inside a <script>; remove that tag (the build writes <script type="module">)');
+  return template.replace('<!--APP-->', () => `<script type="module">${js.replace(/<\/script/gi, '<\\/script')}</script>`);
 }
 // B-5: <meta name="lion-hawk-build" content="<game> <gameVersion> lion-hawk <engineVersion> <hash>"> after <head>
 export function stampPage(html, { id, version, engine, hash }) {
@@ -1922,16 +1926,17 @@ export function stampWorker(sw, { version, engine, hash, precache }) {
 - create `test/fixtures/models/game/{src/main.js,template.html,build.hooks.js,pwa/sw.js,pwa/manifest.webmanifest,pwa/icon.svg}`.
 
 **Interfaces:**
-- Produces `build({ game, out, env, site, mode, e2e, entry, log }) → Promise<{ out, version, hash, files, sizes: { html, assets, total: { bytes, gzip } } }>`.
+- Produces `build({ game, out, env, site, mode, e2e, entry, log }) → Promise<{ out, version, hash, files, sizes: { html, assets, total: { bytes, gzip } } }>`. This is the public programmatic API exported from `lion-hawk/build` (integrator request 1 adds the `exports` entry) and documented in the module's header comment (Step 4). Games call it from their test servers (3l CI-7: `await build({ game: root, out, e2e: true })`); every option except `game` and `out` has a default, `game` may be a directory or a loaded config, and the result has no `report` member (the size report goes to `log`).
 - Produces `bundle(cfg, { entry, e2e })`, `bakedAssets(cfg)` and `ENGINE_VERSION`, and re-exports `dedupe` and `UsageError`.
 - Hooks get `ctx = { config, game, out, e2e, version, engine, log }`. `beforePage(ctx)` is awaited before the page is made; `page(html, ctx) → html`.
 
 **Expected decisions:**
 - (a) `--e2e` means no minify, an inline sourcemap, `ctx.e2e = true` for hooks (Tractor skips ffmpeg) and no `sw.js` (tests run without a service worker).
 - (b) The content hash is sha256 over the page before stamping, the baked assets and the non-sw PWA files, 12 hex characters.
-- (c) The page stamp is a `<meta name="lion-hawk-build">` tag. The sw `__VERSION__` becomes `<game>+lh<engine>-<hash>`. `__PRECACHE__` becomes `./`, every `assets/models/*` and every PWA file except `sw.js`. (C8)
+- (c) The page stamp is a `<meta name="lion-hawk-build">` tag. The sw `__VERSION__` becomes `<gameVersion>+lh<engine>-<hash>`. `__PRECACHE__` becomes `./`, every `assets/models/*` and every PWA file except `sw.js`. (C8)
 - (d) A baked GLB whose sha differs from `manifest.json` fails the build.
 - (e) `--mode` accepts only `single`.
+- (f) The bundle is ESM (`format: 'esm'`) and goes into the page as an inline `<script type="module">` at `<!--APP-->` (D1; Task 12). The same in `dev()`.
 
 - [ ] **Step 1: Fixture build inputs.** `test/fixtures/models/game/src/main.js`:
 ```js
@@ -1945,7 +1950,7 @@ globalThis.fixture = { models: Object.keys(PHYS.models), glbs: Object.values(MAN
 ```html
 <!doctype html>
 <html><head><meta charset="utf-8"><title>fixture</title></head>
-<body><script><!--HOOK--></script><script><!--APP--></script></body></html>
+<body><script><!--HOOK--></script><!--APP--></body></html>
 ```
 `test/fixtures/models/game/build.hooks.js`:
 ```js
@@ -1977,7 +1982,7 @@ import { copyFixture } from './helpers/bakeGame.mjs';
 
 const quiet = () => {};
 const scratch = () => mkdtempSync(join(tmpdir(), 'lh-out-'));
-const runPage = html => { const ctx = { window: {} }; ctx.globalThis = ctx; for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInNewContext(m[1], ctx); return ctx; };
+const runPage = html => { const ctx = { window: {} }; ctx.globalThis = ctx; for (const m of html.matchAll(/<script(?: type="module")?>([\s\S]*?)<\/script>/g)) vm.runInNewContext(m[1], ctx); return ctx; };
 
 test('3d: build writes the page, the baked models, the PWA files and a stamped sw.js; the bundle runs', async () => {
   const game = copyFixture(), out = scratch(), logs = [];
@@ -1992,6 +1997,7 @@ test('3d: build writes the page, the baked models, the PWA files and a stamped s
   assert.equal(page.fixture.three, 'game-copy');                                 // dedupe: three from the game root (#11)
   assert.equal(page.fixture.tag, '</script>');                                   // escaped in the page, intact at runtime
   assert.deepEqual(page.window.__HOOK__, { e2e: false, version: '1.2.3', engine: ENGINE_VERSION, out: 'set' });   // B-2 hooks ran
+  assert.equal(html.match(/<script type="module">/g).length, 1);                // D1: the bundle is one inline module
   const sw = readFileSync(join(out, 'sw.js'), 'utf8');
   assert.match(sw, new RegExp(`'fixture-1\\.2\\.3\\+lh${ENGINE_VERSION.replaceAll('.', '\\.')}-${r.hash}'`));
   assert.ok(sw.includes(`const PRECACHE = ${JSON.stringify(['./', 'assets/models/cart.glb', 'assets/models/crate.glb', 'assets/models/palette.glb', 'assets/models/pet.glb', 'assets/models/pet.anim.json', 'assets/models/ramp.glb', 'icon.svg', 'manifest.webmanifest'])};`));
@@ -2029,7 +2035,13 @@ test('3d: --e2e skips minify and the service worker and tells the hooks; shared 
 ```js
 // lion-hawk build (B-1, B-2, B-3 as amended by D1, B-5): esbuild + dedupe, the page from the template, assets/models/* from
 // baked/, the PWA files, sw.js stamped with the version and the precache list, then a size report.
-// build({ game, out, env, site, mode, e2e, entry, log }) → { out, version, hash, files, sizes }.
+//
+// Public API (`import { build } from 'lion-hawk/build'`, 3l CI-7):
+//   build({ game = '.', out, env = process.env, site = false, mode = 'single', e2e = false, entry, log = console.log })
+//     → Promise<{ out, version, hash, files, sizes: { html, assets, total: { bytes, gzip } } }>
+//   game: a game directory (or a loadConfig() result); out: the output dir (else $<outEnv>); e2e: unminified, inline
+//   sourcemap, no sw.js, ctx.e2e for hooks; entry: overrides build.entry (an e2e entry); log: the size report sink.
+// Also exported: bundle, bakedAssets, ENGINE_VERSION, dedupe, UsageError.
 import { build as esbuild } from 'esbuild';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -2046,7 +2058,7 @@ export const ENGINE_VERSION = JSON.parse(readFileSync(new URL('../../package.jso
 
 export async function bundle(cfg, { entry, e2e = false } = {}) {
   const res = await esbuild({
-    entryPoints: [resolve(cfg.dir, entry ?? cfg.build.entry)], bundle: true, format: 'iife', minify: !e2e, write: false,
+    entryPoints: [resolve(cfg.dir, entry ?? cfg.build.entry)], bundle: true, format: 'esm', minify: !e2e, write: false, // D1: inline module
     sourcemap: e2e ? 'inline' : false, loader: { '.json': 'json' }, logLevel: 'silent', plugins: [dedupe({ root: cfg.dir })],
   });
   return res.outputFiles[0].text;
@@ -2201,7 +2213,7 @@ export async function dev({ game = '.', port = 8740, host = '0.0.0.0', log = con
     reload();
   };
   const ctx = await context({
-    entryPoints: [resolve(cfg.dir, cfg.build.entry)], bundle: true, format: 'iife', sourcemap: 'inline', write: false,
+    entryPoints: [resolve(cfg.dir, cfg.build.entry)], bundle: true, format: 'esm', sourcemap: 'inline', write: false,
     outfile: join(cfg.dir, 'build/dev/app.js'), loader: { '.json': 'json' }, logLevel: 'silent',
     plugins: [dedupe({ root: cfg.dir }), { name: 'lh-dev-page', setup(b) {
       b.onEnd(async res => {
@@ -2447,6 +2459,8 @@ Then re-bake: `node bin/lion-hawk.js bake --game test/fixtures/models/game`.
 
 ## Contract issues
 
+Ruling (contract-issues "3d bake and CLI"): C1–C9 all accepted; the plan's tasks implement them as written below.
+
 - **C1** (§4.3 "follows the longest axis"): a capsule or cylinder axis is the extent with the round cross-section (other two closest to equal), with ties going to the longest. "Longest" fits a wheel along its diameter.
 - **C2** (§4.3 anim.json, underspecified): `parts` lists the part rows, then one row per socket named `sock-<name>`, as Tractor's mount rows did. Rotations slerp. The 12-float layout is Matrix4 elements 0,1,2,4,5,6,8,9,10,12,13,14 (agreed with 3f).
 - **C3** (§4.3 sockets): a socket with no ancestor part has `part: null`. 3b's `validateSidecar` must accept null.
@@ -2458,12 +2472,15 @@ Then re-bake: `node bin/lion-hawk.js bake --game test/fixtures/models/game`.
   - the B-5 page stamp is `<meta name="lion-hawk-build" content="<id> <ver> lion-hawk <engine> <hash>">`;
   - the sw `__VERSION__` is `<ver>+lh<engine>-<hash>`;
   - `--e2e` = unminified, no `sw.js`, `ctx.e2e`;
-  - the hooks' ctx is `{ config, game, out, e2e, version, engine, log }` (dev adds `dev: true`).
+  - the hooks' ctx is `{ config, game, out, e2e, version, engine, log }` (dev adds `dev: true`);
+  - `sw.js` gets `__PRECACHE__` stamped as a JSON array (`./`, `assets/models/*`, the PWA files but `sw.js`);
+  - the page takes the bundle at a bare `<!--APP-->` as an inline `<script type="module">` (D1, 3j ruling 7);
+  - `build()` is a public, documented export of `lion-hawk/build` for games' test servers (3l CI-7).
 - **C9** (§4.2 via the bake): the bake needs only `registry.has`, `density` and `hash`, and `bake.materials` is required. Until 3b merges, the fixture registry is duck-typed (Task 16 swaps it).
 
 ## Integrator requests
 
-1. **`package.json`.** Add these before 3d starts:
+1. **`package.json`.** Add these before 3d starts (3m ruling 6: they land with 0.7.3):
    - `dependencies`: pin `@gltf-transform/core`, `@gltf-transform/extensions` and `@gltf-transform/functions` at `4.5.1`, and `meshoptimizer` at `~1.2.0` (match gltf-transform's tested range rather than `^1.3`);
    - add `pngjs` `^7.0.0` (new; the palette step);
    - move `esbuild` `^0.28.2` from devDependencies to dependencies (the CLI bundles at runtime).
@@ -2477,5 +2494,6 @@ Then re-bake: `node bin/lion-hawk.js bake --game test/fixtures/models/game`.
    - (b) the palette colours follow Tractor's formula, not Rally's old `pow(f, 1/2.2)` factor;
    - (c) Tractor's `rename.nodes: { hat: 'sock-hat' }` must be per pet model, because `hat-cowboy.glb` has a mesh node called `hat`;
    - (d) part names with `.` lose it (`lamp.001` → `lamp001`), and repeated names get `-2`;
-   - (e) each game's `pwa/sw.js` needs `const PRECACHE = __PRECACHE__;`, and Rally's template needs `<!--APP-->` in place of `/*BUNDLE*/`.
+   - (e) each game's `pwa/sw.js` needs `const PRECACHE = __PRECACHE__;`, and every template needs a bare `<!--APP-->` (no `<script>` around it; the build writes an inline `<script type="module">`, D1): Rally's replaces `<script>/*BUNDLE*/</script>`, and Tractor's and Pig Pens' `<script><!--APP--></script>` lose the wrapping tag;
+   - (f) 3l (CI-7): the programmatic build is `import { build } from 'lion-hawk/build'`, `build({ game, out, e2e: true }) → { out, version, hash, files, sizes }` (no `report`).
 4. **Task 16** runs at the Wave A merge if 3b is not on 3d's branch by then.
