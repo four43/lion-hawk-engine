@@ -67,3 +67,74 @@ export function validateCollider(c, { where = 'collider', path = 'collider', mat
   }
   return c;
 }
+
+const strict = (o, keys, fail, path) => { for (const k of Object.keys(o)) if (!keys.includes(k)) fail(`${path}${k}`, 'unknown field', o[k]); };
+
+// One model's sidecar (overview §4.3). model: the id for messages. Required: v, parts, colliders.
+// Optional: source (hand-written fixtures have none), mass (informational), sockets, bounds.
+export function validateSidecar(s, { model = '?', materials } = {}) {
+  const where = `sidecar: ${model}`;
+  const fail = (path, problem, v) => { throw new Error(`${where}: ${path} ${problem} (got ${show(v)})`); };
+  if (!isPlain(s)) throw new Error(`${where}: must be an object (got ${show(s)})`);
+  strict(s, ['v', 'source', 'parts', 'colliders', 'mass', 'sockets', 'bounds'], fail, '');
+  if (s.v !== SIDECAR_VERSION) fail('v', `must be ${SIDECAR_VERSION}`, s.v);
+  if (s.source !== undefined) {
+    if (!isPlain(s.source)) fail('source', 'must be an object', s.source);
+    strict(s.source, ['file', 'sha256'], fail, 'source.');
+    if (!name(s.source.file)) fail('source.file', 'must be a non-empty string', s.source.file);
+    if (typeof s.source.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(s.source.sha256)) fail('source.sha256', 'must be 64 lowercase hex digits', s.source.sha256);
+  }
+  if (!Array.isArray(s.parts) || !s.parts.every(name)) fail('parts', 'must be a list of non-empty strings', s.parts);
+  s.parts.forEach((p, i) => { if (s.parts.indexOf(p) !== i) fail(`parts[${i}]`, 'repeats a part', p); });
+  if (!Array.isArray(s.colliders)) fail('colliders', 'must be a list', s.colliders);
+  s.colliders.forEach((c, i) => validateCollider(c, { where, path: `colliders[${i}]`, materials, parts: s.parts }));
+  if (s.mass !== undefined) {
+    const m = s.mass;
+    if (!isPlain(m)) fail('mass', 'must be an object', m);
+    strict(m, ['mass', 'com', 'inertia', 'frame'], fail, 'mass.');
+    if (!finite(m.mass) || m.mass <= 0) fail('mass.mass', 'must be a number > 0', m.mass);
+    if (!vec3(m.com)) fail('mass.com', 'must be 3 numbers', m.com);
+    if (!vec3(m.inertia) || !m.inertia.every(x => x >= 0)) fail('mass.inertia', 'must be 3 numbers >= 0', m.inertia);
+    if (!quat(m.frame)) fail('mass.frame', 'must be a unit quaternion [x, y, z, w]', m.frame);
+  }
+  if (s.sockets !== undefined) {
+    if (!isPlain(s.sockets)) fail('sockets', 'must be an object', s.sockets);
+    for (const [k, so] of Object.entries(s.sockets)) {
+      if (!isPlain(so)) fail(`sockets.${k}`, 'must be an object', so);
+      strict(so, ['p', 'q', 'part'], fail, `sockets.${k}.`);
+      if (!vec3(so.p)) fail(`sockets.${k}.p`, 'must be 3 numbers', so.p);
+      if (!quat(so.q)) fail(`sockets.${k}.q`, 'must be a unit quaternion [x, y, z, w]', so.q);
+      if (!s.parts.includes(so.part)) fail(`sockets.${k}.part`, 'names an unknown part', so.part);
+    }
+  }
+  if (s.bounds !== undefined) {
+    const b = s.bounds;
+    if (!isPlain(b)) fail('bounds', 'must be an object', b);
+    strict(b, ['min', 'max'], fail, 'bounds.');
+    if (!vec3(b.min)) fail('bounds.min', 'must be 3 numbers', b.min);
+    if (!vec3(b.max) || b.max.some((x, i) => x < b.min[i])) fail('bounds.max', 'must be 3 numbers, each >= min', b.max);
+  }
+  return s;
+}
+
+// The whole baked/phys.json (D2): { v: 1, engine, materials: '<registry hash>', models: { <id>: Sidecar } }.
+// It checks the shape and, given a registry, that every material exists. Comparing `materials` with registry.hash is
+// the caller's job (checks.materials, lion-hawk bake --check), so a stale hash reads as stale, not as malformed.
+export function validatePhys(phys, { materials } = {}) {
+  const fail = (path, problem, v) => { throw new Error(`phys: ${path} ${problem} (got ${show(v)})`); };
+  if (!isPlain(phys)) throw new Error(`phys: must be an object (got ${show(phys)})`);
+  strict(phys, ['v', 'engine', 'materials', 'models'], fail, '');
+  if (phys.v !== SIDECAR_VERSION) fail('v', `must be ${SIDECAR_VERSION}`, phys.v);
+  if (typeof phys.engine !== 'string' || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(phys.engine)) fail('engine', 'must be a version like 0.8.0', phys.engine);
+  if (typeof phys.materials !== 'string' || !/^[0-9a-f]{8}$/.test(phys.materials)) fail('materials', 'must be an 8-hex registry hash', phys.materials);
+  if (!isPlain(phys.models)) fail('models', 'must be an object', phys.models);
+  for (const [id, s] of Object.entries(phys.models)) validateSidecar(s, { model: id, materials });
+  return phys;
+}
+
+// T-14 helper for checks.materials: every material a phys.json names, with where it is named, keys sorted.
+export function materialRefs(phys) {
+  const out = {};
+  for (const [id, s] of Object.entries(phys.models)) s.colliders.forEach((c, i) => (out[c.material] ??= []).push(`${id}.colliders[${i}]`));
+  return Object.fromEntries(Object.keys(out).sort().map(k => [k, out[k]]));
+}
