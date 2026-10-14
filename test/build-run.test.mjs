@@ -47,6 +47,16 @@ test('3d: $<outEnv> is used when --out is absent; the hash changes when a baked 
   const b = await build({ game, out: scratch(), env: {}, log: quiet });
   assert.notEqual(a.hash, b.hash);
 });
+test('3d: an e2e build over an earlier normal build drops the stale sw.js (C8); hooks see an existing out dir', async () => {
+  const game = copyFixture(), out = scratch();
+  await build({ game, out, env: {}, log: quiet });
+  assert.ok(existsSync(join(out, 'sw.js')));
+  await build({ game, out, env: {}, e2e: true, log: quiet });
+  assert.ok(!existsSync(join(out, 'sw.js')));
+  const fresh = join(scratch(), 'not-yet');
+  await build({ game, out: fresh, env: {}, log: quiet });
+  assert.equal(runPage(readFileSync(join(fresh, 'index.html'), 'utf8')).window.__HOOK__.out, 'set');   // out existed when beforePage ran
+});
 test('3d: --e2e skips minify and the service worker and tells the hooks; shared mode and site/exp are refused', async () => {
   const game = copyFixture(), out = scratch();
   await build({ game, out, env: {}, e2e: true, log: quiet });

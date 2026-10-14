@@ -8,7 +8,7 @@
 //   sourcemap, no sw.js, ctx.e2e for hooks; entry: overrides build.entry (an e2e entry); log: the size report sink.
 // Also exported: bundle, bakedAssets, ENGINE_VERSION, dedupe, UsageError.
 import { build as esbuild } from 'esbuild';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -50,6 +50,8 @@ export async function build({ game = '.', out, env = process.env, site = false, 
   const hooks = cfg.build.hooks ? (await importFresh(resolve(cfg.dir, cfg.build.hooks))).default ?? {} : {};
   const ctx = { config: cfg, game: cfg.dir, out: dir, e2e, version: cfg.version, engine: ENGINE_VERSION, log };
   const js = await bundle(cfg, { entry, e2e });
+  mkdirSync(dir, { recursive: true });                // hooks may write into ctx.out
+  if (e2e) rmSync(join(dir, 'sw.js'), { force: true }); // C8: --e2e = no sw.js, even over an earlier normal build
   if (hooks.beforePage) await hooks.beforePage(ctx);
   let html = fillTemplate(readFileSync(resolve(cfg.dir, cfg.build.template), 'utf8'), js);
   if (hooks.page) html = await hooks.page(html, ctx);
