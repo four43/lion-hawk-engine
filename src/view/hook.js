@@ -26,9 +26,10 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     hz: engine.game.sim.hz, // G-E1: peers() steps the hub clock by 1000 / hz
     stepN: n => note(engine.stepN(n)), advance: s => note(engine.advance(s)), render: a => { engine.render(a); after(); },
     get time() { return engine.time; }, get scene() { return engine.scene; }, get loading() { return engine.loading; }, // [S-6]
-    go: (n, a) => { engine.go(n, a); after(); }, overlay: (n, a) => { engine.overlay(n, a); after(); },
+    go: (n, a) => { engine.go(n, a); after(); }, overlay: (n, a, o) => { engine.overlay(n, a, o); after(); }, // #95: o = { once }
     close: n => { engine.close(n); after(); }, jump: (n, p, o, a) => { engine.jump(n, p, o, a); after(); },
     command: (type, data) => { engine.command(type, data); after(); }, // #5
+    commands: engine.commands, // #100: the live { pending, dropped, handles }; Playwright's untilLoaded reads pending in the page
     on: (type, fn) => engine.events.on(e => { if (e.type === type) fn(safeEvent(e)); }),
     events: { since: seq => { engine.flushEvents(); return engine.events.since(seq).map(safeEvent); } }, // #71
     state: () => engine.state(),

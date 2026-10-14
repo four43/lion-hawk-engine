@@ -102,19 +102,21 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       left = r.left; await unblocked('step', t0, timeout);
     }
   };
-  // steps until no load is active, waiting out view.wait blocks; returns the steps taken
+  // steps until no load is active, waiting out view.wait blocks; returns the steps taken. #100: commands pending at the call
+  // are delivered at the next step and may start a load, so that step is taken first (s0: the step it must leave; -1 none)
   const untilLoaded = async ({ maxSteps = 1200, timeout = 30000 } = {}) => {
-    const t0 = Date.now(); let k = 0;
+    const t0 = Date.now(); let k = 0, s0 = null;
     for (;;) {
-      const r = await ev(({ k, maxSteps, stalled }) => {
+      const r = await ev(({ k, maxSteps, stalled, s0 }) => {
         const e = window.engine, blocked = new Function('e', `return ${stalled}`);
+        if (s0 === null) s0 = e.commands.pending > 0 ? e.time.step : -1;
         for (; k <= maxSteps; k++) {
-          if (!e.loading.active) { e.render(0); return { k }; }
-          if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k }; } e.stepN(1); }
+          if (!e.loading.active && e.time.step !== s0) { e.render(0); return { k }; }
+          if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k, s0 }; } e.stepN(1); }
         }
         e.render(0); return { fail: true, k, step: e.state().step, scene: e.scene.name, overlays: [...e.scene.overlays], events: e.events.since(0).slice(-8) };
-      }, { k, maxSteps, stalled });
-      if (r.wait) { k = r.k; await unblocked('untilLoaded', t0, timeout); continue; }
+      }, { k, maxSteps, stalled, s0 });
+      if (r.wait) { k = r.k; s0 = r.s0; await unblocked('untilLoaded', t0, timeout); continue; }
       if (r.fail) throw new Error(formatFailure('untilLoaded', r, maxSteps));
       return r.k;
     }
