@@ -1068,11 +1068,20 @@ node -e "const fs=require('fs'),d='/tmp/claude-1000/lion-hawk-phase3/3m/baseline
   Expected: three JSON files, each with `errors: []`, `frames ≥ 100`, `programs > 0` and `drawsMedian > 0`. A game with `errors` or zero draws is a stop: fix the probe opening (GAMES) or use the decision's fallback.
 - [ ] **Step 5: Record** the Baselines tables in the notes: counts per suite from step 1, and one row per game from `baseline.json` (programs, draw calls median/max, frame ms median/p95, settled ms, total gzip, total bytes). Copy `baseline.json`'s content into a fenced block under the table, so the numbers survive the scratch dir.
 - [ ] **Step 6: Commit** (engine): `git -C /home/smiller/projects/four43/lion-hawk-engine-3m add docs/plans/2026-10-13-phase-3m-integration-notes.md && git -C /home/smiller/projects/four43/lion-hawk-engine-3m commit -m "docs(plan): phase 3 baselines: test counts, sizes and frame-rate probes"`
+- [ ] **Step 7: Local base tags** (ruling P1; the first gate needs a rollback target and a golden diff base, and `git tag` is empty in both repos; constraint 14 allows local tags):
+
+```
+git -C /home/smiller/projects/four43/lion-hawk-engine tag -a v0.7.2 27e4701 -m "lion-hawk 0.7.2: phase-2g head, baseline for phase 3"
+git -C /home/smiller/projects/four43/four43-lh3 tag -a v-games-0.7.2 e03ed71 -m "four43 e03ed71: baseline for phase 3"
+git -C /home/smiller/projects/four43/lion-hawk-engine tag -l 'v0.7.2' && git -C /home/smiller/projects/four43/four43-lh3 tag -l 'v-games-0.7.2'
+```
+
+  Expected: both tags print. They are the `v<previous>` and `v-games-<previous>` of the 0.7.3 gate (Procedure G steps 5 and 8). Nothing is pushed.
 
 ### Task 7: Purity: the Rapier rule and the kit sim roots
 
-**Files:** modify `testing/purity.js`; create `test/purity-phase3.test.mjs` (engine, `phase-3-integrate`).
-**Interfaces:** Produces `scanSource(src, file, { rapier = false } = {})` and `scanPurity(paths, { rapier = false } = {})`; existing callers are unchanged. Consumes overview D9 and §7.1. 3h's request R2 is met here (a new test file, per "new tests go in new files", instead of editing `test/purity.test.mjs`).
+**Files:** modify `testing/purity.js` and `testing/index.js`; create `test/purity-phase3.test.mjs` (engine, `phase-3-integrate`).
+**Interfaces:** Produces `scanSource(src, file, { rapier = false } = {})`, `scanPurity(paths, { rapier = false } = {})` and `simRoots(root)` (the engine's sim roots: `src/core`, `src/defs`, `src/sim`, `src/index.sim.js` and each kit's `sim.js`; exported from `lion-hawk/test`, and imported by Task 13 instead of copied, ruling P10); existing callers are unchanged. Consumes overview D9 and §7.1. 3h's request R2 is met here (a new test file, per "new tests go in new files", instead of editing `test/purity.test.mjs`).
 
 **Decision:**
 - The Rapier rule is opt-in and is used on engine roots only.
@@ -1085,9 +1094,8 @@ node -e "const fs=require('fs'),d='/tmp/claude-1000/lion-hawk-phase3/3m/baseline
 // and the kit sim halves are sim-pure like src/sim (lion-hawk 3m; 3h request R2).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { scanSource, scanPurity } from '../testing/purity.js';
+import { scanSource, scanPurity, simRoots } from '../testing/purity.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const hits = (src, o) => scanSource(src, 'f.js', o).map(v => `${v.line}:${v.rule}`);
@@ -1106,13 +1114,8 @@ test('the rapier rule is opt-in and catches static, side-effect and multi-line d
 test('the three rule is unchanged with the rapier option', () => {
   assert.deepEqual(hits("const m = await import(\n  'three'\n);", { rapier: true }), ['1:three']);
 });
-const simRoots = () => {
-  const kits = `${root}src/kits`;
-  const kitSims = existsSync(kits) ? readdirSync(kits).sort().map(k => `${kits}/${k}/sim.js`).filter(existsSync) : [];
-  return [`${root}src/core`, `${root}src/defs`, `${root}src/sim`, `${root}src/index.sim.js`, ...kitSims];
-};
 test('engine sim roots, the kit sim halves included, are pure and never import Rapier', () => {
-  assert.deepEqual(scanPurity(simRoots(), { rapier: true }), []);
+  assert.deepEqual(scanPurity(simRoots(root), { rapier: true }), []);
 });
 test('no engine source imports Rapier (D9: defineGame({ physics: { rapier } }))', () => {
   assert.deepEqual(scanPurity([`${root}src`], { rapier: true }).filter(v => v.rule === 'rapier'), []);
@@ -1144,11 +1147,19 @@ export function scanSource(src, file, { rapier = false } = {}) {
 export function scanPurity(paths, opts) {
   return paths.filter(p => existsSync(p)).flatMap(walk).flatMap(f => scanSource(readFileSync(f, 'utf8'), f, opts));
 }
+// The engine's sim roots (L-3): src/core, src/defs, src/sim, src/index.sim.js and each kit's sim half. `root` ends with '/'.
+export function simRoots(root) {
+  const kits = `${root}src/kits`;
+  const kitSims = existsSync(kits) ? readdirSync(kits).sort().map(k => `${kits}/${k}/sim.js`).filter(existsSync) : [];
+  return [`${root}src/core`, `${root}src/defs`, `${root}src/sim`, `${root}src/index.sim.js`, ...kitSims];
+}
 ```
+
+  Add `readdirSync` to the `node:fs` import at the top of `testing/purity.js` if it is not there. In `testing/index.js` change the first line to `export { scanSource, scanPurity, simRoots, stripComments } from './purity.js';`.
 
 - [ ] **Step 4: Run** the step 2 command and then `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3m -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 test/purity.test.mjs test/purity-phase3.test.mjs`. Expected: PASS (6 existing tests + 4 new).
 - [ ] **Step 5: Prove the root scan red by mutation.** Create `src/sim/zz-mutation.js` containing `import R from '@dimforge/rapier3d-compat';` and run step 2. Expected: FAIL on both root tests, naming `zz-mutation.js` line 1, rule `rapier`. Delete the file and re-run: PASS.
-- [ ] **Step 6: Commit:** `git -C /home/smiller/projects/four43/lion-hawk-engine-3m add testing/purity.js test/purity-phase3.test.mjs && git -C /home/smiller/projects/four43/lion-hawk-engine-3m commit -m "test(purity): opt-in Rapier rule; engine roots and kit sims never import Rapier (D9)"`
+- [ ] **Step 6: Commit:** `git -C /home/smiller/projects/four43/lion-hawk-engine-3m add testing/purity.js testing/index.js test/purity-phase3.test.mjs && git -C /home/smiller/projects/four43/lion-hawk-engine-3m commit -m "test(purity): opt-in Rapier rule; engine roots and kit sims never import Rapier (D9)"`
 
 ### Task 8: Guard tests for field notes and the public surface
 
@@ -1166,7 +1177,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const s = readFileSync(new URL('../docs/field-notes.md', import.meta.url), 'utf8');
+const s = readFileSync(process.env.LH_FIELD_NOTES ?? new URL('../docs/field-notes.md', import.meta.url), 'utf8'); // LH_FIELD_NOTES: red proof on a scratch copy
 const heads = [...s.matchAll(/^### (\d+)\. /gm)].map(m => Number(m[1]));
 const rows = [...s.matchAll(/^\| (\d+) \|/gm)].map(m => Number(m[1]));
 
@@ -1185,11 +1196,11 @@ test('phase 3 notes (#110 on) have What happened, Workaround, Engine change and 
 ```
 
 - [ ] **Step 2: Run** `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3m -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 test/field-notes.test.mjs`. Expected: PASS (109 contiguous notes and rows, verified 2026-10-13).
-- [ ] **Step 3: Prove it red by mutation.** In a scratch copy, renumber note 109 to 111 and point the test at it:
+- [ ] **Step 3: Prove it red by mutation** (ruling P10: the real test, run against a mutated copy). Renumber note 109 to 111 in a scratch copy and point the real test at it:
   - `cp docs/field-notes.md /tmp/claude-1000/lion-hawk-phase3/3m/fn.md && sed -i 's/^### 109\. /### 111. /' /tmp/claude-1000/lion-hawk-phase3/3m/fn.md`;
-  - `node -e "const s=require('fs').readFileSync('/tmp/claude-1000/lion-hawk-phase3/3m/fn.md','utf8');const h=[...s.matchAll(/^### (\d+)\. /gm)].map(m=>+m[1]);console.log(h.every((n,i)=>n===i+1))"`.
+  - `LH_FIELD_NOTES=/tmp/claude-1000/lion-hawk-phase3/3m/fn.md systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3m -E LH_FIELD_NOTES -E NODE_OPTIONS=--max-old-space-size=512 node --test test/field-notes.test.mjs`.
 
-  Expected: `false`. The test's check is the same expression.
+  Expected: FAIL on `field notes are numbered 1..N without gaps`. Re-run the step 2 command without the variable: PASS.
 - [ ] **Step 4: Write the failing test** `test/package-phase3.test.mjs`:
 
 ```js
@@ -1390,12 +1401,14 @@ export { heightfieldDesc } from './sim/physics/heightfield.js';
   - `createEngine` throws `physics: await RAPIER.init() before createEngine` for an uninitialised module;
   - `engine.builtin`;
   - `./build` now points at `tools/build/index.js` (it still exports `dedupe`).
-- [ ] **Step 8: Spec.** Apply 3b request 3, 3c request 5 and the 3d clarifications as the controller ruled them (contract-issues "3b", "3c", "3d"), each marked `(phase 3, 0.8.0)`. Commit `docs(spec): 0.8.0 clarifications from 3b, 3c and 3d`.
+- [ ] **Step 8: Spec.** Apply 3b request 3, 3c request 6 (the spec text; request 5 is 3b's `round` ask) and the 3d clarifications as the controller ruled them (contract-issues "3b", "3c", "3d"), each marked `(phase 3, 0.8.0)`. Commit `docs(spec): 0.8.0 clarifications from 3b, 3c and 3d`.
 - [ ] **Step 9: Field notes:** Procedure F for 3b, 3c and 3d, in that order. #1, #2, #11 and #106 become done (0.8.0); #28 and #64 per 3c's notes.
-- [ ] **Step 10: Commit** `chore(release): lion-hawk 0.8.0`. Then run **Procedure G** for `0.8.0` (no game is buildable yet).
+- [ ] **Step 10: Commit** `chore(release): lion-hawk 0.8.0`.
+- [ ] **Step 11: Re-bake the fixture before the gate** (3d request 2, hygiene; ruling P3: it runs at every minor version, before Procedure G, so the tag includes it). Run `node bin/lion-hawk.js bake --game test/fixtures/models/game` in `lion-hawk-engine-3m` (after 3d's Task 16 the fixture's `phys.json` records the real registry hash, whatever 3b's final hash rule gives). If `test/fixtures/models/game/baked/` changed, commit `chore(fixtures): re-bake the CLI fixture at 0.8.0`.
+- [ ] **Step 12: Gate and broadcast.** Run **Procedure G** for `0.8.0` (no game is buildable yet).
   - Expected: all six goldens are bit-exact. The games have not migrated, and `engine.state()` adds `world` only with entities, so no game test changes.
   - Tags: `v0.8.0` and `v-games-0.8.0`.
-- [ ] **Step 11: 3d request 2 (hygiene).** Run `node bin/lion-hawk.js bake --game test/fixtures/models/game` in `lion-hawk-engine-3m` (after 3d's Task 16 the fixture's `phys.json` records the real registry hash, whatever 3b's final hash rule gives). If `test/fixtures/models/game/baked/` changed, commit `chore(fixtures): re-bake the CLI fixture at 0.8.0` and publish it as part of the same freeze.
+  - In the Procedure P message, also broadcast the 0.8.0 reconciliation additions (contract-issues "Reconciliation additions", ruling P8) to the game worktrees: the part poses (`partXf`, `world.partXfPrev`; 3c Task 10b), box `round` > 0 and the registry hash rule (3b), and physics pausing while a scene loads (3c). Log it in Broadcasts.
 
 ### Task 12: Cut 3f, 3g, 3h, 3i and the game worktrees; pickup
 
@@ -1423,13 +1436,14 @@ done
   - `.bin/lion-hawk` exists;
   - `status` is empty (the lockfile was refreshed on `feat/lion-hawk-3` in Procedure G step 3).
 - [ ] **Step 3: Pickup.** Procedure P to all seven new worktrees. Add the game plans' start rule: asset and sim steps from 0.8.0, view steps at 0.9.0, Tractor's net step at 0.10.0 (overview §5.1). Log it in Broadcasts.
+  - Include two process rulings (P6, P7), forwarded through the controller to the 3k and 3l controllers: game notes go under `games/<game>/docs/plans/` (3k and 3l too, per contract ruling 3j #8, not `games/pig-pens/docs/phase-3k-notes.md`), and 3l adds a `test:peers` script in its `package.json` (`"test:peers": "node --test test/net.peers.browser.mjs"`) so the gate runs its two-page `peers()` test (`gate.mjs` runs only `test:(e2e|mobile|peers)*` scripts). Task 18 refuses a merge without either.
 - [ ] **Step 4: Intake** of the 3j, 3k and 3l integrator requests into the Requests table (Procedure R step 1). Commit the ledger.
 
 ### Task 13: The D9 workspace rule (before any view code lands)
 
 **Files:** create `games/test/helpers/scan.mjs`; modify `games/test/workspace.test.mjs` (four43, `feat/lion-hawk-3`).
 **Interfaces:**
-- Consumes: `stripComments` (`lion-hawk/test`).
+- Consumes: `stripComments` and `simRoots` (`lion-hawk/test`; `simRoots` is Task 7's helper, imported here, not copied: ruling P10).
 - Produces: `jsFiles(path)` → `string[]`; `importsOf(files, match)` → `[{ file, line, spec }]`.
 - Requested by 3e (request 2) and 3k (request 2), and ruled ("narrowed to sim roots").
 
@@ -1466,8 +1480,9 @@ export function importsOf(files, match) {
 - [ ] **Step 2: Change the test first.** In `games/test/workspace.test.mjs`:
   - replace the header comment's first three lines with the comment below;
   - replace the last test (`'engine source does not import three or Rapier yet (no alias in the game builds)'`) with the three tests below;
-  - add `existsSync` to the `node:fs` import;
-  - add `import { jsFiles, importsOf } from './helpers/scan.mjs';`.
+  - keep the `node:fs` import as it is (the copied `simRoots` was the only user of `existsSync`/`readdirSync`; keep any the file already used);
+  - add `import { jsFiles, importsOf } from './helpers/scan.mjs';` and `import { simRoots } from 'lion-hawk/test';`;
+  - let the engine path be overridden for the red proof: `const engine = process.env.LH_ENGINE ?? <the existing expression>;`.
 
 ```js
 // lion-hawk G-2 and phase 3 D9: the games share one three and one Rapier and consume the engine from its own repo, a
@@ -1477,35 +1492,28 @@ export function importsOf(files, match) {
 ```
 
 ```js
-const simRoots = () => {
-  const kits = `${engine}/src/kits`;
-  const kitSims = existsSync(kits) ? readdirSync(kits).sort().map(k => `${kits}/${k}/sim.js`).filter(existsSync) : [];
-  return [...['core', 'defs', 'sim'].flatMap(d => jsFiles(`${engine}/src/${d}`)), ...kitSims, `${engine}/src/index.sim.js`];
-};
 test('engine source never imports Rapier (D9: defineGame({ physics: { rapier } }))', () => {
   assert.deepEqual(importsOf(jsFiles(`${engine}/src`), /^@dimforge\//), []);
 });
 test('engine sim code never imports three (L-3), kit sim halves included', () => {
-  assert.deepEqual(importsOf(simRoots(), /^three(\/|$)/), []);
+  assert.deepEqual(importsOf(simRoots(`${engine}/`).flatMap(jsFiles), /^three(\/|$)/), []);
 });
 test("engine view code imports three only as 'three' or 'three/addons/…', which the build dedupes", () => {
   assert.deepEqual(importsOf(jsFiles(`${engine}/src`), /^three(\/|$)/).filter(h => !/^three(\/addons\/[\w./-]+)?$/.test(h.spec)), []);
 });
 ```
 
-- [ ] **Step 3: Prove the new rules can fail** (red on a scratch tree, since the engine checkout is shared and must not be mutated):
+- [ ] **Step 3: Prove the new rules can fail** (ruling P10: the real test against mutated code; the engine checkout is shared and must not be mutated, so aim `LH_ENGINE` at a scratch copy of it):
 
 ```
-mkdir -p /tmp/claude-1000/lion-hawk-phase3/3m/scan/src/sim
-printf "import RAPIER from '@dimforge/rapier3d-compat';\nimport * as T from 'three/src/Three.js';\n" > /tmp/claude-1000/lion-hawk-phase3/3m/scan/src/sim/bad.js
-cd /home/smiller/projects/four43/four43-lh3/games && node -e "
-import('./test/helpers/scan.mjs').then(({ jsFiles, importsOf }) => {
-  const f = jsFiles('/tmp/claude-1000/lion-hawk-phase3/3m/scan/src');
-  console.log(JSON.stringify([importsOf(f, /^@dimforge\//).length, importsOf(f, /^three(\/|$)/).filter(h => !/^three(\/addons\/[\w./-]+)?$/.test(h.spec)).length]));
-})"
+E=/tmp/claude-1000/lion-hawk-phase3/3m/engine-mut
+rm -rf $E && mkdir -p $E && cp -r /home/smiller/projects/four43/lion-hawk-engine/src $E/src
+printf "import RAPIER from '@dimforge/rapier3d-compat';\nimport * as T from 'three/src/Three.js';\n" > $E/src/sim/zz-bad.js
+cd /home/smiller/projects/four43/four43-lh3/games
+LH_ENGINE=$E systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=$PWD -E LH_ENGINE -E NODE_OPTIONS=--max-old-space-size=512 node --test test/workspace.test.mjs
 ```
 
-  Expected: `[1,1]`: each rule would flag the file.
+  Expected: FAIL on all three new tests (`engine source never imports Rapier`, `engine sim code never imports three`, `engine view code imports three only as …`), each naming `zz-bad.js`. Then `rm -rf $E` and run step 4 without `LH_ENGINE`: PASS.
 - [ ] **Step 4: Run** `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/four43-lh3/games -E NODE_OPTIONS=--max-old-space-size=512 node --test --test-concurrency=4 test/workspace.test.mjs`. Expected: PASS (7 tests: the 4 kept plus the 3 new), at 0.8.0 and still after 3e lands.
 - [ ] **Step 5: Commit** `test(games): D9 workspace rule: no Rapier in the engine, no three in sim roots, bare three in view code`. Run Procedure P step 1 for the three game worktrees ("merge `feat/lion-hawk-3` before 3e lands"). Log it in Broadcasts, and wait for their acknowledgement before the first Wave B landing.
 
@@ -1521,16 +1529,17 @@ import('./test/helpers/scan.mjs').then(({ jsFiles, importsOf }) => {
 - Produces **0.9.0** (`v0.9.0`), with early patch landings in between (Task 10 step 3).
 
 - [ ] **Step 1: 3e** (Procedure M, message `chore(merge): phase 3e renderer, lights, hygiene and boot render pipeline`). It may land early as 0.8.x for 3g's Task 11.
-  - Land 3e request 4 (the `boot(…, { timer })` → `world.stats.stepMs` assertion) as a new test file `test/render-timer.test.mjs`, written by the integrator from 3e's request text: a failing run first, before 3c's `timer` passes through.
+  - Land 3e request 4 (the `boot(…, { timer })` → `world.stats.stepMs` assertion) as a new test file `test/render-timer.test.mjs`, written by the integrator from 3e's request text. 3c's `timer` already passes through at 0.8.0, so prove it red by mutation (ruling P4): drop `timer` from `boot.js`'s `createEngine` call, run the file (FAIL on the `world.stats.stepMs` assertion), restore it (PASS).
   - Export the 3e names (step 5) in the same landing.
 - [ ] **Step 2: 3f** (Procedure M, `chore(merge): phase 3f assets, loader, anim tables and material compiler`).
   - Resolve the stubs `src/view/assets/index.js` and `src/view/materials/compiler.js` with `git checkout --theirs`.
-  - Rerun `test/render-pipeline.test.mjs` and `test/render-stubs.test.mjs` per 3e request 3, and 3f's Task 9 Step 1b stub-surface check (3e ruling #1: same export names and members as the stubs). The stub-shape cases for assets and the compiler are expected to fail now; they go with the file in step 3.
+  - Run 3f's Task 9 Step 1b stub-surface check (3e ruling #1: same export names and members as the stubs). Then drop the assets and compiler cases from `test/render-stubs.test.mjs` in this landing (3f R6; record them under "Removed or renamed tests") and rerun `test/render-pipeline.test.mjs` and `test/render-boot.test.mjs`: PASS, so an early 3f landing for 3g's Task 15 passes its gate. The file keeps its sync and audio cases until step 3.
+  - Add the two `render.paint` assertions (3e R3, with 3f's compiler in place; ruling P4) as a new file `test/render-paint.test.mjs`: a bad paint base throws, and a `chassis` paint builds. Prove it red by mutation (make the compiler ignore `paint`), restore, PASS.
   - It may land early for 3g's Task 15.
 - [ ] **Step 3: 3g** (Procedure M, `chore(merge): phase 3g view sync, cameras, instancing, crowds and audio`).
   - Take 3g's `src/view/sync/index.js` and `src/view/audio/index.js` over the stubs.
   - Delete `test/render-stubs.test.mjs` (3e request 3, 3g request 4) and record it in "Removed or renamed tests".
-  - Land 3g request 2 (the `createViewSync(engine, { gfx, assets, compiler, view })` boot wiring) as an X request on 3e's `boot.js`, with its test first.
+  - 3g request 2 (the `createViewSync(engine, { gfx, assets, compiler, view })` boot wiring) is already met by 3e's Task 8 (ruling P4): `grep -n createViewSync src/view/boot.js` in the merged code, mark it met in Requests, and make no X change.
 - [ ] **Step 4: 3h** (Procedure M, `chore(merge): phase 3h terrain, vehicle, coverage and fx kits`).
 - [ ] **Step 5: Exports.** Bump to `0.9.0` (as in Task 11 step 2) and watch the `0.9.0` rows fail. Then append to `src/index.view.js`:
 
@@ -1573,9 +1582,10 @@ export { createAudio } from './view/audio/index.js';
     - engine view modules import three (D9), so game builds must go through `lion-hawk build`.
   - Bump commit `chore(release): lion-hawk 0.9.0`.
 - [ ] **Step 10: Spec and notes.**
-  - Record 3f C1–C10, 3g's rig surfaces and 3h C1–C7 as the controller reconciled them, in the overview §4.7–§4.10 (kind C) and as spec clarifications (kind S).
+  - Record 3f C1–C11, 3g's rig surfaces and 3h C1–C7 as the controller reconciled them, in the overview §4.7–§4.10 (kind C) and as spec clarifications (kind S).
   - Run Procedure F for 3e, 3f, 3g and 3h. #67 becomes done (0.9.0, 3g).
-- [ ] **Step 11: Procedure G** for `0.9.0`.
+- [ ] **Step 11: Re-bake the fixture** as in Task 11 step 11 (ruling P3), commit if it changed, then run **Procedure G** for `0.9.0`.
+  - In the Procedure P message, also broadcast the 0.9.0 reconciliation additions (ruling P8) to the game worktrees: view-sync part poses (3g Task 13b), vehicle wheel `part` (3h Task 6b), compiler paint and `mc.repaint` (3f Task 8b, C11), `render.paint`, `lights.follow(x, z, y = 0)`, `snapshot` `[w, h]` and `render.assets.decoders` (3e), and coverage `washes` entries `{ at(x, z), washTime }` (3h). Log it in Broadcasts.
   - `--enforce` lists only games whose view step is merged into `feat/lion-hawk-3`; at this point, none.
   - Builds and probes run for each game branch already merged with a `game.config.js`. Record their rows in the Frame-rate table as informational.
   - Tags: `v0.9.0` and `v-games-0.9.0`.
@@ -1586,17 +1596,17 @@ export { createAudio } from './view/audio/index.js';
 **Files:** engine `package.json`, `src/version.js`, `CHANGELOG.md`, `docs/spec.md`, `docs/field-notes.md`, the ledger.
 **Interfaces:** Consumes 3i (`src/sim/net/**`, `src/defs/fields.js` `F.body`, `testing/mp.js` `drop`/`blackout`/`diverged`). Produces **0.10.0** (`v0.10.0`). No index change: `F` is already exported.
 
-- [ ] **Step 1: Land 3i's prerequisites first.** 3i requests 1–2 are kind X on 3c's `src/sim/world/install.js` and `world.js` (install, attach, E-7 guard calls; contract-issues 3i #8).
-  - If 3c's worktree is closed, the integrator makes them on `phase-3-integrate`: the failing tests from 3i's request text first, then the change, then Procedure M step 5, as patch `0.9.x`.
-  - Tell 3i (3i's Task 10 waits on request 2).
+- [ ] **Step 1: 3i's prerequisites.** 3i requests 1–2 are kind X on 3c's `src/sim/world/install.js` and `world.js` (install, attach, E-7 guard calls; contract-issues 3i #8). Ruling P5:
+  - The E-7 guard calls (request 2) and `engine.netPart?.attach(world)` (request 1b) are already in 3c at 0.8.0, 3i's base: `grep -n 'attach\|netPart' src/sim/world/install.js src/sim/world/world.js` in the merged code, mark them met in Requests, and do not hold 3i's Task 10.
+  - The `installNet(engine)` call in `createEngine` (request 1a) imports `src/sim/net/install.js`, which exists only after 3i merges. Land it after step 2 as an X request on 3c's `install.js`: the failing test from 3i's request text first, then the change, then Procedure M step 5, as patch `0.9.x`.
 - [ ] **Step 2: Merge** `phase-3-net` (Procedure M, `chore(merge): phase 3i net part: replication, driven/proxy/view remotes, F.body, mp extras`).
 - [ ] **Step 3: Version 0.10.0.** Watch the `F.body` row fail at the bump if the branch is not merged yet (a check that the row is live), then pass after the merge. Run the Task 11 step 4 command: PASS.
 - [ ] **Step 4: CHANGELOG `## 0.10.0 — <date>`, "Phase 3 Wave C: the net part."**
   - Bullets: `F.body()`, `kind({ remote, follow, tune, send, spawn, spawned })`, the built-in `net.frame` handler through `engine.builtin`, driven remotes with batched inputs and the jitter queue, correction and `e.netFix`, `world.net` (contract-issues 3i #6), and the `mp()` additions `drop`, `blackout`, `diverged`.
   - **Behaviour change:** on a guest, only replication spawns or despawns host-authority kinds (E-7).
-- [ ] **Step 5: Spec** (3i request 3, verbatim) and Procedure F for 3i. Commit.
-- [ ] **Step 6: Commit** `chore(release): lion-hawk 0.10.0`. Run **Procedure G** for `0.10.0` (same `--enforce` rule as Task 14 step 11).
-  - Expected in the engine suites: 3i's headless bump test under 80 ms and 2% loss, and its two-page test (a browser file run under the lock).
+- [ ] **Step 5: Spec** (3i request 3, the list it gives, applied as the controller ruled it) and Procedure F for 3i. Commit.
+- [ ] **Step 6: Commit** `chore(release): lion-hawk 0.10.0`. Re-bake the fixture as in Task 11 step 11 (ruling P3), then run **Procedure G** for `0.10.0` (same `--enforce` rule as Task 14 step 11).
+  - Expected in the engine suites: 3i's headless bump test under 80 ms and 2% loss, and 3i's `mp()` suite (`testing/mp.js` `drop`/`blackout`/`diverged`, `test/net.*.test.mjs`; ruling P5). 3i has no two-page browser test: that is 3l's `peers()` test, checked in Task 18 step 9.
   - Tags: `v0.10.0` and `v-games-0.10.0`.
   - Procedure P, with "Tractor's net step may start".
 
@@ -1604,7 +1614,7 @@ export { createAudio } from './view/audio/index.js';
 
 **Files:** create `games/test/phase3-done.test.mjs` (four43, `feat/lion-hawk-3`).
 **Interfaces:**
-- Consumes `games/test/helpers/scan.mjs` `jsFiles`; `lion-hawk/test` `stripComments`; the engine copies of the game notes (`docs/plans/2026-10-13-phase-3{j-rally,k-pigpens,l-tractor}-notes.md`).
+- Consumes `games/test/helpers/scan.mjs` `jsFiles`; `lion-hawk/test` `stripComments`; each game's own notes (`games/<game>/docs/plans/2026-10-13-phase-3{j-rally,k-pigpens,l-tractor}-notes.md`, in the game's tree: on the branch and after the merge; ruling P2).
 - Produces `MIGRATED` (empty until Task 18).
 
 - [ ] **Step 1: Write** `games/test/phase3-done.test.mjs`:
@@ -1659,7 +1669,7 @@ for (const g of MIGRATED) {
     assert.match(pkg.scripts?.build ?? '', /^lion-hawk build\b/);
     const { bad, allows } = violations(dir);
     assert.deepEqual(bad, []);
-    const notes = readFileSync(join(engine, 'docs/plans', NOTES[g]), 'utf8');
+    const notes = readFileSync(join(dir, 'docs/plans', NOTES[g]), 'utf8');
     for (const rel of allows) assert.ok(notes.includes(rel), `${g}: ${rel} has an lh-allow line that ${NOTES[g]} does not list`);
   });
 }
@@ -1698,8 +1708,8 @@ For each request, in arrival order (blocking requests first):
 | Game | Branch | Plan | Notes on the branch | Engine copy | Version |
 |---|---|---|---|---|---|
 | Rally | `feat/lion-hawk-3-rally` | 3j | `games/rally/docs/plans/2026-10-13-phase-3j-rally-notes.md` | `docs/plans/2026-10-13-phase-3j-rally-notes.md` | 0.4.0 |
-| Pig Pens | `feat/lion-hawk-3-pigpens` | 3k | the path its plan names (`games/pig-pens/docs/phase-3k-notes.md`) | `docs/plans/2026-10-13-phase-3k-pigpens-notes.md` | 2.2.0 |
-| Tractor Pickup | `feat/lion-hawk-3-tractor` | 3l | the path its plan names | `docs/plans/2026-10-13-phase-3l-tractor-notes.md` | 1.9.0 |
+| Pig Pens | `feat/lion-hawk-3-pigpens` | 3k | `games/pig-pens/docs/plans/2026-10-13-phase-3k-pigpens-notes.md` (ruling P7; 3k's plan names `docs/phase-3k-notes.md` until its controller applies it) | `docs/plans/2026-10-13-phase-3k-pigpens-notes.md` | 2.2.0 |
+| Tractor Pickup | `feat/lion-hawk-3-tractor` | 3l | `games/tractor-pickup/docs/plans/2026-10-13-phase-3l-tractor-notes.md` (ruling P7) | `docs/plans/2026-10-13-phase-3l-tractor-notes.md` | 1.9.0 |
 
 Games merge in the order they finish. For the game being merged:
 
@@ -1716,7 +1726,7 @@ Games merge in the order they finish. For the game being merged:
   - Run `git -C /home/smiller/projects/four43/four43-lh3 merge --no-ff <branch> -m "chore(merge): <game> on lion-hawk phase 3 (<version>)"`.
   - On a `games/package-lock.json` conflict, take `feat/lion-hawk-3`'s side, then run `npm install` in `/home/smiller/projects/four43/four43-lh3/games` under the unit caps, and commit the lockfile in the merge.
   - Run the game plan's own lockfile and prune requests (3j R1, 3k R1, 3l R1) right after.
-- [ ] **Step 4: `MIGRATED`.** Add the game to `MIGRATED` in `games/test/phase3-done.test.mjs` and run Task 16's step 2 command. Expected: PASS. Commit `test(games): <game> passes the phase 3 done-when rules`.
+- [ ] **Step 4: `MIGRATED`.** Add the game to `MIGRATED` in `games/test/phase3-done.test.mjs` and run Task 16's step 2 command. Expected: PASS (it reads the notes in the game's own tree, so it runs before the step 6 copy; ruling P2). Commit `test(games): <game> passes the phase 3 done-when rules`.
 - [ ] **Step 5: Probe opening.** If the game's desktop e2e opening changed (seed, args, settings or scene name), update its `GAMES` entry in `games/test/perf/probe.mjs` to match, and record the change. Run the Task 5 step 2 command: PASS. Commit.
 - [ ] **Step 6: Notes into the engine.**
   - Copy the branch's notes file to the engine copy path in `lion-hawk-engine-3m`.
@@ -1728,7 +1738,7 @@ Games merge in the order they finish. For the game being merged:
 - [ ] **Step 8: Pickup.** Procedure P step 1 to the remaining game worktrees ("merge `feat/lion-hawk-3`: <game> is in"). A conflict there is shared files only (`games/package-lock.json`, `games/test/**`), which the remaining game takes from `feat/lion-hawk-3`.
 - [ ] **Step 9: Tractor only** (R5). Confirm both of these in the gate log:
   - the headless bump test (`mp()`, NET_VERSION 4, 80 ms and 2% loss; both peers within 0.5 m of the owner's pose 1 s after contact; no correction over `snapAt`);
-  - the `peers()` two-page test.
+  - the `peers()` two-page test, which runs as 3l's `test:peers` script (rulings P5, P6: `"test:peers": "node --test test/net.peers.browser.mjs"`; `gate.mjs` runs only `test:(e2e|mobile|peers)*` scripts). A gate log without a `test:peers` entry for Tractor is a stop: send it back to the 3l controller.
 
   Copy the 3l notes' manual interop check (a 1.8.0 device given a 1.9.0 room code shows the version message) into the Hand-off as a user check.
 
@@ -1738,7 +1748,7 @@ Games merge in the order they finish. For the game being merged:
 - engine: `package.json`, `src/version.js`, `CHANGELOG.md`, `docs/spec.md` (§8.4 note), `docs/plans/2026-10-13-phase-3-overview.md` (status line), the ledger;
 - four43: `games/package-lock.json`.
 
-**Interfaces:** Consumes all twelve merged plans. Produces the 0.11.0 candidate on `phase-3-integrate` (published and tagged only after Task 20).
+**Interfaces:** Consumes all twelve merged plans. Produces the 0.11.0 candidate on `phase-3-integrate`. Step 6 publishes it locally as `0.11.0-candidate` (Procedure G steps 1–6, untagged); the final tag `v0.11.0` is set only after Task 20 (ruling P9).
 
 - [ ] **Step 1: Version** `0.11.0` (as in Task 11 step 2). Run the Task 11 step 4 command: PASS (every `SURFACE` row live).
 - [ ] **Step 2: CHANGELOG `## 0.11.0 — <date>`, "Phase 3 complete: the three games build their worlds from engine parts."**
@@ -1749,7 +1759,7 @@ Games merge in the order they finish. For the game being merged:
 - [ ] **Step 3: Spec §8.4.** Under the table add: "Phase 3 (2026-10, engine 0.7.3–0.11.0) delivered rows 3–5, plus the terrain, vehicle (Rapier ray-cast), coverage and fx kits the games needed (rows 6–7 in part). Rally's tyre model as a kit backend, kit-herd, fields (row 8) and the shared build mode (row 9) remain. Plan: `docs/plans/2026-10-13-phase-3-overview.md`."
 - [ ] **Step 4: Overview status line.** Replace `Status: binding for the phase 3 sub-plans.` with `Status: done (0.11.0, <date>); the record of phase 3. Rulings: 2026-10-13-phase-3-contract-issues.md.`
 - [ ] **Step 5: Commit** `chore(release): lion-hawk 0.11.0` and `docs: phase 3 complete in spec §8.4 and the overview`.
-- [ ] **Step 6: Final full gate** (Procedure G steps 1–6, without tagging) with `--enforce rally,pig-pens,tractor-pickup`. Expected: `GATE PASS`:
+- [ ] **Step 6: Final full gate** (re-bake the fixture as in Task 11 step 11, ruling P3; then Procedure G steps 1–6, which publish the candidate to the engine main checkout and lock four43, without tagging; the log and ledger row say `0.11.0-candidate`) with `--enforce rally,pig-pens,tractor-pickup`. Expected: `GATE PASS`:
   - every suite green;
   - all three games build into the scratch dir;
   - each probe within budget or with a recorded R1 decision;
@@ -1838,7 +1848,7 @@ git -C /home/smiller/projects/four43/four43-lh3 status --short site
 - The final gate log (`/tmp/claude-1000/lion-hawk-phase3/3m/gates/0.11.0.log`) and its ledger row show:
   - the engine suites green, with the count at least gate 0's 387 plus every plan's new tests, and every drop explained under "Removed or renamed tests";
   - the workspace green, including `gate` (9), `owners` (5), `perf` (9), `workspace` (7) and `phase3-done` (4 = 1 + 3 games);
-  - Rally `test:e2e` and `test:mobile`, Pig Pens `test:e2e` and Tractor `test:e2e` green (Tractor's includes the two-page `peers()` test);
+  - Rally `test:e2e` and `test:mobile`, Pig Pens `test:e2e` and Tractor `test:e2e` and Tractor's `test:peers` (the two-page `peers()` test) green;
   - three scratch builds;
   - three probe rows within the R1/R3 budgets, or with a recorded decision;
   - no guarded path changed.
