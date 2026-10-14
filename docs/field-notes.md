@@ -16,7 +16,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 1 | Library upgrades change feel, and range checks don't notice | Rally | open |
 | 2 | Rapier 0.21 wakes sleeping bodies on their first step | Rally | done (in-game) |
 | 3 | One-sided range checks hide regressions | Rally | open |
-| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done for Rally (2c-rally R2–R3) and Pig Pens (2e P2–P4: farm scene 932f19a); Tractor Pickup sim half done (2f T4–T5: trip, show ack, reward, menus, start screen in farm state + commands); cutscene ack 2g G3 |
+| 4 | Flow state lives in the view | Tractor Pickup, Pig Pens, Rally | done (Rally 2c-rally R2–R3; Pig Pens 2e P2–P4: farm scene 932f19a; Tractor Pickup 2f T4–T5 sim half, 2g G1–G6 view halves that only read state and events; the old `main.js` loop deleted in 2g G7) |
 | 5 | Positional input can't be expressed as actions | Pig Pens, Tractor Pickup | done (2d D1, D3) |
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4; Tractor new farms 2f T5 `frames: 1`, 78 ms build) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
@@ -91,15 +91,15 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 76 | Two clocks in the net code: wall time and the frame's step stamp | Tractor Pickup | done (2f T-E3) |
 | 77 | The player number is game state; the transport knows only peer ids | Tractor Pickup | done (2f T-E5/T-E6 reserved keys, the port fills `from`; T6: the host drops a frame whose sender is not the peer's player) |
 | 78 | Binary replica frames vs plain-JSON tapes | Tractor Pickup | done (2f T-E4, T-E6, T6, T8: guest and solo tapes are plain JSON, log `net.frame` commands and replay alone) |
-| 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | sim half done (2f T4: `show` event, `show.done { spots, gen }` places riders before `finishShow`); view pacing 2g G3 |
+| 79 | The show writes sim animals from the view, paced by the voice | Tractor Pickup | done (2f T4 sim half: `show` event, `show.done { spots, gen }`; 2g G3: the view animates copies on `update(dt)` time and acks with the event's `gen`) |
 | 80 | A guest's welcome needs its new farm synchronously | Tractor Pickup | done (2f T5 host; T6 guest: welcome deferred, `farmReady` applies it after `ctx.load`; one step later than the old path, parity row 23; two repair tests step 2) |
-| 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption 2g (use `PILOT.revCone`) |
+| 81 | The reverse cone is screen-relative; a world vector can't say "down" | Tractor Pickup | done (2f T-E8 engine `map` hook; 2f T3 `stickToWorld`; 2g G1 devices map through `PILOT.revCone`); the stick under a swinging chase camera is on the playtest list |
 | 82 | Keys override the stick and a pad overrides both, vs a length merge | Tractor Pickup | accepted (2f T-E8: longest vector wins, ties to the first source); on the 2g playtest list; `goBack` is a button ORed across devices, so S on the keys with the stick forward drives the stick's way in reverse |
-| 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | done in the sim (2f T-E9 engine; T4–T5: parent 2 s, skip 1 s, wake 5 s as `ui.hold({ wall: true })`); DOM adoption 2g |
-| 84 | Player records in browser storage are read by the flow | Tractor Pickup | sim half done (2f T4: sim owns progress/settings via commands; events carry copies); storage saver 2g |
-| 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | sim half done (2f T5: bedtime checked each step against the last `clock`/`bed.set` date); 1 Hz view clock 2g G4 |
+| 83 | Holds measured on `performance.now` vs capped engine time | Tractor Pickup | done (2f T-E9/T4–T5 sim holds on wall time; 2g G2–G4 adopted markup: `farm.parent`, `show.skip`, `sleep.wake`; G6 touch tests); the feel is on the playtest list |
+| 84 | Player records in browser storage are read by the flow | Tractor Pickup | done (2f T4 sim half; 2g G4: the entry loads the records as farm args and saves the `progress`, `settings` and `bed` events) |
+| 85 | Bedtime counts in epoch time across reloads and hidden tabs | Tractor Pickup | done (2f T5 sim half; 2g G4: a 1 Hz `clock` command and one on `visibilitychange`) |
 | 86 | `randomSeed()` with `Math.random` inside a sim module | Tractor Pickup | done (2f T1: the one allowlisted exception in the purity test; no sim module calls it) |
-| 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | sim half done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order); view plays them in 2g |
+| 87 | Per-step sound cues computed in the frame loop | Tractor Pickup | done (2f T3 sim events; 2g G1: the view plays them) |
 | 88 | Tests poke sync internals (monkeypatching, game reassignment) | Tractor Pickup | done (2f T6–T7: per-step sync lookup and the harness `game`/`sync` accessors keep them working) |
 | 89 | The vendored `handshake.js` stays game-side | Tractor Pickup, engine | open (spec §10) |
 | 90 | Systems keep running while a scene loads; only `step` is suspended | engine, Tractor Pickup | done for Tractor (2f T3: the whole pipeline is the farm `step` hook, goldens bit-exact); engine-level rule still open |
@@ -113,10 +113,15 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 98 | The sim reads `time.wall`, so browser-recorded tapes would not replay exactly | engine, Tractor Pickup | open (only headless/`mp()` tapes replay exactly; fix option: per-step wall stamps on tapes) |
 | 99 | Playwright bindings resolve asynchronously, so a two-page bridge needs sequence numbers | engine | done (2g G-E1: per-call seq, `room.step` waits for each page's calls; early events queued by an init-script stub; reload unsupported) |
 | 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | open (the command waits for the next step; option: `untilLoaded` also waits while `engine.commands.pending` > 0) |
-| 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.lh-stick` translate −50%) |
-| 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | open (2g G1 kept the move; G5 must fix: `drawAt` also advances the forecast state the sim's `before` reads, so the host sim depends on frame timing) |
-| 103 | A failing `assert.equal` on a DOM node can use gigabytes | engine, all games | fixed (2g G-E2: `same()` identity helper, guard test; `--test-concurrency=4` in every unit script) |
+| 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.tp-stick` translate −50%; the engine could document the centre anchoring) |
+| 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | fixed (2g G5: read-only `players.poseAt` + view pose map; G5 fix: poses carry `type`/`golden`; G7 deleted `drawAt`) |
+| 103 | A failing `assert.equal` on a DOM node can use gigabytes | engine, all games | fixed (2g G-E2: `same()` identity helper, guard test; `--test-concurrency=4` in every unit script); suites with four Rapier processes peak ~1.1–1.2 GB, so caps need 2 GB (2g G4) |
 | 104 | Late game markup needs re-adoption (`menus.js` builds screens on open) | engine, Tractor Pickup | done (0.7.2: late adoption on sync and `ui.adopt()`) |
+| 105 | A view half cannot read its overlay's open args | engine, Tractor Pickup | open (2g G4: the sleep half reads `quiet` from the event log) |
+| 106 | `?fps` times Rapier by wrapping the sim world's `step` from the view | engine, Tractor Pickup | open (2g G4; wants an engine physics-timing hook) |
+| 107 | `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page | engine, Tractor Pickup | open (2g G5: Tractor passes `render: 'manual'`; the two-page test takes ~80 s) |
+| 108 | Feel constants are module state: tapes replay exactly only from the shipped values | engine, Tractor Pickup | open (2g G4b: tests restore the constants; wants a tunables or game-reset hook) |
+| 109 | `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold | engine, Tractor Pickup | open (2g G6: the iPad gesture test runs at 1x) |
 
 ## Entries
 
@@ -147,7 +152,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Tractor Pickup: `main.js` sets `g.mode = 'reward'`, and the sim waits on `showDone`/`rewardDone`, which come from view animations.
   - Pig Pens: `driving`, `tool` and `selected` live in `main()`'s closures.
 - **Engine change:** scenes own flow (S-4). View animations end with an ack event, which needs scene-scoped listeners (`ctx.on`).
-- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens done (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup planned (2f T4–T5: trip, show ack, reward, bedtime and menus in the farm scene and non-pausing overlays; 2g G3: the show cutscene acks with `show.done`).
+- **Status:** Rally part done in 2c-rally R2–R3; Pig Pens done (2e P2–P4: `tool`, `selected`, `driving` and the per-gesture state in the `farm` scene's `ctx.state`; drive mode is farm sub-state); Tractor Pickup done (2f T4–T5: trip, show ack, reward, bedtime and menus in the farm scene and non-pausing overlays; 2g G1–G6: view halves that read `engine.scene.state` and react to events, the show cutscene acks with `show.done`; 2g G7: the old `main.js` loop, `window.tp` and `window.game` deleted).
 
 ### 5. Positional input can't be expressed as actions: Pig Pens, Tractor Pickup
 - **What happened:**
@@ -537,7 +542,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** `ui/show.js` sets each rider's `state = 'show'` and tweens its `x/y/z/yaw` (a sim object) from the view, with waits on `setTimeout` and on the voice's promises; the layout depends on the screen (portrait vs landscape). After the show the herd walks the animals into the barn from wherever the view left them, so the sim's next state depends on the view.
 - **Decision:** the show stays a view cutscene (word timing is the voice's, which the sim cannot know). At the `show` cue the sim freezes the riders (`state = 'show'`); the view animates copies and ends with a game-wide `show.done { spots }` carrying where each animal stands, which the sim applies before `finishShow`. Replays reproduce it (the spots are in the tape).
 - **Cost (playtest):** other players see your riders stay in the trailer during your show; today they see them hop out to the line-up.
-- **Status:** sim half done (2f T4: `show` event, `show.done { spots, gen }` places riders before `finishShow`); view pacing 2g G3.
+- **Status:** done (2f T4: `show` event, `show.done { spots, gen }` places riders before `finishShow`; 2g G3: the view animates copies of the riders, its waits count `update(dt)` time on the raw frame time, and the ack always carries the `show` event's `gen`).
 
 ### 80. A guest's welcome needs its new farm synchronously: Tractor Pickup (phase 2f plan)
 - **What happened:** `guest.js`'s `applyWelcome` calls `onFarm(seed, you)` and uses the returned game at once. A farm rebuilt through `ctx.load` arrives later.
@@ -548,7 +553,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 81. The reverse cone is screen-relative; a world vector can't say "down": Tractor Pickup (phase 2f plan)
 - **What happened:** point to go (C-2, C-8) wants the stick in the world frame (camera heading plus stick angle), but reversing depends on the stick's screen angle (within 35° of straight down), which a world-frame vector loses once the camera lags the tractor.
 - **Change:** the device `map` hook writes `goX`/`goZ` (world frame, length = stick distance) and a `goBack` button decided on the screen angle (`stickToWorld`); `pilot.drive` reproduces `pilot.update` within 1e-9 (2f T3's property test).
-- **Status:** engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption 2g (use `PILOT.revCone`).
+- **Status:** engine half done (2f T-E8: the game's map `to` gets the screen-relative stick; the sign is the game's); sim half done (2f T3: `stickToWorld` keeps the cone on the screen; `pilot.update`/`drive` share one core); view adoption done (2g G1: the stick, keys and pad share one map through `stickToWorld`, with `PILOT.revCone` for `goBack`). How it feels under a swinging chase camera is on the 2g playtest list.
 
 ### 82. Keys override the stick and a pad overrides both, vs a length merge: Tractor Pickup (phase 2f plan)
 - **What happened:** `ui/input.js` `read()` lets any held direction key replace the stick and any moved pad stick replace both. The engine merges sources per action (largest |value|), and a pair by vector length.
@@ -558,18 +563,18 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 83. Holds measured on `performance.now` vs capped engine time: Tractor Pickup (phase 2f plan)
 - **What happened:** the parent gear (2 s), the wake button (5 s) and the show's skip (1 s) are `holdToFire` on `performance.now`. `ui.hold` counts engine time, which `maxCatchUp` caps: below 20 fps a 5 s hold would take longer in wall time (as #56).
 - **Change:** `ui.hold({ wall: true })` counts `engine.time.wall` from the press; headless that is virtual and deterministic.
-- **Status:** done in the sim (2f T-E9 engine; T4–T5: parent 2 s, skip 1 s, wake 5 s as `ui.hold({ wall: true })`); DOM adoption 2g.
+- **Status:** done (2f T-E9 engine; T4–T5: parent 2 s, skip 1 s, wake 5 s as `ui.hold({ wall: true })`; 2g G2–G4: the gear, skip and wake buttons are adopted markup; G6: touch tests of the wake hold). The feel on a real iPad is on the playtest list.
 
 ### 84. Player records in browser storage are read by the flow: Tractor Pickup (phase 2f plan)
 - **What happened:** `main.js` loads progress, settings and bedtime from `localStorage` and the flow reads them (the start screen needs a paint choice, hats ride on boops, the reward unlocks paints and hats, power sets the tractor).
 - **Change:** the sim owns them: the entry passes the stored records as scene args (clamped as today), menus change them through commands, and the sim emits `progress`, `settings` and `bed` events that the entry saves. Tapes carry them in the args.
-- **Status:** sim half done (2f T4: sim owns progress/settings via commands; events carry copies); storage saver 2g.
+- **Status:** done (2f T4: sim owns progress/settings via commands; events carry copies; 2g G4: the entry loads the stored records as the farm's args, clamped, and saves the `progress`, `settings` and `bed` events).
 
 ### 85. Bedtime counts in epoch time across reloads and hidden tabs: Tractor Pickup (phase 2f plan)
 - **What happened:** bedtime is stored as a `Date.now()` time so it counts while the page is closed or hidden; `stepBedtime` reads `Date.now()` every step.
 - **Change:** the entry sends `clock { date }` once a second and on becoming visible; `bed.set` carries the date it was set. The check runs in the farm step against the last date.
 - **Cost (playtest):** the last drive starts up to a second late.
-- **Status:** sim half done (2f T5: bedtime checked each step against the last `clock`/`bed.set` date); 1 Hz view clock 2g G4.
+- **Status:** done (2f T5: bedtime checked each step against the last `clock`/`bed.set` date; 2g G4: the entry sends `clock { date }` at 1 Hz and when the page becomes visible).
 
 ### 86. `randomSeed()` with `Math.random` inside a sim module: Tractor Pickup (phase 2f plan)
 - **What happened:** `src/sim/rng.js` exports `randomSeed()` (`Math.random`), which the purity scan flags; its unit test imports it from there.
@@ -579,7 +584,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 87. Per-step sound cues computed in the frame loop: Tractor Pickup (phase 2f plan)
 - **What happened:** `main.js`'s `stepSounds` runs after each `game.step` and reads wheel contacts to fire `whee`, `cheer` and the sandbox's squelch; the view cannot see steps.
 - **Change:** the farm step emits `whee`, `cheer` and `squelch` events; the view plays them.
-- **Status:** sim half done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order); view plays them in 2g.
+- **Status:** done (2f T3: `whee`/`cheer`/`squelch` events in `stepSounds` order; 2g G1: the farm view half plays them).
 
 ### 88. Tests poke sync internals: Tractor Pickup (phase 2f plan)
 - **What happened:** the mp suites replace `sync.after`, wrap `sync.handlers.claim`, reassign `w.host.game` and call `sync.before` directly.
@@ -651,12 +656,13 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 101. `bindStick` places an adopted floating base by its centre: Tractor Pickup (phase 2g G1)
 - **What happened:** `bindStick` sets `left`/`top` to the thumb point, but Tractor's CSS placed the box's top-left at thumb − R.
 - **Decision:** the adopted base gets the class `lh-stick` with `translate(-50%, -50%)`. The old path is unchanged.
-- **Status:** worked around. The engine could document the centre anchoring.
+- **Status:** worked around (the class became the game-owned `tp-stick` in 2g G2). The engine could document the centre anchoring.
 
 ### 102. The view writes sim animals for other players' carried riders: Tractor Pickup (phase 2g G1)
 - **What happened:** `players.drawAt(now, herd)` places other players' carried animals in `game.herd` every frame (M-65). It moved unchanged into the farm view's `frame`, which breaks "view halves never write the sim". A tape recorded in a room could depend on frame timing.
 - **Decision:** kept in G1, which moved code without rewriting it (no room is bound in G1, so it never runs). The G1 review found it is wider: `players.sample(now)` also advances the forecast state (`last`, the error fade, the `next` record) that the sim's `before` reads. G5 must give the view a read-only `players.poseAt(now, out)` and draw carried riders from a view pose-override map (as #79).
-- **Status:** open.
+- **Outcome:** G5 added `players.poseAt(now, out)`: the view's own forecast per player, fed the same records, so nothing the sim's step reads moves. The farm frame draws other players' trains and carried riders from that map. The G5 review found the remote rider poses had no `type` (animals3d threw every frame); the fix copies `type` and `golden` and a two-page test covers it. G7 deleted `drawAt` with the old `main.js`.
+- **Status:** fixed.
 
 ### 103. A failing `assert.equal` on a DOM node can use gigabytes: engine, all games (phase 2g G-E2)
 - **What happened:**
@@ -667,9 +673,39 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - DOM nodes are compared by identity through `same()` in `test/helpers/dom.mjs`. A guard test rejects `assert.equal`/`deepEqual` on node expressions (it catches common shapes, not plain variables).
   - Every unit test script runs `--test-concurrency=4`.
   - Agents run suites in a capped scope with a node heap limit below the cap, so a runaway dies inside node and the user gets no KDE low-memory notice.
+- **Later (2g G4):** with `--test-concurrency=4`, the Tractor unit suite and the games workspace suite still peak at about 1.1–1.2 GB, because four Rapier processes run at once. A 1 GB cap OOM-killed them. The rule is now `MemoryMax=2G` with a 512 MB node heap per process for unit and workspace suites, and 3 GB (2 GB heap) for one browser suite at a time.
 - **Status:** fixed.
 
 ### 104. Late game markup needs re-adoption: engine, Tractor Pickup (phase 2g G2)
 - **What happened:** uiDom adopted `data-lh-slot` markup only when a control first appeared. Tractor's `menus.js` builds each screen after its overlay registers its controls, and removes the screen on close. So pre-made markup would be destroyed, and late markup was never used.
 - **Decision:** in 0.7.2, a sync swaps an engine-made control onto a slot element that appears later, and re-adopts or falls back when an adopted element leaves the document. `ui.adopt()` forces the swap at once. Without a `MutationObserver`, late adoption happens only through `adopt()`.
 - **Status:** done.
+
+### 105. A view half cannot read its overlay's open args: engine, Tractor Pickup (phase 2g G4)
+- **What happened:** the sim opens the `sleep` overlay with `{ quiet }` (a sleep restored at boot is quiet: no spoken goodnight and no dusk wait). The view half needs `quiet` to decide whether the wake button shows at once or after `BED.dusk`. Overlay args do not reach view halves.
+- **Workaround:** the sleep half reads the latest `sleep` event from `engine.events.since(0)`. If the log has lost it (more than 256 events in between, or a boot-time open before any flush), it assumes quiet, so the button is never hidden for good.
+- **Engine change:** pass the overlay's args to its view half (`enter(engine, view, args)`, or `engine.scene.overlayArgs(name)`).
+- **Status:** open.
+
+### 106. `?fps` times Rapier by wrapping the sim world's `step` from the view: engine, Tractor Pickup (phase 2g G4)
+- **What happened:** the X-4 hitch readout shows Rapier's share of each frame. The old `main.js` wrapped `world.step` for timing (B-1). The view half does the same under `?fps`. It only measures, but it replaces a method on a sim object from the view.
+- **Engine change:** a physics-timing hook, for example `engine.onStep` reporting each step's sim and physics milliseconds, or a `debug.timing` the sim fills.
+- **Status:** open.
+
+### 107. `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page: engine, Tractor Pickup (phase 2g G5)
+- **What happened:** with the default, each manual-stepping page still renders every rAF under SwiftShader. The guest took 13 s to reach WebGL init, and `waitForFunction(window.engine)` timed out at 30 s with about 12 cores busy. With `render: 'manual'` (`?lh-test=render`) both pages open in 2.8 s.
+- **Workaround:** Tractor's two-page test passes `render: 'manual'`. The test still takes about 80 s (after the G5 fix added the carried-rider check).
+- **Engine change:** `peers()` defaults to `render: 'manual'`.
+- **Status:** open.
+
+### 108. Feel constants are module state, so tapes replay exactly only from the shipped values: engine, Tractor Pickup (phase 2g G4b)
+- **What happened:** the `tune` command (user ruling: `?tune` goes through game flow) writes Tractor's feel constants (`P`, `PILOT`, `TP`, …), which are module-level objects. They are not in the scene state or on the tape. A tape with `tune` commands replays exactly only if the constants are back at their shipped values first, and two sims in one process (`mp()`) share them. A guest that tuned while solo keeps its values after joining.
+- **Workaround:** the tune tests restore the constants in `afterEach` and before a replay. Feel constants are not replicated.
+- **Engine change:** a tunables hook (the game declares its tunables; the engine resets them on boot and on replay, and records them on the tape), or a game-reset hook that replay calls first.
+- **Status:** open.
+
+### 109. `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold: engine, Tractor Pickup (phase 2g G6)
+- **What happened:** `bindGesture` adds each frame's `rawDt` to a press, and a lift is seen only after its frame. SwiftShader drew the iPad preset (pixel ratio 1.5, 1791×1251) at about 570 ms a frame, so a short tap on the show became a 1 s hurry hold.
+- **Workaround:** the iPad gesture test runs at `deviceScaleFactor: 1` (about 380–400 ms a frame), with a speech stub. Harmless at real frame rates, but a stuttering device (X-4) could turn a tap into a hold.
+- **Engine change:** measure the hold from the pointer events' `timeStamp`s (down to up), not from summed frame time.
+- **Status:** open.
