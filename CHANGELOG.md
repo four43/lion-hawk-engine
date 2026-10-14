@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 — 2026-10-14
+
+- Fixes for the Pig Pens port: view sync skips a drawn entity until `assets.has(model)` and makes it on a later frame (no throw while loading); the bake's convex hull runs in quickhull order with a connected visible region, so near-coplanar meshes (Kenney tractor `wheel-back-right`) finish; `palette: 'vertex'` also writes `COLOR_0` from the factor of untextured materials (factor goes white, alpha kept).
+
 ## 0.10.0 — 2026-10-14
 
 - World net part (3i): entities with a `net` part replicate on their own (N-9). `F.body()` (N-8); kind options `remote` (`driven` | `proxy` | `view`), `follow`, `tune` (`snapAt`, `nudge`, `smoothMs`, live per engine as `world.net.tunables`), `send`, `spawn`, `spawned`, `record`, `apply`. Driven remotes play the owner's batched inputs and are nudged or snapped (N-13…N-16; the nudge holds while touching another dynamic body), with `e.netFix` for 3g's smoothing. The host relays owner records and departures; a guest's `world.clear()` respawns every replica from its newest record (CI-15, `world.serial`); E-7 guard on spawn and despawn. `world.net`: `role`, `self`, `players`, `player(peer, n)`, `find(kind, netId)`, `remoteOf(e)`, `stats`.

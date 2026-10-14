@@ -23,12 +23,22 @@ export function applyRenames(doc, rename) {
 const s2l = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
 // Every primitive with a base-colour texture and TEXCOORD_0 but no COLOR_0 gets COLOR_0 (linear floats) = texel at the vertex
 // UV × base colour factor (Kenney writes sRGB-looking values into the factor; used as they are, as Tractor's bake did). Its
-// texture, TEXCOORD_0 and TANGENT go; the factor becomes white. Textures left unused are disposed.
+// texture, TEXCOORD_0 and TANGENT go; the factor becomes white. Untextured primitives (baseColorFactor only) get COLOR_0 = the
+// factor at every vertex the same way, and their material's factor becomes white when all its users got one. Textures left unused
+// are disposed.
 export function paletteToVertex(doc, model) {
-  const cache = new Map();
+  const cache = new Map(), factored = new WeakSet();
+  const factorToVertex = (doc, prim, mat) => {
+    const f = mat.getBaseColorFactor(), n = prim.getAttribute('POSITION').getCount(), out = new Float32Array(n * 3);
+    for (let k = 0; k < 3; k++) { const c = s2l(Math.round(Math.max(0, Math.min(1, f[k])) * 255)); for (let i = 0; i < n; i++) out[i * 3 + k] = c; }
+    prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(out).setBuffer(doc.getRoot().listBuffers()[0]));
+    factored.add(prim);
+  };
   for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) {
     const mat = prim.getMaterial(), tex = mat?.getBaseColorTexture(), uv = prim.getAttribute('TEXCOORD_0');
-    if (prim.getAttribute('COLOR_0') || !tex || !uv) continue;
+    if (prim.getAttribute('COLOR_0') || !mat) continue;
+    if (!tex) { factorToVertex(doc, prim, mat); continue; } // untextured (baseColorFactor only): the factor, at every vertex
+    if (!uv) continue;
     if (tex.getMimeType() !== 'image/png') throw new Error(`bake: ${model}: material '${mat.getName()}' palette texture is ${tex.getMimeType()} (only PNG)`);
     if (!cache.has(tex)) cache.set(tex, PNG.sync.read(Buffer.from(tex.getImage())));
     const png = cache.get(tex), f = mat.getBaseColorFactor(), n = prim.getAttribute('POSITION').getCount(), out = new Float32Array(n * 3), e = [0, 0];
@@ -45,9 +55,11 @@ export function paletteToVertex(doc, model) {
       if (a && !a.listParents().some(p => p !== doc.getRoot())) a.dispose();
     }
   }
-  for (const m of doc.getRoot().listMaterials()) if (m.getBaseColorTexture()) {
-    const users = m.listParents().filter(p => p.propertyType === 'Primitive');
-    if (users.every(p => p.getAttribute('COLOR_0') && !p.getAttribute('TEXCOORD_0'))) m.setBaseColorTexture(null).setBaseColorFactor([1, 1, 1, 1]);
+  for (const m of doc.getRoot().listMaterials()) {
+    const users = m.listParents().filter(p => p.propertyType === 'Primitive'), a = m.getBaseColorFactor()[3];
+    if (m.getBaseColorTexture()) {
+      if (users.every(p => p.getAttribute('COLOR_0') && !p.getAttribute('TEXCOORD_0'))) m.setBaseColorTexture(null).setBaseColorFactor([1, 1, 1, a]);
+    } else if (users.length && users.every(p => factored.has(p))) m.setBaseColorFactor([1, 1, 1, a]); // the colour now lives in COLOR_0
   }
   for (const t of doc.getRoot().listTextures()) if (!t.listParents().some(p => p !== doc.getRoot())) t.dispose();
 }
