@@ -52,8 +52,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   let active = [], busy = false, pending = 0, settledAttr, disposed = false;
   const entries = () => {
     const s = engine.scene, out = [];
-    if (s.name !== undefined) out.push({ name: s.name, key: s.id });
-    for (let i = 0; i < s.overlays.length; i++) out.push({ name: s.overlays[i], key: s.overlayIds[i] });
+    if (s.name !== undefined) out.push({ name: s.name, key: s.id, args: s.args });
+    for (let i = 0; i < s.overlays.length; i++) out.push({ name: s.overlays[i], key: s.overlayIds[i], args: s.overlayArgs(s.overlays[i]) }); // #105
     return out;
   };
   const same = (a, b) => a.name === b.name && a.key === b.key;
@@ -66,7 +66,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
         active = cur.slice(); // set first: a half that transitions re-enters via the next pass
         for (let i = gone.length - 1; i >= 0; i--) caught(() => views[gone[i].name]?.exit?.(engine, view));
         ui.sync(); // #46: the entering halves see their scene's controls created, adopted and enabled
-        for (const c of added) caught(() => views[c.name]?.enter?.(engine, view));
+        for (const c of added) caught(() => views[c.name]?.enter?.(engine, view, c.args)); // #105: enter(engine, view, args)
         applyFocus();
       }
     } finally { busy = false; }
