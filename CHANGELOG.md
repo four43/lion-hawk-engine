@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0 — 2026-10-14
+
+- World net part (3i): entities with a `net` part replicate on their own (N-9). `F.body()` (N-8); kind options `remote` (`driven` | `proxy` | `view`), `follow`, `tune` (`snapAt`, `nudge`, `smoothMs`, live per engine as `world.net.tunables`), `send`, `spawn`, `spawned`, `record`, `apply`. Driven remotes play the owner's batched inputs and are nudged or snapped (N-13…N-16; the nudge holds while touching another dynamic body), with `e.netFix` for 3g's smoothing. The host relays owner records and departures; a guest's `world.clear()` respawns every replica from its newest record (CI-15, `world.serial`); E-7 guard on spawn and despawn. `world.net`: `role`, `self`, `players`, `player(peer, n)`, `find(kind, netId)`, `remoteOf(e)`, `stats`.
+- `defineGame({ net: { world: true } })` installs the net part in `createEngine`; `installNet(engine)` is exported from `lion-hawk/sim` and stays idempotent.
+- `mp()` gains `w.drop(peer)`, `w.blackout(seconds, { kinds })` and `w.diverged({ agree })` (T-11).
+- **Behaviour change:** driven kinds send `input` as `{ s, list }` (NET_VERSION 4 for Tractor).
+
 ## 0.9.0 — 2026-10-14
 
 Phase 3 Wave B complete (3e + 3f + 3g + 3h).

@@ -10,6 +10,7 @@ import { createUi } from './ui.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
 import { createRegistry } from '../sim/replica.js';
 import { installWorld, checkPhysics } from '../sim/world/install.js';
+import { installNet } from '../sim/net/install.js';
 
 // [I-7] reserved keys a port sets on any command's data (#77); a schema may not declare them
 const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
@@ -418,6 +419,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   worlds = installWorld(engine, { timer }); // §4.1, §4.4: checks physics.rapier, adds lh.world.swap and lh.physics.*
+  if (game.net?.world) installNet(engine); // 3i: the World net part, before setup and any port; each World open attaches it
   sync(); syncTime();
   // setup and the start enter run busy like any transition: what they request queues, then applies in order
   booting = true;

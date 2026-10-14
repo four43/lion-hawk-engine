@@ -24,6 +24,7 @@ export const SURFACE = [
   ['0.8.0', 'lion-hawk/build', ['dedupe', 'build']],
   ['0.8.2', 'lion-hawk/view', ['createAssets', 'createMaterialCompiler', 'furGeometry', 'sampleAnimTable', 'blendAnimTable', 'decodeAnimTable']],
   ['0.9.0', 'lion-hawk/view', ['createViewSync', 'createChaseRig', 'createOrbitRig', 'createMountRig', 'makeProject', 'createInstances', 'createCrowd', 'createAudio']],
+  ['0.10.0', 'lion-hawk/sim', ['installNet']],
   ['0.8.1', 'lion-hawk/kits/terrain', ['createTerrain']],
   ['0.8.1', 'lion-hawk/kits/terrain/view', ['createTerrainMesh', 'chunkIndex']],
   ['0.8.1', 'lion-hawk/kits/vehicle', ['VEHICLE_SYSTEM', 'createVehicle']],
