@@ -16,6 +16,14 @@ const C = 5; // controls per wheel: steer, engine, brake, slip, side
 const fail = m => { throw new Error(`vehicle: ${m}`); };
 const label = e => e?.model ?? ((e?.tags && [...e.tags].join(',')) || `entity ${e?.id}`);
 const xyz = p => (Array.isArray(p) ? { x: p[0], y: p[1], z: p[2] } : { x: p.x, y: p.y, z: p.z });
+// A named wheel's part pose for view sync (3g Task 13b, 3c partXf), in the chassis frame: the hub (connection point moved
+// `suspension` down the ray), steered about +y, then rolled about the axle by -rotation (a forward roll moves the bottom back).
+function partPose(o, at, w, rot, axle) {
+  o.p.x = at.x; o.p.y = at.y - w.suspension; o.p.z = at.z;
+  const sy = Math.sin(w.steering / 2), cy = Math.cos(w.steering / 2), sr = Math.sin(-rot / 2), bw = Math.cos(-rot / 2);
+  const bx = axle.x * sr, bz = axle.z * sr; // the axle has no y
+  o.q.x = cy * bx + sy * bz; o.q.y = sy * bw; o.q.z = cy * bz - sy * bx; o.q.w = cy * bw;
+}
 
 function install(engine) {
   if (ENGINES.has(engine)) return;
@@ -54,6 +62,12 @@ export function createVehicle(world, e, opts = {}) {
     if (!(s.radius > 0)) fail(`wheel ${i}: radius must be > 0 (got ${s.radius})`);
     return xyz(at);
   });
+  const parts = specs.map((s, i) => {
+    if (s.part === undefined) return null;
+    if (typeof s.part !== 'string' || s.part === '') fail(`wheel ${i}: part must be a model part name (got ${s.part})`);
+    if (specs.findIndex(t => t.part === s.part) !== i) fail(`wheel ${i}: part '${s.part}' is used twice`);
+    return s.part;
+  });
 
   const vc = world.rapier.createVehicleController(e.body);
   vc.setIndexForwardAxis = AXIS[forward]; // Rapier 0.21: a property setter with a method's name (read back as indexForwardAxis)
@@ -83,6 +97,8 @@ export function createVehicle(world, e, opts = {}) {
     w.pair = id ? reg.pair(tyre, id) : null;
     w.friction = w.pair ? w.pair.friction : 1;
   };
+  if (parts.some(p => p !== null)) world.add(e, 'partXf', parts.filter(p => p !== null)); // merges with the game's own names
+  const poses = parts.map(p => (p === null ? null : e.partXf[p])); // the World's objects, written in place every step
   const car = {
     controller: vc, entity: e, wheels, tyre, removed: false,
     set(i, c) {
@@ -109,6 +125,7 @@ export function createVehicle(world, e, opts = {}) {
         vc.wheelContactPoint(i, w.point); vc.wheelContactNormal(i, w.normal);
         w.suspension = vc.wheelSuspensionLength(i) ?? 0; w.steering = vc.wheelSteering(i) ?? 0; w.load = vc.wheelSuspensionForce(i) ?? 0;
         ground(i, w);
+        if (poses[i] !== null) partPose(poses[i], points[i], w, vc.wheelRotation(i) ?? 0, axle);
       }
     },
   };
