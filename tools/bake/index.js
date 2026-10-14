@@ -70,6 +70,20 @@ export async function bake({ game = '.', ids = [], check = false, log = console.
   const cfg = typeof game === 'string' ? await loadConfig(game) : game;
   const registry = await loadRegistry(cfg), src = sources(cfg), outDir = resolve(cfg.dir, cfg.bake.out), prev = readBaked(outDir);
   for (const id of ids) if (!src.has(id)) throw new Error(`bake: ${id}: no such model in ${cfg.bake.src}`);
+  if (check) {
+    const stale = [], phys = prev.phys;
+    if (!phys) return { ok: false, baked: [], stale: [{ id: '*', why: 'no phys.json' }] };
+    if (phys.materials !== registry.hash) stale.push({ id: '*', why: `registry hash ${phys.materials} → ${registry.hash}` });
+    if (minor(phys.engine) !== minor(ENGINE_VERSION)) stale.push({ id: '*', why: `engine ${phys.engine} → ${ENGINE_VERSION}` });
+    for (const [id, s] of src) {
+      const side = phys.models[id];
+      if (!side) stale.push({ id, why: 'not baked' });
+      else if (side.source.sha256 !== sha256(readFileSync(s.file))) stale.push({ id, why: 'source changed' });
+    }
+    for (const id of Object.keys(phys.models)) if (!src.has(id)) stale.push({ id, why: 'source removed' });
+    for (const s of stale) log(`stale: ${s.id}: ${s.why}`);
+    return { ok: stale.length === 0, baked: [], stale };
+  }
   const changed = prev.phys && (prev.phys.materials !== registry.hash || minor(prev.phys.engine) !== minor(ENGINE_VERSION));
   if (ids.length && (changed || !prev.phys)) log('bake: no phys.json yet, or the registry hash or engine version changed, so every model is baked');
   const full = !ids.length || changed || !prev.phys, todo = full ? [...src.keys()] : ids, results = [];
