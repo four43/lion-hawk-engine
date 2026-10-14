@@ -115,6 +115,13 @@ export function createVehicle(world, e, opts = {}) {
   let list = CARS.get(world);
   if (!list) CARS.set(world, list = []);
   list.push(car);
+  // despawn and clear() free the controller (3c runs own() callbacks while this Rapier world is still alive)
+  const rw = world.rapier;
+  world.own(e, () => {
+    const k = list.indexOf(car);
+    if (k !== -1) list.splice(k, 1);
+    if (!car.removed) { car.removed = true; rw.removeVehicleController(vc); }
+  });
   install(engine);
   return car;
 }
