@@ -1,8 +1,9 @@
 import test from 'node:test';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import assert from 'node:assert/strict';
 import { getIO } from '../tools/bake/read.js';
 import { classify, sanitize } from '../tools/bake/conventions.js';
-import { model, boxGeom, build } from './fixtures/models/make.mjs';
+import { model, boxGeom } from './fixtures/models/make.mjs';
 import REGISTRY from './fixtures/models/game/materials.js';
 
 const box = (m, name, mat, extra = {}) => m.node(name, { ...extra, mesh: m.mesh(name, [[boxGeom([1, 1, 1]), mat]]) });
@@ -40,4 +41,18 @@ test('3d: parts nest, sockets record their part (or null), names are sanitised a
     ['col-cylinder', 'cylinder', 'wheel', null], ['col-capsule', 'capsule', 'mast', null], ['col-sphere', 'sphere', 'body', null]]);
   assert.equal(c.parts[3].node.getName(), 'lamp001');    // the GLB node is renamed too, so runtime names match the sidecar
   assert.equal(sanitize('a b.c[1]:d/e'), 'a_bc1de');
+});
+test('3d: part names are unique across every scene node, as GLTFLoader names them', async () => {
+  const m = model(); m.node('Group'); box(m, 'Group', 'wood');
+  const io = await getIO(), doc = await io.readBinary(await m.bytes());
+  const c = classify(doc, 'm', { registry: REGISTRY });
+  assert.deepEqual(c.parts.map(p => p.name), ['Group-2']);
+  const bytes = await io.writeBinary(doc);
+  const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  assert.equal(gltf.scene.getObjectByName('Group-2').isMesh, true);
+  assert.equal(gltf.scene.getObjectByName('Group').isMesh, undefined);
+});
+test('3d: a mesh name that is empty after sanitising is an error', async () => {
+  const m = model(); box(m, '..', 'wood');
+  await assert.rejects(run(m), /^Error: bake: m: '\.\.' has an empty name after sanitising$/);
 });

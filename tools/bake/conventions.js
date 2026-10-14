@@ -13,6 +13,14 @@ export function classify(doc, model, { registry, sockets = [] }) {
   const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
   if (!scene) fail('no scene');
   const parts = [], cols = [], socks = [], names = new Set(), sockNames = new Set();
+  // GLTFLoader names every node and the scene in one namespace, so parts dedupe against all non-part nodes too (col-* nodes are removed before writing).
+  if (scene.getName()) names.add(sanitize(scene.getName()));
+  const seed = node => {
+    if (node.getName().startsWith('col-')) return;
+    if (!node.getMesh() && node.getName()) names.add(sanitize(node.getName()));
+    for (const c of node.listChildren()) seed(c);
+  };
+  for (const n of scene.listChildren()) seed(n);
   const walk = (node, part) => {
     const name = node.getName(), mesh = node.getMesh();
     if (name.startsWith('col-')) {
@@ -40,6 +48,7 @@ export function classify(doc, model, { registry, sockets = [] }) {
     if (mesh) {
       if (!name) fail('mesh node with no name');
       const base = sanitize(name);
+      if (!base) fail(`'${name}' has an empty name after sanitising`);
       let unique = base;
       for (let k = 2; names.has(unique); k++) unique = `${base}-${k}`;   // Kenney repeats names (corn cobs): name-2, name-3…
       if (unique !== name) node.setName(unique);
