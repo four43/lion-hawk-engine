@@ -14,8 +14,10 @@ const skip = v => !since(v) && `engine ${ENGINE_VERSION} < ${v}`;
 
 // [version, entry point, names]. Extras requested by plans are added here in the commit that exports them (Procedure R, kind E).
 export const SURFACE = [
-  ['0.8.0', 'lion-hawk/sim', ['defineMaterials', 'BASE_MATERIALS', 'SIDECAR_VERSION', 'validateSidecar', 'validatePhys', 'createWorld', 'heightfieldDesc']],
-  ['0.8.0', 'lion-hawk/view', ['defineMaterials', 'createWorld']],
+  ['0.7.4', 'lion-hawk/sim', ['defineMaterials', 'BASE_MATERIALS', 'SIDECAR_VERSION', 'validateSidecar', 'validatePhys']],
+  ['0.7.4', 'lion-hawk/view', ['defineMaterials']],
+  ['0.8.0', 'lion-hawk/sim', ['createWorld', 'heightfieldDesc']],
+  ['0.8.0', 'lion-hawk/view', ['createWorld']],
   ['0.8.0', 'lion-hawk/test', ['checks']],
   ['0.8.0', 'lion-hawk/bake', ['bake', 'loadConfig']],
   ['0.8.0', 'lion-hawk/build', ['dedupe', 'build']],
