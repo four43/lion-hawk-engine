@@ -98,6 +98,7 @@ Probe ran on the built pages through `serveDir` (no fallback needed); frames 119
 
 | Version | Date | Engine head | four43 head | Engine | Workspace | Browser | Builds | Probes | Verdict | Log |
 |---|---|---|---|---|---|---|---|---|---|---|
+| 0.7.3 | 2026-10-14 | 2a5cbde (`v0.7.3`) | d884cf3 (`v-games-0.7.3`) | pass: unit 409, browser 14 (bridge-e2e 7, e2e 1, hold-e2e 1, load-e2e 2, touch-e2e 2, untilLoaded-e2e 1) = 423 | pass 874 | pass: TP_MP=engine 782/1 (allowed, M-50); Pig Pens e2e 6, Tractor e2e 14, Rally e2e 4, Rally mobile 0 | none (no `game.config.js` yet) | none | GATE PASS; dirty 0; golden diff vs `v-games-0.7.2` empty | `/tmp/claude-1000/lion-hawk-phase3/3m/gates/0.7.3.log` |
 
 ## Frame-rate table (overview §8 R1, R3)
 
@@ -110,11 +111,20 @@ Budgets: programs ≤ baseline + 2; draw calls (median) ≤ baseline; total gzip
 
 | ID | From | Kind | Files | Ask | Decision | Landed in | Test |
 |---|---|---|---|---|---|---|---|
+| 3a-R1 | 3a | D | `package.json`, `package-lock.json`, `src/version.js` | 0.7.3; `@gltf-transform/*` 4.5.1, `meshoptimizer ~1.2.0`, `pngjs ^7`, `esbuild` as dependencies (with 3d R1's pins) | done | 2a5cbde (0.7.3) | `test/package-phase3.test.mjs` (red without `pngjs`, then green) |
+| 3a-R2 | 3a | S | `CHANGELOG.md` | `## 0.7.3` entry | done; checked against the merged notes (reset bullet adds ruling 4) | 2a5cbde | — |
+| 3a-R3 | 3a | S | `docs/spec.md` | Task 10 steps 1–3 (header, part A D1–D9, part B) | done verbatim, plus R7 | 350e614 | — |
+| 3a-R4 | 3a | S | `docs/field-notes.md` | #95, #100, #105, #107, #108, #109 done; candidates from #110 | done: five candidates → #110–#114 | e902f5c | `test/field-notes.test.mjs` |
+| 3a-R5 | 3a | — | — | games workspace suite after the merge, before Wave A | done: the 0.7.3 gate's workspace step, 874/874 (against `feat/lion-hawk-3`, which links the main checkout) | gate 0.7.3 | — |
+| 3a-R6 | 3a | — | — | Tractor iPad gesture e2e against 0.7.3 before dropping a #109 workaround | forwarded to 3l (non-blocking); the 0.7.3 gate's Tractor e2e passed 14/14 at the current settings | — | — |
+| 3a-R7 | 3a | S | `docs/spec.md` | [I-2]: `now` reads the clock of `event.timeStamp`, for tests; [T-5]/[T-17]: `maxSteps: 0` with commands pending throws | both applied: code reads `clock() - t0` with `t0 = event.timeStamp`; a scratch probe showed `untilLoaded({ maxSteps: 0 })` throws `untilLoaded after 0 steps` with a command pending (Playwright loop reads the same) | 350e614 | — |
 
 ## Broadcasts
 
 | Date | To | Message |
 |---|---|---|
+| 2026-10-14 | controller | Freeze before the 0.7.3 `--ff-only` of `phase-3` (constraint 16): no other worktree was active, so a no-op. |
+| 2026-10-14 | controller | Procedure P pickup for 0.7.3 (gate log `/tmp/claude-1000/lion-hawk-phase3/3m/gates/0.7.3.log`); no open game or engine worktree to relay to. Freeze lifted. |
 
 ## Field-note map
 
