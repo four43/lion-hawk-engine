@@ -78,4 +78,18 @@ export function zeroAlloc(game, { steps = 10000, warm = 600, seed = 1, scene, ar
   } finally { engine.world?.dispose(); }
 }
 
-export const checks = { determinism, simPurity, zeroAlloc };
+// [T-14] material references: sidecar colliders and the inline entries a game lists, plus the registry hash phys.json
+// was baked against. A missing one would also throw at spawn; this names all of them at once.
+export function materials(game, { inline = [] } = {}) {
+  const reg = game.defs?.materials;
+  if (!reg) throw new Error('checks.materials: the game has no defs.materials');
+  const phys = game.defs?.models ?? null, missing = [];
+  for (const [id, sc] of Object.entries(phys?.models ?? {})) {
+    (sc.colliders ?? []).forEach((c, i) => { if (!reg.has(c.material)) missing.push({ where: `models.${id}.colliders[${i}]`, material: c.material }); });
+  }
+  inline.forEach((c, i) => { if (!reg.has(c.material)) missing.push({ where: `inline[${i}]`, material: c.material }); });
+  const hash = { phys: phys?.materials ?? null, registry: reg.hash, ok: phys === null || phys.materials === reg.hash };
+  return { ok: missing.length === 0 && hash.ok, missing, hash };
+}
+
+export const checks = { determinism, simPurity, zeroAlloc, materials };
