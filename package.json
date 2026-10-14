@@ -9,9 +9,13 @@
     "./view": "./src/index.view.js",
     "./net": "./src/index.net.js",
     "./test": "./testing/index.js",
-    "./build": "./tools/dedupe.js",
+    "./bake": "./tools/bake/index.js",
+    "./build": "./tools/build/index.js",
     "./playwright": "./testing/playwright.js",
     "./package.json": "./package.json"
+  },
+  "bin": {
+    "lion-hawk": "bin/lion-hawk.js"
   },
   "peerDependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",

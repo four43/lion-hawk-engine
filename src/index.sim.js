@@ -19,3 +19,5 @@ export { checkSchema, wireCodec } from './sim/schema.js';
 export { defineMaterials } from './defs/materials.js';
 export { BASE_MATERIALS } from './defs/materials.base.js';
 export { SIDECAR_VERSION, validateSidecar, validatePhys } from './defs/sidecar.js';
+export { createWorld } from './sim/world/world.js';
+export { heightfieldDesc } from './sim/physics/heightfield.js';

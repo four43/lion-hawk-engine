@@ -6,3 +6,4 @@ export { headless, policy, eventList } from './headless.js';
 export { replay } from './replay.js';
 export { invariants } from './invariants.js';
 export { mp } from './mp.js';
+export { checks } from './checks.js';
