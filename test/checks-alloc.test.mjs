@@ -23,12 +23,21 @@ test('zeroAlloc: 30 crates, a moving marker and per-step queries retain under 64
   const r = zeroAlloc(physGame({ build: scene, tick }), { steps: 3000 });
   assert.equal(r.ok, true, `retained ${r.growth} bytes`);
   assert.equal(r.steps, 3000);
+  // bounded fill is not a leak: one small event every 10 steps fills the 256-entry ring inside the window
+  const rare = zeroAlloc(physGame({ build: scene, tick: (e, dt, ctx) => { tick(e, dt, ctx); if (e.time.step % 10 === 0) e.events.emit('rare', { n: e.time.step }); } }), { steps: 3000 });
+  assert.equal(rare.ok, true, `rare events retained ${rare.growth} bytes`);
 });
 test('zeroAlloc catches a system that keeps what it allocates', { timeout: 300000 }, () => {
   const kept = [];
   const r = zeroAlloc(physGame({ build: scene, tick: (e, dt, ctx) => { tick(e, dt, ctx); kept.push(new Float64Array(16)); } }), { steps: 3000 });
   assert.equal(r.ok, false);
   assert.ok(r.growth > 64 * 1024, `${r.growth}`);
+  // a small leak near the limit: 2 KB every 40 steps, about 150 KB over the run
+  const small = zeroAlloc(physGame({ build: scene, tick: (e, dt, ctx) => { tick(e, dt, ctx); if (e.time.step % 40 === 0) kept.push(new Array(256).fill(0)); } }), { steps: 3000 });
+  assert.equal(small.ok, false, `small leak measured ${small.growth}`);
+});
+test('zeroAlloc: an unknown named policy throws before an engine or World exists', () => {
+  assert.throws(() => zeroAlloc(physGame({ build: scene }), { steps: 1, warm: 1, input: 'nope' }), /no policy 'nope'/);
 });
 test('zeroAlloc takes start args and an input(step) policy over warm and measured steps (3j #5 ruling)', () => {
   const got = [], asked = [];

@@ -48,20 +48,32 @@ function collector() {
   if (vmGc === null) { v8.setFlagsFromString('--expose-gc'); vmGc = vm.runInNewContext('gc'); }
   return vmGc;
 }
+// Settled heap reading: gc() until used_heap_size stops falling (drop under 1 KB), at most 10 calls. Two fixed
+// calls leave ~0.5 MB of floating garbage that hides real leaks.
+function settled(gc) {
+  let prev = Infinity, cur = Infinity;
+  for (let i = 0; i < 10; i++) { gc(); cur = v8.getHeapStatistics().used_heap_size; if (prev - cur < 1024) break; prev = cur; }
+  return cur;
+}
 // Retained heap growth over `steps` engine steps after `warm` (JIT and rings settle). Rapier's per-call vectors are
-// garbage and do not count; anything kept does. Input resolves once per run through determinism's policyOf; a named
-// policy gets a stand-in h = { engine, seed } (no h.find/world/time).
+// garbage and do not count; anything kept does. Bounded engine state (the 256-entry event ring, pools) keeps filling
+// inside a short window, so the verdict is the SECOND half only: settled readings at warm, warm+steps/2 and
+// warm+steps; `growth` is the second-half growth scaled x2, so `limit` keeps its meaning over `steps`. Blind spot:
+// used_heap_size excludes ArrayBuffer backing stores and Rapier's WASM memory. Input resolves once per run through
+// determinism's policyOf, before the engine exists (an unknown policy leaks no World); a named policy gets a
+// stand-in h = { engine, seed } (no h.find/world/time).
 export function zeroAlloc(game, { steps = 10000, warm = 600, seed = 1, scene, args, input, limit = 64 * 1024 } = {}) {
-  const gc = collector(), engine = createEngine(game, { seed, scene, args }), pol = policyOf(game, input);
-  const scratch = {}, h = { engine, seed: engine.seed };
+  const gc = collector(), pol = policyOf(game, input);
+  const engine = createEngine(game, { seed, scene, args }), scratch = {}, h = { engine, seed: engine.seed };
   const run = (from, n) => { for (let i = 0; i < n; i++) { if (pol) engine.input.set(pol(h, from + i, scratch)); engine.stepN(1); } };
   try {
+    const half = Math.floor(steps / 2);
     run(0, warm);
-    gc(); gc();
-    const before = v8.getHeapStatistics().used_heap_size;
-    run(warm, steps);
-    gc(); gc();
-    const growth = v8.getHeapStatistics().used_heap_size - before;
+    settled(gc);
+    run(warm, half);
+    const mid = settled(gc);
+    run(warm + half, steps - half);
+    const growth = (settled(gc) - mid) * 2;
     return { ok: growth < limit, growth, steps };
   } finally { engine.world?.dispose(); }
 }
