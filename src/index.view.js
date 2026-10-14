@@ -15,3 +15,7 @@ export { createLightRig } from './view/render/lights.js';
 export { warm, instancedShadows, disposeTree, programCount } from './view/render/hygiene.js';
 export { snapshot } from './view/render/snapshot.js';
 export { createTiltShift } from './view/render/tiltShift.js';
+export { createAssets } from './view/assets/index.js';
+export { sampleAnimTable, blendAnimTable, decodeAnimTable } from './view/assets/animTable.js';
+export { createMaterialCompiler } from './view/materials/compiler.js';
+export { furGeometry } from './view/materials/fur.js';

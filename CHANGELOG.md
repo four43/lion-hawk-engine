@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2 — 2026-10-14
+
+- Assets and material compiler (3f): `createAssets` (manifest `preload` with one fetch per URL and `gfx.warm()`, `has`, `get`, `clone(key, { paint, instanced })`, sockets, skinned clones), `createMaterialCompiler` (tiers, `get`, `paint`, `coverage`, `extend`, `apply`, `repaint`, `PAINT`/hue paint, `time`), `furGeometry`, `sampleAnimTable`, `blendAnimTable`, `decodeAnimTable`. These replace 3e's stubs; `render.paint = { base, shade }` reaches the compiler.
+
 ## 0.8.1 — 2026-10-14
 
 - Kits (3h): `lion-hawk/kits/terrain` (`createTerrain`) and `/view` (`createTerrainMesh`), `lion-hawk/kits/vehicle` (`VEHICLE_SYSTEM`, `createVehicle`, part poses for wheels), `lion-hawk/kits/coverage` (`coverageKit`) and `/view` (`coverageView`), `lion-hawk/kits/fx/view` (`createParticles`, `createMarks`).

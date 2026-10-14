@@ -112,5 +112,6 @@ export function createAssets({ manifest, base = './assets/', compiler = null, re
     ready.clear(); files.clear(); tracked.clear();
   }
 
-  return Object.freeze({ preload, progress, has: key => ready.has(key), get, clone, dispose });
+  // not frozen: 3e's render-pipeline test assigns onto assets.dispose
+  return { preload, progress, has: key => ready.has(key), get, clone, dispose };
 }
