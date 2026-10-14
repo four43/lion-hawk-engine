@@ -44,16 +44,19 @@ export async function dev({ game = '.', port = 8740, host = '0.0.0.0', log = con
   const srcDir = resolve(cfg.dir, cfg.bake.src);
   if (cfg.bake.materials && existsSync(srcDir)) {
     const pending = new Set();
+    let chain = Promise.resolve();   // re-bakes run one at a time: two concurrent bake() calls would lose one model's update
     watchers.push(watch(srcDir, (_, file) => {
       if (!file || !/\.(glb|gltf)$/.test(file)) return;
       pending.add(file); clearTimeout(timer);
-      timer = setTimeout(async () => {
+      timer = setTimeout(() => {
         const files = [...pending]; pending.clear();
-        try {
-          const byFile = new Map([...sources(cfg)].map(([id, s]) => [basename(s.file), id]));
-          const ids = files.map(f => byFile.get(f)).filter(Boolean);
-          if (ids.length) { await bake({ game: cfg, ids, log }); reload(); }
-        } catch (e) { log(`dev: ${e.message}`); }
+        chain = chain.then(async () => {
+          try {
+            const byFile = new Map([...sources(cfg)].map(([id, s]) => [basename(s.file), id]));
+            const ids = files.map(f => byFile.get(f)).filter(Boolean);
+            if (ids.length) { await bake({ game: cfg, ids, log }); reload(); }
+          } catch (e) { log(`dev: ${e.message}`); }
+        });
       }, 100);
     }));
   }
