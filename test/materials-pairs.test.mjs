@@ -53,3 +53,10 @@ test('3b: bad pair tables throw naming the pair', () => {
   ];
   for (const [pairs, message] of cases) assert.throws(() => defineMaterials({}, { pairs }), e => e.message === message || assert.fail(`got "${e.message}", want "${message}"`));
 });
+test('3b: a pair tyre on two materials without tyre data must be complete', () => {
+  assert.throws(() => defineMaterials({ a: {}, b: {} }, { pairs: { 'a|b': { tire: { mu: 0.2 } } } }),
+    e => e.message === "materials: pair 'a|b'.tire.C required when neither 'a' nor 'b' has tyre data (got undefined)" || assert.fail(e.message));
+  const tire = { mu: 0.9, C: 8, kp: 1.5, ap: 0.2, crr: 0.01, drag: 0.3 };
+  const m = defineMaterials({ a: {}, b: {} }, { pairs: { 'a|b': { tire } } });
+  assert.deepEqual(m.pair('a', 'b').tire, tire);
+});

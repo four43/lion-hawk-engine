@@ -162,6 +162,14 @@ export function defineMaterials(entries = {}, options = {}) {
 
   // 4. Pairs (M-7, M-8). Cached per ORDERED pair: the tie and tyre rules depend on which side is the ground (b).
   const table = parsePairs(options.pairs ?? {}, id => at.has(id));
+  for (const { key, entry } of table.values()) {
+    if (!entry.tire) continue;
+    const [a, b] = key.split('|');
+    if (list[need(a)].tire || list[need(b)].tire) continue;
+    for (const f of Object.keys(TIRE)) {
+      if (entry.tire[f] === undefined) throw new Error(`materials: pair '${key}'.tire.${f} required when neither '${a}' nor '${b}' has tyre data (got undefined)`);
+    }
+  }
   const pairEntries = new Map();
   for (const [norm, { entry }] of table) { const [a, b] = norm.split('|').map(need); pairEntries.set(Math.min(a, b) * 256 + Math.max(a, b), entry); }
   const pairCache = new Map();
