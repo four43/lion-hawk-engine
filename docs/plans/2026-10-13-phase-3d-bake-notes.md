@@ -2,8 +2,8 @@
 
 ## Outcome
 
-- Commit range `2a5cbde..HEAD` (v0.7.3 to `1e35ce4`, branch `phase-3-bake`, 41 commits, includes the 0.7.4 merge `179d29e`). 80 files changed (3186 insertions, 8 deletions), 50 of them under `test/`.
-- The 3d set is 61 tests in 17 files, all passing. The plan said 57; the Task 6 fix added 2 (59), and Task 16 added 2 (61).
+- Commit range `2a5cbde..HEAD` (v0.7.3 to the commit that adds this file, branch `phase-3-bake`; the code and tests end at `7b4a9d0`, 46 commits to there plus this docs commit; includes the 0.7.4 merge `179d29e`). 81 files changed (3395 insertions, 8 deletions) at `7b4a9d0`, 50 of them under `test/`.
+- The 3d set is 64 tests in 17 files, all passing. The 17 files are `test/bake-*.test.mjs`, `test/build-*.test.mjs`, `test/cli.test.mjs` and, outside those globs, `test/build.test.mjs` and `test/bake-sidecar.test.mjs` (the latter matches the bake glob; `build.test.mjs` does not match `build-*`, so name it explicitly). The plan said 57; the Task 6 fix added 2 (59), Task 16 added 2 (61), and the final fix wave added 3 (64: e2e-over-normal sw.js, partial-vs-full bake byte-identity, axisOf tie-break).
 - The non-browser engine unit suite had no new failures (Task 15: 467 pass, 0 fail, 19 skip; after the 0.7.4 merge: 520 tests, 501 pass, 0 fail).
 - Nothing under `src/` was created or edited (3d-1). The bake and CLI live in `tools/` and `bin/`.
 - Real-game smoke: Tractor bakes all 40 models and Rally all 4, from scratch dirs only (see Measurements).
@@ -40,6 +40,16 @@ Plan judgment-task decisions (as implemented):
 - Re-bakes are byte-identical (3d-3): sorted keys where order is free, 6-decimal rounding, no timestamps.
 - Default hulls skip flat (part, material) groups with a warning; only an all-flat model fails (C4).
 - 3f/3g must treat a multi-material part node as a `Group`.
+
+### Final review
+
+- **R13** final fix wave = I-1, M-1 (+ Task 17 review: exports/bin request blocking for Wave A; Task 16 minors; file-count note), M-2 (mkdir before hooks), M-3 (hook ctx.out test can fail), M-4 (serialise dev re-bakes), M-7 (partial-then-full bake byte-identical test), M-8 (C1 tie-break test); all cheap and correctness or test-honesty fixes. M-5, M-6 and M-9 stay deferred and are listed below. Cost if wrong: dev misses edits to kit subfolder sources until restart.
+- Fixed in the wave: I-1 an `--e2e` build into a dir holding an earlier normal build kept the old stamped `sw.js` (breaks C8); it now removes it. M-2 `beforePage` ran before the out dir existed; it is now created first. M-3 the hook fixture's `out` check could not fail; it now records `typeof ctx.out === 'string'` and the dir's existence, and the build test asserts `'set'` (dev passes `out: null`). M-4 dev re-bakes are chained on one promise, so two saves more than 100 ms apart cannot run two `bake()` calls at once. The test is skipped: a fixture bake takes a few ms, so the two bakes never overlap and a test passed without the fix (checked by mutation, 3 of 3 runs). M-7 and M-8 added tests, each checked by mutation (removing `sorted()` fails the partial-vs-full test; flipping the axis tie comparison fails the axisOf test).
+- Still deferred:
+  - **M-5** the dev watcher is not recursive: subfolder `file` sources and same-basename kits are not re-baked in dev (restart dev).
+  - **M-6** `fs.watch` on the template stops after an atomic rename save (editors that write a temp file and rename).
+  - **M-9** a template with no `<head>` gets the build meta before the doctype.
+- For 3k: a `.gltf` or `.glb` source's sha does not cover external `.bin` files or textures, so `--check` and dev miss texture-only edits.
 
 Process incident: a Task 15 implementer ran `pkill -f "node --test"` machine-wide to clear a hung run. It may have killed other agents' test runs. Later tasks were told never to use `pkill`.
 
@@ -90,19 +100,21 @@ Task 13
 - The hash-change test cannot catch dropped asset hashing (the manifest sha is in the bundle); PWA hash untested; unused `gunzipSync` and `id`; entry or config passed as `game` untested; anim sidecar not sha-checked.
 
 Task 14
-- No test pins the inline module or `ctx.dev`/`ctx.engine`.
+- Minors 2 to 4 (debounce timer in `close()`, `serve()` EISDIR, `onEnd` hook throw) were fixed in `af41a4a`. Only this gap remains: no test pins the inline module or `ctx.dev`/`ctx.engine`.
 
 Task 15
 - `--port ''` is accepted as 0; sub-command `--help` exits 2; in the dev test `p.kill` is not awaited.
 
 Task 16
-- No deferred minors are recorded in the ledger (review was still open when this file was written).
+- The pet's mass moved from 269.5 to 282.975 kg (3b's `flesh` density is 1050); noted under Decisions.
+- The stale `bakeGame` helper header comment: fixed in `7b4a9d0` (it now names the registry rewrite and `changeRegistry`).
+- A patch-version bump check keeps old models: `--check` compares engine major.minor only, so a patch bump leaves old baked models in place by design.
 
 ## Done-when evidence
 
 RUN = `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 --working-directory=/home/smiller/projects/four43/lion-hawk-engine-3d -E NODE_OPTIONS=--max-old-space-size=512 -E TMPDIR=/tmp/claude-1000/lion-hawk-phase3/3d/tmp node --test --test-concurrency=4`
 
-- `RUN test/bake-*.test.mjs test/build-*.test.mjs test/cli.test.mjs test/build.test.mjs` (17 files): tests 61, pass 61, fail 0, skipped 0.
+- `RUN test/bake-*.test.mjs test/build-*.test.mjs test/cli.test.mjs test/build.test.mjs` (17 files): tests 64, pass 64, fail 0, skipped 0 (final run after the fix wave).
 - `node bin/lion-hawk.js bake --game test/fixtures/models/game --check`: exit 0.
 - Engine unit suite (non-browser, run by Task 15 and again after the 0.7.4 merge): no new failures (see Outcome).
 - Smoke: Tractor bakes 40 of 40 models and Rally 4 of 4 into scratch (see Measurements). Nothing was written under four43.
@@ -122,11 +134,11 @@ RUN = `systemd-run --user --wait -P -p MemoryMax=2G -p MemorySwapMax=0 -p Runtim
 
 ## Integrator requests
 
-None of these blocks 3d.
+None of these blocks 3d's own tests, but item 1's `exports` and `bin` are BLOCKING for the Wave A merge.
 
-1. `package.json`. Not blocking.
+1. `package.json`. BLOCKING for the Wave A merge (3l imports `lion-hawk/build`); not blocking 3d's own tests.
    - Dependencies landed with 0.7.3: gltf-transform 4.5.1, `meshoptimizer` 1.2.0, `pngjs`, `esbuild` in dependencies. Done.
-   - Still needed at the Wave A merge: `exports` `"./bake": "./tools/bake/index.js"` and `"./build": "./tools/build/index.js"` (today `./build` points at `./tools/dedupe.js`; the new entry keeps exporting `dedupe`, so `test/build.test.mjs` and `test/package.test.mjs` keep passing), and `"bin": { "lion-hawk": "bin/lion-hawk.js" }`. Not blocking: tests import by path, and the CLI runs as `node bin/lion-hawk.js`.
+   - Still needed at the Wave A merge: `exports` `"./bake": "./tools/bake/index.js"` and `"./build": "./tools/build/index.js"` (today `./build` points at `./tools/dedupe.js`; the new entry keeps exporting `dedupe`, so `test/build.test.mjs` and `test/package.test.mjs` keep passing), and `"bin": { "lion-hawk": "bin/lion-hawk.js" }`. Without them `import 'lion-hawk/build'` (3l, CI-7) and the `lion-hawk` command do not resolve. Not needed by 3d's own tests: they import by path, and the CLI runs as `node bin/lion-hawk.js`. Also add `"./bake"` for 3k.
 2. After each engine minor bump, run `node bin/lion-hawk.js bake --game test/fixtures/models/game` and commit `baked/`. Not blocking: the current-fixture test ignores the engine line, and `--check` reports an engine-minor line.
 3. Tell 3j, 3k and 3l. Not blocking.
    - (a) `weld` changes vertex counts where the palette step drops UVs and tangents (Rally's hatchback goes from 3709 to 2048), so parity tests should compare triangle counts, or the game sets `optimise.weld: false`.
@@ -142,7 +154,7 @@ None of these blocks 3d.
 - None removed or renamed.
 - Task 2's mesh fixture changed from the unit tetrahedron to a non-degenerate one (R7).
 - Task 16 changed the fixture registry to 3b's real one; the pet's mass moved from 269.5 to 282.975 kg (`flesh` density 1050). No test literal depended on it.
-- The 3d set is 61 tests (plan said 57).
+- The 3d set is 64 tests (plan said 57).
 
 ## Measurements
 
