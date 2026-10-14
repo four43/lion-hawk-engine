@@ -1,6 +1,8 @@
 // Temp game dirs for the 3d bake, build and CLI tests. copyFixture() copies test/fixtures/models/game (optionally without its
 // committed baked/) and stubs `three` in its node_modules, so a build proves dedupe resolves from the game root.
-// gameWith({ id: bytes }, bake) writes a one-off game with the fixture registry and the given bake config.
+// gameWith({ id: bytes }, bake) writes a one-off game with the fixture registry (3b's real base library, its engine import
+// rewritten to an absolute file URL by copyMaterials) and the given bake config. changeRegistry(dir) adds one material so the
+// registry hash changes.
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
