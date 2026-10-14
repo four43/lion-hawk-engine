@@ -1,5 +1,7 @@
 // src/defs/fields.js
 // Field types and kinds for replicated objects (N-8, N-11), moved from Tractor Pickup's src/net/replica.js (M-22). Plain data: src/sim/replica.js packs them.
+// Phase 3i: F.body() (N-8) and the kind's net-part options (N-9, N-12..N-17, D8): remote, follow, tune, send and the spawn hooks.
+// Existing kinds keep their wire bytes; only a driven kind sends its `input` as { s, list } (N-13).
 const boolsOf = fields => Object.keys(fields).filter(k => fields[k].t === 'bool');
 export const F = {
   bool: () => ({ t: 'bool' }), // the bools of one obj share a flags byte (at most 8)
@@ -17,5 +19,43 @@ export const F = {
     if (axes.length + buttons.length !== names.length) throw new Error('F.actions: every action must be axis() or button()');
     return { t: 'actions', names, axes, buttons };
   },
+  // N-8: one body's { p, q, v, w } at Tractor Pickup 1.8.0's precision: p.x/p.z in 1/64 m over ±range, p.y in 1/256 m over ±height,
+  // v in 1/1000 m/s over ±32, w in 1/2000 rad/s over ±16 (26 bytes). An obj field, so replica.js packs it unchanged; `body: true` marks it.
+  body: ({ range = 400, height = 50 } = {}) => {
+    if (!(range > 0 && range * 2 * 64 <= 65535)) throw new Error(`F.body: range must be in (0, 511] (got ${range})`);
+    if (!(height > 0 && height * 2 * 256 <= 65535)) throw new Error(`F.body: height must be in (0, 127] (got ${height})`);
+    const XZ = F.fixed(-range, range, 1 / 64), Y = F.fixed(-height, height, 1 / 256), V = F.fixed(-32, 32, 1 / 1000), W = F.fixed(-16, 16, 1 / 2000);
+    return { ...F.obj({ p: F.obj({ x: XZ, y: Y, z: XZ }), q: F.quat(), v: F.obj({ x: V, y: V, z: V }), w: F.obj({ x: W, y: W, z: W }) }), body: true, range, height };
+  },
 };
-export const kind = def => { if (!Number.isInteger(def.code) || def.code < 0 || def.code > 255) throw new Error('bad kind code ' + def.code); return { idMin: 0, ...def, rec: F.obj(def.fields) }; }; // { name, code, authority: 'host' | 'owner', max, idMin, idMax, fields, newer? }
+export const REMOTES = Object.freeze(['driven', 'proxy', 'view']), FOLLOWS = Object.freeze(['interp', 'forecast']);
+export const TUNE = Object.freeze({ snapAt: 1.5, nudge: 6, smoothMs: 150 }); // N-14, N-15, N-17 defaults
+export const SEND = Object.freeze({ hz: 20, key: 2 }); // N-11: diffs at hz, a keyframe every `key` seconds
+export const INPUT_BATCH = 8; // N-13: a driven record carries the newest input and up to 7 before it
+const checkKeys = (o, allowed, what, fail) => { for (const k of Object.keys(o)) if (!(k in allowed)) fail(`unknown ${what} key '${k}'`); };
+// { name, code, authority: 'host' | 'owner', max, idMin, idMax, fields, remote?, follow?, tune?, send?, record?, apply?, newer?, spawn?, spawned? }
+export const kind = def => {
+  if (!Number.isInteger(def.code) || def.code < 0 || def.code > 255) throw new Error('bad kind code ' + def.code);
+  const fail = m => { throw new Error(`kind '${def.name}': ${m}`); };
+  const fields = def.fields, input = fields?.input?.t === 'actions' ? fields.input : null;
+  const bodies = fields ? Object.keys(fields).filter(k => fields[k]?.body === true) : [];
+  const remote = def.remote ?? (def.authority === 'owner' && input && bodies.includes('body') ? 'driven' : 'proxy');
+  if (!REMOTES.includes(remote)) fail(`remote must be one of ${REMOTES.join(', ')} (got ${remote})`);
+  if (remote === 'driven' && (!input || !bodies.includes('body'))) fail("remote 'driven' needs an input: F.actions(...) field and a body: F.body() field");
+  if (remote === 'driven' && def.authority !== 'owner') fail("remote 'driven' needs authority 'owner'");
+  const follow = def.follow ?? 'interp';
+  if (!FOLLOWS.includes(follow)) fail(`follow must be one of ${FOLLOWS.join(', ')} (got ${follow})`);
+  if (follow === 'forecast' && !bodies.length) fail("follow 'forecast' needs an F.body() field");
+  if (def.tune !== undefined) checkKeys(def.tune, TUNE, 'tune', fail);
+  const tune = { ...TUNE, ...def.tune };
+  if (!(tune.snapAt > 0 && Number.isFinite(tune.snapAt))) fail(`tune.snapAt must be > 0 (got ${tune.snapAt})`);
+  if (!(Number.isInteger(tune.nudge) && tune.nudge >= 1)) fail(`tune.nudge must be an integer >= 1 (got ${tune.nudge})`);
+  if (!(tune.smoothMs >= 0 && Number.isFinite(tune.smoothMs))) fail(`tune.smoothMs must be >= 0 (got ${tune.smoothMs})`);
+  if (def.send !== undefined) checkKeys(def.send, SEND, 'send', fail);
+  const send = { ...SEND, ...def.send };
+  for (const k of ['hz', 'key']) if (!(send[k] > 0 && Number.isFinite(send[k]))) fail(`send.${k} must be > 0 (got ${send[k]})`);
+  for (const h of ['record', 'apply', 'newer', 'spawn', 'spawned']) if (def[h] !== undefined && typeof def[h] !== 'function') fail(`${h} must be a function`);
+  // N-13: a driven kind's input travels as { s: the owner step of the newest input, list: up to INPUT_BATCH snapshots, oldest first }
+  const wire = remote === 'driven' ? { ...fields, input: F.obj({ s: F.uint(4), list: F.list(input, INPUT_BATCH, 1) }) } : fields;
+  return { idMin: 0, ...def, remote, follow, tune: Object.freeze(tune), send: Object.freeze(send), bodies, input, rec: F.obj(wire) };
+};
