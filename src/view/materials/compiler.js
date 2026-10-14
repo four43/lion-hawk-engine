@@ -102,12 +102,75 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     return m;
   }
 
+  // a clone of a compiled material with its own uniforms (same program); `key` null means not cached (per entity)
+  function variant(material, key, { features, extras, uCoverage } = {}) {
+    const s = STATE.get(material), def = registry.get(s.id);
+    const st = { ...s, features: features ?? s.features, extras: extras ?? s.extras };
+    st.uniforms = uniformsFor(def, st.features, s.o, uCoverage);
+    const m = material.clone();
+    m.userData.lh = { ...material.userData.lh, key: key ?? material.userData.lh.key, features: st.features };
+    m.userData.lhShared = key !== null; // per-entity clones are the entity's to dispose
+    install(m, st);
+    if (key !== null) cache.set(key, m);
+    return m;
+  }
+
+  function paint(id, color, opts) {
+    const base = get(id, opts), c = new Color(color), key = `${base.userData.lh.key}|paint:${c.getHexString()}`;
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const m = variant(base, key);
+    m.color.copy(c); // times the vertex colours, when the mesh has them
+    return m;
+  }
+
+  function coverage(material, { uCoverage } = {}) {
+    const s = STATE.get(material);
+    if (!s || !s.features.includes('COVERAGE')) throw new Error(`compiler: coverage() needs a compiled material whose registry entry has a coverage block (got '${material?.name}')`);
+    const covi = `${material.userData.lh.key}|covi`; // instanced: one shared variant per material, coverage from the instanceCoverage attribute
+    const m = material.userData.lh.instanced
+      ? cache.get(covi) ?? variant(material, covi, { features: [...s.features.slice(0, 1), 'COVERAGE_INSTANCED', ...s.features.slice(1)], uCoverage })
+      : variant(material, null, { uCoverage: uCoverage ?? new Vector4(0, 0, 0, 0) }); // plain: a per-entity clone
+    return { material: m, uniforms: { uCoverage: STATE.get(m).uniforms.uCoverage.value } };
+  }
+
+  function extend(material, name, patch) {
+    const s = STATE.get(material);
+    if (!s || material.userData.lhShared === false) throw new Error(`compiler: extend() needs a shared material from this compiler (got '${material?.name}'); extend first, then take coverage()`);
+    if (!/^[\w-]+$/.test(name) || typeof patch !== 'function') throw new Error(`compiler: extend(material, name, patch) needs a name of [A-Za-z0-9_-] and a patch(shader, inject) function (got '${name}')`);
+    const key = `${material.userData.lh.key}|x:${name}`;
+    return cache.get(key) ?? variant(material, key, { extras: [...s.extras, { name, patch }] });
+  }
+
+  function apply(root, { instanced = false, paint: colors = null, coverage: cov = false } = {}) {
+    const uCoverage = cov ? new Vector4(0, 0, 0, 0) : null; // one vec4 per call: one entity's (dirt, rust, snow, mud)
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      const names = o.userData.lhMat ?? list.map(m => m.name);
+      o.userData.lhMat = names; // the authored names survive re-apply and clone (userData is JSON-copied)
+      const a = o.geometry.attributes, inst = instanced || !!o.isInstancedMesh;
+      const out = names.map((name, i) => {
+        const opts = { instanced: inst, vertexColors: !!a.color, skinned: !!o.isSkinnedMesh, receiveShadow: o.receiveShadow, map: list[i]?.map ?? null, fur: !!a.furShell };
+        let m;
+        if (name.startsWith('paint-')) {
+          const c = colors?.[name.slice(6)];
+          m = c != null && !inst ? paint(paintBase, c, opts) : get(paintBase, opts); // instanced paint: instanceColor on the base
+        } else if (registry.has(name)) m = get(name, opts);
+        else throw new Error(`compiler: mesh '${o.name}' uses material '${name}', which is neither a registry id nor paint-<slot>`);
+        if (uCoverage && STATE.get(m).features.includes('COVERAGE')) m = coverage(m, { uCoverage }).material;
+        return m;
+      });
+      o.material = Array.isArray(o.material) ? out : out[0];
+    });
+    return { uCoverage };
+  }
+
   function dispose() { for (const m of cache.values()) m.dispose(); cache.clear(); }
-  const notYet = name => () => { throw new Error(`compiler: ${name}() lands in 3f Task 6`); };
 
   // not frozen: 3e's render-pipeline test assigns onto mc.made / mc.dispose
   return {
-    shading, time, get, paint: notYet('paint'), coverage: notYet('coverage'), extend: notYet('extend'), apply: notYet('apply'),
+    shading, time, get, paint, coverage, extend, apply,
     furGeometry: (geometry, mask, opts) => furGeometry(geometry, mask, opts),
     keys: () => [...cache.keys()], made: () => [...cache.values()].map(material => ({ material, use: material.userData.lhUse })), dispose,
   };
