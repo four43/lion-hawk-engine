@@ -4,14 +4,18 @@ import { parseFlags } from '../core/flags.js';
 import { createDriver } from './driver.js';
 import { createUiDom } from './uiDom.js';
 import { installEngine } from './hook.js';
+import { createPipeline, checkRender } from './render/pipeline.js';
 
-export function defineView({ scenes } = {}) {
+export function defineView({ scenes, render } = {}) {
   if (!scenes || typeof scenes !== 'object') throw new Error('defineView: scenes required');
   for (const [n, s] of Object.entries(scenes)) for (const h of ['enter', 'exit', 'frame', 'built']) if (s[h] !== undefined && typeof s[h] !== 'function') throw new Error(`defineView: scene '${n}'.${h} must be a function`);
-  return Object.freeze({ scenes: Object.freeze({ ...scenes }) });
+  checkRender(render); // overview §4.6: with render, boot builds the renderer, lights, compiler, assets, sync and audio
+  const out = { scenes: Object.freeze({ ...scenes }) };
+  if (render !== undefined) out.render = Object.freeze({ ...render });
+  return Object.freeze(out);
 }
 
-export function boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf } = {}) {
+export function boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf, canvas, timer, renderer } = {}) {
   doc ??= target.document ?? globalThis.document;
   flags ??= parseFlags(target.location?.search ?? '');
   const errors = [], views = halves.scenes ?? {};
@@ -21,7 +25,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     const a = flags.extra?.args; if (a) { try { args = JSON.parse(a); } catch { /* ignore a malformed ?args */ } }
   }
   // [S-6] ?lh-test counts every step as a presented frame (deterministic; game.until never waits for a rAF)
-  const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames' });
+  const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames', timer });
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id) }; // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
   const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine))], onError: report });
@@ -31,6 +35,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const ui = createUiDom(engine, { root: root ?? doc.body, doc, errors, onTap: () => refresh() });
   view.ui = ui; view.driver = driver;
   const caught = fn => { try { fn(); } catch (err) { report(err); } };
+  // overview §4.6: with defineView({ render }) the gfx, compiler, assets, sync and audio exist before any half enters
+  const pipe = halves.render ? createPipeline(engine, view, halves.render, { doc, target, canvas, renderer, flags, report }) : null;
 
   // View halves follow the ACTUAL stack: each refresh diffs the previous and current entries (main scene keyed by name
   // plus its state object, which is new on every enter) and calls exit/enter for the differences, so nothing depends
@@ -95,7 +101,9 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const offRender = engine.onRender(alpha => {
     if (disposed) return;
     reconcile();
+    if (pipe) { try { pipe.frame(alpha); } catch (err) { report(err); } } // §4.6: sync.frame before the halves
     for (const e of active.slice()) if (active.some(a => same(a, e))) caught(() => views[e.name]?.frame?.(engine, alpha, view)); // snapshot; skip halves a previous frame exited
+    if (pipe) { try { pipe.draw(); } catch (err) { report(err); } } // one renderer.render(scene, camera) after the halves
     view.dt = view.rawDt = 0; refresh();
   });
   const hook = installEngine(engine, { driver, target, errors, after: refresh, busy: () => pending > 0, view });
@@ -104,6 +112,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     if (disposed) return; disposed = true; want = null;
     driver.stop(); for (const d of driver.devices) d.dispose?.();
     ui.dispose(); hook.dispose(); sa.remove(); off(); offBuilt(); offRender();
+    pipe?.dispose();
   };
 
   if (flags.lhTest) {
