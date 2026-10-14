@@ -10,6 +10,7 @@ export const CHUNKS = Object.freeze({
   FUR: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'clipping_planes_fragment', 'color_fragment', 'opaque_fragment'] },
   SUBSURFACE: { vertex: [], fragment: ['common', 'lights_fragment_end'] },
   WIND: { vertex: ['common', 'begin_vertex'], fragment: ['normal_fragment_begin'] },
+  PAINT: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'color_fragment'] },
 });
 
 export function inject(src, chunk, text, where = 'after') {
@@ -138,7 +139,29 @@ normal = normalize( vNormal );
 #endif`);
 }
 
-const PATCH = { COVERAGE: coverage, FUR: fur, SUBSURFACE: subsurface, WIND: wind };
+// PAINT (Task 8b; Tractor 1.8's paintable): a paint slot that keeps its vertex shading. lhPaint = (model-space xyz, brightness b over
+// the slot's brightest vertex, written by mc.apply). k = min(max, floor + gain × b) from uPaintShade. uPaintMode.x: 0 keeps the vertex
+// colours, 1 paints diffuse × k (× instanceColor), 2 paints a hue ramp hsl(fract(dot(xyz, axis) + w), s, l) × k. Worked out per
+// vertex, as 1.8's vertex colours were, so triangles blend the same RGB. Injected last, so it runs before the coverage layers.
+function paint(sh) {
+  const hsl = `float lhHue( float p, float q, float t ) { if ( t < 0.0 ) t += 1.0; if ( t > 1.0 ) t -= 1.0;
+  if ( t < 1.0 / 6.0 ) return p + ( q - p ) * 6.0 * t; if ( t < 0.5 ) return q; if ( t < 2.0 / 3.0 ) return p + ( q - p ) * 6.0 * ( 2.0 / 3.0 - t ); return p; }
+vec3 lhHsl( float h, float s, float l ) { float p = l <= 0.5 ? l * ( 1.0 + s ) : l + s - l * s, q = 2.0 * l - p; // three's Color.setHSL
+  return vec3( lhHue( q, p, h + 1.0 / 3.0 ), lhHue( q, p, h ), lhHue( q, p, h - 1.0 / 3.0 ) ); }`;
+  sh.vertexShader = inject(sh.vertexShader, 'common', `attribute vec4 lhPaint; uniform vec3 uPaintMode; uniform vec4 uPaintAxis; uniform vec3 uPaintShade; varying vec3 vLhPaint;
+${hsl}`);
+  sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', `float lhK = min( uPaintShade.z, uPaintShade.x + uPaintShade.y * lhPaint.w );
+vLhPaint = vec3( lhK );
+#ifdef USE_INSTANCING_COLOR
+vLhPaint *= instanceColor.rgb;
+#endif
+if ( uPaintMode.x > 1.5 ) vLhPaint = lhHsl( fract( dot( lhPaint.xyz, uPaintAxis.xyz ) + uPaintAxis.w ), uPaintMode.y, uPaintMode.z ) * lhK;`);
+  sh.fragmentShader = inject(sh.fragmentShader, 'common', 'uniform vec3 uPaintMode; varying vec3 vLhPaint;');
+  sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', `if ( uPaintMode.x > 1.5 ) diffuseColor.rgb = vLhPaint;
+else if ( uPaintMode.x > 0.5 ) diffuseColor.rgb = diffuse * vLhPaint;`);
+}
+
+const PATCH = { COVERAGE: coverage, FUR: fur, SUBSURFACE: subsurface, WIND: wind, PAINT: paint };
 
 // Applies the features in a fixed order (CHUNKS order), whatever order they are listed in.
 export function patchShader(sh, features) {
