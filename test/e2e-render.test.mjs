@@ -67,3 +67,49 @@ test('no WebGL: one render: error, no gfx, and the game still plays (RF1)', asyn
     assert.equal(await game.page.evaluate(() => window.engine.scene.name), 'race');
   } finally { await game.close(); }
 });
+test('warm compiles the hidden toon sphere and an instanced material, and leaves the sphere hidden (M-12)', async t => {
+  if (skip) return t.skip(skip);
+  const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
+  try {
+    await game.page.evaluate(() => window.__fx.pixel(1, 1)); // the visible scene's programs exist first
+    const w = await game.page.evaluate(() => window.__fx.warm());
+    assert.ok(w.after >= w.before + 2, `programs ${w.before} -> ${w.after}`); assert.equal(w.hidden, false);
+    const again = await game.page.evaluate(() => { const n = window.__fx.programs(); window.__fx.pixel(1, 1); return [n, window.__fx.programs()]; });
+    assert.equal(again[1], again[0], 'the next frame compiles nothing new');
+    assert.deepEqual(await game.errors(), []);
+  } finally { await game.close(); }
+});
+test('snapshot: a PNG with a clear corner and the red box in the middle, square and [w, h]; renderer and scene untouched (RF5)', async t => {
+  if (skip) return t.skip(skip);
+  const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
+  try {
+    const plain = await game.page.evaluate(() => window.__fx.pixel(640, 360));
+    const s = await game.page.evaluate(() => window.__fx.snap());
+    assert.match(s.url, /^data:image\/png;base64,/); assert.deepEqual([s.info.w, s.info.h], [64, 64]);
+    assert.equal(s.parentOk, true); assert.equal(s.y, 0.5); assert.equal(s.target, null); assert.equal(s.alphaKept, true);
+    const d = await game.page.evaluate(url => window.__fx.decode(url), s.url);
+    assert.equal(d.corner[3], 0, `clear corner: ${d.corner}`); assert.ok(d.centre[3] > 200 && d.centre[0] > d.centre[1] + 40, `red centre: ${d.centre}`);
+    const c = await game.page.evaluate(() => window.__fx.snap({ crop: true, outline: { px: 4 } }));
+    assert.ok(c.info.w > 8 && c.info.w < 64 + 8 && c.info.h > 8, `cropped ${c.info.w}x${c.info.h}`);
+    const wide = await game.page.evaluate(() => window.__fx.snap({ size: [96, 64] })); // 3l CI-13: a non-square picture
+    const dw = await game.page.evaluate(url => window.__fx.decode(url), wide.url);
+    assert.deepEqual([wide.info.w, wide.info.h, dw.w, dw.h], [96, 64, 96, 64]); assert.equal(dw.corner[3], 0); assert.ok(dw.centre[3] > 200, `box in the middle: ${dw.centre}`);
+    near(await game.page.evaluate(() => window.__fx.pixel(640, 360)), plain, 0, 'the main view draws as before');
+    assert.deepEqual(await game.errors(), []);
+  } finally { await game.close(); }
+});
+test('tilt-shift as gfx.post: off draws exactly the plain frame with no new programs; on adds its three passes without GL errors', async t => {
+  if (skip) return t.skip(skip);
+  const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
+  try {
+    const plain = await game.page.evaluate(() => window.__fx.pixel(4, 4));
+    const off = await game.page.evaluate(() => window.__fx.tilt(false));
+    assert.equal(off.after, off.before); assert.deepEqual(off.px, plain); assert.equal(off.err, 0);
+    const on = await game.page.evaluate(() => window.__fx.tilt(true));
+    // three pass programs, plus the scene's lit material recompiled for the linear render target (4 on SwiftShader)
+    assert.ok(on.after - on.before >= 3, `programs ${on.before} -> ${on.after}`); assert.equal(on.err, 0);
+    await game.page.evaluate(() => window.__fx.noPost());
+    assert.deepEqual(await game.page.evaluate(() => window.__fx.pixel(4, 4)), plain);
+    assert.deepEqual(await game.errors(), []);
+  } finally { await game.close(); }
+});
