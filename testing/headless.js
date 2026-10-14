@@ -3,6 +3,7 @@
 import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
 import { policy } from '../src/core/policy.js';
+import { worldFinite } from './invariants.js';
 
 export { policy };
 const matcher = m => typeof m === 'function' ? m : e => e.type === m;
@@ -33,9 +34,13 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
   const one = (f, k) => {
     if (f) engine.input.set(f(h, k, sc(f))); engine.stepN(1);
     if (sums && engine.time.step % 60 === 0) sums.push([engine.time.step, checksum(engine.state())]);
+    const w = engine.world; if (w !== undefined && w.stats.entities > 0) worldFinite(w, engine); // [T-1] always on
     for (const inv of invariants) inv(h);
   };
   const fmt = e => { const { seq, step, type, ...rest } = e; return `  @${step} ${type} ${JSON.stringify(rest)}`; };
+  const needWorld = () => { const w = engine.world; if (!w) throw new Error('headless: no World (no main scene)'); return w; };
+  const whereFn = where => where === undefined ? null : typeof where === 'function' ? where
+    : e => { for (const k of Object.keys(where)) if (e[k] !== where[k]) return false; return true; };
   const h = {
     engine, seed: engine.seed,
     get scene() { return engine.scene; }, get time() { return engine.time; },
@@ -79,6 +84,22 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),
     checksum: () => checksum(engine.state()),
+    get world() { return engine.world; }, // [T-5]
+    find(name, where) { // a bare name matches a tag or a net kind; where: predicate or partial object (===)
+      const w = engine.world, test = whereFn(where), out = [];
+      if (!w) return out;
+      for (const e of w.with()) if ((name == null || e.tags.has(name) || e.net === name) && (!test || test(e))) out.push(e);
+      return out;
+    },
+    one(name, where) {
+      const r = h.find(name, where);
+      if (r.length !== 1) throw new Error(`headless: one(${JSON.stringify(name)}) found ${r.length} entities (seed ${engine.seed}, step ${engine.time.step})`);
+      return r[0];
+    },
+    get: id => engine.world?.get(id),
+    spawn: desc => needWorld().spawn(desc),
+    despawn(e) { needWorld().despawn(e); return h; },
+    place(e, at, opts) { needWorld().place(e, at, opts); return h; },
     tape() { if (!sums) throw new Error('headless: not recording'); return { ...engine.tape(), end: engine.time.step, sums: sums.map(x => x.slice()) }; },
   };
   return h;

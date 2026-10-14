@@ -9,6 +9,7 @@ import { actions as defineActions, createInput } from './actions.js';
 import { createUi } from './ui.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
 import { createRegistry } from '../sim/replica.js';
+import { installWorld, checkPhysics } from '../sim/world/install.js';
 
 // [I-7] reserved keys a port sets on any command's data (#77); a schema may not declare them
 const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
@@ -32,6 +33,7 @@ export function defineGame(spec) {
     commands[k] = c.handler; schemas[k] = c.schema;
   }
   for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
+  if (spec.physics !== undefined) checkPhysics(spec.physics, fail); // §4.1: gravity, params and groups checked at definition
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
   const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail);
@@ -60,11 +62,12 @@ function netConfig(n, schemas, fail) {
   return Object.freeze(c);
 }
 
-export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0 } = {}) {
+export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0, timer = null } = {}) {
   game.reset?.(); // #108: module tunables back to their shipped values first, so every engine (a replay, each mp() peer) starts from them
   if (typeof wall0 !== 'number' || !Number.isFinite(wall0)) throw new Error('engine: wall0 must be a finite number');
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
+  if (timer !== null && typeof timer !== 'function') throw new Error('engine: timer must be a function'); // #106
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
   const schemas = game.schemas ?? {}; // N-3: declared command schemas (defineGame)
   let wallBase = wall0, wallBaseStep = 0, step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
@@ -135,6 +138,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       if (blocks.size === 0 && (acks === 'steps' || time.frames > l.fb)) finishLoad(entry, l);
     } catch (err) { if (entry.load === l) dropLoad(entry); throw err; }
   };
+  let worlds; // S-3: the World seat (installWorld, below); worlds.current is the main scene's World
   const enter = (name, a) => {
     const s = def(name), scoped = [], cmds = new Map(), ctx = { name, id: nextId++, args: a, state: {}, system: (n, fn, o = {}) => { const rm = schedule.add(n, fn, { stage: 'pre', ...o }); scoped.push(rm); return rm; } };
     // #5: scene-scoped command handlers live on the stack entry, so they leave with the scene (exit or a rolled-back enter)
@@ -149,13 +153,16 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     };
     const entry = { s, ctx, scoped, cmds, load: null };
     ctx.load = o => load(entry, o);
+    Object.defineProperty(ctx, 'world', { get: () => worlds.current }); // main scene and overlays: the main scene's World
+    const main = stack.length === 0; // S-3: a main scene's World exists before its enter
+    if (main) worlds.open();
     stack.push(entry); sync();
     try { s.enter?.(engine, ctx); s.ui?.(ui.builder(name), engine, ctx); }
-    catch (err) { dropLoad(entry); const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); throw err; }
+    catch (err) { dropLoad(entry); const k = stack.indexOf(entry); if (k !== -1) stack.splice(k, 1); for (const rm of scoped) rm(); ui.clear(name); sync(); if (main) worlds.close(); throw err; }
     return ctx;
   };
   const isOpen = name => stack.some(o => o.ctx.name === name);
-  const exit = i => { const [entry] = stack.splice(i, 1), { s, ctx, scoped } = entry; dropLoad(entry); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); sync(); } };
+  const exit = i => { const [entry] = stack.splice(i, 1), { s, ctx, scoped } = entry; dropLoad(entry); try { s.exit?.(engine, ctx); } finally { for (const rm of scoped) rm(); ui.clear(ctx.name); if (i === 0) worlds.close(); sync(); } };
   // Pausing: while any open overlay has `pauses`, every stage stays frozen and only the overlays at or above the TOPMOST
   // pausing overlay run their step hooks (the main scene and anything beneath that overlay wait).
   const pausedFrom = () => { for (let i = stack.length - 1; i >= 1; i--) if (stack[i].s.pauses) return i; return -1; };
@@ -180,9 +187,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // pausing overlay. Only the commands queued before delivery starts are delivered (a handler's command waits a step).
   // #72: data is checked as plain JSON at issue and delivered as that copy (one allocation per command, never per step).
   const cmds = [], holes = []; let dropped = 0, delivering = false;
-  const handles = type => Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.some(f => f) === true);
+  const builtins = new Map(); // §4.4 seam for 3i: engine-level command handlers, run before the game's handler
+  const handles = type => builtins.has(type) || Object.hasOwn(game.commands, type) || stack.some(o => o.cmds.get(type)?.some(f => f) === true);
   const deliver = c => {
-    let ran = false; const gf = Object.hasOwn(game.commands, c.type) ? game.commands[c.type] : undefined;
+    let ran = false; const bf = builtins.get(c.type), gf = Object.hasOwn(game.commands, c.type) ? game.commands[c.type] : undefined;
+    if (bf) { ran = true; bf(engine, c.data, stack[0]?.ctx); }
     if (gf) { ran = true; gf(engine, c.data, stack[0]?.ctx); }
     const p = pausedFrom();
     for (let i = 0; i < stack.length; i++) {
@@ -347,6 +356,14 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     block(label = '') { // [S-6] e.g. view.wait: a settling load waits until every block is released
       const b = { label: String(label) }; blocks.add(b); return () => { blocks.delete(b); };
     },
+    get world() { return worlds.current; }, // S-3: the main scene's World (undefined before the first scene)
+    builtin(type, fn) { // §4.4: fn(engine, data, mainCtx) before the game's handler, which still runs
+      if (typeof type !== 'string' || !type) throw new Error('engine: builtin type must be a non-empty string');
+      if (typeof fn !== 'function') throw new Error(`engine: builtin '${type}' needs a function`);
+      if (builtins.has(type)) throw new Error(`engine: builtin '${type}' is already registered`);
+      builtins.set(type, fn);
+      return () => { if (builtins.get(type) === fn) builtins.delete(type); };
+    },
     time, scene: sceneView, // live views: persistent objects, updated in place
     rng: name => streams.get(name) ?? (streams.set(name, base.fork(name)), streams.get(name)), // one stream per name
     emit: (type, data) => events.emit(type, data),
@@ -389,13 +406,18 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       if (!rec) throw new Error('engine: not recording');
       return copy({ v: 1, game: game.id, seed: base.seed, scene, args, hz: game.sim.hz, wall0, log: rec.log });
     },
-    state: () => ({ ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step }), // engine keys win
+    state: () => { // engine keys win; `world` only while the World has entities, so un-migrated goldens are unchanged
+      const s = { ...(game.state?.(engine) ?? {}), scene: stack[0]?.ctx.name, overlays: stack.slice(1).map(o => o.ctx.name), step };
+      const w = worlds.digest(); if (w !== undefined) s.world = w;
+      return s;
+    },
   };
   schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
   schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
+  worlds = installWorld(engine, { timer }); // §4.1, §4.4: checks physics.rapier, adds lh.world.swap and lh.physics.*
   sync(); syncTime();
   // setup and the start enter run busy like any transition: what they request queues, then applies in order
   booting = true;
