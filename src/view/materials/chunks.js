@@ -164,6 +164,17 @@ else if ( uPaintMode.x > 0.5 ) diffuseColor.rgb = diffuse * vLhPaint;`);
 const PATCH = { COVERAGE: coverage, FUR: fur, SUBSURFACE: subsurface, WIND: wind, PAINT: paint };
 
 // Applies the features in a fixed order (CHUNKS order), whatever order they are listed in.
+// The features that move vertices, and so must move them in the shadow pass too (mc.depth). Only their vertex stage is patched:
+// the depth fragment shader has none of the colour chunks, so each patch runs against a stand-in fragment that has them.
+export const DEPTH_FEATURES = Object.freeze(['FUR', 'WIND']);
+const FRAG_TAGS = [...new Set(Object.values(CHUNKS).flatMap(c => c.fragment))].map(c => `#include <${c}>`).join('\n');
+export function patchDepth(sh, features) {
+  for (const f of DEPTH_FEATURES) if (features.includes(f)) {
+    const t = { vertexShader: sh.vertexShader, fragmentShader: FRAG_TAGS, uniforms: sh.uniforms };
+    PATCH[f](t); sh.vertexShader = t.vertexShader;
+  }
+  return sh;
+}
 export function patchShader(sh, features) {
   for (const f of Object.keys(CHUNKS)) if (features.includes(f)) PATCH[f](sh);
   return sh;

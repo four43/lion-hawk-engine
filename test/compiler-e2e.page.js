@@ -120,3 +120,21 @@ window.lhPaint = tier => {
   r.done();
   return out;
 };
+
+// mc.depth on the GPU: windy instanced, fur and extended materials cast shadows through their depth twins with no shader
+// errors, and the shadow of a windy blade moves with mc.time.
+window.lhDepth = tier => {
+  const r = rig(tier), { mc, scene } = r, box = new THREE.BoxGeometry(0.4, 1.2, 0.4);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), mc.get('testBare', { receiveShadow: true }));
+  floor.position.z = -0.8; floor.receiveShadow = true; scene.add(floor);
+  const windy = mc.get('testBare', { instanced: true, wind: { fade: [0, 0], amp: [1.5, 1.5] } });
+  const im = new THREE.InstancedMesh(box, windy, 1); im.castShadow = true; im.customDepthMaterial = mc.depth(windy); scene.add(im);
+  const fur = new THREE.Mesh(furGeometry(new THREE.BoxGeometry(0.4, 0.4, 0.4), () => 1), mc.get('testFur'));
+  fur.position.x = -1.2; fur.castShadow = true; fur.customDepthMaterial = mc.depth(fur.material); scene.add(fur);
+  const snow = mc.extend(mc.get('testBare'), 'snow', (sh, inject, o) => { sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', 'transformed.y += 0.05;'); if (!o.depth) sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', 'diffuseColor.rgb *= 0.95;'); });
+  const sm = new THREE.Mesh(box, snow); sm.position.x = 1.2; sm.castShadow = true; sm.customDepthMaterial = mc.depth(snow); scene.add(sm);
+  const t0 = r.shot(); mc.time.value = 0.9; const t1 = r.shot();
+  const out = { errors: r.errors, moved: diff(t0, t1) };
+  r.done();
+  return out;
+};

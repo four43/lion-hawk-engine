@@ -2,8 +2,8 @@
 // (id, tier, user kind, features), cached, so every mesh that draws `steel` the same way shares one material and every
 // material with the same feature set shares one shader program (customProgramCacheKey). Instanced and plain users,
 // skinned users and shadow receivers get separate materials by construction (matSplit, M-13).
-import { MeshPhysicalMaterial, MeshStandardMaterial, MeshLambertMaterial, Color, Vector2, Vector3, Vector4, Matrix4, BufferAttribute, DoubleSide, FrontSide } from 'three';
-import { patchShader, inject } from './chunks.js';
+import { MeshPhysicalMaterial, MeshStandardMaterial, MeshLambertMaterial, MeshDepthMaterial, RGBADepthPacking, Color, Vector2, Vector3, Vector4, Matrix4, BufferAttribute, DoubleSide, FrontSide } from 'three';
+import { patchShader, patchDepth, inject } from './chunks.js';
 import { furGeometry } from './fur.js';
 import { defineMaterials } from '../../defs/materials.js';
 
@@ -40,7 +40,7 @@ function install(m, st) {
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, st.uniforms);
       patchShader(sh, st.features);
-      for (const x of st.extras) x.patch(sh, inject);
+      for (const x of st.extras) x.patch(sh, inject, { depth: false });
     };
     m.customProgramCacheKey = () => key;
   }
@@ -247,11 +247,40 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     return root;
   }
 
-  function dispose() { for (const m of cache.values()) m.dispose(); cache.clear(); }
+  // The shadow-pass twin of a compiled material: a MeshDepthMaterial (RGBA packing, as three's shadow maps use) whose vertex stage
+  // runs the same displacement (WIND, FUR) on the same uniform objects, then every extend() patch with { depth: true } (a patch
+  // that only edits the fragment stage returns early on it). Set it as mesh.customDepthMaterial. Cached per material; the compiler
+  // owns and disposes it.
+  const depths = new Map(); // material key -> depth twin
+  function depth(material) {
+    const s = STATE.get(material);
+    if (!s) throw new Error(`compiler: depth() needs a material from this compiler (got '${material?.name}')`);
+    const dk = material.userData.lh.key, hit = depths.get(dk); // per-entity clones (coverage) share their base's twin
+    if (hit) return hit;
+    const m = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
+    m.name = `${material.name}:depth`;
+    m.side = material.side;
+    const moved = s.features.filter(f => f === 'FUR' || f === 'WIND');
+    if (moved.length || s.extras.length) {
+      const key = `lhd:${moved.join('+')}${s.extras.map(x => `|x:${x.name}`).join('')}`;
+      m.defines = { ...(m.defines ?? {}) }; for (const f of moved) m.defines[f] = '';
+      m.onBeforeCompile = sh => {
+        Object.assign(sh.uniforms, STATE.get(material).uniforms);
+        patchDepth(sh, moved);
+        for (const x of s.extras) x.patch(sh, inject, { depth: true });
+      };
+      m.customProgramCacheKey = () => key;
+    }
+    m.userData.lhShared = true; m.userData.lh = { depthOf: material.userData.lh?.key };
+    depths.set(dk, m);
+    return m;
+  }
+
+  function dispose() { for (const m of cache.values()) m.dispose(); cache.clear(); for (const m of depths.values()) m.dispose(); depths.clear(); }
 
   // not frozen: 3e's render-pipeline test assigns onto mc.made / mc.dispose
   return {
-    shading, time, get, paint, coverage, extend, apply, repaint,
+    shading, time, get, paint, coverage, extend, apply, repaint, depth,
     furGeometry: (geometry, mask, opts) => furGeometry(geometry, mask, opts),
     keys: () => [...cache.keys()], made: () => [...cache.values()].map(material => ({ material, use: material.userData.lhUse })), dispose,
   };

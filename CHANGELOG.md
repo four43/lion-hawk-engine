@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2 — 2026-10-14
+
+- Fixes for the Rally port: view sync binds `partXf` nodes (and checks their names) against whatever object the create hooks leave, including one a hook returns for an undrawn entity, one that replaces the model clone, and one from a hook added later; a render before an entity's first step draws its parts at the nodes' rest pose, and `partXf` in a spawn desc (or `world.add`) may be `{ name: { p, q } | null }` to seed curr and prev; `mc.depth(material)` returns a cached `MeshDepthMaterial` (RGBA packing) for `mesh.customDepthMaterial` that runs the material's WIND and FUR displacement on the same uniforms and its `extend()` patches with `{ depth: true }` (patches now receive a third argument `{ depth }`).
+
 ## 0.10.1 — 2026-10-14
 
 - Fixes for the Pig Pens port: view sync skips a drawn entity until `assets.has(model)` and makes it on a later frame (no throw while loading); the bake's convex hull runs in quickhull order with a connected visible region, so near-coplanar meshes (Kenney tractor `wheel-back-right`) finish; `palette: 'vertex'` also writes `COLOR_0` from the factor of untextured materials (factor goes white, alpha kept).

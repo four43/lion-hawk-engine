@@ -69,4 +69,10 @@ for (const tier of ['physical', 'standard', 'lambert']) {
     assert.ok(hlr > hlg && hrg > hrr, `hue ramp: left ${r.hue[0]}, right ${r.hue[1]}`);
     assert.equal(r.keepDiff, 0, 'unpainted draws exactly the vertex colours');
   });
+  test(`${tier}: depth twins (mc.depth) compile and cast shadows that move with the material`, async t => {
+    if (skip) return t.skip(skip);
+    const r = await page.evaluate(tr => window.lhDepth(tr), tier);
+    assert.deepEqual(r.errors, []);
+    assert.ok(r.moved > 10, `wind moved ${r.moved} pixels (blade and shadow)`);
+  });
 }
