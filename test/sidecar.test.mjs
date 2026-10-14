@@ -29,6 +29,14 @@ test('3b: a complete sidecar with every shape validates and is returned unchange
   const min = { v: 1, parts: [], colliders: [] };
   assert.equal(validateSidecar(min), min, 'source, mass, sockets and bounds are optional (hand-written fixtures)');
 });
+test('3b: a socket may have no parent part (3d C3); a zero-mass sidecar validates (3d zero-mass bake)', () => {
+  const sock = part => ({ v: 1, parts: ['body'], colliders: [], sockets: { seat: { p: [0, 1, 0], q: [0, 0, 0, 1], part } } });
+  const ok = sock(null);
+  assert.equal(validateSidecar(ok, { model: 'cart' }), ok);
+  throwsExactly(() => validateSidecar(sock('roof'), { model: 'cart' }), "sidecar: cart: sockets.seat.part names an unknown part (got 'roof')");
+  const zero = { v: 1, parts: ['deco'], colliders: [], mass: { mass: 0, com: [0, 0, 0], inertia: [0, 0, 0], frame: [0, 0, 0, 1] } };
+  assert.equal(validateSidecar(zero, { model: 'cart' }), zero);
+});
 test('3b: sidecar errors name the model and the path', () => {
   const bad = (edit, message) => { const s = good(); edit(s); throwsExactly(() => validateSidecar(s, { model: 'cart', materials: defineMaterials() }), message); };
   bad(s => { s.v = 2; }, 'sidecar: cart: v must be 1 (got 2)');
@@ -39,6 +47,7 @@ test('3b: sidecar errors name the model and the path', () => {
   bad(s => { delete s.colliders[3].p; }, 'sidecar: cart: colliders[3].p must be 3 numbers (got undefined)');
   bad(s => { s.colliders[3].part = 'tyre'; }, "sidecar: cart: colliders[3].part names an unknown part (got 'tyre')");
   bad(s => { s.colliders[0].material = 'unobtainium'; }, "sidecar: cart: colliders[0].material names an unknown material (got 'unobtainium')");
+  bad(s => { s.mass.mass = -1; }, 'sidecar: cart: mass.mass must be a number >= 0 (got -1)');
   bad(s => { s.mass.inertia = [1, -1, 1]; }, 'sidecar: cart: mass.inertia must be 3 numbers >= 0 (got [1,-1,1])');
   bad(s => { s.sockets.hat.part = 'roof'; }, "sidecar: cart: sockets.hat.part names an unknown part (got 'roof')");
   bad(s => { s.bounds.max = [1, -1, 2]; }, 'sidecar: cart: bounds.max must be 3 numbers, each >= min (got [1,-1,2])');

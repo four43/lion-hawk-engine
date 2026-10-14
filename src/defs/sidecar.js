@@ -92,7 +92,7 @@ export function validateSidecar(s, { model = '?', materials } = {}) {
     const m = s.mass;
     if (!isPlain(m)) fail('mass', 'must be an object', m);
     strict(m, ['mass', 'com', 'inertia', 'frame'], fail, 'mass.');
-    if (!finite(m.mass) || m.mass <= 0) fail('mass.mass', 'must be a number > 0', m.mass);
+    if (!finite(m.mass) || m.mass < 0) fail('mass.mass', 'must be a number >= 0', m.mass);
     if (!vec3(m.com)) fail('mass.com', 'must be 3 numbers', m.com);
     if (!vec3(m.inertia) || !m.inertia.every(x => x >= 0)) fail('mass.inertia', 'must be 3 numbers >= 0', m.inertia);
     if (!quat(m.frame)) fail('mass.frame', 'must be a unit quaternion [x, y, z, w]', m.frame);
@@ -104,7 +104,7 @@ export function validateSidecar(s, { model = '?', materials } = {}) {
       strict(so, ['p', 'q', 'part'], fail, `sockets.${k}.`);
       if (!vec3(so.p)) fail(`sockets.${k}.p`, 'must be 3 numbers', so.p);
       if (!quat(so.q)) fail(`sockets.${k}.q`, 'must be a unit quaternion [x, y, z, w]', so.q);
-      if (!s.parts.includes(so.part)) fail(`sockets.${k}.part`, 'names an unknown part', so.part);
+      if (so.part !== null && !s.parts.includes(so.part)) fail(`sockets.${k}.part`, 'names an unknown part', so.part);
     }
   }
   if (s.bounds !== undefined) {
