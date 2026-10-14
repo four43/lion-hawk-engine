@@ -78,3 +78,41 @@ export function createParticles({ max = 1200, shape = 'cube', geometry = null, m
 
   return { emit, update, mesh, color, get live() { return nLive; } };
 }
+
+// Ground marks (tyre tracks): a ring of flat quads on one InstancedMesh. add() writes the instance matrix directly
+// (no trig, no allocation): across = (nz, 0, -nx) × width, up, along = (nx, 0, nz) × length.
+export function createMarks({ max = 400, width = 0.45, length = 0.9, material = null, heightAt = null, lift = 0.06 } = {}) {
+  if (!Number.isInteger(max) || max < 1) fail(`max must be a positive integer (got ${max})`);
+  const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const mat = material ?? new THREE.MeshBasicMaterial({ color: '#5a4630', transparent: true, opacity: 0.4, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mesh = new THREE.InstancedMesh(geo, mat, max);
+  mesh.name = 'fx-marks'; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; mesh.count = 0;
+  const a = mesh.instanceMatrix.array;
+  let next = 0, lo = max, hi = -1;
+
+  function add(x, z, nx, nz, alpha = 1) {
+    const l = Math.sqrt(nx * nx + nz * nz);
+    if (!(l > 0)) return -1;
+    const fx = nx / l, fz = nz / l, al = alpha < 0 ? 0 : alpha > 1 ? 1 : alpha, w = width * (0.5 + 0.5 * al);
+    const y = (heightAt ? heightAt(x, z) : 0) + lift, i = next, o = i * 16;
+    next = (next + 1) % max;
+    a[o] = fz * w; a[o + 1] = 0; a[o + 2] = -fx * w; a[o + 3] = 0;
+    a[o + 4] = 0; a[o + 5] = 1; a[o + 6] = 0; a[o + 7] = 0;
+    a[o + 8] = fx * length; a[o + 9] = 0; a[o + 10] = fz * length; a[o + 11] = 0;
+    a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
+    if (mesh.count < max) mesh.count++;
+    if (i < lo) lo = i;
+    if (i > hi) hi = i;
+    return i;
+  }
+
+  function update() {
+    if (hi < 0) return;
+    const m = mesh.instanceMatrix;
+    m.clearUpdateRanges(); m.addUpdateRange(lo * 16, (hi - lo + 1) * 16); m.needsUpdate = true;
+    lo = max; hi = -1;
+  }
+
+  return { add, update, mesh };
+}
