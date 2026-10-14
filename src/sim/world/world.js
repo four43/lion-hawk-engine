@@ -12,7 +12,7 @@ import { createEventDrain } from '../physics/events.js';
 import { qFromYaw, qnorm } from '../../core/math.js';
 
 let SERIAL = 0; // process-wide: a new World never reuses an old World's serial (the view keys on it, S-3)
-const DESC_KEYS = new Set(['model', 'colliders', 'body', 'groups', 'at', 'yaw', 'q', 'tags', 'xf', 'contacts', 'sensor']);
+const DESC_KEYS = new Set(['model', 'colliders', 'body', 'groups', 'at', 'yaw', 'q', 'tags', 'xf', 'contacts', 'sensor', 'partXf']);
 const WORLD_KEYS = ['id', 'sockets'];
 const FIXED_PARTS = new Set(['id', 'tags', 'model', 'body', 'colliders', 'sockets', 'heightfield']);
 const BODY_KEYS = new Set(['type', 'lock', 'ccd', 'linearDamping', 'angularDamping', 'sleep', 'canSleep', 'mass', 'massProps']);
@@ -25,6 +25,8 @@ const indexOfId = (list, id) => { let lo = 0, hi = list.length; while (lo < hi) 
 const insert = (list, e) => { const i = indexOfId(list, e.id); if (list[i] !== e) list.splice(i, 0, e); };
 const drop = (list, e) => { const i = indexOfId(list, e.id); if (list[i] === e) list.splice(i, 1); };
 const hasParts = (e, parts) => { for (let i = 0; i < parts.length; i++) if (e[parts[i]] === undefined) return false; return true; };
+const partNames = v => Array.isArray(v) && v.length > 0 && v.every(n => typeof n === 'string' && n !== '') && new Set(v).size === v.length;
+const partPose = () => ({ p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } });
 
 // digest: FNV-1a over float64 bits, so the checksum sees every bit of a pose or velocity (no rounding)
 const F64 = new Float64Array(1), U32 = new Uint32Array(F64.buffer);
@@ -40,6 +42,7 @@ export function createWorld(engine, opts = {}) {
   const pool = createPool();
   const list = [], byId = new Map(), handles = new Map(); // handles: collider handle → { e, material } (M-5)
   const slots = [], bodied = [], sleepers = [], queries = []; // live slots; dynamic + kinematic bodies; #2; { parts, list }
+  const parted = []; // entities with partXf, in id order (lh.world.swap copies their parts)
   const root = { q: null, next: new Map() }, socketsOf = new Map();
   let nextId = 1, disposed = false, nBodies = 0, nColliders = 0, spawnFns = [], despawnFns = [], placer = null;
 
@@ -49,7 +52,7 @@ export function createWorld(engine, opts = {}) {
     if (!r || r.world !== api || r.dead) throw new Error(`world.${what}: not a live entity of this World`);
     return r;
   };
-  const record = (kind, fixedMass) => ({ world: api, slot: -1, kind, dead: false, awake: 1, own: null, k: 1, fixedMass });
+  const record = (kind, fixedMass) => ({ world: api, slot: -1, kind, dead: false, awake: 1, own: null, k: 1, fixedMass, parts: null });
   const modelSockets = id => {
     let s = socketsOf.get(id);
     if (!s) socketsOf.set(id, s = deepFreeze(structuredClone(sidecars[id].sockets ?? {})));
@@ -63,6 +66,15 @@ export function createWorld(engine, opts = {}) {
     if (r.kind === DYNAMIC || r.kind === KINEMATIC) bodied.push(e);
     for (let i = 0; i < queries.length; i++) if (hasParts(e, queries[i].parts)) queries[i].list.push(e);
     const fns = spawnFns; for (let i = 0; i < fns.length; i++) fns[i](e, api);
+  }
+
+  // 3g request 7: per-part poses (e.partXf[name], curr, written by sim code) with a hidden prev, copied by swap
+  function setParts(e, r, names) {
+    if (!r.parts) { r.parts = []; e.partXf = {}; insert(parted, e); }
+    for (const name of names) {
+      if (Object.hasOwn(e.partXf, name)) continue;
+      const cur = partPose(); e.partXf[name] = cur; r.parts.push({ name, cur, prev: partPose() });
+    }
   }
 
   function spawn(desc = {}) {
@@ -101,6 +113,10 @@ export function createWorld(engine, opts = {}) {
     if (desc.groups !== undefined) { try { mask = groups.mask(desc.groups.member, desc.groups.filter); } catch (err) { fail(err.message.replace(/^physics: /, '')); } }
     if (desc.material !== undefined && (desc.material === null || typeof desc.material !== 'object')) fail("material must be { part: id } (use { '*': id } for every part)");
     if (desc.contacts !== undefined && !(desc.contacts?.min >= 0)) fail('contacts must be { min: impulse >= 0 }');
+    if (desc.partXf !== undefined) {
+      if (!partNames(desc.partXf)) fail('partXf must be an array of distinct part names');
+      if (kind === BODILESS && desc.xf !== true) fail('partXf needs an xf (a body or xf: true)');
+    }
     const mass = bo?.mass, mp = bo?.massProps;
     if (mass !== undefined) {
       if (mp !== undefined) fail('body takes mass or massProps, not both');
@@ -170,6 +186,7 @@ export function createWorld(engine, opts = {}) {
       e.xf = makeXf(pool, r.slot, e);
     }
     if (sc) e.sockets = modelSockets(desc.model);
+    if (desc.partXf !== undefined) setParts(e, r, desc.partXf);
     register(e, r);
     return e;
   }
@@ -181,6 +198,7 @@ export function createWorld(engine, opts = {}) {
     if (e.colliders) { for (const c of e.colliders) handles.delete(c.collider.handle); nColliders -= e.colliders.length; delete e.colliders; }
     if (e.body) { nBodies--; delete e.body; }
     if (r.slot >= 0) { e.xf = deadXf(pool, r.slot); slots.splice(slots.indexOf(r.slot), 1); pool.free(r.slot); r.slot = -1; }
+    if (r.parts) { r.parts = null; drop(parted, e); }
   }
   function despawn(e) {
     const r = e?.[INTERNAL];
@@ -205,7 +223,7 @@ export function createWorld(engine, opts = {}) {
     for (let i = worldOwned.length - 1; i >= 0; i--) worldOwned[i]();
     worldOwned.length = 0;
     for (const e of list) forget(e, e[INTERNAL]);
-    list.length = 0; byId.clear(); handles.clear(); bodied.length = 0; sleepers.length = 0;
+    list.length = 0; byId.clear(); handles.clear(); bodied.length = 0; sleepers.length = 0; parted.length = 0;
     for (const q of queries) q.list.length = 0; // the same arrays: systems that cached them keep working
   }
   function clear() { live(); teardown(); pool.reset(); nextId = 1; if (ph) ph.recreate(); api.serial = ++SERIAL; }
@@ -238,7 +256,12 @@ export function createWorld(engine, opts = {}) {
     if (FIXED_PARTS.has(part)) throw new Error(`world.add: '${part}' cannot be added after spawn`);
     if (value === undefined) throw new Error(`world.add: '${part}' needs a value`);
     if (part === 'net') api.net?.guard('add', e, value); // 3i seam
-    if (part === 'xf') {
+    if (part === 'partXf') {
+      if (!partNames(value)) throw new Error("world.add: 'partXf' must be an array of distinct part names");
+      if (r.slot < 0) throw new Error("world.add: 'partXf' needs an xf (a body or xf: true)");
+      const had = !!r.parts; setParts(e, r, value);
+      if (had) return e;
+    } else if (part === 'xf') {
       if (r.slot >= 0) return e;
       r.slot = pool.alloc(); slots.push(r.slot); e.xf = makeXf(pool, r.slot, e);
     } else {
@@ -258,6 +281,7 @@ export function createWorld(engine, opts = {}) {
       if (e.body) throw new Error('world.remove: a body entity keeps its xf');
       slots.splice(slots.indexOf(r.slot), 1); pool.free(r.slot); r.slot = -1;
     }
+    if (part === 'partXf') { r.parts = null; drop(parted, e); }
     for (const q of queries) if (q.parts.includes(part)) drop(q.list, e);
     delete e[part];
     return e;
@@ -304,7 +328,17 @@ export function createWorld(engine, opts = {}) {
   // (physics.world). Nothing here allocates except Rapier's own per-call vectors.
   let drainEvents = null; // made below, once api exists
   const sys = {
-    swap() { if (!disposed) pool.swap(slots); },
+    swap() {
+      if (disposed) return;
+      pool.swap(slots);
+      for (let i = 0; i < parted.length; i++) {
+        const ps = parted[i][INTERNAL].parts;
+        for (let k = 0; k < ps.length; k++) {
+          const c = ps[k].cur, p = ps[k].prev;
+          p.p.x = c.p.x; p.p.y = c.p.y; p.p.z = c.p.z; p.q.x = c.q.x; p.q.y = c.q.y; p.q.z = c.q.z; p.q.w = c.q.w;
+        }
+      }
+    },
     step() { if (ph && !disposed) ph.step(); },
     read() {
       if (!ph || disposed) return;
@@ -387,6 +421,14 @@ export function createWorld(engine, opts = {}) {
     place: (e, target, o) => { live(); return placer.place(e, target, o); },
     socket: (e, name, out) => placer.socket(e, name, out),
     xfPrev: (e, out) => placer.xfPrev(e, out),
+    partXfPrev(e, name, out = partPose()) {
+      const ps = mine(e, 'partXfPrev').parts;
+      if (ps) for (let k = 0; k < ps.length; k++) if (ps[k].name === name) {
+        const p = ps[k].prev; out.p.x = p.p.x; out.p.y = p.p.y; out.p.z = p.p.z; out.q.x = p.q.x; out.q.y = p.q.y; out.q.z = p.q.z; out.q.w = p.q.w;
+        return out;
+      }
+      throw new Error(`world.partXfPrev: entity ${e.id} has no part '${name}'`);
+    },
     materialOf: h => handles.get(h)?.material,
     entityOf: h => handles.get(h)?.e,
     sys, digest, heightfield, audit,
