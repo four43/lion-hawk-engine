@@ -8,6 +8,7 @@ const setup = () => {
   const { window, document } = dom(), engine = createEngine(game), ui = createUiDom(engine, { root: document.body, doc: document });
   ui.sync(); return { window, document, engine, ui };
 };
+function setup2(g) { const { window, document } = dom(), engine = createEngine(g), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync(); return { window, document, engine, ui }; }
 const q = (d, id) => d.querySelector(`[data-testid="${id}"]`);
 
 test('title Play renders and a click moves the engine to race', () => {
@@ -199,4 +200,3 @@ test('G-E2: a sync looks for slots only after a slot-relevant mutation (no per-f
   const el = slot(document, 't.go'); ui.sync(); assert.ok(n > 0); same(q(document, 't.go'), el);
   n = 0; ui.sync(); assert.equal(n, 0);
 });
-function setup2(g) { const { window, document } = dom(), engine = createEngine(g), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync(); return { window, document, engine, ui }; }
