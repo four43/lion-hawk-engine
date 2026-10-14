@@ -93,11 +93,11 @@ None removed or renamed. `gesture.test.mjs` test 1 is retitled "2f: bindGesture:
 
 The integrator numbers these from #110.
 
-1. "`bindGesture` reads the event clock (#109 outcome): holds are real time at any frame rate; the frame-sum overcounted the frame before the down. A hidden tab cancels fingers, so nothing pauses a hold."
-2. "`untilLoaded` waits for commands pending at the call, not while any are pending (#100 outcome): a game whose systems issue commands every step would otherwise never settle."
-3. "`reset()` runs in every `createEngine`; in `mp()` a later peer's engine resets tunables an earlier peer's run changed, so tests that tune must tune after all peers are created (#108 outcome). Tunables are per process and still not on the tape."
-4. "After a fallback swap (an adopted `data-lh-slot` element leaves the document and the engine re-adopts or creates a control), focus that was on the old element is not moved to the new one (G-E2 parked minor; no code change in 0.7.3)."
-5. "A lift dispatched late can still read as a hold: `update` checks the hold before a queued `pointerup` is seen, so at frames of roughly 860 ms or more a short tap whose lift arrives after a frame >= hold.seconds past the down still fires the hold (#109 residual; 570 ms frames are fixed)."
+1. "`bindGesture` reads the event clock (#109 outcome): holds are real time at any frame rate; the frame-sum overcounted the frame before the down. A hidden tab cancels fingers, so nothing pauses a hold." → #110
+2. "`untilLoaded` waits for commands pending at the call, not while any are pending (#100 outcome): a game whose systems issue commands every step would otherwise never settle." → #111
+3. "`reset()` runs in every `createEngine`; in `mp()` a later peer's engine resets tunables an earlier peer's run changed, so tests that tune must tune after all peers are created (#108 outcome). Tunables are per process and still not on the tape." → #112
+4. "After a fallback swap (an adopted `data-lh-slot` element leaves the document and the engine re-adopts or creates a control), focus that was on the old element is not moved to the new one (G-E2 parked minor; no code change in 0.7.3)." → #113
+5. "A lift dispatched late can still read as a hold: `update` checks the hold before a queued `pointerup` is seen, so at frames of roughly 860 ms or more a short tap whose lift arrives after a frame >= hold.seconds past the down still fires the hold (#109 residual; 570 ms frames are fixed)." → #114
 
 ## Deferred minors
 

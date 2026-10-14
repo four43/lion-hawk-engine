@@ -107,21 +107,26 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 92 | A summed wall clock drifts; recorded wall stamps are not replayed | engine | fixed (2f T-E3 fix 1: re-anchored base); replay caveat documented |
 | 93 | A late peer's virtual wall is an ulp off the hub's | engine | open (tolerance in tests; `wallStep0` engine option if exactness is ever needed) |
 | 94 | The hub drops at send, so in-flight messages still land after a blackout starts | engine, Tractor Pickup | kept (Tractor's M-53 behaviour; documented by the mp drop test) |
-| 95 | `engine.overlay` throws on an overlay already open or pending | engine, Tractor Pickup | open (Tractor guards with `isOpen(name, { pending: true })`; consider `{ once: true }`) |
+| 95 | `engine.overlay` throws on an overlay already open or pending | engine, Tractor Pickup | done (0.7.3, 3a): `engine.overlay(name, args, { once: true })` is a no-op when the overlay is open or pending, and is never recorded; Tractor can drop `flow.open`'s guard |
 | 96 | Host diffs that arrive while a guest farm builds are dropped until the next keyframe | Tractor Pickup | accepted (same as the old show-deferred path; settles within M-58) |
 | 97 | An interop test that only checks the guest's view passes with the guest→host link cut | Tractor Pickup | fixed (2f T7 fix 1: host-side train, paint and a cross-path boop, proven by a drop probe) |
 | 98 | The sim reads `time.wall`, so browser-recorded tapes would not replay exactly | engine, Tractor Pickup | open (only headless/`mp()` tapes replay exactly; fix option: per-step wall stamps on tapes) |
 | 99 | Playwright bindings resolve asynchronously, so a two-page bridge needs sequence numbers | engine | done (2g G-E1: per-call seq, `room.step` waits for each page's calls; early events queued by an init-script stub; reload unsupported) |
-| 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | open (the command waits for the next step; option: `untilLoaded` also waits while `engine.commands.pending` > 0) |
+| 100 | `untilLoaded` right after `game.command` returns at once | engine, Tractor Pickup | done (0.7.3, 3a): headless and Playwright `untilLoaded` first take the step that delivers the commands pending at the call (commands the stepped systems issue do not hold it); `window.engine.commands` |
 | 101 | `bindStick` places an adopted floating base by its centre | Tractor Pickup | worked around (2g G1: `#stickBase.tp-stick` translate −50%; the engine could document the centre anchoring) |
 | 102 | The view writes sim animals for other players' carried riders (`players.drawAt`) | Tractor Pickup | fixed (2g G5: read-only `players.poseAt` + view pose map; G5 fix: poses carry `type`/`golden`; G7 deleted `drawAt`) |
 | 103 | A failing `assert.equal` on a DOM node can use gigabytes | engine, all games | fixed (2g G-E2: `same()` identity helper, guard test; `--test-concurrency=4` in every unit script); suites with four Rapier processes peak ~1.1–1.2 GB, so caps need 2 GB (2g G4) |
 | 104 | Late game markup needs re-adoption (`menus.js` builds screens on open) | engine, Tractor Pickup | done (0.7.2: late adoption on sync and `ui.adopt()`) |
-| 105 | A view half cannot read its overlay's open args | engine, Tractor Pickup | open (2g G4: the sleep half reads `quiet` from the event log) |
+| 105 | A view half cannot read its overlay's open args | engine, Tractor Pickup | done (0.7.3, 3a): view halves enter as `enter(engine, view, args)`, and `engine.scene.overlayArgs(name)` returns an open overlay's args |
 | 106 | `?fps` times Rapier by wrapping the sim world's `step` from the view | engine, Tractor Pickup | open (2g G4; wants an engine physics-timing hook) |
-| 107 | `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page | engine, Tractor Pickup | open (2g G5: Tractor passes `render: 'manual'`; the two-page test takes ~80 s) |
-| 108 | Feel constants are module state: tapes replay exactly only from the shipped values | engine, Tractor Pickup | open (2g G4b: tests restore the constants; wants a tunables or game-reset hook) |
-| 109 | `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold | engine, Tractor Pickup | open (2g G6: the iPad gesture test runs at 1x) |
+| 107 | `peers()` defaults to `render: 'auto'`, which starves the second SwiftShader page | engine, Tractor Pickup | done (0.7.3, 3a): `peers()` defaults to `render: 'manual'` (`render: 'auto'` opts out) |
+| 108 | Feel constants are module state: tapes replay exactly only from the shipped values | engine, Tractor Pickup | done (0.7.3, 3a): `defineGame({ reset })` runs first in every `createEngine`, so replays and `mp()` peers start from the shipped tunables; tunables stay per process and off the tape (tune after all peers exist) |
+| 109 | `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold | engine, Tractor Pickup | done (0.7.3, 3a): holds and taps are timed on the pointer events' clock (`event.timeStamp`, injectable `now`), not summed frame time; `uncapped` is ignored; a late-dispatched lift at frames of about 860 ms or more is #114 |
+| 110 | `bindGesture` reads the event clock, so holds are real time at any frame rate | engine | done (0.7.3, 3a) |
+| 111 | `untilLoaded` waits for the commands pending at the call, not while any are pending | engine | done (0.7.3, 3a) |
+| 112 | `reset()` runs in every `createEngine`, so in `mp()` a later peer resets an earlier peer's tunables | engine, Tractor Pickup | done (0.7.3, 3a) |
+| 113 | After a fallback swap, focus on the old element is not moved to the new one | engine | open |
+| 114 | A lift dispatched late can still read as a hold | engine, Tractor Pickup | open |
 
 ## Entries
 
@@ -626,7 +631,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 95. `engine.overlay` throws on an overlay already open or pending: engine, Tractor Pickup (phase 2f T4)
 - **What happened:** Tractor can reach the same overlay from a cue, a command or a hold, so it can request the overlay again. `engine.overlay(name)` throws in that case, so every caller needs an `isOpen(name, { pending: true })` guard. Tractor wraps this in `flow.open`.
 - **Decision:** the guard stays game-side for now. If a second game needs it too, add `engine.overlay(name, args, { once: true })` (a no-op when already open or pending).
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): `engine.overlay(name, args, { once: true })` is a no-op when the overlay is open or pending, and is never recorded; Tractor can drop `flow.open`'s guard.
 
 ### 96. Host diffs that arrive while a guest farm builds are dropped until the next keyframe: Tractor Pickup (phase 2f T6)
 - **What happened:** diffs that land during the one- to two-step farm build go into the store, then `useFarm` clears the store and re-applies only the kept keyframe. Anything that changed in those steps is stale until the next host keyframe.
@@ -651,7 +656,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 100. `untilLoaded` right after `game.command` returns at once: engine, Tractor Pickup (phase 2g G1)
 - **What happened:** `game.command('farm.new')` only queues the command until the next step ([I-7]). `untilLoaded` checks `engine.loading.active` before stepping, finds no load, and returns 0.
 - **Decision:** Tractor's test steps once between the two calls. Engine option: headless and Playwright `untilLoaded` keep stepping while `engine.commands.pending` > 0 (`untilEvent` already steps). Drop Tractor's extra `step(1)` when it lands.
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): headless and Playwright `untilLoaded` first take the step that delivers the commands pending at the call (commands the stepped systems issue do not hold it); `window.engine.commands`.
 
 ### 101. `bindStick` places an adopted floating base by its centre: Tractor Pickup (phase 2g G1)
 - **What happened:** `bindStick` sets `left`/`top` to the thumb point, but Tractor's CSS placed the box's top-left at thumb − R.
@@ -685,7 +690,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** the sim opens the `sleep` overlay with `{ quiet }` (a sleep restored at boot is quiet: no spoken goodnight and no dusk wait). The view half needs `quiet` to decide whether the wake button shows at once or after `BED.dusk`. Overlay args do not reach view halves.
 - **Workaround:** the sleep half reads the latest `sleep` event from `engine.events.since(0)`. If the log has lost it (more than 256 events in between, or a boot-time open before any flush), it assumes quiet, so the button is never hidden for good.
 - **Engine change:** pass the overlay's args to its view half (`enter(engine, view, args)`, or `engine.scene.overlayArgs(name)`).
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): view halves enter as `enter(engine, view, args)`, and `engine.scene.overlayArgs(name)` returns an open overlay's args.
 
 ### 106. `?fps` times Rapier by wrapping the sim world's `step` from the view: engine, Tractor Pickup (phase 2g G4)
 - **What happened:** the X-4 hitch readout shows Rapier's share of each frame. The old `main.js` wrapped `world.step` for timing (B-1). The view half does the same under `?fps`. It only measures, but it replaces a method on a sim object from the view.
@@ -697,16 +702,46 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **What happened:** with the default, each manual-stepping page still renders every rAF under SwiftShader. The guest took 13 s to reach WebGL init, and `waitForFunction(window.engine)` timed out at 30 s with about 12 cores busy. With `render: 'manual'` (`?lh-test=render`) both pages open in 2.8 s.
 - **Workaround:** Tractor's two-page test passes `render: 'manual'`. The test still takes about 80 s (after the G5 fix added the carried-rider check).
 - **Engine change:** `peers()` defaults to `render: 'manual'`.
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): `peers()` defaults to `render: 'manual'` (`render: 'auto'` opts out).
 
 ### 108. Feel constants are module state, so tapes replay exactly only from the shipped values: engine, Tractor Pickup (phase 2g G4b)
 - **What happened:** the `tune` command (user ruling: `?tune` goes through game flow) writes Tractor's feel constants (`P`, `PILOT`, `TP`, …), which are module-level objects. They are not in the scene state or on the tape. A tape with `tune` commands replays exactly only if the constants are back at their shipped values first, and two sims in one process (`mp()`) share them. A guest that tuned while solo keeps its values after joining.
 - **Workaround:** the tune tests restore the constants in `afterEach` and before a replay. Feel constants are not replicated.
 - **Engine change:** a tunables hook (the game declares its tunables; the engine resets them on boot and on replay, and records them on the tape), or a game-reset hook that replay calls first.
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): `defineGame({ reset })` runs first in every `createEngine`, so replays and `mp()` peers start from the shipped tunables; tunables stay per process and off the tape (tune after all peers exist).
 
 ### 109. `bindGesture` counts holds in whole frames, so a tap at ~2 fps reads as a hold: engine, Tractor Pickup (phase 2g G6)
 - **What happened:** `bindGesture` adds each frame's `rawDt` to a press, and a lift is seen only after its frame. SwiftShader drew the iPad preset (pixel ratio 1.5, 1791×1251) at about 570 ms a frame, so a short tap on the show became a 1 s hurry hold.
 - **Workaround:** the iPad gesture test runs at `deviceScaleFactor: 1` (about 380–400 ms a frame), with a speech stub. Harmless at real frame rates, but a stuttering device (X-4) could turn a tap into a hold.
 - **Engine change:** measure the hold from the pointer events' `timeStamp`s (down to up), not from summed frame time.
-- **Status:** open.
+- **Status:** done (0.7.3, 3a): holds and taps are timed on the pointer events' clock (`event.timeStamp`, injectable `now`), not summed frame time; `uncapped` is ignored; a late-dispatched lift at frames of about 860 ms or more is #114.
+
+### 110. `bindGesture` reads the event clock, so holds are real time at any frame rate: engine (phase 3a)
+- **What happened:** #109's outcome. Summing frame time overcounted the frame before the down, so a short tap at about 2 fps read as a hold. A hidden tab cancels the fingers, so nothing pauses a hold.
+- **Workaround:** before 0.7.3, Tractor's iPad gesture test ran at `deviceScaleFactor: 1` (#109).
+- **Engine change:** `bindGesture` times a hold from the down event's `timeStamp` on `now()` (default `performance.now`, the same clock) and a tap from `up.timeStamp − down.timeStamp`; `uncapped` is accepted and ignored.
+- **Status:** done (0.7.3, 3a): holds and taps on the event clock; a real-Chromium probe (CDP touch and mouse) confirmed `event.timeStamp` is on `performance.now`'s clock.
+
+### 111. `untilLoaded` waits for the commands pending at the call, not while any are pending: engine (phase 3a)
+- **What happened:** #100's outcome. A loop that stepped while `engine.commands.pending` > 0 would never settle in a game whose systems issue commands every step.
+- **Workaround:** none needed: the rule was chosen before any game hit it.
+- **Engine change:** headless and Playwright `untilLoaded` take the step that delivers the commands pending at the call, then wait only for `engine.loading.active` to clear. With commands pending, `untilLoaded({ maxSteps: 0 })` throws.
+- **Status:** done (0.7.3, 3a): `untilLoaded` takes the delivering step only.
+
+### 112. `reset()` runs in every `createEngine`, so in `mp()` a later peer resets an earlier peer's tunables: engine, Tractor Pickup (phase 3a)
+- **What happened:** #108's outcome. Module tunables are per process. In `mp()`, each peer's `createEngine` calls the game's `reset()`, so a later peer's engine resets tunables that an earlier peer's run changed.
+- **Workaround:** a test that tunes must tune after all its `mp()` peers are created. Tunables are still not on the tape.
+- **Engine change:** `defineGame({ reset })`, called first in every `createEngine` ([G-1a]). Recording tunables on the tape stays open.
+- **Status:** done (0.7.3, 3a): documented in spec [G-1a] and [T-9]; tunables on the tape not planned.
+
+### 113. After a fallback swap, focus on the old element is not moved to the new one: engine (phase 3a)
+- **What happened:** when an adopted `data-lh-slot` element leaves the document, the engine re-adopts a new slot element or creates a control. Focus that was on the old element is not moved to the new one (a G-E2 parked minor).
+- **Workaround:** none yet; no game has hit it.
+- **Engine change:** move focus to the replacement when the old element had it.
+- **Status:** open (no code change in 0.7.3).
+
+### 114. A lift dispatched late can still read as a hold: engine, Tractor Pickup (phase 3a)
+- **What happened:** #109's residual. `update` checks the hold before a queued `pointerup` is seen. At frames of roughly 860 ms or more, a short tap whose lift arrives after a frame that ends `hold.seconds` or more past the down still fires the hold. 570 ms frames are fixed.
+- **Workaround:** keep test frame times under about 860 ms (Tractor's iPad gesture test at 1x).
+- **Engine change:** drain pending pointer events before the hold check, or check the hold against the latest event stamp.
+- **Status:** open (#109 residual).

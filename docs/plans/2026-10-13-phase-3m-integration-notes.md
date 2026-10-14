@@ -120,6 +120,11 @@ Budgets: programs ≤ baseline + 2; draw calls (median) ≤ baseline; total gzip
 
 | # | From | Candidate |
 |---|---|---|
+| 110 | 3a | 1: `bindGesture` reads the event clock (#109 outcome) |
+| 111 | 3a | 2: `untilLoaded` waits for commands pending at the call (#100 outcome) |
+| 112 | 3a | 3: `reset()` in every `createEngine`; tune after all `mp()` peers (#108 outcome) |
+| 113 | 3a | 4: focus not moved after a fallback swap (G-E2 parked minor) |
+| 114 | 3a | 5: a late-dispatched lift can still read as a hold (#109 residual) |
 
 ## Contract issues (as reconciled)
 
