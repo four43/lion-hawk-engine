@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — 2026-10-14
+
+Phase 3 Wave A: materials, the World and the bake.
+
+- Materials registry (M-1, M-2, M-3, M-7, M-8) and sidecar schema (A-5): landed early in 0.7.4 (see that entry); since 0.8.0 the base library is the World's default registry.
+- `World` in `lion-hawk/sim` (E-1…E-13, S-3): `createWorld`; each main scene owns one (`engine.world`, `ctx.world`; overlays share it), made before `enter` and disposed after `exit`. Entities with deterministic ids, live `with()` queries, a transform pool with prev/curr halves (`e.xf.slot`, `world.xf.pool`), `place`/`socket`, bodies, colliders, joints, contact and sensor events in Rapier order, a heightfield entity, part poses (`partXf`, `world.partXfPrev`), `own`/`onSpawn`/`onDespawn`, `audit()` and the net seam (`world.net?.guard`, `engine.netPart?.attach(world)`).
+- Rapier wrapper (M-4…M-6, M-9, #1, #2, #106): Rapier is injected (`defineGame({ physics: { rapier } })`, nothing under `src/` imports it), every 0.21 integration parameter is pinned, named collision groups, √f/Multiply and Max combine rules, `heightfieldDesc` (row-major heights), `body: { sleep: true }` re-sleeps after the first step, and `createEngine(game, { timer })` fills `world.stats.stepMs`/`stepMsTotal` (never `state()`). Built-in systems `lh.world.swap` (input.apply) and `lh.physics.step`/`read`/`events` (physics.world); no Rapier step while a scene loads.
+- Headless World access and `checks` in `lion-hawk/test` (T-1, T-5, T-10, T-12…T-14): `h.world`/`find`/`one`/`get`/`spawn`/`despawn`/`place`, an always-on finite check over poses and body velocities after every headless step, and `checks.determinism`, `checks.simPurity`, `checks.zeroAlloc`, `checks.materials`.
+- `lion-hawk bake`/`build`/`dev` (A-1…A-7, B-1…B-5, #11): the `lion-hawk` bin; `lion-hawk/bake` (`bake`, `loadConfig`) and `lion-hawk/build` (`build`, `dedupe`). The bake writes optimised GLBs, `phys.json` (validated with `validatePhys`, stamped with the registry hash) and anim tables, byte-identical on re-bake; `bake --check` reports stale sources, registry or engine minor. `build` bundles with esbuild and dedupes three (#11), stamps the page and `sw.js` (`<gameVersion>+lh<engine>-<hash>`), and takes `--e2e`; it never writes `site/` without `--site`. `dev` serves and re-bakes on change.
+- **Behaviour changes:**
+  - `engine.state()` gains `world` (the World digest) only while a World has entities, so games without entities keep their goldens.
+  - `createEngine` throws `physics: await RAPIER.init() before createEngine` for an uninitialised Rapier module.
+  - `engine.builtin(type, fn)`: engine-side command handlers that run before the game's handler (§4.4).
+  - The `./build` export now points at `tools/build/index.js` (it still exports `dedupe`).
+
 ## 0.7.5 — 2026-10-14
 
 Phase 3e: renderer, lights and boot render pipeline (early landing, ahead of Wave B).
