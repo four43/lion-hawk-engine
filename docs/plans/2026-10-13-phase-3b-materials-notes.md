@@ -143,5 +143,5 @@ None.
 
 For the integrator to number from #110.
 
-- The material hash covers only ids (in order), effective `phys` and pair `friction`/`restitution`, so a `look`/`game` tweak needs no re-bake, but a stale `look` baked into a GLB is not caught by `checks.materials` (Contract issue 6).
-- M-8 pairs are order-dependent. Kits must pass the moving body as `a` and the ground as `b`.
+- The material hash covers only ids (in order), effective `phys` and pair `friction`/`restitution`, so a `look`/`game` tweak needs no re-bake, but a stale `look` baked into a GLB is not caught by `checks.materials` (Contract issue 6). → #115
+- M-8 pairs are order-dependent. Kits must pass the moving body as `a` and the ground as `b`. → #116
