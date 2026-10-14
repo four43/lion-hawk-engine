@@ -58,7 +58,12 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
       h.until(() => (found = log.find(e => e.seq > mark && f(e))) !== undefined, { message: `untilEvent(${typeof m === 'string' ? m : 'fn'})`, ...opts });
       return found;
     },
-    untilLoaded(opts = {}) { return h.until(x => !x.engine.loading.active, { message: 'untilLoaded', ...opts }); }, // [S-6]
+    // [S-6]; #100: commands queued before the call are delivered at the next step and may start a load, so take that step
+    // first. Only those: commands the stepped systems issue themselves never hold it (they would keep pending > 0 forever).
+    untilLoaded(opts = {}) {
+      const s0 = engine.commands.pending > 0 ? engine.time.step : -1;
+      return h.until(x => x.engine.time.step !== s0 && !x.engine.loading.active, { message: 'untilLoaded', ...opts });
+    },
     untilScene(name, opts = {}) { return h.until(x => x.scene.name === name || x.scene.overlays.includes(name), { message: `untilScene(${name})`, ...opts }); },
     mark: () => engine.events.seq,
     get events() { engine.flushEvents(); return log; }, since: m => { engine.flushEvents(); return log.since(m); }, // #71
@@ -69,7 +74,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     enabled: id => engine.ui.enabled(id), tryTap: id => engine.ui.tryTap(id), // #45
     command(type, data) { if (!engine.commands.handles(type)) throw new Error(`headless: no handler for command '${type}'`); engine.command(type, data); return h; },
     go(n, a) { engine.go(n, a); return h; },
-    overlay(n, a) { engine.overlay(n, a); return h; },
+    overlay(n, a, o) { engine.overlay(n, a, o); return h; }, // #95: o = { once }
     close(n) { engine.close(n); return h; },
     jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),

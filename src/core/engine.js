@@ -20,6 +20,7 @@ export function defineGame(spec) {
   if (typeof spec.id !== 'string' || !spec.id) fail('id must be a non-empty string');
   if (!spec.scenes || !Object.keys(spec.scenes).length) fail('scenes must not be empty');
   if (spec.setup !== undefined && typeof spec.setup !== 'function') fail('setup must be a function');
+  if (spec.reset !== undefined && typeof spec.reset !== 'function') fail('reset must be a function');
   if (!(spec.start in spec.scenes)) fail(`start '${spec.start}' is not a scene`);
   // [I-7] a command is a handler, or { schema, handler } (N-3: checked at issue); game.commands keeps the handlers, game.schemas the schemas
   const commands = {}, schemas = {};
@@ -60,6 +61,7 @@ function netConfig(n, schemas, fail) {
 }
 
 export function createEngine(game, { seed = 1, scene = game.start, args, acks = 'steps', record = false, wall0 = 0 } = {}) {
+  game.reset?.(); // #108: module tunables back to their shipped values first, so every engine (a replay, each mp() peer) starts from them
   if (typeof wall0 !== 'number' || !Number.isFinite(wall0)) throw new Error('engine: wall0 must be a finite number');
   if (acks !== 'steps' && acks !== 'frames') throw new Error("engine: acks must be 'steps' or 'frames'");
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
@@ -78,6 +80,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
+  // #105: the args an open overlay entered with (its ctx.args), for its view half; undefined when it is not an open overlay
+  sceneView.overlayArgs = name => { for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === name) return stack[i].ctx.args; return undefined; };
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
   const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds, ctxOf: name => stack.find(o => o.ctx.name === name)?.ctx });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
@@ -299,6 +303,14 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     return open;
   };
   const alreadyOpen = name => { throw new Error(`engine: scene '${name}' is already open`); };
+  // #95: { once: true } turns a request for an overlay that is open, or will be once the queue applies, into a no-op
+  const onceOpen = (name, opts) => {
+    if (opts === undefined) return false;
+    if (opts === null || typeof opts !== 'object' || Array.isArray(opts)) throw new Error('engine: overlay options must be an object');
+    if (opts.once !== undefined && typeof opts.once !== 'boolean') throw new Error('engine: overlay once must be a boolean');
+    if (!opts.once) return false;
+    def(name); return projectedOpen(name);
+  };
   const doGo = (name, a) => {
     def(name); const i = stack.findIndex(o => o.ctx.name === name); if (i > 0) alreadyOpen(name);
     const from = stack[0]?.ctx.name; while (stack.length) exit(stack.length - 1); enter(name, a); events.emit('scene', { name, from });
@@ -348,7 +360,10 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     schedule: () => schedule.describe(),
     // recording, an external op's payload is validated and the scene/handler receives a copy of what was logged
     go: (name, a) => rec ? recorded(o => o.push('go', name, arg(a, 'scene args')), o => reqGo(name, o ? live(o[2]) : a)) : reqGo(name, a),
-    overlay: (name, a) => rec ? recorded(o => o.push('overlay', name, arg(a, 'scene args')), o => reqOverlay(name, o ? live(o[2]) : a)) : reqOverlay(name, a),
+    overlay: (name, a, opts) => {
+      if (onceOpen(name, opts)) return engine; // #95: a no-op, never recorded (a replay meets the same open overlay)
+      return rec ? recorded(o => o.push('overlay', name, arg(a, 'scene args')), o => reqOverlay(name, o ? live(o[2]) : a)) : reqOverlay(name, a);
+    },
     close: name => rec ? recorded(o => o.push('close', name), () => reqClose(name)) : reqClose(name),
     jump: (name, preset, opts, a) => rec
       ? recorded(o => o.push('jump', name, preset, arg(opts, 'jump opts'), arg(a, 'scene args')), o => reqJump(name, preset, o ? live(o[3]) : opts, o ? live(o[4]) : a))

@@ -3,19 +3,22 @@ import assert from 'node:assert/strict';
 import { bindGesture, createEngine, defineGame } from '../src/index.view.js';
 import { dom } from './helpers/dom.mjs';
 const setup = (o = {}) => {
-  const { window, document } = dom(), log = [];
+  const { window, document } = dom(), log = [], clock = { t: 0 }; // #109: the gesture's clock; every event carries clock.t as its timeStamp
   const engine = createEngine(defineGame({ id: 'g', start: 's', scenes: { s: {} } }));
   const el = document.createElement('div'); document.body.appendChild(el);
-  const ev = (t, type, id, x = 0, y = 0, extra = {}) => t.dispatchEvent(new window.PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch', button: 0, ...extra }));
+  const ev = (t, type, id, x = 0, y = 0, extra = {}) => {
+    const e = new window.PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch', button: 0, ...extra });
+    Object.defineProperty(e, 'timeStamp', { value: clock.t }); return t.dispatchEvent(e);
+  };
   const g = bindGesture(engine, el, { tap: () => log.push('tap'), hold: { seconds: 1, fire: () => log.push('hold') }, drag: d => log.push(`drag:${d.phase}`),
-    pinch: p => log.push(`pinch:${p.phase}:${p.scale.toFixed(2)}`), doc: document, ...o });
-  return { window, document, el, ev, g, log };
+    pinch: p => log.push(`pinch:${p.phase}:${p.scale.toFixed(2)}`), doc: document, now: () => clock.t, ...o });
+  return { window, document, el, ev, g, log, clock };
 };
-test('2f: bindGesture: a quick tap; a still finger held 1 s of raw time fires once and is no tap (#59, #56)', () => {
+test('2f: bindGesture: a quick tap; a still finger held 1 s on the event clock fires once and is no tap (#59, #109)', () => {
   const s = setup();
   s.ev(s.el, 'pointerdown', 1, 10, 10); s.g.update(0.016, 0.016); s.ev(s.window, 'pointerup', 1, 10, 10);
   assert.deepEqual(s.log, ['tap']); s.log.length = 0;
-  s.ev(s.el, 'pointerdown', 2, 10, 10); for (let i = 0; i < 4; i++) s.g.update(0.1, 0.3); // capped 0.4 s, raw 1.2 s
+  s.ev(s.el, 'pointerdown', 2, 10, 10); for (let i = 0; i < 4; i++) { s.clock.t += 300; s.g.update(0.1, 0.3); } // 1.2 s since the down
   s.ev(s.window, 'pointerup', 2, 10, 10); assert.deepEqual(s.log, ['hold']);
 });
 test('2f: bindGesture: a drag past 12 px, a two-finger pinch, and a second finger cancels a hold (#59)', () => {
@@ -25,14 +28,14 @@ test('2f: bindGesture: a drag past 12 px, a two-finger pinch, and a second finge
   s.ev(s.el, 'pointerdown', 1, 100, 100); s.ev(s.el, 'pointerdown', 2, 200, 100); s.ev(s.window, 'pointermove', 2, 300, 100); s.g.update(0.016, 0.016);
   s.ev(s.window, 'pointerup', 2, 300, 100); s.ev(s.window, 'pointerup', 1, 100, 100);
   assert.deepEqual(s.log, ['pinch:start:1.00', 'pinch:move:2.00', 'pinch:end:2.00']); s.log.length = 0;
-  s.ev(s.el, 'pointerdown', 1, 10, 10); s.g.update(0.5, 0.5); s.ev(s.el, 'pointerdown', 2, 60, 10); s.g.update(0.6, 0.6);
+  s.ev(s.el, 'pointerdown', 1, 10, 10); s.clock.t += 500; s.g.update(0.5, 0.5); s.ev(s.el, 'pointerdown', 2, 60, 10); s.clock.t += 600; s.g.update(0.6, 0.6);
   s.ev(s.window, 'pointerup', 2, 60, 10); s.ev(s.window, 'pointerup', 1, 10, 10);
   assert.deepEqual(s.log.filter(x => x === 'hold' || x === 'tap'), []);
 });
 test('2f: bindGesture: payloads, uncapped: false, cancel, a slow tap, ignored buttons and dispose (#59)', () => {
   const got = [], s = setup({ uncapped: false, drag: d => got.push(['drag', d.phase, d.dx, d.dy]), pinch: p => got.push(['pinch', p.phase, +p.scale.toFixed(3), +p.rotate.toFixed(3), p.panX, p.panY]) });
-  s.ev(s.el, 'pointerdown', 1, 10, 10); for (let i = 0; i < 5; i++) s.g.update(0.1, 0.3); s.ev(s.window, 'pointerup', 1, 10, 10);
-  assert.deepEqual(s.log, []); // capped 0.5 s (raw 1.5 s ignored): no hold, and too slow for a tap
+  s.ev(s.el, 'pointerdown', 1, 10, 10); for (let i = 0; i < 5; i++) { s.clock.t += 100; s.g.update(0.1, 0.3); } s.ev(s.window, 'pointerup', 1, 10, 10);
+  assert.deepEqual(s.log, []); // 0.5 s down to up: no hold (1 s) and too slow for a tap (0.45 s); uncapped: false changes nothing (#109)
   s.ev(s.el, 'pointerdown', 1, 10, 10); s.ev(s.window, 'pointermove', 1, 30, 25); s.g.update(0.016); s.g.update(0.016); s.ev(s.window, 'pointermove', 1, 40, 50); s.g.update(0.016);
   s.ev(s.window, 'pointercancel', 1);
   assert.deepEqual(got.splice(0), [['drag', 'start', 0, 0], ['drag', 'move', 20, 15], ['drag', 'move', 30, 40], ['drag', 'end', 30, 40]]); // one move per update, only when it moved

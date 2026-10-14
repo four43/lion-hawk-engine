@@ -102,19 +102,21 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       left = r.left; await unblocked('step', t0, timeout);
     }
   };
-  // steps until no load is active, waiting out view.wait blocks; returns the steps taken
+  // steps until no load is active, waiting out view.wait blocks; returns the steps taken. #100: commands pending at the call
+  // are delivered at the next step and may start a load, so that step is taken first (s0: the step it must leave; -1 none)
   const untilLoaded = async ({ maxSteps = 1200, timeout = 30000 } = {}) => {
-    const t0 = Date.now(); let k = 0;
+    const t0 = Date.now(); let k = 0, s0 = null;
     for (;;) {
-      const r = await ev(({ k, maxSteps, stalled }) => {
+      const r = await ev(({ k, maxSteps, stalled, s0 }) => {
         const e = window.engine, blocked = new Function('e', `return ${stalled}`);
+        if (s0 === null) s0 = e.commands.pending > 0 ? e.time.step : -1;
         for (; k <= maxSteps; k++) {
-          if (!e.loading.active) { e.render(0); return { k }; }
-          if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k }; } e.stepN(1); }
+          if (!e.loading.active && e.time.step !== s0) { e.render(0); return { k }; }
+          if (k < maxSteps) { if (blocked(e)) { e.render(0); return { wait: true, k, s0 }; } e.stepN(1); }
         }
         e.render(0); return { fail: true, k, step: e.state().step, scene: e.scene.name, overlays: [...e.scene.overlays], events: e.events.since(0).slice(-8) };
-      }, { k, maxSteps, stalled });
-      if (r.wait) { k = r.k; await unblocked('untilLoaded', t0, timeout); continue; }
+      }, { k, maxSteps, stalled, s0 });
+      if (r.wait) { k = r.k; s0 = r.s0; await unblocked('untilLoaded', t0, timeout); continue; }
       if (r.fail) throw new Error(formatFailure('untilLoaded', r, maxSteps));
       return r.k;
     }
@@ -262,7 +264,7 @@ async function open(browser, url, { preset = 'desktop', seed, scene, args, query
 }
 
 // [T-20] n pages joined through one Node in-memory hub (lion-hawk/net's bridgeTransport on the page side, N-2). Page i opens
-// with ?lh-test&lh-bridge=host|guest (page 0 is the host) and argsOf(i, name) ?? args; the game binds its port to
+// with ?lh-test=render (render: 'manual', #107; pass render: 'auto' to opt out) and ?lh-bridge=host|guest (page 0 is the host) and argsOf(i, name) ?? args; the game binds its port to
 // bridgeTransport() when it sees ?lh-bridge. room.step(n) does, n times, what mp() does: advance the hub clock by 1000 / hz,
 // tick the hub, deliver each page's hub events in order, then step every open page once (manual mode: deterministic), waiting
 // after each page's step until Node has every send it made. Closing a page's driver leaves the hub for it.
@@ -284,7 +286,7 @@ export function bridgeEnd(net) {
     } };
   return end;
 }
-export async function peers(browser, url, n, { link = {}, preset = 'desktop', seed = 1, args, argsOf, query = {}, timeout = 10000, ...rest } = {}) {
+export async function peers(browser, url, n, { link = {}, preset = 'desktop', seed = 1, args, argsOf, query = {}, timeout = 10000, render = 'manual', ...rest } = {}) {
   if (!Number.isInteger(n) || n < 1) throw new Error('peers: n must be a positive integer');
   const hub = createMemoryHub({ rng: rng(seed).fork('peers.link').next, ...link }), list = [];
   let k = 0, hz = null;
@@ -315,7 +317,7 @@ export async function peers(browser, url, n, { link = {}, preset = 'desktop', se
       }, { isHost: !i, id: net.id, hostId: net.hostId, sent: 0 });
     };
     const a = argsOf ? argsOf(i, name) : args;
-    p.game = await open(browser, url, { ...rest, preset, seed, args: a, query: { ...query, 'lh-bridge': role } }, prepare);
+    p.game = await open(browser, url, { ...rest, render, preset, seed, args: a, query: { ...query, 'lh-bridge': role } }, prepare); // #107: manual by default
     const close = p.game.close;
     p.game.close = async () => { if (p.closed) return; p.closed = p.end.closed = true; hub.leave(net.id, 'left'); await close(); };
     list.push(p);
