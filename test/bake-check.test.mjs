@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { bake, ENGINE_VERSION } from '../tools/bake/index.js';
-import { copyFixture, FIXTURE } from './helpers/bakeGame.mjs';
+import { copyFixture, changeRegistry, FIXTURE } from './helpers/bakeGame.mjs';
 import { build } from './fixtures/models/make.mjs';
 
 const quiet = () => {};
@@ -34,10 +34,10 @@ test('3d: --check reports a changed, added or removed source, the registry hash 
   const phys = JSON.parse(readFileSync(join(dir2, 'baked/phys.json'), 'utf8'));
   const [maj, min] = ENGINE_VERSION.split('.');
   writeFileSync(join(dir2, 'baked/phys.json'), JSON.stringify({ ...phys, engine: `${maj}.${Number(min) + 1}.0` }));
-  writeFileSync(join(dir2, 'materials.js'), readFileSync(join(dir2, 'materials.js'), 'utf8').replace(/hash: '[0-9a-f]+'/, "hash: 'abcdef01'"));
+  const newHash = changeRegistry(dir2);
   assert.deepEqual((await bake({ game: dir2, check: true, log: quiet })).stale.map(s => s.why),
-    [`registry hash ${phys.materials} → abcdef01`, `engine ${maj}.${Number(min) + 1}.0 → ${ENGINE_VERSION}`]);
-  writeFileSync(join(dir2, 'baked/phys.json'), JSON.stringify({ ...phys, engine: `${maj}.${min}.99`, materials: 'abcdef01' }));   // a patch bump is not stale
+    [`registry hash ${phys.materials} → ${newHash}`, `engine ${maj}.${Number(min) + 1}.0 → ${ENGINE_VERSION}`]);
+  writeFileSync(join(dir2, 'baked/phys.json'), JSON.stringify({ ...phys, engine: `${maj}.${min}.99`, materials: newHash }));   // a patch bump is not stale
   assert.equal((await bake({ game: dir2, check: true, log: quiet })).ok, true);
   rmSync(join(dir2, 'baked/phys.json'));
   const noPhysLogs = [];
