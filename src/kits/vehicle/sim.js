@@ -42,9 +42,11 @@ export function createVehicle(world, e, opts = {}) {
   if (!engine) fail('the World has no engine (world.engine): create vehicles on a scene World');
   if (!e?.body) fail(`'${label(e)}' has no body`);
   if (!e.body.isDynamic()) fail(`'${label(e)}' needs a dynamic body`);
-  const { wheels: specs, rayGroups, forward = 'x' } = opts;
+  const { wheels: specs, rayGroups, forward = 'x', terrain = null, tyre = 'rubber', grip = false } = opts;
   if (!Array.isArray(specs) || specs.length === 0) fail(`'${label(e)}' needs at least one wheel`);
   if (!Object.hasOwn(AXIS, forward)) fail(`forward must be 'x' or 'z' (got ${forward})`);
+  const reg = world.materials;
+  if (!reg.has(tyre)) fail(`unknown tyre material '${tyre}'`);
   const mask = rayMask(world, rayGroups);
   const points = specs.map((s, i) => {
     const at = s.at ?? (s.socket !== undefined ? e.sockets?.[s.socket]?.p : undefined);
@@ -70,8 +72,19 @@ export function createVehicle(world, e, opts = {}) {
       material: null, pair: null, friction: 1, suspension: 0, steering: 0, load: 0 };
   });
 
+  // The ground under a wheel (M-10): the terrain's materialAt at the contact point when the ray hit the terrain,
+  // else the hit collider's material. The pair (tyre, ground) is the registry's cached frozen entry (D4).
+  const tHandle = terrain ? terrain.entity.colliders[0].collider.handle : -1;
+  const ground = (i, w) => {
+    if (!w.inContact) { w.material = null; w.pair = null; w.friction = 1; return; }
+    const hit = vc.wheelGroundObject(i), h = hit ? hit.handle : -1;
+    const id = terrain && h === tHandle ? terrain.materialAt(w.point.x, w.point.z) : h >= 0 ? (world.materialOf(h) ?? null) : null;
+    w.material = id;
+    w.pair = id ? reg.pair(tyre, id) : null;
+    w.friction = w.pair ? w.pair.friction : 1;
+  };
   const car = {
-    controller: vc, entity: e, wheels, removed: false,
+    controller: vc, entity: e, wheels, tyre, removed: false,
     set(i, c) {
       if (!(i >= 0 && i < n)) fail(`wheel ${i} out of range 0..${n - 1}`);
       const k = i * C;
@@ -85,9 +98,9 @@ export function createVehicle(world, e, opts = {}) {
     // called by VEHICLE_SYSTEM once per step; games do not call it
     update(dt) {
       for (let i = 0; i < n; i++) {
-        const k = i * C;
+        const k = i * C, g = grip ? wheels[i].friction : 1; // the last step's pair friction; x 1 keeps values bit-exact
         vc.setWheelSteering(i, ctl[k]); vc.setWheelEngineForce(i, ctl[k + 1]); vc.setWheelBrake(i, ctl[k + 2]);
-        vc.setWheelFrictionSlip(i, ctl[k + 3]); vc.setWheelSideFrictionStiffness(i, ctl[k + 4]);
+        vc.setWheelFrictionSlip(i, ctl[k + 3] * g); vc.setWheelSideFrictionStiffness(i, ctl[k + 4] * g);
       }
       vc.updateVehicle(dt, undefined, mask); // the controller already leaves its own chassis out of the wheel rays
       for (let i = 0; i < n; i++) {
@@ -95,6 +108,7 @@ export function createVehicle(world, e, opts = {}) {
         w.inContact = vc.wheelIsInContact(i);
         vc.wheelContactPoint(i, w.point); vc.wheelContactNormal(i, w.normal);
         w.suspension = vc.wheelSuspensionLength(i) ?? 0; w.steering = vc.wheelSteering(i) ?? 0; w.load = vc.wheelSuspensionForce(i) ?? 0;
+        ground(i, w);
       }
     },
   };
