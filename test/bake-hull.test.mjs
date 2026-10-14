@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { hull, decimate } from '../tools/bake/hull.js';
 
 const cube = [];
@@ -34,4 +35,21 @@ test('3d: decimate keeps at most max support points, all from the input, and the
   assert.equal(hull(d).points.length, d.length);   // every kept point is a hull vertex
   assert.deepEqual(decimate(cube, 64), cube);       // under the cap: unchanged
   assert.deepEqual(sorted(hull([...pts].reverse()).points), sorted(h.points));
+});
+test('the hull of Kenney car-kit tractor wheel-back-right (672 points, a near-coplanar rim) finishes closed and convex, then caps at 64', { timeout: 20000 }, () => {
+  const pts = JSON.parse(readFileSync(new URL('./fixtures/hull-wheel-back-right.json', import.meta.url), 'utf8'));
+  const h = hull(pts);
+  assert.ok(h, 'a volume');
+  assert.equal(h.tris.length, 2 * h.points.length - 4, 'a closed triangulated sphere (Euler)');
+  const edges = new Set();
+  for (const [a, b, c] of h.tris) for (const [i, j] of [[a, b], [b, c], [c, a]]) { assert.ok(!edges.has(`${i},${j}`), 'each directed edge once'); edges.add(`${i},${j}`); }
+  for (const [i, j] of [...edges].map(e => e.split(','))) assert.ok(edges.has(`${j},${i}`), 'every edge has its twin');
+  const P = h.points, scale = 1e-6;
+  for (const [a, b, c] of h.tris) {
+    const u = P[b].map((v, k) => v - P[a][k]), w = P[c].map((v, k) => v - P[a][k]);
+    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], l = Math.hypot(...n);
+    for (const p of pts) assert.ok(n.reduce((s, v, k) => s + v * (p[k] - P[a][k]), 0) / l <= scale, 'every input point is inside');
+  }
+  const capped = hull(decimate(h.points, 64));
+  assert.ok(capped && capped.points.length <= 64);
 });
