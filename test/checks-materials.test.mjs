@@ -25,6 +25,7 @@ test('a hash mismatch alone fails; a game without models has nothing to compare'
   const none = materials(physGame({ defs: { models: undefined } }));
   assert.deepEqual(none, { ok: true, missing: [], hash: { phys: null, registry: '5ca1ab1e', ok: true } });
 });
-test('a game without defs.materials is refused until the base library is the default (Task 17)', () => {
-  assert.throws(() => materials(physGame({ defs: { materials: undefined } })), /checks\.materials: the game has no defs\.materials/);
+test('a game without defs.materials is checked against the base library', () => {
+  const r = materials(physGame({ defs: { materials: undefined, models: undefined } }), { inline: [{ material: 'shell' }] });
+  assert.deepEqual(r.missing, [{ where: 'inline[0]', material: 'shell' }]);
 });

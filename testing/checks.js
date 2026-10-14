@@ -3,6 +3,8 @@ import v8 from 'node:v8';
 import vm from 'node:vm';
 import { createEngine } from '../src/core/engine.js';
 import { headless } from './headless.js';
+import { defineMaterials } from '../src/defs/materials.js';
+import { materialRefs } from '../src/defs/sidecar.js';
 import { scanPurity } from './purity.js';
 
 // input (controller ruling): a function (step) → snapshot, a named policy of the game, or a constant snapshot
@@ -81,12 +83,14 @@ export function zeroAlloc(game, { steps = 10000, warm = 600, seed = 1, scene, ar
 // [T-14] material references: sidecar colliders and the inline entries a game lists, plus the registry hash phys.json
 // was baked against. A missing one would also throw at spawn; this names all of them at once.
 export function materials(game, { inline = [] } = {}) {
-  const reg = game.defs?.materials;
-  if (!reg) throw new Error('checks.materials: the game has no defs.materials');
+  const reg = game.defs?.materials ?? defineMaterials({});
   const phys = game.defs?.models ?? null, missing = [];
-  for (const [id, sc] of Object.entries(phys?.models ?? {})) {
-    (sc.colliders ?? []).forEach((c, i) => { if (!reg.has(c.material)) missing.push({ where: `models.${id}.colliders[${i}]`, material: c.material }); });
-  }
+  // materialRefs keys by material, sorted; the report keeps sidecar order (model, collider index)
+  const refs = [];
+  for (const [material, locs] of Object.entries(phys ? materialRefs(phys) : {})) if (!reg.has(material)) for (const loc of locs) refs.push({ where: `models.${loc}`, material });
+  const order = Object.entries(phys?.models ?? {}).flatMap(([id, sc]) => sc.colliders.map((_, i) => `models.${id}.colliders[${i}]`));
+  refs.sort((x, y) => order.indexOf(x.where) - order.indexOf(y.where));
+  missing.push(...refs);
   inline.forEach((c, i) => { if (!reg.has(c.material)) missing.push({ where: `inline[${i}]`, material: c.material }); });
   const hash = { phys: phys?.materials ?? null, registry: reg.hash, ok: phys === null || phys.materials === reg.hash };
   return { ok: missing.length === 0 && hash.ok, missing, hash };

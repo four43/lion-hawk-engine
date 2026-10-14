@@ -9,6 +9,8 @@ import { createGroups } from '../physics/groups.js';
 import { shapeDesc, materialFor, applyMaterial } from '../physics/colliders.js';
 import { heightfieldDesc } from '../physics/heightfield.js';
 import { createEventDrain } from '../physics/events.js';
+import { defineMaterials } from '../../defs/materials.js';
+import { validateCollider } from '../../defs/sidecar.js';
 import { qFromYaw, qnorm } from '../../core/math.js';
 
 let SERIAL = 0; // process-wide: a new World never reuses an old World's serial (the view keys on it, S-3)
@@ -32,10 +34,13 @@ const partPose = () => ({ p: { x: 0, y: 0, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 }
 const F64 = new Float64Array(1), U32 = new Uint32Array(F64.buffer);
 const mix = (h, v) => { F64[0] = v; h = Math.imul(h ^ U32[0], 0x01000193); return Math.imul(h ^ U32[1], 0x01000193); };
 
+let BASE = null; // §4.1: defs.materials defaults to the base library only; built once, on first need
+const baseRegistry = () => (BASE ??= defineMaterials({}));
+
 export function createWorld(engine, opts = {}) {
   const game = engine.game, phys = game.physics ?? {}, hz = game.sim.hz;
   const R = opts.rapier !== undefined ? opts.rapier : phys.rapier ?? null;
-  const registry = opts.materials !== undefined ? opts.materials : game.defs?.materials ?? null;
+  const registry = opts.materials != null ? opts.materials : game.defs?.materials ?? baseRegistry();
   const sidecars = (opts.models !== undefined ? opts.models : game.defs?.models)?.models ?? {};
   const groups = createGroups(opts.groups ?? phys.groups ?? []);
   const ph = R ? createPhysics(R, { gravity: opts.gravity ?? phys.gravity, hz, params: opts.params ?? phys.params, timer: opts.timer ?? null }) : null;
@@ -138,6 +143,9 @@ export function createWorld(engine, opts = {}) {
         if (c.p !== undefined) { if (!isVec(c.p, 3)) throw new Error('p must be [x, y, z]'); d.setTranslation(c.p[0], c.p[1], c.p[2]); }
         if (c.q !== undefined) { if (!isVec(c.q, 4)) throw new Error('q must be [x, y, z, w]'); d.setRotation({ x: c.q[0], y: c.q[1], z: c.q[2], w: c.q[3] }); }
       } catch (err) { fail(`collider ${i} (${part}): ${err.message}`); }
+      // 3b-R5: an inline entry gets 3b's full schema check (after 3c's own, so their messages stand); the resolved id stands in
+      // for a material that came from desc.material.
+      if (desc.colliders !== undefined) validateCollider(c.material === id ? c : { ...c, material: id }, { inline: true, materials: registry, where: `spawn '${L}'`, path: `colliders[${i}]` });
       applyMaterial(ph.R, d, m, density).setCollisionGroups(mask);
       let ev = 0;
       if (desc.sensor === true) { d.setSensor(true); ev |= ph.R.ActiveEvents.COLLISION_EVENTS; }

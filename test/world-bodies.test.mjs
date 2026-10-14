@@ -107,9 +107,12 @@ test('spawn errors name the desc and leave nothing behind', () => {
     assert.equal(w.spawn(ball('pet')).id, 1);
   } finally { w.dispose(); }
 });
-test('a collider needs a registry: without one the spawn says so', () => {
+test('without a registry the base library applies: base ids resolve, game ids do not', () => {
   const w = createWorld(stubEngine({ materials: null }));
-  try { assert.throws(() => w.spawn({ model: 'crate', body: 'dynamic' }), /world: 'crate' collider 0 \(body\) needs a material registry: set defs\.materials/); } finally { w.dispose(); }
+  try {
+    assert.equal(w.spawn({ tags: ['ok'], body: 'dynamic', colliders: [{ shape: 'sphere', r: 0.3, material: 'rubber' }] }).colliders[0].material, 'rubber');
+    assert.throws(() => w.spawn({ model: 'cart', body: 'dynamic' }), /world: 'cart' unknown material 'shell' on collider 0 \(body\)/);
+  } finally { w.dispose(); }
 });
 test('despawn frees the body, its colliders and owned joints; maps and counters follow (E-7)', () => {
   const w = make();
