@@ -40,5 +40,7 @@ test('3d: --check reports a changed, added or removed source, the registry hash 
   writeFileSync(join(dir2, 'baked/phys.json'), JSON.stringify({ ...phys, engine: `${maj}.${min}.99`, materials: 'abcdef01' }));   // a patch bump is not stale
   assert.equal((await bake({ game: dir2, check: true, log: quiet })).ok, true);
   rmSync(join(dir2, 'baked/phys.json'));
-  assert.deepEqual((await bake({ game: dir2, check: true, log: quiet })).stale, [{ id: '*', why: 'no phys.json' }]);
+  const noPhysLogs = [];
+  assert.deepEqual((await bake({ game: dir2, check: true, log: m => noPhysLogs.push(m) })).stale, [{ id: '*', why: 'no phys.json' }]);
+  assert.deepEqual(noPhysLogs, ['stale: *: no phys.json']);
 });

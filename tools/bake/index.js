@@ -72,7 +72,7 @@ export async function bake({ game = '.', ids = [], check = false, log = console.
   for (const id of ids) if (!src.has(id)) throw new Error(`bake: ${id}: no such model in ${cfg.bake.src}`);
   if (check) {
     const stale = [], phys = prev.phys;
-    if (!phys) return { ok: false, baked: [], stale: [{ id: '*', why: 'no phys.json' }] };
+    if (!phys) { const stale = [{ id: '*', why: 'no phys.json' }]; log(`stale: *: no phys.json`); return { ok: false, baked: [], stale }; }
     if (phys.materials !== registry.hash) stale.push({ id: '*', why: `registry hash ${phys.materials} → ${registry.hash}` });
     if (minor(phys.engine) !== minor(ENGINE_VERSION)) stale.push({ id: '*', why: `engine ${phys.engine} → ${ENGINE_VERSION}` });
     for (const [id, s] of src) {
