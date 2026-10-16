@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.3 — 2026-10-16
+
+- `world.joint(a, b, { type: 'spherical' | 'revolute' | 'fixed' | 'prismatic', a: [x, y, z], b: [x, y, z], axis?, limits?: [lo, hi] })` builds the JointData from the injected Rapier (raw JointData still works; an unknown type, bad anchors, a missing or zero axis, or bad limits throw); net: every removal frame for an owner kind (the repeats too) is forgotten by the store and a re-bound player number drops its old relay and pending removals, so a player who reuses a number with a lower clock replicates again; `mp().addPeer({ wall0 })`.
+
 ## 0.10.2 — 2026-10-14
 
 - Fixes for the Rally port: view sync binds `partXf` nodes (and checks their names) against whatever object the create hooks leave, including one a hook returns for an undrawn entity, one that replaces the model clone, and one from a hook added later; a render before an entity's first step draws its parts at the nodes' rest pose, and `partXf` in a spawn desc (or `world.add`) may be `{ name: { p, q } | null }` to seed curr and prev; `mc.depth(material)` returns a cached `MeshDepthMaterial` (RGBA packing) for `mesh.customDepthMaterial` that runs the material's WIND and FUR displacement on the same uniforms and its `extend()` patches with `{ depth: true }` (patches now receive a third argument `{ depth }`).

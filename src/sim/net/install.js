@@ -129,9 +129,11 @@ export function installNet(engine) {
     if (k.remote === 'driven') { r.queue.offer(rec.input); correct(r, rec); }
     if (k.remote === 'driven' || r.fc) apply(r, rec, null);
   }
-  function removed(k, id) {
-    const e = W.byKey.get(keyOf(k, id)); if (e) despawnRemote(e);
-    if (k.authority === 'owner') W.store.forget(k.name, id); // a new player with this number starts a fresh (lower) clock
+  function removed(k, id) { const e = W.byKey.get(keyOf(k, id)); if (e) despawnRemote(e); }
+  // a removed owner object leaves no store entry: a new player with this number starts a fresh (lower) clock. Every removal
+  // frame (the REPEAT copies too, and one for an object never seen) is forgotten here, so none leaves a stale sender time behind.
+  function forgetRemoved(f) {
+    for (const k of ownerKinds) { const g = f.groups.get(k.name); if (g) for (const id of g.removed) W.store.forget(k.name, id); }
   }
 
   // ---- the host's relay (N-10, C-3): each guest's newest owner records, passed on with that guest's clock ----
@@ -194,7 +196,13 @@ export function installNet(engine) {
       if (n === 0) return unbind(peer);
       if (!Number.isInteger(n) || n < 2 || n > cfg.maxSender) throw new Error(`net: player number must be 2..${cfg.maxSender} (got ${n})`);
       for (const [p, m] of players) if (m === n && p !== peer) throw new Error(`net: player ${n} is already bound to ${p}`);
-      players.set(peer, n); if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
+      const again = players.get(peer) === n; players.set(peer, n);
+      if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
+      if (W && !again) { // a reused number starts fresh: no old relay clock, no pending removals, no store entry
+        W.fwd.delete(n);
+        for (let j = W.gone.length - 1; j >= 0; j--) if (W.gone[j].n === n) W.gone.splice(j, 1);
+        for (const k of ownerKinds) W.store.forget(k.name, n);
+      }
     },
     find(name, netId) {
       const k = reg.byName.get(name); if (!k) throw new Error(`net: unknown kind '${name}'`);
@@ -240,6 +248,7 @@ export function installNet(engine) {
     if (role === 'host') keepForRelay(f);
     const ch = W.store.apply(f);
     for (let i = 0; i < ch.length; i++) { const c = ch[i], k = reg.byName.get(c.kind); if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); }
+    forgetRemoved(f);
   });
 
   // ---- every step: remote poses, driven playout and nudges (N-12..N-14) ----

@@ -314,11 +314,40 @@ export function createWorld(engine, opts = {}) {
     (r.own ??= []).push(fn);
     return () => { const i = r.own ? r.own.indexOf(fn) : -1; if (i >= 0) r.own.splice(i, 1); };
   }
-  // §4.5 joints: raw Rapier joint data (L-1), freed when either entity despawns (Tractor's hitch)
-  function joint(a, b, data) {
+  // §4.5 joints: a descriptor { type, a, b, axis?, limits? } built from the injected Rapier, or raw Rapier joint data (L-1);
+  // freed when either entity despawns (Tractor's hitch)
+  const JOINT_TYPES = ['spherical', 'revolute', 'fixed', 'prismatic'];
+  const vec3 = (v, what) => {
+    if (!isVec(v, 3) || !v.every(Number.isFinite)) throw new Error(`world.joint: ${what} must be [x, y, z] of finite numbers, got ${JSON.stringify(v)}`);
+    return { x: v[0], y: v[1], z: v[2] };
+  };
+  function jointData(d) {
+    if (!JOINT_TYPES.includes(d.type)) throw new Error(`world.joint: unknown type ${JSON.stringify(d.type)} (one of ${JOINT_TYPES.join(', ')})`);
+    const A = vec3(d.a, 'anchor a'), B = vec3(d.b, 'anchor b'), J = ph.R.JointData, axial = d.type === 'revolute' || d.type === 'prismatic';
+    if (!axial && d.axis !== undefined) throw new Error(`world.joint: a ${d.type} joint takes no axis`);
+    if (!axial && d.limits !== undefined) throw new Error(`world.joint: a ${d.type} joint takes no limits`);
+    let data;
+    if (d.type === 'spherical') data = J.spherical(A, B);
+    else if (d.type === 'fixed') data = J.fixed(A, { x: 0, y: 0, z: 0, w: 1 }, B, { x: 0, y: 0, z: 0, w: 1 });
+    else {
+      if (d.axis === undefined) throw new Error(`world.joint: a ${d.type} joint needs an axis [x, y, z]`);
+      const X = vec3(d.axis, 'axis'), n = Math.hypot(X.x, X.y, X.z);
+      if (!(n > 0)) throw new Error('world.joint: axis must be non-zero');
+      data = J[d.type](A, B, { x: X.x / n, y: X.y / n, z: X.z / n });
+    }
+    if (d.limits !== undefined) {
+      const L = d.limits;
+      if (!Array.isArray(L) || L.length !== 2 || !L.every(Number.isFinite) || L[0] > L[1]) throw new Error(`world.joint: limits must be [lo, hi] finite with lo <= hi, got ${JSON.stringify(L)}`);
+      data.limitsEnabled = true; data.limits = [L[0], L[1]];
+    }
+    return data;
+  }
+  function joint(a, b, desc) {
     live();
     if (!a?.body || !b?.body) throw new Error('world.joint: both entities need a body');
     mine(a, 'joint'); mine(b, 'joint');
+    if (desc === null || typeof desc !== 'object') throw new Error('world.joint: needs a descriptor { type, a, b, axis?, limits? } or Rapier JointData');
+    const data = desc instanceof ph.R.JointData || typeof desc.jointType === 'number' ? desc : jointData(desc);
     const j = ph.world.createImpulseJoint(data, a.body, b.body, true), rec = { on: true };
     let offA, offB; // both entities drop the closure when the joint goes, so a long-lived one holds none for dead joints
     const free = () => { offA(); offB(); if (!rec.on) return; rec.on = false; if (ph.world && j.isValid()) ph.world.removeImpulseJoint(j, true); };

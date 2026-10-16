@@ -16,9 +16,9 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
   const at = clock ?? (() => hub.now), list = [], reg = createRegistry(game.net.kinds, { maxSender: game.net.maxSender });
   const kindOf = (name, what) => { const k = reg.byName.get(name); if (!k) throw new Error(`mp: ${what}: unknown kind '${name}'`); return k; };
   let k = 0; // hub.now is k * 1000 / hz, the engines' own virtual-wall formula: peers created at the start are exact; a late peer's wall0 + m * 1000 / hz can be an ulp off (field note #93)
-  const addPeer = () => {
+  const addPeer = ({ wall0 = hub.now } = {}) => { // wall0: a peer whose clock starts elsewhere (a rejoin with a lower clock)
     const index = list.length, name = index ? `guest${index}` : 'host';
-    const h = headless(game, { seed, args: argsOf(index, name), record, wall0: hub.now });
+    const h = headless(game, { seed, args: argsOf(index, name), record, wall0 });
     const net = index ? hub.join() : hub.host();
     const port = createPort(h.engine, { transport: net, role: index ? 'guest' : 'host', clock: at, onWarn: onWarn && ((kind, e) => onWarn(p, kind, e)) });
     const p = { index, name, h, engine: h.engine, net, port, dropped: false }; list.push(p); return p;

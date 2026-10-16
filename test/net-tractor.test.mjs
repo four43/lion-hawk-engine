@@ -54,3 +54,22 @@ test('3i: after a guest\'s world.clear() a replicated train comes back with its 
   assert.equal(gw.rapier.impulseJoints.len(), 2, 'its own hitch and the replica\'s, made again by spawned');
   assert.ok(gw.net.find('animal', 1) && gw.net.find('tree', 7) && gw.net.find('player', 1), 'bodiless and data kinds too');
 });
+test('3i: a player number reused after a leave, with a lower clock, replicates again: repeated removals leave no stale entry (0.10.3)', () => {
+  const w = mp(farmlet, { peers: 3, argsOf: i => ({ n: i === 3 ? 2 : i + 1 }) }); // peer 3 rejoins as player 2
+  w.seconds(2, (p, i) => i === 1 ? { thr: 1 } : null); // player 2 joins and moves
+  const H = w.host.h.world.net, G3 = w.peers[2].h.world.net;
+  assert.ok(G3.find('train', 2), 'guest 3 sees the first player 2');
+  const oldClock = w.peers[1].engine.time.wall;
+  w.drop(w.peers[1]); w.seconds(0.5); // player 2 leaves; the host's removal frames repeat (REPEAT) and all arrive
+  assert.equal(H.find('train', 2), undefined); assert.equal(G3.find('train', 2), undefined);
+  w.host.engine.scene.state.next = 1; // the host hands out number 2 again
+  const fresh = w.addPeer({ wall0: 0 }); // a fresh player 2 whose clock is far below the old one's
+  w.seconds(1);
+  assert.ok(fresh.engine.time.wall < oldClock, 'the new clock is lower');
+  assert.deepEqual([...H.players.values()].sort(), [2, 3]);
+  for (const [name, net] of [['host', H], ['guest 3', G3]]) assert.ok(net.find('train', 2), `${name} sees the new player 2's train`);
+  const z = [H, G3].map(n => n.find('train', 2).xf.p.z);
+  w.seconds(1, (p, i) => i === 3 ? { thr: 1 } : null);
+  [H, G3].forEach((n, j) => assert.ok(n.find('train', 2).xf.p.z > z[j] + 1, `the replica moves on ${j ? 'guest 3' : 'the host'}`));
+  assert.deepEqual(w.diverged({ agree: { train: 0.3 } }), []);
+});
