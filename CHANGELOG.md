@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-10-16
+
+- SUBSURFACE is now wrap past the terminator, a view-dependent rim haze and back-lit transmission, all scaled by `BRDF_Lambert` (albedo / π). The old term was π× too strong and covered every lit face, so saturated colours like flesh's `#ff6040` washed whole models red. `subsurface.color` multiplies the albedo (white keeps the surface's hue). Strength 0 compiles no SUBSURFACE program.
+
 ## 0.11.0 — 2026-10-16
 
 - Phase 3 complete.
