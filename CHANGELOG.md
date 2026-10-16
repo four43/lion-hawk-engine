@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0 — 2026-10-16
+
+- Phase 3 complete.
+- All three games (Pig Pens 2.2.0, Rally 0.4.0, Tractor 1.9.0) run fully on the engine.
+
 ## 0.10.3 — 2026-10-16
 
 - `world.joint(a, b, { type: 'spherical' | 'revolute' | 'fixed' | 'prismatic', a: [x, y, z], b: [x, y, z], axis?, limits?: [lo, hi] })` builds the JointData from the injected Rapier (raw JointData still works; an unknown type, bad anchors, a missing or zero axis, or bad limits throw); net: every removal frame for an owner kind (the repeats too) is forgotten by the store and a re-bound player number drops its old relay and pending removals, so a player who reuses a number with a lower clock replicates again; `mp().addPeer({ wall0 })`.
