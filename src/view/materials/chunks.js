@@ -107,15 +107,25 @@ if ( vFurShell > 0.0 ) {
 }`, 'before');
 }
 
-// SUBSURFACE: a wrap-lighting term per directional light, so light bleeds past the terminator (skin, wax, leaves).
-// Physical and standard only (the compiler drops it for lambert).
+// SUBSURFACE: soft translucency per directional light (skin, wax, leaves, pets). Three parts, all energy-scaled like three's own
+// Lambert (BRDF_Lambert: albedo / π), so strength 1 is at most a fraction of the direct diffuse light, never a wash over lit faces:
+//  - wrap: light bleeds a little past the terminator, zero on faces that face the light (so flat lit faces keep their colour);
+//  - rim: a haze on silhouettes (grazing to the view), lit by the light's wrapped side, so edges look slightly translucent;
+//  - back: transmission when the light is behind the surface from the viewer, on the rim only.
+// uSubColor tints the scattered light and multiplies the albedo, so white (the default) keeps the surface's own hue.
+// Physical and standard only (the compiler drops it for lambert, and when strength is 0).
 function subsurface(sh) {
   sh.fragmentShader = inject(sh.fragmentShader, 'common', 'uniform vec3 uSubColor; uniform float uSubStrength;');
   sh.fragmentShader = inject(sh.fragmentShader, 'lights_fragment_end', `#if NUM_DIR_LIGHTS > 0
+vec3 lhV = normalize( vViewPosition );
+float lhRim = pow( 1.0 - saturate( dot( normal, lhV ) ), 3.0 );
 for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
-  float lhNL = dot( geometryNormal, directionalLights[ i ].direction );
-  float lhWrap = max( 0.0, ( lhNL + 0.5 ) / 1.5 ) - max( 0.0, lhNL );
-  reflectedLight.directDiffuse += uSubColor * uSubStrength * lhWrap * directionalLights[ i ].color * diffuseColor.rgb;
+  vec3 lhL = directionalLights[ i ].direction;
+  float lhNL = dot( normal, lhL );
+  float lhWrap = saturate( ( lhNL + 0.4 ) / 1.4 ) - saturate( lhNL );      // only past the terminator
+  float lhBack = pow( saturate( dot( lhV, -lhL ) ), 4.0 );                   // light from behind the surface
+  float lhSss = lhWrap + lhRim * ( 0.6 * saturate( lhNL + 0.4 ) + lhBack );
+  reflectedLight.directDiffuse += uSubStrength * lhSss * directionalLights[ i ].color * BRDF_Lambert( uSubColor * diffuseColor.rgb );
 }
 #endif`);
 }

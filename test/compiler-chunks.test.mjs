@@ -49,6 +49,10 @@ test('each feature declares its uniforms and attributes; patches apply in a fixe
   assert.match(fur.vertexShader, /attribute vec3 furNormal; attribute float furMask; attribute float furShell; uniform float furLen;/);
   assert.match(fur.fragmentShader, /uniform float furDensity; uniform vec3 furTint;/);
   assert.match(p(['SUBSURFACE']).fragmentShader, /uniform vec3 uSubColor; uniform float uSubStrength;[\s\S]*directionalLights\[ i \]/);
+  const sss = p(['SUBSURFACE']).fragmentShader;
+  assert.match(sss, /BRDF_Lambert\( uSubColor \* diffuseColor\.rgb \)/, 'energy-scaled like three\'s Lambert (albedo / π), not raw albedo');
+  assert.match(sss, /lhRim = pow\( 1\.0 - saturate\( dot\( normal, lhV \) \), 3\.0 \)/, 'a view-dependent rim: translucency shows on edges');
+  assert.match(sss, /saturate\( \( lhNL \+ 0\.4 \) \/ 1\.4 \) - saturate\( lhNL \)/, 'wrap only past the terminator: lit faces keep their colour');
   assert.match(p(['WIND']).vertexShader, /uniform float uLhTime; uniform vec2 uWindFade; uniform vec2 uWindAmp;/);
   const a = p(['WIND', 'FUR', 'COVERAGE']), b = p(['COVERAGE', 'FUR', 'WIND']);
   assert.equal(a.vertexShader, b.vertexShader);

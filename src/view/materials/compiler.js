@@ -65,7 +65,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     const look = def.look ?? {}, f = [];
     if (def.coverage) f.push('COVERAGE');
     if (look.fur && o.fur) f.push('FUR');
-    if (look.subsurface && shading !== 'lambert') f.push('SUBSURFACE'); // D5: physical and standard only
+    if (look.subsurface && look.subsurface.strength > 0 && shading !== 'lambert') f.push('SUBSURFACE'); // D5: physical and standard only; off at strength 0
     if (o.wind) f.push('WIND');
     if (o.paint) f.push('PAINT'); // Task 8b: shading-preserving paint slot
     return f;

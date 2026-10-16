@@ -10,6 +10,7 @@ const REG = defineMaterials({
   testMud: { look: { color: '#ff0000', metalness: 0.2, roughness: 0.7, clearcoat: 0.5, side: 'double' }, coverage: { dirt: 1, mud: 0.5 } },
   testFur: { look: { color: '#ffffff', fur: { length: 0.07, shells: 10, density: 34, tint: '#ffeecc' } } },
   testWax: { look: { color: '#ffffff', subsurface: { color: '#ff8866', strength: 0.6 } } },
+  testWaxOff: { look: { color: '#ffffff', subsurface: { color: '#ff8866', strength: 0 } } },
   testBare: { look: { color: '#808080' } },
 });
 const LIB = { physical: ShaderLib.physical, standard: ShaderLib.standard, lambert: ShaderLib.lambert };
@@ -60,6 +61,13 @@ test('cache: same options share one material; each user kind gets its own (M-13 
   assert.equal(a.userData.lhShared, true);
 });
 
+test('subsurface at strength 0 compiles no SUBSURFACE program (a game turning it off pays nothing)', () => {
+  for (const tier of ['physical', 'standard']) {
+    const off = createMaterialCompiler(REG, { shading: tier }).get('testWaxOff');
+    assert.equal(off.defines.SUBSURFACE, undefined, tier);
+    assert.doesNotMatch(off.customProgramCacheKey(), /SUBSURFACE/, tier);
+  }
+});
 test('defines and program keys follow the material (M-11); SUBSURFACE is dropped for lambert', () => {
   for (const tier of ['physical', 'standard', 'lambert']) {
     const mc = createMaterialCompiler(REG, { shading: tier });
