@@ -20,6 +20,7 @@ export function createMemoryHub({ delay = 0, jitter = 0, loss = 0, rng = Math.ra
     e.net = { isHost, id, get hostId() { return hostId; }, on: ev.on, off: ev.off, leave: () => hub.leave(id, 'left'),
       send(to, data, reliable = false) {
         const dst = ends.get(to); if (!dst || !e.up || to === id || (!isHost && to !== hostId)) return; // star: guests reach only the host
+        if (!reliable && !(data instanceof ArrayBuffer)) return; // as roomLink: the fast channel carries only binary
         if (!reliable && rng() < loss) return;
         if (hub.drop?.(id, to, data, reliable)) return; // M-53: a test drops chosen messages (both channels), as a connection change does
         let at = now + delay + (jitter ? rng() * jitter : 0); const k = id + '>' + to;

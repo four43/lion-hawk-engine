@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- View sync: an instanced entity is re-uploaded whenever its drawn pose differs from the one last written, so a still prop moved by `world.place` redraws and a body that stops is drawn where it came to rest (it used to stay at its last interpolated pose); instanced paint finds its `paint-<slot>` on templates the compiler already applied (`userData.lhMat`), so `e.paint` reaches `instanceColor` with real assets.
+- kit-terrain view: each chunk geometry has its own index, so evicting one chunk's LOD no longer frees the index buffer the other chunks at that LOD draw with.
+- Net: a driven record carries `max(INPUT_BATCH, 2 × steps per send)` inputs (the wire allows up to `INPUT_WIRE_MAX` = 64) and the receiver's jitter queue scales with steps per send, so no owner step is skipped when sends are more than 8 steps apart (Rally's 240 Hz at 20 Hz); a driven kind whose sends are too far apart throws at install. A record that cannot encode (an out-of-range field) costs only its kind's frame (`stats.unsent`, warned once) instead of every send; each `onStep` listener runs in its own try, so one that throws no longer starves the port's drain. A JSON message (codec `'json'`) sent on the fast channel goes reliable, since WebRTC's fast channel carries only binary; the memory hub now drops JSON on the fast channel as `roomLink` does.
+
 ## 0.11.1 — 2026-10-16
 
 - SUBSURFACE is now wrap past the terminator, a view-dependent rim haze and back-lit transmission, all scaled by `BRDF_Lambert` (albedo / π). The old term was π× too strong and covered every lit face, so saturated colours like flesh's `#ff6040` washed whole models red. `subsurface.color` multiplies the albedo (white keeps the surface's hue). Strength 0 compiles no SUBSURFACE program.

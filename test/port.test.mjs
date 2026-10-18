@@ -70,3 +70,10 @@ test('2f: peerLeft frees a peer\'s rate set, so a rejoin with the same id gets a
   for (let i = 0; i < 60; i++) t.emit('message', 'g1', { t: 'echo', n: i }, true);
   e.stepN(1); assert.equal(log(e, 'host.echo').length, 120, 'a fresh budget at the same clock time'); assert.equal(p.stats.dropped, 2);
 });
+test('N-3: a JSON-codec message sent on the fast channel goes reliable (the fast channel carries only binary) and arrives', () => {
+  const w = pair(); w.step(2);
+  w.H.net.send(w.gp.transport.id, { t: 'say', n: 999 }); // reliable defaults to false
+  w.step(2);
+  const say = log(w.G, 'guest.say').find(d => d.n === 999);
+  assert.ok(say, 'delivered'); assert.equal(say.reliable, true);
+});

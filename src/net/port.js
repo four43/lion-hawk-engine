@@ -53,7 +53,7 @@ export function createPort(engine, { transport, role, clock = () => performance.
       const { to, data, reliable } = item;
       if (data instanceof ArrayBuffer) return transport.send(to, data, reliable);
       let w; try { w = outW.codec.encode(data.t, data); } catch (e) { stats.unsent++; return warn(`net: not sent (${role} message '${data.t}')`, e); }
-      transport.send(to, w, reliable);
+      transport.send(to, w, reliable || !(w instanceof ArrayBuffer)); // the fast channel carries only binary: JSON (codec 'json') goes reliable
     } catch (e) { stats.unsent++; warn('net: send', e); } // M-44
   };
   offs.push(engine.onStep(e => e.net.drain(send)));

@@ -109,3 +109,10 @@ test('2f: withLag reads an injected clock for its reliable order (N-4)', () => {
   lg.send(h.id, { a: 1 }, true); t += 30; lg.send(h.id, { a: 2 }, true);
   assert.deepEqual(timers, [150, 120], 'the second waits for the first, 30 ms later on the injected clock');
 });
+test('the memory hub drops JSON on the fast channel, as roomLink does (WebRTC carries only binary there), so tests see what production does', () => {
+  const hub = createMemoryHub(), h = hub.host(), g = hub.join(), got = [];
+  h.on('message', (from, d, rel) => got.push([d, rel]));
+  g.send(h.id, { t: 'fast json' }, false); g.send(h.id, { t: 'reliable json' }, true); g.send(h.id, new ArrayBuffer(2), false);
+  hub.tick(1);
+  assert.deepEqual(got.map(([d, rel]) => [d instanceof ArrayBuffer ? 'bytes' : d.t, rel]), [['reliable json', true], ['bytes', false]]);
+});
