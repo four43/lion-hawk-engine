@@ -76,7 +76,9 @@ export function createParticles({ max = 1200, shape = 'cube', geometry = null, m
     if (nLive === 0) { high = 0; next = 0; mesh.count = 0; }
   }
 
-  return { emit, update, mesh, color, get live() { return nLive; } };
+  // the mesh, and the geometry and material made here (a passed-in one is the caller's)
+  function dispose() { mesh.removeFromParent(); mesh.dispose(); if (!geometry) geo.dispose(); if (!material) mesh.material.dispose(); }
+  return { emit, update, mesh, color, dispose, get live() { return nLive; } };
 }
 
 // Ground marks (tyre tracks): a ring of flat quads on one InstancedMesh. add() writes the instance matrix directly
@@ -114,5 +116,6 @@ export function createMarks({ max = 400, width = 0.45, length = 0.9, material = 
     lo = max; hi = -1;
   }
 
-  return { add, update, mesh };
+  function dispose() { mesh.removeFromParent(); mesh.dispose(); geo.dispose(); if (!material) mat.dispose(); } // a passed-in material is the caller's
+  return { add, update, mesh, dispose };
 }

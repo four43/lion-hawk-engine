@@ -52,6 +52,6 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
     },
     cover(i, d, r, s, m) { for (let k = 0; k < parts.length; k++) if (parts[k].coverage) parts[k].inst.cover(i, d, r, s, m); },
     commit() { for (let k = 0; k < parts.length; k++) parts[k].inst.commit(); },
-    dispose() { group.removeFromParent(); for (let k = 0; k < parts.length; k++) parts[k].inst.mesh.dispose(); },
+    dispose() { group.removeFromParent(); for (let k = 0; k < parts.length; k++) parts[k].inst.dispose(); },
   };
 }

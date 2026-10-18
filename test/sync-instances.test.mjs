@@ -49,3 +49,11 @@ test('3g: coverage adds a per-instance vec4 instanceCoverage on a geometry of it
   inst.copy(1, 0); assert.deepEqual([...inst.coverage.array.slice(0, 4)], [0.5, 0, 0.25, 1]);
   assert.throws(() => createInstances({ geometry: geo, material: mat, max: 1 }).cover(0, 1, 0, 0, 0), /cover\(\) needs coverage: true/);
 });
+test('3g: dispose frees the coverage wrapper geometry with only instanceCoverage on it (three frees every attribute listed on a disposed geometry)', () => {
+  const src = new THREE.BoxGeometry(), inst = createInstances({ geometry: src, material: new THREE.MeshBasicMaterial(), max: 4, coverage: true });
+  const wrapper = inst.mesh.geometry; let freed = null;
+  wrapper.addEventListener('dispose', () => { freed = [...Object.keys(wrapper.attributes), ...(wrapper.index ? ['index'] : [])]; });
+  inst.dispose();
+  assert.deepEqual(freed, ['instanceCoverage'], 'the wrapper is disposed, holding only its own buffer');
+  assert.ok(src.attributes.position && src.index, 'the shared template geometry keeps its attributes');
+});

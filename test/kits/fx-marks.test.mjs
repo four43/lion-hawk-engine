@@ -37,3 +37,8 @@ test('marks form a ring; update uploads only the rows written; a zero direction 
   assert.deepEqual(mk.mesh.instanceMatrix.updateRanges, [{ start: 16, count: 16 }]);
   assert.equal(mk.add(0, 0, 0, 0), -1); assert.equal(mk.mesh.count, 3);
 });
+test('dispose takes the marks mesh out of its parent and frees what it made', () => {
+  const m = createMarks({ max: 4 }), scene = new THREE.Scene(); scene.add(m.mesh); let n = 0;
+  for (const r of [m.mesh.geometry, m.mesh.material, m.mesh]) r.addEventListener('dispose', () => n++);
+  m.dispose(); assert.equal(m.mesh.parent, null); assert.equal(n, 3);
+});

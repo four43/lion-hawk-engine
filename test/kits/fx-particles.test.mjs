@@ -79,3 +79,11 @@ test('createParticles refuses a bad shape or size', () => {
   assert.throws(() => createParticles({ shape: 'cone' }), /fx: shape must be 'cube' or 'quad' \(got cone\)/);
   assert.throws(() => createParticles({ max: 0 }), /fx: max must be a positive integer \(got 0\)/);
 });
+test('dispose takes the particle mesh out of its parent and frees the geometry and material it made (not ones passed in)', () => {
+  const own = createParticles({ max: 4 }), scene = new THREE.Scene(); scene.add(own.mesh);
+  const freed = []; for (const r of [own.mesh.geometry, own.mesh.material, own.mesh]) r.addEventListener('dispose', () => freed.push(r.type ?? r.constructor.name));
+  own.dispose(); assert.equal(own.mesh.parent, null); assert.equal(freed.length, 3);
+  const geometry = new THREE.BoxGeometry(), material = new THREE.MeshBasicMaterial(), given = createParticles({ max: 4, geometry, material }); let kept = 0;
+  geometry.addEventListener('dispose', () => kept++); material.addEventListener('dispose', () => kept++);
+  given.dispose(); assert.equal(kept, 0, 'a passed-in geometry and material are the caller\'s');
+});

@@ -4,7 +4,8 @@
 // the whole map and the mesh's bounds would be its first instance's. With `colors` the colour buffer exists from the start, white.
 // With `coverage` (3f's COVERAGE_INSTANCED materials) the mesh gets a per-instance vec4 `instanceCoverage` (dirt, rust, snow,
 // mud; zero) written by cover(i, d, r, s, m). It lives on a geometry of the mesh's own that shares the source's attributes, so
-// the template and plain clones never see it; that wrapper is not disposed (disposing it would free the shared buffers).
+// the template and plain clones never see it. dispose() frees the wrapper holding only instanceCoverage (three frees every
+// attribute a disposed geometry lists, so the shared ones are detached first).
 // Nothing is allocated after create (setting a colour from a CSS string parses it: do that at spawn, not per frame).
 import * as THREE from 'three';
 
@@ -53,6 +54,9 @@ export function createInstances({ geometry, material, max, castShadow = true, re
       if (dirtyC && mesh.instanceColor) { mesh.instanceColor.needsUpdate = true; dirtyC = false; }
       if (dirtyV) { cov.needsUpdate = true; dirtyV = false; }
     },
-    dispose() { mesh.removeFromParent(); mesh.dispose(); }, // geometry and material are shared: not disposed here
+    dispose() { // geometry and material are shared: not disposed here (the coverage wrapper is ours)
+      mesh.removeFromParent(); mesh.dispose();
+      if (cov) { for (const k of Object.keys(geo.attributes)) if (k !== 'instanceCoverage') geo.deleteAttribute(k); geo.setIndex(null); geo.dispose(); }
+    },
   };
 }

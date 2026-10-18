@@ -54,3 +54,8 @@ test('3g: crowd parts that cast shadows get the instanced depth material (X-4), 
   const c = setup().crowd;
   for (const m of c.group.children) assert.equal(m.customDepthMaterial?.name, 'lh.instancedDepth', m.name);
 });
+test('3g: crowd dispose frees each coverage part\'s own wrapper geometry', () => {
+  const c = setup().crowd, cov = c.parts.filter(p => p.coverage); let n = 0;
+  assert.ok(cov.length > 0); for (const p of cov) p.inst.mesh.geometry.addEventListener('dispose', () => n++);
+  c.dispose(); assert.equal(n, cov.length);
+});
