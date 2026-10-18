@@ -2,7 +2,7 @@
 // game-wide command, handled at the next step's input.apply (so a tape records it); everything the sim queued on engine.net goes
 // out after each step. N-3: rate, size and schema checks are applied here to every message, and a game cannot skip them.
 // N-4: every stamp and rate window reads the injected clock. The port never steps the engine.
-import { createRegistry, decodeFrame, frameToJson, isFrame } from '../sim/replica.js';
+import { createRegistry, decodeFrame, frameToJson, isFrame, DECODED } from '../sim/replica.js';
 import { wireCodec } from '../sim/schema.js';
 import { createRate, createWarnOnce } from '../sim/limits.js';
 
@@ -33,7 +33,11 @@ export function createPort(engine, { transport, role, clock = () => performance.
     // N-3, M-50: the rate is counted first, in clock time, before the size check, so an oversized message still uses budget
     if (!(reliable ? frame && r.reliableFrames ? r.reliableFrames : r.reliable : r.fast).allow(at)) return drop('rate', from);
     if (data instanceof ArrayBuffer ? data.byteLength > cfg.maxFrame : !(size(data) <= cfg.maxJson)) return drop('size', from);
-    if (frame) { const f = decodeFrame(data, reg); return f ? issue('net.frame', { frame: frameToJson(f), from, at, reliable }) : drop('frame', from); } // #78: plain JSON for the tape
+    if (frame) { // #78: plain JSON for the game and the tape; the decoded frame rides along for the built-in handler (DECODED)
+      const f = decodeFrame(data, reg); if (!f) return drop('frame', from);
+      const d = { frame: frameToJson(f), from, at, reliable }; Object.defineProperty(d, DECODED, { value: f });
+      try { engine.net.receive('net.frame', d); } catch (e) { drop('command', from, e); } return;
+    }
     const m = inW.codec.decode(data); if (!m) return drop('message', from); // an unknown tag, or not its schema
     issue(inW.types[m.tag], { ...m.data, from, at, reliable }); // #77: from is the transport peer id
   };

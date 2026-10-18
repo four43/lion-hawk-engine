@@ -6,7 +6,7 @@
 // The controller is world.net on every World it sees; a new World resets the per-World state; world.clear() (a new serial on the
 // same World) keeps it and spawns every replica again from its newest record (CI-15).
 // Sim-pure. Everything reads steps, engine.time.wall and command `at` stamps (N-4), so each peer's tape replays alone (#78).
-import { createRegistry, createStore, createTracker, encodeFrame, frameFromJson, REPEAT } from '../replica.js';
+import { createRegistry, createStore, createTracker, encodeFrame, frameFromJson, REPEAT, DECODED } from '../replica.js';
 import { createInterp, lerpPose } from '../interp.js';
 import { createForecast, newPose } from '../forecast.js';
 import { createWarnOnce } from '../limits.js';
@@ -46,7 +46,7 @@ export function installNet(engine) {
   const fresh = () => ({
     store: createStore(kinds), trackers: kinds.map(k => createTracker([k])), lastKey: kinds.map(() => -Infinity),
     byKey: new Map(), remotes: new Map(), list: [], // replicated entities: (kind, netId) -> e, e -> remote state, and the states in spawn order
-    own: new WeakMap(), buckets: kinds.map(() => []), pairs: kinds.map(() => []), // what this peer sends
+    own: new WeakMap(), buckets: kinds.map(() => []), bucketN: kinds.map(() => 0), pairs: kinds.map(() => []), keyG: [], diffG: [], // what this peer sends
     fwd: new Map(), gone: [], // host: each guest's newest owner records to pass on (C-3), and removals of players who left
   });
   function sync() {
@@ -250,7 +250,7 @@ export function installNet(engine) {
   });
   engine.builtin('net.frame', (e, d) => {
     if (role === 'solo' || !self || !sync()) { stats.dropped++; return; }
-    let f; try { f = frameFromJson(d.frame, reg); } catch (err) { stats.dropped++; warn('net: frame', err); return; }
+    let f = d[DECODED]; if (!f) try { f = frameFromJson(d.frame, reg); } catch (err) { stats.dropped++; warn('net: frame', err); return; } // a replayed tape has only the JSON
     if (role === 'host' ? players.get(d.from) !== f.sender : d.from !== hostId) { stats.dropped++; return; } // #77, M-50
     if (f.sender === self) return;
     stats.frames++;
@@ -301,33 +301,38 @@ export function installNet(engine) {
   engine.onStep(() => {
     if (role === 'solo' || !self || !sync()) return;
     const step = engine.time.step, list = world.with('net');
-    for (let i = 0; i < W.buckets.length; i++) W.buckets[i].length = 0;
+    // R-8: buckets, pairs and the group lists are refilled by index and trimmed only when their count changes (length = 0 then
+    // push would drop and regrow their storage every step)
+    for (let i = 0; i < W.buckets.length; i++) W.bucketN[i] = 0;
     for (let i = 0; i < list.length; i++) { // this peer's authority entities: host kinds on the host, its own owner-kind entity everywhere
       const e = list[i], ki = index.get(e.net); if (ki === undefined || W.remotes.has(e)) continue;
       const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : e.netId !== self) continue;
       let o = W.own.get(e);
       if (!o) { const ring = k.remote === 'driven' ? createInputRing(k.input, batch[ki]) : null, rec = newRecord(k); W.own.set(e, o = { e, rec, ring, pair: [e.netId, rec], base: (x, out) => defaultRecord(k, x, out, ring) }); }
       if (o.ring) o.ring.push(step, e.input); // N-13: every step's input, batched per send tick
-      W.buckets[ki].push(o);
+      W.buckets[ki][W.bucketN[ki]++] = o;
     }
+    for (let i = 0; i < W.buckets.length; i++) if (W.buckets[i].length !== W.bucketN[i]) W.buckets[i].length = W.bucketN[i];
     if (role === 'host' ? !players.size : hostId === null) return; // nobody to send to: a joiner's first keyframe has everything
     const time = Math.floor(engine.time.wall) >>> 0;
-    let keyG = null, diffG = null, ownerDue = false;
+    let nKey = 0, nDiff = 0, ownerDue = false; const keyG = W.keyG, diffG = W.diffG;
     for (let i = 0; i < kinds.length; i++) {
       const k = kinds[i]; if (k.authority === 'host' && role !== 'host') continue;
       const key = step - W.lastKey[i] >= keyEvery[i], diff = step % every[i] === 0; if (!key && !diff) continue;
       if (k.authority === 'owner') ownerDue = true;
-      const pairs = W.pairs[i], b = W.buckets[i]; pairs.length = 0;
-      for (let j = 0; j < b.length; j++) { const o = b[j]; o.pair[1] = k.record ? k.record(o.e, o.rec, world, o.base) : o.base(o.e, o.rec); pairs.push(o.pair); }
+      const pairs = W.pairs[i], b = W.buckets[i];
+      for (let j = 0; j < b.length; j++) { const o = b[j]; o.pair[1] = k.record ? k.record(o.e, o.rec, world, o.base) : o.base(o.e, o.rec); pairs[j] = o.pair; }
+      if (pairs.length !== b.length) pairs.length = b.length;
       objs[k.name] = pairs;
       try { // a record that cannot encode (a bad field value) costs this kind's frame only; the next keyframe resends what it held back
-        if (key) { W.lastKey[i] = step; (keyG ??= []).push(...W.trackers[i].key(objs)); }
-        if (diff) { const g = W.trackers[i].diff(objs)[0]; if (!key && (g.records.length || g.removed.length)) (diffG ??= []).push(g); }
+        if (key) { W.lastKey[i] = step; keyG[nKey++] = W.trackers[i].key(objs)[0]; }
+        if (diff) { const g = W.trackers[i].diff(objs)[0]; if (!key && (g.records.length || g.removed.length)) diffG[nDiff++] = g; }
       } catch (err) { stats.unsent++; warn(`net: kind '${k.name}' not sent`, err); }
       objs[k.name] = undefined;
     }
-    if (keyG) sendFrame(true, self, time, keyG, 0);
-    if (diffG) sendFrame(false, self, time, diffG, 0);
+    if (keyG.length !== nKey) keyG.length = nKey; if (diffG.length !== nDiff) diffG.length = nDiff;
+    if (nKey) sendFrame(true, self, time, keyG, 0);
+    if (nDiff) sendFrame(false, self, time, diffG, 0);
     if (role === 'host' && (ownerDue || W.gone.length)) relay(step);
   });
   engine.netPart = ctl;

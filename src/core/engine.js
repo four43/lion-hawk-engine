@@ -275,6 +275,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       outbox.push({ to, data, reliable: reliable === true }); // one item per message
     },
     leave() { outbox.push({ leave: true }); },
+    // a port's own commands (N-3: it built them, plain JSON by construction): queued without command()'s checked deep copy,
+    // which is one walk of the whole frame per received frame. Recording takes command()'s path, so the tape is the same.
+    receive(type, data) { if (rec) engine.command(type, data); else issue(type, data); },
     // in order; a throwing fn keeps the rest. Not re-entrant: a nested drain from fn would re-deliver and empty the
     // queue under the outer loop, so it throws instead
     drain(fn) {

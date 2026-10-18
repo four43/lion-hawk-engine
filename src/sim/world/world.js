@@ -497,6 +497,6 @@ export function createWorld(engine, opts = {}) {
     onDespawn(fn) { despawnFns = [...despawnFns, fn]; return () => { despawnFns = despawnFns.filter(f => f !== fn); }; },
   };
   placer = createPlacer(pool, () => (ph ? ph.world : null), api);
-  drainEvents = createEventDrain({ emit: (type, data) => engine.emit(type, data), hz, entityOf: api.entityOf, materialOf: api.materialOf });
+  drainEvents = createEventDrain({ emit: engine.events?.adopt ? (type, data) => engine.events.adopt(type, data) : (type, data) => engine.emit(type, data), hz, entityOf: api.entityOf, materialOf: api.materialOf }); // each payload is fresh: adopted, not copied (an engine stand-in without events.adopt: emit)
   return api;
 }

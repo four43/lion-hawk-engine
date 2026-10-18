@@ -8,7 +8,7 @@ export const lerpAngle = (a, b, k) => { let d = (b - a) % (Math.PI * 2); if (d >
 export function lerpPose(pa, pb, k, out) {
   out.p.x = lerp(pa.p.x, pb.p.x, k); out.p.y = lerp(pa.p.y, pb.p.y, k); out.p.z = lerp(pa.p.z, pb.p.z, k);
   const a = pa.q, b = pb.q, s = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w < 0 ? -1 : 1;
-  const x = lerp(a.x, s * b.x, k), y = lerp(a.y, s * b.y, k), z = lerp(a.z, s * b.z, k), w = lerp(a.w, s * b.w, k), n = Math.hypot(x, y, z, w) || 1;
+  const x = lerp(a.x, s * b.x, k), y = lerp(a.y, s * b.y, k), z = lerp(a.z, s * b.z, k), w = lerp(a.w, s * b.w, k), n = Math.sqrt(x * x + y * y + z * z + w * w) || 1; // not Math.hypot: it boxes its four doubles (R-8)
   out.q.x = x / n; out.q.y = y / n; out.q.z = z / n; out.q.w = w / n; return out;
 }
 export function createInterp({ size = 32 } = {}) {

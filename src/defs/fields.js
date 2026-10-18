@@ -11,7 +11,7 @@ export const F = {
   fixed: (lo, hi, step) => ({ t: 'fixed', lo, hi, step, n: Math.round((hi - lo) / step) }), // u16 steps from lo; values are clamped into lo..hi
   angle: () => ({ t: 'angle' }), // u16 over a full turn
   quat: () => ({ t: 'quat' }), // 4 x i16, normalized on decode
-  obj: fields => { const bools = boolsOf(fields); if (bools.length > 8) throw new Error('too many bools: ' + bools.length); return { t: 'obj', fields, bools }; },
+  obj: fields => { const bools = boolsOf(fields); if (bools.length > 8) throw new Error('too many bools: ' + bools.length); return { t: 'obj', fields, bools, keys: Object.keys(fields).filter(k => fields[k].t !== 'bool') }; }, // keys: the packed fields in order (replica.js loops them)
   list: (of, max, min = 0) => ({ t: 'list', of, max, min }), // u8 count
   // an action snapshot (N-8): axes as i16/32767 in the map's key order, then the buttons as flags (8 per byte); decodes to { axis: number, button: boolean }
   actions: map => {
