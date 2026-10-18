@@ -9,6 +9,7 @@
 - Shadows: `mc.apply()` sets a FUR or WIND mesh's `customDepthMaterial` to its `mc.depth()` twin, so swaying grass and fur cast displaced shadows (fur no longer draws every shell undisplaced in the shadow pass); `instancedShadows` keeps a depth material a caster already has; view sync and `createCrowd` carry the twin onto their instanced meshes, and crowd parts now get `INSTANCED_DEPTH` too (X-4).
 - Light rig: `follow()` snaps the shadow box to whole shadow-map texels across the light, so shadow edges no longer shimmer as the followed point moves (the box is within a texel of the point; the sun offset is exact).
 - Warm: with shadows on, `warm()` also compiles the shadow pass's depth programs (three's depth material and `INSTANCED_DEPTH` for every caster kind, the casters' own `customDepthMaterial`s, and `depth: [{ material, use, side }]`), bound to a render target, without fog and at the side the shadow pass will use, so the first shadowed frame compiles nothing (it used to compile every depth program mid-game). `gfx.warm()` passes the compiler's depth twins (`mc.twins()`).
+- `assets.preload(keys, { instanced: [keys] })` makes those models' instanced variants (coverage, depth twins; painted parts warmed with instance colours) before warm, so the first instanced spawn compiles nothing. `warm()` takes `{ material, use }` entries as well as materials. View sync and `createCrowd` share one `instancedPart` helper.
 
 ## 0.11.1 — 2026-10-16
 

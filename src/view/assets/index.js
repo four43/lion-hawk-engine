@@ -6,6 +6,7 @@ import { Vector3, Quaternion } from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { sharedLoader, loadGlb, loadJson } from './loader.js';
 import { decodeAnimTable } from './animTable.js';
+import { instancedPart } from '../instancing/parts.js';
 
 export function createAssets({ manifest, base = './assets/', compiler = null, renderer = null, gfx = null, decoders = {}, fetch = globalThis.fetch } = {}) {
   if (!manifest || manifest.v !== 1 || typeof manifest.models !== 'object') throw new Error(`assets: manifest must be baked/manifest.json with v: 1 (got ${manifest ? `v${manifest.v}` : manifest})`);
@@ -76,13 +77,23 @@ export function createAssets({ manifest, base = './assets/', compiler = null, re
     return p;
   }
 
-  // A-10: resolves once every key is loaded and compiled, then after gfx.warm() (M-12)
-  async function preload(keys) {
+  // A-10: resolves once every key is loaded and compiled, then after gfx.warm() (M-12). instanced: the keys view sync will
+  // draw 'instanced' (or createCrowd): their instanced variants are made now, so warm compiles them (painted parts with
+  // instance colours) instead of the first spawn
+  async function preload(keys, { instanced = [] } = {}) {
     if (disposed) throw new Error('assets: preload after dispose');
     const list = [...new Set(keys)];
     for (const k of list) entry(k);
+    for (const k of instanced) if (!list.includes(k)) throw new Error(`assets: preload { instanced } names '${k}', which is not in keys`);
     await Promise.all(list.map(track));
-    if (gfx?.warm) await gfx.warm();
+    const materials = [], depth = [];
+    if (compiler) for (const k of new Set(instanced)) ready.get(k).scene.traverse(o => {
+      if (!o.isMesh || o.isSkinnedMesh) return;
+      const { holder, paint } = instancedPart(o, compiler), use = paint ? 'instancedColor' : 'instanced';
+      materials.push({ material: holder.material, use });
+      if (holder.customDepthMaterial) depth.push({ material: holder.customDepthMaterial, use, side: holder.material.side });
+    });
+    if (gfx?.warm) await gfx.warm(materials.length ? { materials, depth } : undefined);
   }
 
   function get(key) {

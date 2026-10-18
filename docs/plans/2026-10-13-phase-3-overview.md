@@ -520,7 +520,7 @@ boot(game, view, { canvas, timer, ... });
 
 ```js
 const assets = createAssets({ manifest, base: './assets/', compiler, renderer });
-await view.wait(assets.preload(['tractor', 'pig']));   // A-10; resolves after warm()
+await view.wait(assets.preload(['tractor', 'pig'], { instanced: ['pig'] }));   // A-10; resolves after warm(); instanced: their instanced variants are warmed too
 assets.progress                    // { loaded, total, bytes }
 assets.has(key); assets.get(key)   // → { scene, clips, anim, sockets } (template; throws if not preloaded)
 assets.clone(key, { paint, instanced = false }) → THREE.Object3D   // materials compiled via compiler.apply

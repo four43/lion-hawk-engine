@@ -392,6 +392,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 
 - **[A-9]** There is one shared `GLTFLoader` with the meshopt and KTX2 decoders, and Draco optional. Each URL is loaded once and cached as `Map<url, Promise>`. Instances are clones; skinned meshes use `SkeletonUtils.clone`.
 - **[A-10]** `engine.assets.preload(keys)` drives the loading scene and ends by warming materials ([M-12]).
+  - *Clarification (0.11.2):* `preload(keys, { instanced: [keys] })` names the models drawn `instanced` (or by `createCrowd`). Their instanced variants are made before warm, painted parts as instance-colour users, so the first spawn compiles nothing. With shadows on, warm also compiles the shadow pass's depth programs.
 - **[A-11]** Animation uses `AnimationMixer`. A model may opt into baked animation tables (`bake: { animTable: true }`) for large instanced crowds.
 
 ---

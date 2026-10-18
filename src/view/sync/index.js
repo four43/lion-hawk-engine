@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { instancedShadows, disposeTree } from '../render/hygiene.js';
 import { createInstances } from '../instancing/instances.js';
+import { instancedPart } from '../instancing/parts.js';
 import { newOffset, addFix, fade, applyOffset, active } from './smooth.js';
 
 const SMOOTH_MS = 150; // N-15 default when the kind has no tune.smoothMs
@@ -53,12 +54,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     tpl.traverse(o => {
       if (!o.isMesh) return;
       if (o.isSkinnedMesh) throw new Error(`sync: model '${model}' is skinned; draw it as 'object' or with createCrowd`);
-      // the authored name: a template the compiler already applied has the paint base's material, its paint-<slot> in lhMat
-      const name = o.userData.lhMat?.[0] ?? (typeof o.material?.name === 'string' ? o.material.name : '');
-      const holder = new THREE.Mesh(o.geometry, o.material); holder.name = o.name;
-      if (o.userData.lhMat) holder.userData.lhMat = o.userData.lhMat;
-      compiler.apply(holder, { instanced: true, coverage: true });
-      const paint = name.startsWith('paint-') ? name.slice(6) : null, coverage = holder.material.defines?.COVERAGE_INSTANCED !== undefined;
+      const { holder, paint, coverage } = instancedPart(o, compiler);
       const inst = createInstances({ geometry: o.geometry, material: holder.material, max: START_MAX, colors: !!paint, coverage });
       inst.mesh.name = `${model}:${o.name}`; if (holder.customDepthMaterial) inst.mesh.customDepthMaterial = holder.customDepthMaterial;
       instancedShadows(inst.mesh); root.add(inst.mesh);

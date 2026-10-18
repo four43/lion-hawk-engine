@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { sampleAnimTable, blendAnimTable } from '../assets/animTable.js';
 import { createInstances } from './instances.js';
 import { instancedShadows } from '../render/hygiene.js';
+import { instancedPart } from './parts.js';
 
 const _w = new THREE.Matrix4(), _a = new THREE.Matrix4(), _t = new THREE.Matrix4();
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
@@ -23,8 +24,7 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
   const parts = table.parts.map(pn => {
     const src = asset.scene.getObjectByName(pn);
     if (!src?.isMesh) throw new Error(`createCrowd: part '${pn}' of the anim table is not a mesh in '${name}'`);
-    const holder = new THREE.Mesh(src.geometry, src.material); holder.name = pn; compiler.apply(holder, { instanced: true, coverage: true });
-    const coverage = holder.material.defines?.COVERAGE_INSTANCED !== undefined;
+    const { holder, coverage } = instancedPart(src, compiler);
     const inst = createInstances({ geometry: src.geometry, material: holder.material, max, castShadow, receiveShadow, coverage });
     inst.mesh.name = `${name}:${pn}`; if (holder.customDepthMaterial) inst.mesh.customDepthMaterial = holder.customDepthMaterial;
     instancedShadows(inst.mesh); group.add(inst.mesh);

@@ -128,3 +128,16 @@ test('dispose frees template geometry; afterwards nothing is loaded and preload 
   assert.equal(assets.has('cone'), false);
   await assert.rejects(assets.preload(['cone']), /assets: preload after dispose/);
 });
+test('preload(keys, { instanced }) makes the instanced variants before warm: every material an instanced, painted entity draws was warmed with its mesh kind (M-12)', async () => {
+  const { InstancedMesh, Scene } = await import('three');
+  const { createViewSync } = await import('../src/view/sync/index.js');
+  const { fakeWorld } = await import('./helpers/fakeWorld.mjs');
+  let warmed = null; const gfx = { warm: (opts = {}) => { warmed = [...ref.mc.made(), ...(opts.materials ?? [])].map(e => e.isMaterial ? { material: e, use: e.userData.lhUse } : e); } };
+  const ref = await setup({ gfx });
+  await ref.assets.preload(['pig'], { instanced: ['pig'] });
+  const world = fakeWorld(), sync = createViewSync({ world }, { gfx: { scene: new Scene() }, assets: ref.assets, compiler: ref.mc, view: { dt: 1 / 60 } });
+  world.spawn({ model: 'pig', draw: 'instanced', paint: { trim: '#ff0000' }, coverage: { dirt: 0.5 } }); sync.frame(1);
+  const drawn = sync.root.children.filter(m => m instanceof InstancedMesh).map(m => ({ material: m.material, use: m.instanceColor ? 'instancedColor' : 'instanced' }));
+  assert.equal(drawn.length, 2);
+  for (const d of drawn) assert.ok(warmed.some(w => w.material === d.material && w.use === d.use), `${d.material.name} as ${d.use} was not warmed`);
+});
