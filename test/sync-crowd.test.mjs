@@ -50,3 +50,7 @@ test('3g: crowd count is range-checked; dispose takes the group out; bad assets 
   assert.throws(() => createCrowd({ ...s.asset, anim: { ...table, parts: ['tail'] } }, { max: 1, compiler: s.compiler }), /part 'tail' of the anim table is not a mesh in 'pig'/);
   assert.throws(() => createCrowd(s.asset, { max: 0, compiler: s.compiler }), /max must be/);
 });
+test('3g: crowd parts that cast shadows get the instanced depth material (X-4), as view sync gives its instanced meshes', () => {
+  const c = setup().crowd;
+  for (const m of c.group.children) assert.equal(m.customDepthMaterial?.name, 'lh.instancedDepth', m.name);
+});

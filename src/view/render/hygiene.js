@@ -4,12 +4,13 @@ import * as THREE from 'three';
 
 // X-4 (Tractor review 3): three.js draws every shadow caster with one shared depth material. Instanced and plain casters
 // take turns in the shadow pass, so that material keeps switching programs: garbage every frame and a GC pause on an
-// iPad. Instanced casters get a depth material of their own, so neither ever changes kind.
+// iPad. Instanced casters get a depth material of their own, so neither ever changes kind. A caster that already has one
+// (the compiler's FUR or WIND depth twin) keeps it.
 export const INSTANCED_DEPTH = new THREE.MeshDepthMaterial();
 INSTANCED_DEPTH.name = 'lh.instancedDepth'; INSTANCED_DEPTH.userData.lhShared = true;
 
 export function instancedShadows(root) {
-  root.traverse(o => { if (o.isInstancedMesh && o.castShadow) o.customDepthMaterial = INSTANCED_DEPTH; });
+  root.traverse(o => { if (o.isInstancedMesh && o.castShadow && !o.customDepthMaterial) o.customDepthMaterial = INSTANCED_DEPTH; });
   return root;
 }
 

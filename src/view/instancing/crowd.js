@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { sampleAnimTable, blendAnimTable } from '../assets/animTable.js';
 import { createInstances } from './instances.js';
+import { instancedShadows } from '../render/hygiene.js';
 
 const _w = new THREE.Matrix4(), _a = new THREE.Matrix4(), _t = new THREE.Matrix4();
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
@@ -25,7 +26,8 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
     const holder = new THREE.Mesh(src.geometry, src.material); holder.name = pn; compiler.apply(holder, { instanced: true, coverage: true });
     const coverage = holder.material.defines?.COVERAGE_INSTANCED !== undefined;
     const inst = createInstances({ geometry: src.geometry, material: holder.material, max, castShadow, receiveShadow, coverage });
-    inst.mesh.name = `${name}:${pn}`; group.add(inst.mesh);
+    inst.mesh.name = `${name}:${pn}`; if (holder.customDepthMaterial) inst.mesh.customDepthMaterial = holder.customDepthMaterial;
+    instancedShadows(inst.mesh); group.add(inst.mesh);
     return { name: pn, inst, coverage };
   });
   let count = 0;

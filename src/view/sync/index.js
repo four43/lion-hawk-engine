@@ -60,7 +60,8 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
       compiler.apply(holder, { instanced: true, coverage: true });
       const paint = name.startsWith('paint-') ? name.slice(6) : null, coverage = holder.material.defines?.COVERAGE_INSTANCED !== undefined;
       const inst = createInstances({ geometry: o.geometry, material: holder.material, max: START_MAX, colors: !!paint, coverage });
-      inst.mesh.name = `${model}:${o.name}`; instancedShadows(inst.mesh); root.add(inst.mesh);
+      inst.mesh.name = `${model}:${o.name}`; if (holder.customDepthMaterial) inst.mesh.customDepthMaterial = holder.customDepthMaterial;
+      instancedShadows(inst.mesh); root.add(inst.mesh);
       const g = { inst, geometry: o.geometry, part: new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), paint, coverage, owners: [] };
       list.push(g); groups.push(g);
     });
@@ -73,7 +74,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     next.mesh.instanceMatrix.array.set(old.mesh.instanceMatrix.array); next.mesh.instanceMatrix.needsUpdate = true;
     if (old.mesh.instanceColor) { next.mesh.instanceColor.array.set(old.mesh.instanceColor.array); next.mesh.instanceColor.needsUpdate = true; }
     if (g.coverage) { next.coverage.array.set(old.coverage.array); next.coverage.needsUpdate = true; }
-    next.count = old.count; instancedShadows(next.mesh); root.add(next.mesh); old.dispose(); g.inst = next;
+    next.count = old.count; next.mesh.customDepthMaterial = old.mesh.customDepthMaterial; instancedShadows(next.mesh); root.add(next.mesh); old.dispose(); g.inst = next;
   }
   function join(r) {
     for (let k = 0; k < r.parts.length; k++) {

@@ -103,3 +103,13 @@ test('3g: paint as instance colour works on a template the real compiler already
   assert.ok(mesh.instanceColor, 'the painted part has instance colours');
   assert.deepEqual([...mesh.instanceColor.array.slice(0, 3)], [1, 0, 0]);
 });
+test('3g: an instanced FUR part casts through the compiler\'s depth twin, not the plain instanced depth material', () => {
+  const compiler = createMaterialCompiler(defineMaterials({ testFur: { look: { color: '#ffffff', fur: { length: 0.07, shells: 4 } } } }));
+  const g = new THREE.BoxGeometry(); g.setAttribute('furShell', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  const tpl = new THREE.Group(), coat = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ name: 'testFur' })); coat.name = 'coat'; tpl.add(coat); compiler.apply(tpl);
+  const assets = { has: () => true, get: () => ({ scene: tpl, clips: [], anim: null, sockets: {} }) };
+  const world = fakeWorld(), sync = createViewSync({ world }, { gfx: { scene: new THREE.Scene() }, assets, compiler, view: { dt: 1 / 60 } });
+  world.spawn({ model: 'sheep', draw: 'instanced' }); sync.frame(1);
+  const [mesh] = sync.root.children;
+  assert.equal(mesh.customDepthMaterial, compiler.depth(mesh.material));
+});

@@ -1,7 +1,7 @@
 // mc.depth(material): the shadow-pass twin that moves vertices as the material does (Rally's snow, wind, fur).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ShaderLib } from 'three';
+import { ShaderLib, BoxGeometry, BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { defineMaterials } from '../src/defs/materials.js';
 import { createMaterialCompiler } from '../src/view/materials/compiler.js';
 
@@ -39,4 +39,11 @@ test('depth(): fur displaces in the depth pass; extend() patches run with { dept
   assert.equal(d.customProgramCacheKey(), 'lhd:|x:snow');
   assert.throws(() => mc.depth({ name: 'raw' }), /compiler: depth\(\) needs a material from this compiler \(got 'raw'\)/);
   let disposed = 0; d.addEventListener('dispose', () => disposed++); mc.dispose(); assert.equal(disposed, 1);
+});
+test('depth(): apply() gives a FUR mesh its depth twin as customDepthMaterial, so its shadow is displaced too; plain meshes get none', () => {
+  const mc = createMaterialCompiler(REG), g = new BoxGeometry(); g.setAttribute('furShell', new BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  const fur = new Mesh(g, new MeshStandardMaterial({ name: 'testFur' })), plain = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ name: 'testMud' }));
+  const root = new Group(); root.add(fur, plain); mc.apply(root);
+  assert.equal(fur.customDepthMaterial, mc.depth(fur.material));
+  assert.equal(plain.customDepthMaterial, undefined);
 });

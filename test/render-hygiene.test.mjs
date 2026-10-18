@@ -100,3 +100,8 @@ test('warm leaves hidden lights hidden: a light count the frame will not have co
   assert.ok(lampSeen === false, 'the hidden light stayed hidden during compile'); assert.ok(hatSeen === true, 'the hidden mesh was shown');
   assert.ok(lamp.visible === false && hat.visible === false, 'both hidden again');
 });
+test('instancedShadows keeps a depth twin the mesh already has (a FUR or WIND caster must not lose its displacement)', () => {
+  const twin = new THREE.MeshDepthMaterial(), im = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 1);
+  im.castShadow = true; im.customDepthMaterial = twin; instancedShadows(im);
+  assert.equal(im.customDepthMaterial, twin);
+});

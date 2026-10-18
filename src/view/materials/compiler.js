@@ -218,6 +218,9 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
         return m;
       });
       o.material = Array.isArray(o.material) ? out : out[0];
+      // a material that moves vertices (FUR, WIND) casts its shadow through its depth twin, displaced the same way
+      const moving = out.find(m => STATE.get(m).features.some(f => f === 'FUR' || f === 'WIND'));
+      if (moving) o.customDepthMaterial = depth(moving);
     });
     return { uCoverage };
   }
