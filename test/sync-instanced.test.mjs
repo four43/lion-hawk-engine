@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { syncSetup } from './helpers/syncSetup.mjs';
 import { threeIds, retained } from './helpers/alloc.mjs';
+import { createViewSync } from '../src/view/sync/index.js';
+import { createMaterialCompiler } from '../src/view/materials/compiler.js';
+import { defineMaterials } from '../src/defs/materials.js';
+import { fakeWorld } from './helpers/fakeWorld.mjs';
 
 const CRATE = { crate: [{ name: 'body', material: 'wood' }, { name: 'lid', material: 'paint-body', p: [0, 0.5, 0] }] };
 const at = (mesh, i) => new THREE.Vector3().setFromMatrixPosition((() => { const m = new THREE.Matrix4(); mesh.getMatrixAt(i, m); return m; })());
@@ -72,4 +76,30 @@ test('3g: a coverage material instanced gets instanceCoverage from e.coverage, w
   for (let i = 0; i < 20; i++) s.world.spawn({ model: 'pig', draw: 'instanced', coverage: { rust: 1 } });
   s.sync.frame(1); const grown = s.sync.root.children[0].geometry.attributes.instanceCoverage; // past 16: the mesh doubled
   assert.deepEqual([...grown.array.slice(0, 4)], [0.5, 0, 0.75, 0.25]); assert.deepEqual([...grown.array.slice(84, 88)], [0, 1, 0, 0]);
+});
+test('3g: a still instanced entity that is placed somewhere new is re-uploaded (place writes prev and curr together)', () => {
+  const s = syncSetup(CRATE), e = s.world.spawn({ model: 'crate', draw: 'instanced' });
+  s.sync.frame(1); const body = s.sync.root.children[0];
+  s.world.place(e, [5, 0, 0]); s.sync.frame(0.5);
+  assert.ok(near(at(body, 0), 5, 0, 0), `at ${at(body, 0).toArray()}`);
+});
+test('3g: an instanced entity that stops is drawn at its final pose, not the last interpolated one', () => {
+  const s = syncSetup(CRATE), e = s.world.spawn({ model: 'crate', draw: 'instanced' });
+  s.sync.frame(1); const body = s.sync.root.children[0];
+  s.world.move(e, [1, 0, 0]); s.sync.frame(0.5); assert.ok(near(at(body, 0), 0.5, 0, 0));
+  s.world.step(); s.sync.frame(0.3); // prev == curr == [1, 0, 0] now
+  assert.ok(near(at(body, 0), 1, 0, 0), `at ${at(body, 0).toArray()}`);
+  const v = body.instanceMatrix.version; s.sync.frame(0.6); assert.equal(body.instanceMatrix.version, v); // and then it is static again
+});
+test('3g: paint as instance colour works on a template the real compiler already compiled (createAssets does that)', () => {
+  const compiler = createMaterialCompiler(defineMaterials({}));
+  const tpl = new THREE.Group(), lid = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ name: 'paint-body' }));
+  lid.name = 'lid'; tpl.add(lid); compiler.apply(tpl); // as assets' template(): the paint slot's material is now the paint base
+  const assets = { has: () => true, get: () => ({ scene: tpl, clips: [], anim: null, sockets: {} }) };
+  const world = fakeWorld(), sync = createViewSync({ world }, { gfx: { scene: new THREE.Scene() }, assets, compiler, view: { dt: 1 / 60 } });
+  world.spawn({ model: 'crate', draw: 'instanced', paint: { body: '#ff0000' } });
+  sync.frame(1);
+  const [mesh] = sync.root.children;
+  assert.ok(mesh.instanceColor, 'the painted part has instance colours');
+  assert.deepEqual([...mesh.instanceColor.array.slice(0, 3)], [1, 0, 0]);
 });

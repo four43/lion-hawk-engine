@@ -158,3 +158,15 @@ test('dispose frees every built geometry and empties the group', () => {
   try { t.dispose(); } finally { THREE.BufferGeometry.prototype.dispose = real; }
   assert.equal(freed, 4); assert.equal(t.group.children.length, 0);
 });
+
+test('evicting one chunk frees no buffer a live chunk still draws with (three deletes geometry.index on dispose)', () => {
+  const t = createTerrainMesh(T, { compiler: compiler(), chunks: [2, 1], lods: [1, 2, 4], lodFar: [10, 30], evict: [20, 50] });
+  const freed = new Set(), seen = new Set();
+  // what WebGLGeometries.onGeometryDispose does: the index and every attribute lose their GL buffers
+  const watch = () => { for (const m of t.group.children) { const g = m.geometry; if (seen.has(g)) continue; seen.add(g);
+    g.addEventListener('dispose', () => { if (g.index) freed.add(g.index); for (const a of Object.values(g.attributes)) freed.add(a); }); } };
+  t.update(cam(0, 0)); watch();                       // both chunks at LOD 0
+  t.update(cam(24, 0)); watch();                      // left chunk d 24 > evict[0]: its LOD 0 freed; the right one keeps LOD 0
+  const live = t.group.children.find(m => m.visible && m.geometry.attributes.position.getX(0) === 0).geometry;
+  assert.equal(freed.has(live.index), false, 'the live chunk\'s index was freed');
+});

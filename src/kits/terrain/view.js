@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 const fail = m => { throw new Error(`terrain view: ${m}`); };
 
-// The shared index of an n×m vertex chunk plus its four skirts (bottom, top, left, right edge copies), facing out.
+// The index (each chunk geometry takes a copy) of an n×m vertex chunk plus its four skirts (bottom, top, left, right edge copies), facing out.
 export function chunkIndex(n, m) {
   const idx = [], g = (i, j) => j * n + i;
   for (let j = 0; j < m - 1; j++) for (let i = 0; i < n - 1; i++) {
@@ -92,7 +92,7 @@ export function createTerrainMesh(terrain, opts = {}) {
     geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     extra.forEach(([name, a], k) => geo.setAttribute(name, new THREE.BufferAttribute(ext[k], a.size)));
-    geo.setIndex(index[li]);
+    geo.setIndex(index[li].clone()); // its own copy: dispose() frees geometry.index, which other chunks at this LOD still draw with
     geo.computeBoundingSphere();
     ch.geo[li] = geo; stats.builds++; stats.buildMs += now() - t0;
     return geo;

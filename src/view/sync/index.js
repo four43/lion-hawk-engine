@@ -53,8 +53,11 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     tpl.traverse(o => {
       if (!o.isMesh) return;
       if (o.isSkinnedMesh) throw new Error(`sync: model '${model}' is skinned; draw it as 'object' or with createCrowd`);
-      const name = typeof o.material?.name === 'string' ? o.material.name : '';
-      const holder = new THREE.Mesh(o.geometry, o.material); holder.name = o.name; compiler.apply(holder, { instanced: true, coverage: true });
+      // the authored name: a template the compiler already applied has the paint base's material, its paint-<slot> in lhMat
+      const name = o.userData.lhMat?.[0] ?? (typeof o.material?.name === 'string' ? o.material.name : '');
+      const holder = new THREE.Mesh(o.geometry, o.material); holder.name = o.name;
+      if (o.userData.lhMat) holder.userData.lhMat = o.userData.lhMat;
+      compiler.apply(holder, { instanced: true, coverage: true });
       const paint = name.startsWith('paint-') ? name.slice(6) : null, coverage = holder.material.defines?.COVERAGE_INSTANCED !== undefined;
       const inst = createInstances({ geometry: o.geometry, material: holder.material, max: START_MAX, colors: !!paint, coverage });
       inst.mesh.name = `${model}:${o.name}`; instancedShadows(inst.mesh); root.add(inst.mesh);
@@ -94,7 +97,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     }
   }
   function add(e) {
-    const r = { e, id: e.id, obj: null, own: false, parts: null, slots: null, cov: null, off: newOffset(), seen: 0, hooks: [], hv: -1, wrote: false, ws: 1, at: recs.length, pv: undefined, pobj: null, pnodes: null };
+    const r = { e, id: e.id, obj: null, own: false, parts: null, slots: null, cov: null, off: newOffset(), seen: 0, hooks: [], hv: -1, wrote: false, ws: 1, wp: null, wq: null, at: recs.length, pv: undefined, pobj: null, pnodes: null };
     r.off.seq = e.netFix?.seq ?? -1; // a correction made before the entity was first drawn has nothing to smooth
     if (e.model != null && e.draw !== false) {
       if (e.draw !== undefined && e.draw !== 'object' && e.draw !== 'instanced') throw new Error(`sync: entity ${e.id} has draw ${JSON.stringify(e.draw)} (use 'object', 'instanced' or false)`);
@@ -177,7 +180,6 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     const e = r.e, c = e.xf;
     world.xfPrev(e, _prev);
     const pp = _prev.p, pq = _prev.q, cp = c.p, cq = c.q;
-    const still = pp.x === cp.x && pp.y === cp.y && pp.z === cp.z && pq.x === cq.x && pq.y === cq.y && pq.z === cq.z && pq.w === cq.w && !active(r.off);
     _p.set(pp.x + (cp.x - pp.x) * a, pp.y + (cp.y - pp.y) * a, pp.z + (cp.z - pp.z) * a);
     let bx = cq.x, by = cq.y, bz = cq.z, bw = cq.w;
     if (pq.x * bx + pq.y * by + pq.z * bz + pq.w * bw < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; } // q and -q: take the short arc
@@ -188,10 +190,12 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     if (r.pnodes) poseParts(r, a, s);
     if (r.slots) {
       if (r.cov) cover(r);
-      if (still && r.wrote && s === r.ws) return; // static props: nothing to upload
+      // static props: nothing to upload. Compared with the pose last written, not prev == curr: world.place writes both, and a
+      // body that stops was last drawn short of where it came to rest
+      if (r.wrote && s === r.ws && _p.equals(r.wp) && _q.equals(r.wq)) return;
       _m.compose(_p, _q, _s.setScalar(s));
       for (let k = 0; k < r.parts.length; k++) r.parts[k].inst.setMatrix(r.slots[k], _pm.multiplyMatrices(_m, r.parts[k].part));
-      r.wrote = true; r.ws = s;
+      (r.wp ??= new THREE.Vector3()).copy(_p); (r.wq ??= new THREE.Quaternion()).copy(_q); r.wrote = true; r.ws = s;
     }
   }
   const sync = {
