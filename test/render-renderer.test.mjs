@@ -92,3 +92,9 @@ test('per-frame paths allocate nothing (R-8)', () => {
   for (const f of [g.render, g.info]) assert.doesNotMatch(f.toString(), HOT);
   g.dispose();
 });
+test('a resize to the same size and pixel ratio does not touch the renderer (the window event and the ResizeObserver both fire)', () => {
+  const p = page(), r = fakeRenderer(), g = createRenderer({ canvas: p.canvas, target: p.target, renderer: r }), n = r.log.length;
+  g.resize(); p.ls.resize(); assert.equal(r.log.length, n, 'no setSize or setPixelRatio');
+  p.canvas.clientWidth = 400; g.resize(); assert.deepEqual(r.log.at(-1), ['setSize', 400, 844, false]);
+  g.dispose();
+});

@@ -16,6 +16,7 @@
 - Bake: a model without `keepTextures` lets prune drop vertex attributes nothing reads (UVs without a texture, tangents without a normal map); the fixture's cart, crate and pet are 7-17% smaller. `keepTextures` models keep every attribute.
 - Leaks: an instanced mesh with coverage frees its own `instanceCoverage` buffer on dispose (view sync's grow and scene change, and `createCrowd`, which now disposes through its instances); kit-fx `createParticles` and `createMarks` have `dispose()`, freeing the mesh and the geometry and material they made.
 - A lost WebGL context (iOS and Android drop a backgrounded page's) is reported to `errors`, `gfx.lost` is true and nothing draws until the browser restores it; the restore runs `gfx.warm()` again. `createRenderer({ onLost, onRestored })`.
+- `gfx.resize()` leaves the renderer alone when the size and pixel ratio are unchanged (`setSize` reallocates the drawing buffer; one resize fires both the window event and the ResizeObserver).
 
 ## 0.11.1 — 2026-10-16
 

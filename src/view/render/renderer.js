@@ -45,16 +45,18 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
   const size = { w: 1, h: 1 }, fit = { w: 1, h: 1, pixelRatio: 1, aspect: 1, fov: cam.fov }, opts = { dpr, fov: cam.fov, fovPortrait: cam.fovPortrait };
   const input = { cssW: 0, cssH: 0, winW: 0, winH: 0, deviceDpr: 1, touchPoints: 0 };
   const stats = { calls: 0, triangles: 0, points: 0, lines: 0, geometries: 0, textures: 0, programs: 0 };
-  let disposed = false;
+  let disposed = false, sized = false;
   function resize() {
     if (disposed) return size;
     input.cssW = canvas.clientWidth ?? 0; input.cssH = canvas.clientHeight ?? 0;
     input.winW = target.innerWidth ?? 0; input.winH = target.innerHeight ?? 0;
     input.deviceDpr = target.devicePixelRatio ?? 1;
     input.touchPoints = (target.navigator ?? globalThis.navigator)?.maxTouchPoints ?? 0;
+    const pw = fit.w, ph = fit.h, pr = fit.pixelRatio;
     fitView(input, opts, fit);
     size.w = fit.w; size.h = fit.h;
-    r.setPixelRatio(fit.pixelRatio); r.setSize(fit.w, fit.h, false);
+    if (sized && fit.w === pw && fit.h === ph && fit.pixelRatio === pr) return size; // setSize reallocates the drawing buffer: only on a change
+    sized = true; r.setPixelRatio(fit.pixelRatio); r.setSize(fit.w, fit.h, false);
     view.aspect = fit.aspect; view.fov = fit.fov; view.userData.lhFov = fit.fov; view.updateProjectionMatrix();
     return size;
   }
