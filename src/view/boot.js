@@ -94,7 +94,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   }
   const refresh = () => {
     if (disposed) return;
-    reconcile(); ui.sync(); applyFocus();
+    reconcile(); ui.sync(); applyFocus(); view.nav?.sync(); // U-7: a new menu's entry is focused once its controls exist
     const s = hook.settled() ? '1' : '0'; if (s !== settledAttr) { settledAttr = s; doc.documentElement.setAttribute('data-lh-settled', s); }
   };
   function wait(p) { // #20: until p settles, settled() is false; a rejection lands in errors. [S-6] it also blocks a settling load
@@ -118,7 +118,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     reconcile();
     if (pipe) { try { pipe.frame(alpha); } catch (err) { report(err); } } // §4.6: sync.frame before the halves
     const list = active; // a snapshot: active is replaced, never changed in place; skip halves a previous frame exited
-    for (let i = 0; i < list.length; i++) { const e = list[i], f = views[e.name]?.frame; if (f && (list === active || isActive(e))) { try { f(engine, alpha, view); } catch (err) { report(err); } } }
+    for (let i = 0; i < list.length; i++) { const e = list[i], h = views[e.name]; if (h?.frame && (list === active || isActive(e))) { try { h.frame(engine, alpha, view); } catch (err) { report(err); } } } // on its half: a half's frame may use `this`
     if (pipe) { try { pipe.draw(); } catch (err) { report(err); } } // one renderer.render(scene, camera) after the halves
     view.dt = view.rawDt = 0; refresh();
   });

@@ -175,6 +175,11 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       hold: p => ev(p => window.engine.input.hold(p), p),
       release: (...n) => ev(n => window.engine.input.release(...n), n),
     },
+    // U-7, I-8: the page's fake pad (open's default pads: 'fake'). pad({ a: true, start: true, axes: [x, y], id }) sets
+    // which standard buttons are down and the left stick; pad(null) unplugs it. Devices read it on the next frame, so
+    // follow with frames() before stepping.
+    pad: state => ev(st => window.__lhSetPad(st), state ?? null),
+    frames: (n = 2) => ev(n => new Promise(r => { const f = k => k ? requestAnimationFrame(() => f(k - 1)) : r(); f(n); }), n),
     async tap(testid) {
       const loc = page.locator(`[data-testid="${testid}"]`);
       if (preset.hasTouch) {
@@ -243,7 +248,21 @@ export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } 
 // #74: initScript (a function or { content }) runs in the page before any of its scripts, e.g. to stub WebGL.
 export function openGame(browser, url, opts) { return open(browser, url, opts); }
 // `prepare(context, page)` runs before navigation (peers() exposes the bridge there)
-async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript } = {}, prepare) {
+// a page's navigator.getGamepads() with pads: 'fake' (the default): none until game.pad() plugs one in, so a controller on
+// the test machine (or Steam's virtual pad) never reaches a test
+const FAKE_PADS = () => {
+  const NAMES = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, select: 8, start: 9, ls: 10, rs: 11, up: 12, down: 13, left: 14, right: 15 };
+  let pads = [];
+  window.__lhSetPad = st => {
+    if (!st) { pads = []; return; }
+    const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
+    for (const [k, i] of Object.entries(NAMES)) if (st[k]) buttons[i] = { pressed: true, touched: true, value: 1 };
+    pads = [{ id: st.id ?? 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e)', index: 0, connected: true, mapping: 'standard', timestamp: performance.now(), axes: [...(st.axes ?? [0, 0]), 0, 0].slice(0, 4), buttons }];
+  };
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value: () => pads });
+};
+async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript, pads = 'fake' } = {}, prepare) {
+  if (pads !== 'fake' && pads !== 'host') throw new Error("playwright: pads must be 'fake' or 'host'");
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
   const { safeArea, ...ctxOpts } = p;
@@ -251,6 +270,7 @@ async function open(browser, url, { preset = 'desktop', seed, scene, args, query
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: String(e) }));
+  if (pads === 'fake') await context.addInitScript(FAKE_PADS); // U-7: hermetic pads (the host's controllers are 'host')
   if (initScript) await context.addInitScript(initScript); // #74: on the context, so popups and new tabs (a join link) get it too
   if (prepare) await prepare(context, page);
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);

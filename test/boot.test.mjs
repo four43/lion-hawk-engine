@@ -199,3 +199,12 @@ test('G-E2: a view half that builds a screen after the sync gets its slot adopte
   app.hook.go('race'); app.hook.overlay('pause'); assert.equal(swapped, true);
   document.querySelector('[data-testid="pause.resume"]').click(); assert.equal(app.engine.scene.overlays.length, 0);
 });
+
+test('a view half\'s frame is called on the half, so it may use `this`', () => {
+  const { document } = dom(), target = { document, addEventListener() {} };
+  const half = { n: 0, frame() { this.n++; } };
+  const app = boot(game, defineView({ scenes: { title: half } }), { doc: document, target, raf, caf, flags: parseFlags('?lh-test') });
+  app.engine.render(0); app.engine.render(0);
+  assert.equal(half.n, 2); assert.deepEqual(app.hook.errors, []);
+  app.dispose();
+});

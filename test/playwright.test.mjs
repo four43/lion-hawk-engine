@@ -112,7 +112,10 @@ test('2f: openGame adds initScript to the context before the page loads (#74)', 
     evaluate: async () => {}, waitForFunction: async () => {} };
   const browser = { newContext: async () => ({ newPage: async () => page, addInitScript: async (f, a) => calls.push(['init', typeof f === 'function' ? 'fn' : f.content]) }) }; // on the context: popups get it too
   await openGame(browser, 'http://x/', { initScript: () => { window.WebGLRenderingContext = undefined; } });
-  assert.deepEqual(calls.map(c => c[0]), ['init', 'goto']);
+  assert.deepEqual(calls.map(c => c[0]), ['init', 'init', 'goto']); // the fake pads (#138), then the game's script
   calls.length = 0; await openGame(browser, 'http://x/', { initScript: { content: 'window.x = 1' } });
-  assert.deepEqual(calls.map(c => c[1]).slice(0, 1), ['window.x = 1']);
+  assert.deepEqual(calls.map(c => c[1]).slice(0, 2), ['fn', 'window.x = 1']);
+  calls.length = 0; await openGame(browser, 'http://x/', { pads: 'host', initScript: { content: 'window.x = 1' } });
+  assert.deepEqual(calls.map(c => c[1]).slice(0, 1), ['window.x = 1'], "pads: 'host' keeps the machine's controllers");
+  await assert.rejects(openGame(browser, 'http://x/', { pads: 'none' }), /pads must be 'fake' or 'host'/);
 });

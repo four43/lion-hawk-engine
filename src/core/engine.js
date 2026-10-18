@@ -86,6 +86,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.id = m?.id; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
     sceneView.overlays.length = 0; sceneView.overlayIds.length = 0;
     for (let i = 1; i < stack.length; i++) { sceneView.overlays.push(stack[i].ctx.name); sceneView.overlayIds.push(stack[i].ctx.id); }
+    input.gate(menuOwnsInput(game, sceneView.overlays)); // U-9: a menu with input 'menu' on top gates the devices (only the stack changes it)
   };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
@@ -423,7 +424,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     },
   };
   schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
-  schedule.add('lh.input', () => { input.gate(menuOwnsInput(game, sceneView.overlays)); input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' }); // U-9: a menu with input 'menu' on top gates the devices
+  schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
   // U-9: Back runs the topmost menu's nav.back (an action pressed next step, or a function); none is a no-op. Open
   // summons an overlay whose nav.open its `when` allows, unless a menu that owns input is already on top.
   engine.builtin('lh.back', e => {

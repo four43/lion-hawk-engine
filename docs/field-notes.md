@@ -151,6 +151,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 136 | `GLTFLoader` names every node and the scene in one namespace | engine | done (0.8.0, 3d) |
 | 137 | A dedupe test needs an engine-side importer of three | engine | done (0.8.0, 3d) |
 | 138 | Menus can't be driven with a controller | Rally, Tractor Pickup | done (menu-nav, 2026-10-18) |
+| 139 | A view half's `frame` lost its `this` | Rally | done (menu-nav, 2026-10-18) |
+| 140 | The test machine's controllers reach browser tests | Rally, Tractor Pickup | done (menu-nav, 2026-10-18) |
 
 ## Entries
 
@@ -917,3 +919,15 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Workaround:** None: Tab and the mouse were the only ways round a menu.
 - **Engine change:** Menu navigation (spec U-7–U-10, I-8; research `docs/research-menu-navigation.md`, plan `docs/plans/2026-10-18-menu-nav.md`). A scene declares `nav: { modal, initial, back, input, open }`; `bindMenuNav` (booted when any scene has `nav`) moves real DOM focus with the D-pad, the stick or the arrow keys, one step per push, picked by the pure `pickNeighbour` scorer (lined-up candidates first, a 45° cone, no wrap); A/Enter activate (a hold is pressed while A is held); B/Esc/Start send `lh.back`; LB/RB step a choice row; `nav.open` summons a menu from gameplay on a tap or a hold of a pad button or key (`lh.open`). While a menu with `input: 'menu'` is on top the game's devices are gated, and a button held across the menu stays off until released. Candidates are a scene's registered controls plus buttons inside `[data-lh-nav-scope~="<scene>"]`, so unregistered markup navigates too. `<html data-lh-input>`/`data-lh-pad` track the last device; `lion-hawk/kits/glyphs/view` shows role glyphs (Kenney Input Prompts, CC0) for Xbox, PlayStation, Steam Deck, generic pads, keys, mouse and touch.
 - **Status:** done (menu-nav, 2026-10-18). Pad text entry (Rally's seed, Tractor's seed and room code) is still open (spec §10).
+
+### 139. A view half's `frame` lost its `this`: Rally (menu-nav)
+- **What happened:** The allocation-free render slot (c8bd809) called a half's `frame` as a bare function, so Rally's title half, which keeps its last-drawn state on `this.seen`, threw `Cannot read properties of undefined (reading 'seen')` every frame (into `window.engine.errors`).
+- **Workaround:** None needed.
+- **Engine change:** `boot` calls `half.frame(engine, alpha, view)` on the half again; a boot test pins it.
+- **Status:** done (menu-nav, 2026-10-18).
+
+### 140. The test machine's controllers reach browser tests: Rally, Tractor Pickup (menu-nav)
+- **What happened:** Headless Chromium reports the host's gamepads. On the dev machine a controller lay with A held and the stick pushed, and Steam added a virtual pad, so Rally's e2e drove and (with menu navigation) clicked on its own.
+- **Workaround:** None needed.
+- **Engine change:** `openGame` (and `peers`) replace `navigator.getGamepads` with a fake by default (`pads: 'fake'`; `pads: 'host'` opts out); `game.pad(state)` plugs in a scripted standard pad and `game.frames(n)` waits for devices to read it (T-17).
+- **Status:** done (menu-nav, 2026-10-18).

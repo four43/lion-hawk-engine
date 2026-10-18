@@ -146,6 +146,7 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
   const keysDown = new Set();
   const onKey = e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    sync(); // keys arrive between frames, maybe after a step changed the stack: read it live
     const k = String(e.key).toLowerCase();
     if (k !== 'shift' && k !== 'control' && k !== 'alt' && k !== 'meta') st.last = 'keys';
     const tr = triggers.get(`key:${k}`);
@@ -167,15 +168,21 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
   doc.addEventListener('pointerdown', onPointer, true);
 
   let shownKey; // the menu instance focus was last placed for
-  function update(dt = 0) {
-    const pad = pe.update();
-    if (pad.active) { st.last = 'pad'; st.family = pad.family; }
-    show();
+  // follows the stack: a new menu instance gets its entry focused. boot calls it right after each UI sync (as view.focus
+  // was), so focus lands the moment the menu's controls exist; update() and the key handlers call it too.
+  function sync() {
     const menu = topNav(game, engine.scene.overlays), key = menu === undefined ? undefined : menuKey(menu);
     st.menu = menu;
     if (key !== shownKey) { shownKey = key; lift(); pending = menu === undefined ? null : { key, tries: 0 }; }
+    if (menu !== undefined) settle();
+    return menu;
+  }
+  function update(dt = 0, raw = dt) { // holds count raw (uncapped) frame time: a slow frame must not stretch a 2 s hold (#56)
+    const pad = pe.update();
+    if (pad.active) { st.last = 'pad'; st.family = pad.family; }
+    show();
+    const menu = sync();
     if (menu !== undefined) {
-      settle();
       const owns = menuOwnsInput(game, engine.scene.overlays);
       // a shared sub-menu leaves the stick to the game: only the D-pad navigates it
       const dir = owns ? pad.dir : (pad.pressed.up ? 'up' : pad.pressed.down ? 'down' : pad.pressed.left ? 'left' : pad.pressed.right ? 'right' : null);
@@ -185,11 +192,11 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
       if (pad.pressed.b || pad.pressed.start) back();
       if (pad.pressed.lb) cycle(-1); else if (pad.pressed.rb) cycle(1);
     }
-    for (let i = 0; i < keyTriggers.length; i++) tick(keyTriggers[i], dt);
+    for (let i = 0; i < keyTriggers.length; i++) tick(keyTriggers[i], raw);
     for (let i = 0; i < padTriggers.length; i++) {
       const tr = padTriggers[i], b = tr.button;
       if (pad.pressed[b]) press(tr); else if (pad.released[b]) release(tr);
-      tick(tr, dt);
+      tick(tr, raw);
     }
   }
   function dispose() {
@@ -197,5 +204,5 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
     doc.removeEventListener('pointerdown', onPointer, true);
     lift(); html.removeAttribute('data-lh-input'); html.removeAttribute('data-lh-pad');
   }
-  return { update, dispose, state: st, move, activate, back };
+  return { update, sync, dispose, state: st, move, activate, back };
 }
