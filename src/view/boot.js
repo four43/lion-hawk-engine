@@ -63,12 +63,23 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     return out;
   };
   const same = (a, b) => a.name === b.name && a.key === b.key;
+  const isActive = e => { for (let i = 0; i < active.length; i++) if (same(active[i], e)) return true; return false; };
+  // R-8: the stack as last reconciled (main key, then overlay keys), so a frame with no scene change allocates nothing
+  const keys = [];
+  const unchanged = () => {
+    const s = engine.scene, n = (s.name !== undefined ? 1 : 0) + s.overlays.length;
+    if (n !== keys.length || active.length !== n) return false;
+    let k = 0;
+    if (s.name !== undefined && (keys[k++] !== s.id || active[0].name !== s.name)) return false;
+    for (let i = 0; i < s.overlayIds.length; i++, k++) if (keys[k] !== s.overlayIds[i] || active[k].name !== s.overlays[i]) return false;
+    return true;
+  };
   function reconcile() {
-    if (busy) return; busy = true;
+    if (busy || unchanged()) return; busy = true;
     try {
       for (let guard = 0; guard < 16; guard++) {
         const cur = entries(), gone = active.filter(a => !cur.some(c => same(a, c))), added = cur.filter(c => !active.some(a => same(a, c)));
-        if (!gone.length && !added.length) break;
+        if (!gone.length && !added.length) { keys.length = 0; for (const a of active) keys.push(a.key); break; }
         active = cur.slice(); // set first: a half that transitions re-enters via the next pass
         for (let i = gone.length - 1; i >= 0; i--) caught(() => views[gone[i].name]?.exit?.(engine, view));
         ui.sync(); // #46: the entering halves see their scene's controls created, adopted and enabled
@@ -102,7 +113,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     if (disposed) return;
     reconcile();
     if (pipe) { try { pipe.frame(alpha); } catch (err) { report(err); } } // §4.6: sync.frame before the halves
-    for (const e of active.slice()) if (active.some(a => same(a, e))) caught(() => views[e.name]?.frame?.(engine, alpha, view)); // snapshot; skip halves a previous frame exited
+    const list = active; // a snapshot: active is replaced, never changed in place; skip halves a previous frame exited
+    for (let i = 0; i < list.length; i++) { const e = list[i], f = views[e.name]?.frame; if (f && (list === active || isActive(e))) { try { f(engine, alpha, view); } catch (err) { report(err); } } }
     if (pipe) { try { pipe.draw(); } catch (err) { report(err); } } // one renderer.render(scene, camera) after the halves
     view.dt = view.rawDt = 0; refresh();
   });

@@ -62,9 +62,9 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
   // one (an element that is or holds a [data-lh-slot], or that attribute changing), or after adopt(). takeRecords() makes
   // markup built earlier in the same task count; with nothing changed a sync does no querying at all.
   const slotted = rs => {
-    for (const r of rs) {
-      if (r.type === 'attributes') return true;
-      for (const n of r.addedNodes) if (n.nodeType === 1 && (n.hasAttribute('data-lh-slot') || n.querySelector('[data-lh-slot]'))) return true;
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i]; if (r.type === 'attributes') return true;
+      for (let j = 0; j < r.addedNodes.length; j++) { const n = r.addedNodes[j]; if (n.nodeType === 1 && (n.hasAttribute('data-lh-slot') || n.querySelector('[data-lh-slot]'))) return true; }
     }
     return false;
   };
@@ -72,24 +72,32 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
   const mo = win?.MutationObserver ? new win.MutationObserver(rs => { if (slotted(rs)) dirty = true; }) : null;
   mo?.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-lh-slot'] });
 
+  // R-8: a sync allocates nothing once its elements exist: reused name lists, the engine's reused control view, and a
+  // generation mark instead of live sets
+  const names = [], stack = []; let gen = 0, overlaysKey = null, overlaysSeen = [];
+  const dropButton = (b, id) => { if (b.gen !== gen) { release(id, b); buttons.delete(id); } };
+  const dropBox = (box, name) => { if (box.gen !== gen) { box.el.remove(); boxes.delete(name); } };
   function sync() {
-    const scan = dirty || (mo !== null && slotted(mo.takeRecords())); dirty = false;
-    const stack = [engine.scene.name, ...engine.scene.overlays].filter(n => n !== undefined);
-    const tree = engine.ui.tree(), byScene = new Map(stack.map(n => [n, []]));
-    for (const c of tree) { if (!byScene.has(c.scene)) byScene.set(c.scene, []); byScene.get(c.scene).push(c); }
-    const live = new Set(), liveIds = new Set(tree.map(c => c.id)), names = [...byScene.keys()];
+    const scan = dirty || (mo !== null && slotted(mo.takeRecords())); dirty = false; gen++;
+    // written by index and trimmed only when the count changes: length = 0 then push would drop and regrow the backing store
+    const sv = engine.scene; let n = 0; if (sv.name !== undefined) stack[n++] = sv.name; for (let i = 0; i < sv.overlays.length; i++) stack[n++] = sv.overlays[i];
+    if (stack.length !== n) stack.length = n;
+    const tree = engine.ui.view(); let m = 0; for (let i = 0; i < n; i++) names[m++] = stack[i]; // the stack's scenes first, then any other with controls
+    for (let i = 0; i < tree.length; i++) { const sc = tree[i].scene; let seen = false; for (let j = 0; j < m && !seen; j++) seen = names[j] === sc; if (!seen) names[m++] = sc; }
+    if (names.length !== m) names.length = m;
     for (let si = 0; si < names.length; si++) {
-      const name = names[si], overlay = si > 0 && stack.includes(name); live.add(name);
+      const name = names[si], overlay = si > 0 && stack.includes(name);
       let box = boxes.get(name);
       if (!box) {
         const el = document.createElement('div'); el.setAttribute('data-lh-ui', name);
         if (overlay) el.setAttribute('data-lh-overlay', name);
-        boxes.set(name, box = { el, overlay });
+        boxes.set(name, box = { el, overlay, gen: 0 });
       } else if (box.overlay !== overlay) { overlay ? box.el.setAttribute('data-lh-overlay', name) : box.el.removeAttribute('data-lh-overlay'); box.overlay = overlay; }
-      place(root_, box.el, si);
-      const list = byScene.get(name);
-      for (let i = 0; i < list.length; i++) {
-        const c = list[i]; let b = buttons.get(c.id), el;
+      box.gen = gen; place(root_, box.el, si);
+      let i = -1;
+      for (let ti = 0; ti < tree.length; ti++) {
+        const c = tree[ti]; if (c.scene !== name) continue; i++;
+        let b = buttons.get(c.id), el;
         // G-E2: an engine-made control moves onto a slot that has since appeared; an adopted element that left the
         // document is replaced by a new slot or, failing that, an engine-made control (a control never goes without one)
         if (b && (b.adopted ? !b.el.isConnected : scan && (el = slotFor(c.id, c.role)))) { release(c.id, b); b = undefined; }
@@ -97,24 +105,27 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
           el ??= slotFor(c.id, c.role); const adopted = !!el;
           if (!el) { el = document.createElement(c.role === 'textbox' ? 'input' : 'button'); el.setAttribute('type', c.role === 'textbox' ? 'text' : 'button'); }
           el.setAttribute('data-testid', c.id); owned.set(el, c.id);
-          buttons.set(c.id, b = { el, adopted, hold: c.role === 'hold', prog: undefined, down: undefined, label: undefined, enabled: undefined, pressed: undefined, value: undefined, last: undefined });
+          buttons.set(c.id, b = { el, adopted, hold: c.role === 'hold', prog: undefined, down: undefined, label: undefined, enabled: undefined, pressed: undefined, value: undefined, last: undefined, gen: 0 });
         }
+        b.gen = gen;
         if (b.label !== c.label) { b.label = c.label; if (!b.adopted) c.role === 'textbox' ? b.el.setAttribute('aria-label', c.label) : (b.el.textContent = c.label); }
         if (c.role === 'textbox' && b.value !== c.value && document.activeElement !== b.el) { b.value = c.value; b.last = c.value; if (b.el.value !== c.value) b.el.value = c.value; }
         if (b.enabled !== c.enabled) { b.enabled = c.enabled; b.el.disabled = !c.enabled; }
         const pressed = c.role === 'switch' || c.role === 'choice' ? !!c.pressed : undefined;
         if (b.pressed !== pressed) { b.pressed = pressed; pressed === undefined ? b.el.removeAttribute('aria-pressed') : b.el.setAttribute('aria-pressed', String(pressed)); }
         if (b.hold) {
-          const p = String(Math.round(c.progress * 1000) / 1000); if (b.prog !== p) { b.prog = p; b.el.style.setProperty('--lh-progress', p); }
+          const p = Math.round(c.progress * 1000); if (b.prog !== p) { b.prog = p; b.el.style.setProperty('--lh-progress', String(p / 1000)); } // thousandths: an integer, so the compare boxes nothing
           if (b.down !== c.pressed) { b.down = c.pressed; c.pressed ? b.el.setAttribute('data-lh-down', '') : b.el.removeAttribute('data-lh-down'); }
         }
         if (!b.adopted) place(box.el, b.el, i);
       }
     }
-    for (const [id, b] of buttons) if (!liveIds.has(id)) { release(id, b); buttons.delete(id); }
-    for (const [name, box] of boxes) if (!live.has(name)) { box.el.remove(); boxes.delete(name); }
+    buttons.forEach(dropButton); boxes.forEach(dropBox); // Map.forEach with callbacks made once: no iterator or entry arrays
     setHtml('data-lh-scene', stack[0] ?? '');
-    setHtml('data-lh-overlays', stack.slice(1).join(' '));
+    let same = overlaysKey !== null && overlaysSeen.length === Math.max(0, stack.length - 1); // stack[1..], joined only when it changes
+    for (let i = 1; same && i < stack.length; i++) same = overlaysSeen[i - 1] === stack[i];
+    if (!same) { overlaysSeen = stack.slice(1); overlaysKey = overlaysSeen.join(' '); }
+    setHtml('data-lh-overlays', overlaysKey);
   }
   return { sync, adopt() { dirty = true; sync(); }, dispose() { mo?.disconnect(); document.removeEventListener('click', onClick); document.removeEventListener('change', onChange); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.removeEventListener('pointerdown', onDown); document.removeEventListener('contextmenu', onMenu); for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) document.removeEventListener(n, onUp); win?.removeEventListener('blur', releaseAll); win?.removeEventListener('pagehide', releaseAll); document.removeEventListener('visibilitychange', onHide); for (const [id, b] of buttons) release(id, b); root_.remove(); boxes.clear(); buttons.clear(); for (const k of ['data-lh-scene', 'data-lh-overlays', 'data-lh-settled']) html.removeAttribute(k); attrs.clear(); } };
 }

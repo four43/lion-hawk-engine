@@ -1,7 +1,17 @@
 // U-1: scenes declare their controls; the browser renders them as real buttons with data-testid="<scene>.<id>",
 // and headless tests tap them through this registry (T-5).
 export function createUi({ onAction, coveredBy = () => undefined, isAction = () => true, ctxOf = () => undefined }) {
-  const controls = new Map(), active = [], snap = []; // active: the pressed holds; snap: advance()'s reused copy (no per-step allocation)
+  let viewCtx, shownN = 0; // view()'s ctx while controls.forEach(viewOne) runs (one callback, made once: no per-call closure)
+  const viewOne = c => {
+    const ctx = viewCtx, o = c.out ??= { id: c.id, scene: c.scene, role: c.role, label: '', enabled: true, pressed: undefined, group: c.role === 'choice' ? c.group : undefined, progress: undefined, value: undefined };
+    o.label = c.label; o.enabled = c.when ? !!c.when(ctx, ctxOf(c.scene)) : true;
+    if (c.role === 'switch') o.pressed = !!c.get(ctx, ctxOf(c.scene));
+    else if (c.role === 'choice') o.pressed = c.get(ctx, ctxOf(c.scene)) === c.value;
+    else if (c.role === 'hold') { o.pressed = c.pressed; o.progress = Math.min(1, c.held / c.seconds); }
+    else if (c.role === 'textbox') o.value = String(c.get(ctx, ctxOf(c.scene)) ?? '');
+    shown[shownN++] = o;
+  };
+  const controls = new Map(), active = [], snap = [], shown = []; // active: the pressed holds; snap: advance()'s reused copy (no per-step allocation); shown: view()'s
   const add = (scene, role, spec) => {
     const id = `${scene}.${spec.id}`;
     if (controls.has(id)) throw new Error(`ui: duplicate control '${id}'`);
@@ -31,6 +41,13 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
     }),
     clear(scene) {
       for (const [id, c] of controls) if (c.scene === scene) { controls.delete(id); if (c.pressed) { c.pressed = false; active.splice(active.indexOf(c), 1); } }
+    },
+    // the same as tree(), into one reused object per control and one reused array: valid until the next view() (the DOM
+    // UI reads it every frame; R-8). Keys tree() leaves out for a role are undefined here.
+    view(ctx) {
+      shownN = 0; viewCtx = ctx; controls.forEach(viewOne); viewCtx = undefined;
+      if (shown.length !== shownN) shown.length = shownN; // by index, not length = 0 then push: V8 drops the backing store at length 0
+      return shown;
     },
     tree: ctx => [...controls.values()].map(c => {
       const o = { id: c.id, scene: c.scene, role: c.role, label: c.label, enabled: c.when ? !!c.when(ctx, ctxOf(c.scene)) : true };

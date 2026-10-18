@@ -87,7 +87,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // #105: the args an open overlay entered with (its ctx.args), for its view half; undefined when it is not an open overlay
   sceneView.overlayArgs = name => { for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === name) return stack[i].ctx.args; return undefined; };
   const def = name => game.scenes[name] ?? (() => { throw new Error(`engine: no scene '${name}'`); })();
-  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds, ctxOf: name => stack.find(o => o.ctx.name === name)?.ctx });
+  const ui = createUi({ onAction: a => input.set({ [a]: true }), coveredBy: s => coveredBy(s), isAction: a => typeof a === 'string' && a in input.kinds, ctxOf: name => { for (let i = 0; i < stack.length; i++) if (stack[i].ctx.name === name) return stack[i].ctx; return undefined; } });
   // [S-6] frame acks (#38): 'steps' counts every step as a presented frame (headless, ?lh-test); 'frames' counts only
   // engine.presented() (the browser driver acks a rendered frame at the start of the next tick). Listeners are
   // copy-on-write, so presenting allocates nothing. Listener timing: with 'steps' they run at the start of a step, so
@@ -395,6 +395,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     render(alpha) { rendered(alpha); },
     ui: {
       tree: () => ui.tree(engine),
+      view: () => ui.view(engine), // tree() into reused objects, valid until the next view() (R-8: the DOM UI's per-frame read)
       enabled: id => ui.enabled(id, engine), // #45
       tryTap(id) { if (!ui.enabled(id, engine)) return false; engine.ui.tap(id); return true; },
       press: id => rec ? recorded(o => o.push('press', id), () => ui.press(id, engine)) : ui.press(id, engine), // #9
