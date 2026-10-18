@@ -4,6 +4,8 @@ export { installEngineHook } from './view/debugHook.js';
 export { createDriver } from './view/driver.js';
 export { bindKeyboard } from './view/keyboard.js';
 export { bindGamepad } from './view/gamepad.js';
+export { bindMenuNav } from './view/menuNav.js';
+export { createPadEdges, familyOf, PAD_BUTTONS } from './view/padEdges.js';
 export { bindStick, bindHold } from './view/touch.js';
 export { bindPointer } from './view/pointer.js';
 export { bindGesture } from './view/gesture.js';

@@ -5,6 +5,7 @@ import { createDriver } from './driver.js';
 import { createUiDom } from './uiDom.js';
 import { installEngine } from './hook.js';
 import { createPipeline, checkRender } from './render/pipeline.js';
+import { bindMenuNav } from './menuNav.js';
 
 export function defineView({ scenes, render } = {}) {
   if (!scenes || typeof scenes !== 'object') throw new Error('defineView: scenes required');
@@ -15,7 +16,7 @@ export function defineView({ scenes, render } = {}) {
   return Object.freeze(out);
 }
 
-export function boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf, canvas, timer, renderer } = {}) {
+export function boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf, canvas, timer, renderer, nav, getGamepads } = {}) {
   doc ??= target.document ?? globalThis.document;
   flags ??= parseFlags(target.location?.search ?? '');
   const errors = [], views = halves.scenes ?? {};
@@ -28,7 +29,10 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames', timer });
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id) }; // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
-  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine))], onError: report });
+  // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
+  const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);
+  view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads }) : null;
+  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : [])], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
   (doc.head ?? doc.documentElement).appendChild(sa);

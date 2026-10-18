@@ -7,6 +7,7 @@ import { createSchedule, STEP_STAGES } from './schedule.js';
 import { createLoop } from './loop.js';
 import { actions as defineActions, createInput } from './actions.js';
 import { createUi } from './ui.js';
+import { checkNav, topNav, menuOwnsInput } from './nav.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
 import { createRegistry } from '../sim/replica.js';
 import { installWorld, checkPhysics } from '../sim/world/install.js';
@@ -33,7 +34,11 @@ export function defineGame(spec) {
     for (const r in RESERVED) if (Object.hasOwn(c.schema, r)) fail(`commands.${k}.schema may not declare reserved key '${r}'`);
     commands[k] = c.handler; schemas[k] = c.schema;
   }
-  for (const [name, s] of Object.entries(spec.scenes)) for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
+  for (const [name, s] of Object.entries(spec.scenes)) {
+    for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
+    checkNav(name, s.nav, fail); // U-9
+    if (typeof s.nav?.back === 'string' && !(s.nav.back in (spec.actions ?? {}))) fail(`scene '${name}'.nav.back: no action '${s.nav.back}'`);
+  }
   if (spec.physics !== undefined) checkPhysics(spec.physics, fail); // §4.1: gravity, params and groups checked at definition
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
@@ -418,7 +423,20 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     },
   };
   schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
-  schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
+  schedule.add('lh.input', () => { input.gate(menuOwnsInput(game, sceneView.overlays)); input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' }); // U-9: a menu with input 'menu' on top gates the devices
+  // U-9: Back runs the topmost menu's nav.back (an action pressed next step, or a function); none is a no-op. Open
+  // summons an overlay whose nav.open its `when` allows, unless a menu that owns input is already on top.
+  engine.builtin('lh.back', e => {
+    const t = topNav(game, sceneView.overlays); if (t === undefined) return;
+    const b = game.scenes[t].nav.back; if (b === undefined) return;
+    if (typeof b === 'function') { let ctx; for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === t) ctx = stack[i].ctx; b(e, ctx); } else input.set({ [b]: true });
+  });
+  engine.builtin('lh.open', (e, data) => {
+    const name = data?.name, o = typeof name === 'string' ? game.scenes[name]?.nav?.open : undefined;
+    if (!o || menuOwnsInput(game, sceneView.overlays) || isOpen(name)) return;
+    if (o.when && !o.when(e)) return;
+    e.overlay(name, undefined, { once: true });
+  });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });

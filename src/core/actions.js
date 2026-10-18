@@ -22,6 +22,10 @@ export function createInput(schema) {
   const buttons = names.filter(n => !isAxis[n]), owed = Object.fromEntries(buttons.map(n => [n, 0]));
   // each source keeps every key preset (stable shape) and counts its own rising edges per button since the last apply() (#13, #41)
   const sources = [], once = {}, held = {};
+  // U-9 gating: while a menu with input 'menu' is on top, device layers are ignored (set/hold, i.e. tests and UI actions,
+  // still apply). Leaving the gate, a button some device still holds stays latched off until every device lets go, so
+  // the A that clicked "Drive" does not also pull the handbrake.
+  let gated = false; const latched = Object.fromEntries(buttons.map(n => [n, false]));
   // owes[n]: this source fed taps into owed[n] that have not all been shown yet (so clearDevice can drop them)
   const fresh = name => ({ name, values: Object.fromEntries(names.map(n => [n, isAxis[n] ? 0 : false])), rises: Object.fromEntries(buttons.map(n => [n, 0])), owes: Object.fromEntries(buttons.map(n => [n, false])) });
   const check = p => { for (const k in p) if (!(k in isAxis)) throw new Error(`input: unknown action '${k}'`); return p; };
@@ -31,6 +35,8 @@ export function createInput(schema) {
   // axis: largest |value| across sources, ties to the first registered; a paired axis takes the source whose pair vector is
   // longest (ties to the first), so both halves come from one source (#8); button: OR. Allocation-free.
   const merged = n => {
+    if (gated) return isAxis[n] ? undefined : false;
+    if (!isAxis[n] && latched[n]) { if (downElsewhere(n, null)) return false; latched[n] = false; }
     let best, any = false; const m = mate[n];
     if (m !== undefined) {
       let len = -1;
@@ -67,6 +73,14 @@ export function createInput(schema) {
         if (!other) owed[n] = 0;
       }
     },
+    // U-9: on/off once per step before apply(); entering drops every owed device tap, leaving latches held buttons
+    gate(on) {
+      on = !!on; if (on === gated) return;
+      gated = on;
+      if (on) { for (let i = 0; i < buttons.length; i++) owed[buttons[i]] = 0; for (let j = 0; j < sources.length; j++) { const s = sources[j]; for (let i = 0; i < buttons.length; i++) { s.rises[buttons[i]] = 0; s.owes[buttons[i]] = false; } } }
+      else for (let i = 0; i < buttons.length; i++) latched[buttons[i]] = downElsewhere(buttons[i], null);
+    },
+    get gated() { return gated; },
     set: p => { Object.assign(once, check(p)); },
     hold: p => { Object.assign(held, check(p)); },
     release(...ns) { if (!ns.length) clear(held); else for (const n of ns) delete held[n]; },
@@ -78,7 +92,7 @@ export function createInput(schema) {
         if (n in held || n in once) { v = n in held ? held[n] : once[n]; if (!isAxis[n]) { owed[n] = 0; for (let j = 0; j < sources.length; j++) sources[j].owes[n] = false; } }
         else if (isAxis[n]) v = merged(n);
         else {
-          let o = owed[n]; for (let j = 0; j < sources.length; j++) o += sources[j].rises[n];
+          let o = owed[n]; if (!gated && !latched[n]) for (let j = 0; j < sources.length; j++) o += sources[j].rises[n];
           if (o > 3) o = 3;
           if (o > 0) { if (snapshot[n].down) v = false; else { v = true; o--; } } else v = merged(n);
           owed[n] = o;

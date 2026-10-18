@@ -21,7 +21,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 6 | Async loading vs synchronous scene `enter` | Rally, Tractor Pickup | done (Rally 2c; S-6 protocol 2d D4; Tractor new farms 2f T5 `frames: 1`, 78 ms build) |
 | 7 | The world must survive menu screens | Rally | done (2c-rally) |
 | 8 | Device needs beyond axes and buttons | all | done for Rally's needs; Pig Pens' fixed pad done (2e P-E2, see #53; scene scope not needed); Tractor Pickup's radial pair merge done (2f T-E8: `axis({ pair })` + device `map` hook; one `map` option on all devices); gamepad.mapping open |
-| 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup); keyboard/gamepad focus open |
+| 9 | UI controls need more than a text label | Tractor Pickup, Rally | done (2c E4 adoption; 2d D6 ui.hold; custom content = adopted markup; keyboard/gamepad focus and activation: menu navigation, #138) |
 | 10 | `onRender` is a single slot | all | done (2d D9) |
 | 11 | Engine code must not import three/Rapier until builds alias them | all | done (0.8.0, 3d): `lion-hawk build` bundles with esbuild and the `dedupe` plugin (pinned by an engine-side probe package); each game adopts it at its build step |
 | 12 | Tests borrowed tools from a parent folder | engine | done |
@@ -150,6 +150,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 135 | gltf-transform `prune` drops single-colour textures | engine | done (0.8.0, 3d) |
 | 136 | `GLTFLoader` names every node and the scene in one namespace | engine | done (0.8.0, 3d) |
 | 137 | A dedupe test needs an engine-side importer of three | engine | done (0.8.0, 3d) |
+| 138 | Menus can't be driven with a controller | Rally, Tractor Pickup | done (menu-nav, 2026-10-18) |
 
 ## Entries
 
@@ -224,7 +225,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
   - Rally's menus are rich HTML.
 - **Engine change:** custom content in controls (icon or render hook), a `ui.hold` control on engine time, and keyboard/gamepad focus and activation of UI buttons.
 - **2c-rally plan:** E4 adds `ui.choice`, `ui.field` and slot adoption (#18); adopted elements keep the game's own content, which covers icon buttons. Still open: `ui.hold`, focus and gamepad activation of UI buttons.
-- **Status:** done (2c E4 adoption; 2d D6 `ui.hold`; custom content = adopted markup): `u.hold({ id, label, seconds, action, when })` on engine time, `engine.ui.press/release` (recorded, replayable), `--lh-progress` and `data-lh-down` on the DOM button, Space/Enter on a focused hold; Tractor Pickup's SVG horn and ring ride on slot adoption. Still open: gamepad activation and focus navigation of UI buttons.
+- **Status:** done (2c E4 adoption; 2d D6 `ui.hold`; custom content = adopted markup): `u.hold({ id, label, seconds, action, when })` on engine time, `engine.ui.press/release` (recorded, replayable), `--lh-progress` and `data-lh-down` on the DOM button, Space/Enter on a focused hold; Tractor Pickup's SVG horn and ring ride on slot adoption. Gamepad activation and focus navigation of UI buttons: done with menu navigation (#138).
 
 ### 10. `onRender` is a single slot: all
 - **What happened:** a game calling `engine.onRender` after `boot` silently disables view-half frames.
@@ -910,3 +911,9 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 - **Workaround:** None needed.
 - **Engine change:** The build test links an engine-side probe package that imports `three` and asserts the bundle uses the game's copy (R9).
 - **Status:** done (0.8.0, 3d).
+
+### 138. Menus can't be driven with a controller: Rally, Tractor Pickup (menu-nav)
+- **What happened:** A pad could start, pause and retry a Rally run, but not move between options or change a setting; Tractor Pickup's overlays never read the pad and nothing closed a menu with B. Pad A was both Rally's handbrake and `confirm`, so selecting an option with A would also have started the run. Tractor's paint, book, parent and multiplayer menus are mostly plain buttons outside the registry.
+- **Workaround:** None: Tab and the mouse were the only ways round a menu.
+- **Engine change:** Menu navigation (spec U-7–U-10, I-8; research `docs/research-menu-navigation.md`, plan `docs/plans/2026-10-18-menu-nav.md`). A scene declares `nav: { modal, initial, back, input, open }`; `bindMenuNav` (booted when any scene has `nav`) moves real DOM focus with the D-pad, the stick or the arrow keys, one step per push, picked by the pure `pickNeighbour` scorer (lined-up candidates first, a 45° cone, no wrap); A/Enter activate (a hold is pressed while A is held); B/Esc/Start send `lh.back`; LB/RB step a choice row; `nav.open` summons a menu from gameplay on a tap or a hold of a pad button or key (`lh.open`). While a menu with `input: 'menu'` is on top the game's devices are gated, and a button held across the menu stays off until released. Candidates are a scene's registered controls plus buttons inside `[data-lh-nav-scope~="<scene>"]`, so unregistered markup navigates too. `<html data-lh-input>`/`data-lh-pad` track the last device; `lion-hawk/kits/glyphs/view` shows role glyphs (Kenney Input Prompts, CC0) for Xbox, PlayStation, Steam Deck, generic pads, keys, mouse and touch.
+- **Status:** done (menu-nav, 2026-10-18). Pad text entry (Rally's seed, Tractor's seed and room code) is still open (spec §10).

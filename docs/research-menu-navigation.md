@@ -384,3 +384,18 @@ All three share a view-side **pad edge reader**: it polls through the same injec
 - [Microsoft: focus navigation](https://learn.microsoft.com/en-us/windows/apps/design/input/focus-navigation)
 - [Xbox Accessibility Guideline 112](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/112)
 - [Steam Deck compatibility](https://partner.steamgames.com/doc/steamdeck/compat)
+
+## 7. Decisions (user, 2026-10-18)
+
+1. **Scope:** Rally and Tractor Pickup. Pig Pens is not a gamepad game and is skipped.
+2. **Back:** B and Esc are Back. Start and Esc bring up the pause menu, and close menus.
+3. **No Nintendo layout** (no A/B swap).
+4. **No wrapping** at list or grid edges.
+5. **One step per push:** no hold-to-repeat on the D-pad or stick.
+6. **Glyphs in scope,** from Kenney's CC0 Input Prompts pack (Xbox, PlayStation, Keyboard & Mouse).
+7. **Text fields go on the todo list:** Rally's seed, and Tractor's seed and room code.
+8. **Input gating is a per-menu option,** because a small sub-menu may not block the main input.
+9. **Modal (focus trap) is a per-menu option.**
+10. **Testing leans on the position logic:** the scorer gets the thorough unit tests.
+
+The plan is `docs/plans/2026-10-18-menu-nav.md`.

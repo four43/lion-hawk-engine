@@ -41,7 +41,7 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     },
     isOpen: (n, o) => engine.isOpen(n, o), // #36
     ui: { tree: () => engine.ui.tree(), enabled: id => engine.ui.enabled(id), tryTap: id => { try { return engine.ui.tryTap(id); } finally { after(); } }, tap: id => { engine.ui.tap(id); after(); }, press: id => { engine.ui.press(id); after(); }, release: id => { engine.ui.release(id); after(); }, fill: (id, t) => { engine.ui.fill(id, t); after(); } },
-    view: { get project() { return view?.project; } }, // T-17: world targets call the game view's projection
+    view: { get project() { return view?.project; }, get nav() { return view?.nav?.state; } }, // T-17: world targets call the game view's projection; U-7: the navigator's state
     rng: n => engine.rng(n),
     get debug() { return engine.game.debug?.(engine) ?? {}; },
     dispose() { target.removeEventListener?.('error', onError); target.removeEventListener?.('unhandledrejection', onReject); },

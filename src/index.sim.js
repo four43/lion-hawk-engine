@@ -8,6 +8,8 @@ export { createSchedule, STEP_STAGES } from './core/schedule.js';
 export { createLoop } from './core/loop.js';
 export { axis, button, actions, createInput } from './core/actions.js';
 export { createUi } from './core/ui.js';
+export { pickNeighbour, NAV_DIRS } from './core/navScore.js';
+export { checkNav, topNav, menuOwnsInput } from './core/nav.js';
 export { defineGame, createEngine } from './core/engine.js';
 export { policy } from './core/policy.js';
 export { F, kind } from './defs/fields.js';
