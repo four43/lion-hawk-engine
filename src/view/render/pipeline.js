@@ -50,7 +50,9 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
   view.audio = createAudio({ doc, flags });
   let gfx = null;
   try {
-    gfx = createRenderer({ canvas, renderer, target, dpr: render.dpr, antialias: render.antialias, shadows: render.shadows, toneMapping: render.toneMapping, exposure: render.exposure, camera: render.camera });
+    gfx = createRenderer({ canvas, renderer, target, dpr: render.dpr, antialias: render.antialias, shadows: render.shadows, toneMapping: render.toneMapping, exposure: render.exposure, camera: render.camera,
+      onLost: () => report(new Error('render: the WebGL context was lost (the GPU reset, or the page was in the background); drawing resumes when it is restored')),
+      onRestored: () => { Promise.resolve().then(() => gfx.warm?.()).catch(report); } }); // every program is gone: compile them again before they are drawn
   } catch (err) {
     report(new Error(`render: ${err?.message ?? err}`));
   }

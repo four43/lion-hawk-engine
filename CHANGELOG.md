@@ -15,6 +15,7 @@
 - View (R-8): a steady frame's render slot allocates almost nothing (was about 7 KB with an overlay and four controls): `reconcile()` returns at once when the scene stack is unchanged, the frame loop no longer copies the active halves, and the DOM UI sync reads `engine.ui.view()` (new: `tree()` into reused objects, valid until the next call) with reused name lists and generation marks instead of fresh arrays, Maps and Sets. `test/view-alloc.test.mjs` holds it under 256 bytes per frame.
 - Bake: a model without `keepTextures` lets prune drop vertex attributes nothing reads (UVs without a texture, tangents without a normal map); the fixture's cart, crate and pet are 7-17% smaller. `keepTextures` models keep every attribute.
 - Leaks: an instanced mesh with coverage frees its own `instanceCoverage` buffer on dispose (view sync's grow and scene change, and `createCrowd`, which now disposes through its instances); kit-fx `createParticles` and `createMarks` have `dispose()`, freeing the mesh and the geometry and material they made.
+- A lost WebGL context (iOS and Android drop a backgrounded page's) is reported to `errors`, `gfx.lost` is true and nothing draws until the browser restores it; the restore runs `gfx.warm()` again. `createRenderer({ onLost, onRestored })`.
 
 ## 0.11.1 — 2026-10-16
 

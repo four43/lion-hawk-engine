@@ -125,3 +125,15 @@ test('a throwing sync.dispose still disposes the rest and the renderer; the erro
   assert.deepEqual(order, ['assets', 'materials', 'audio']); assert.ok(s.renderer.disposed === true);
   pipe.dispose(); // already disposed: quiet
 });
+test('a lost WebGL context is reported and nothing draws until it is restored; the restore warms every program again', async () => {
+  const s = setup({}), pipe = s.make(), canvas = s.renderer.domElement, ev = t => { const e = new canvas.ownerDocument.defaultView.Event(t, { cancelable: true }); canvas.dispatchEvent(e); return e; };
+  let warmed = 0; const warm = s.view.gfx.warm; s.view.gfx.warm = o => { warmed++; return warm(o); };
+  pipe.draw(); const calls = s.renderer.info.render.calls;
+  ev('webglcontextlost');
+  assert.deepEqual(s.errors, ['render: the WebGL context was lost (the GPU reset, or the page was in the background); drawing resumes when it is restored']);
+  assert.equal(s.view.gfx.lost, true); pipe.draw(); assert.equal(s.renderer.info.render.calls, calls, 'no draw while lost');
+  ev('webglcontextrestored'); await Promise.resolve();
+  assert.equal(s.view.gfx.lost, false); assert.equal(warmed, 1, 'warm again: every program is gone');
+  pipe.draw(); assert.equal(s.renderer.info.render.calls, calls + 1);
+  pipe.dispose(); ev('webglcontextlost'); assert.equal(s.errors.length, 1, 'listeners removed on dispose');
+});

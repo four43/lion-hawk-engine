@@ -25,7 +25,10 @@ export function fitView({ cssW, cssH, winW, winH, deviceDpr, touchPoints }, { dp
 
 const live = new WeakMap(); // page (the canvas's document) → its renderer: one WebGLRenderer per page
 
-export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, shadows = 'pcf', toneMapping = 'none', exposure = 1, camera = {}, renderer = null, target } = {}) {
+// onLost / onRestored: the canvas's webglcontextlost / webglcontextrestored (iOS and Android drop a backgrounded page's
+// context). three's WebGLRenderer keeps the canvas restorable and rebuilds its state; gfx.lost is true in between and
+// render() draws nothing then.
+export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, shadows = 'pcf', toneMapping = 'none', exposure = 1, camera = {}, renderer = null, target, onLost = null, onRestored = null } = {}) {
   checkShadows(shadows); checkToneMapping(toneMapping);
   canvas ??= renderer?.domElement;
   if (!canvas) throw new Error('render: createRenderer needs { canvas }');
@@ -59,9 +62,12 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
   target.addEventListener?.('resize', onResize);
   const ro = typeof target.ResizeObserver === 'function' ? new target.ResizeObserver(onResize) : null; // the canvas can change size without a window resize (Tractor X-11)
   ro?.observe(canvas);
+  const onCtxLost = e => { e.preventDefault?.(); gfx.lost = true; onLost?.(); }; // preventDefault: the browser may restore it
+  const onCtxRestored = () => { gfx.lost = false; onRestored?.(); };
+  canvas.addEventListener?.('webglcontextlost', onCtxLost); canvas.addEventListener?.('webglcontextrestored', onCtxRestored);
   const gfx = {
-    renderer: r, scene, camera: view, size, post: null, resize,
-    render() { if (disposed) return; if (gfx.post) gfx.post.render(scene, view); else r.render(scene, view); },
+    renderer: r, scene, camera: view, size, post: null, resize, lost: false,
+    render() { if (disposed || gfx.lost) return; if (gfx.post) gfx.post.render(scene, view); else r.render(scene, view); },
     info() {
       const i = r.info;
       stats.calls = i.render.calls; stats.triangles = i.render.triangles; stats.points = i.render.points; stats.lines = i.render.lines;
@@ -71,6 +77,7 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
     dispose() {
       if (disposed) return; disposed = true;
       target.removeEventListener?.('resize', onResize); ro?.disconnect();
+      canvas.removeEventListener?.('webglcontextlost', onCtxLost); canvas.removeEventListener?.('webglcontextrestored', onCtxRestored);
       gfx.post?.dispose?.(); gfx.post = null;
       r.dispose(); if (live.get(page) === r) live.delete(page);
     },
