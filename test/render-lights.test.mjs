@@ -18,12 +18,14 @@ test('defaults are Tractor Pickup render/scene.js', () => {
   assert.deepEqual([rig.sun.shadow.bias, rig.sun.shadow.normalBias], [-0.0006, 0.03]);
   assert.ok(scene.children.includes(rig.hemi) && scene.children.includes(rig.sun) && scene.children.includes(rig.sun.target));
 });
+const TEXEL = 60 / 2048; // the default box (±30) over the default map
 test('the shadow box follows a point: the sun at the point plus the offset, aimed at the point (Tractor follow)', () => {
-  const rig = createLightRig(new THREE.Scene()); rig.follow(10, -4);
-  assert.deepEqual(rig.sun.position.toArray(), [-16, 46, 18]); assert.deepEqual(rig.sun.target.position.toArray(), [10, 0, -4]);
+  const rig = createLightRig(new THREE.Scene()), near = (v, a) => v.distanceTo(new THREE.Vector3(...a)) < TEXEL; rig.follow(10, -4);
+  assert.ok(near(rig.sun.position, [-16, 46, 18])); assert.ok(near(rig.sun.target.position, [10, 0, -4])); // within a texel (snapped below)
+  assert.ok(rig.sun.position.clone().sub(rig.sun.target.position).distanceTo(new THREE.Vector3(-26, 46, 22)) < 1e-9, 'the offset is exact');
   rig.follow(10, -4, 30); // Rally: the shadow box rises with the car (3j request 6)
-  assert.deepEqual(rig.sun.position.toArray(), [-16, 76, 18]); assert.deepEqual(rig.sun.target.position.toArray(), [10, 30, -4]);
-  rig.set('dusk'); assert.equal(rig.sun.target.position.y, 30, 'a preset change keeps the followed height');
+  assert.ok(near(rig.sun.position, [-16, 76, 18])); assert.ok(near(rig.sun.target.position, [10, 30, -4]));
+  rig.set('dusk'); assert.ok(Math.abs(rig.sun.target.position.y - 30) < TEXEL, 'a preset change keeps the followed height');
 });
 test('box: [x, z] gives Pig Pens\' uneven shadow box', () => {
   const c = createLightRig(new THREE.Scene(), { sun: { box: [38, 36] } }).sun.shadow.camera;
@@ -93,4 +95,14 @@ test('per-frame paths allocate nothing (R-8)', () => {
 test('dispose takes the lights and the background out of the scene', () => {
   const scene = new THREE.Scene(), rig = createLightRig(scene); rig.dispose();
   assert.equal(scene.children.length, 0); assert.ok(scene.background === null, 'no background');
+});
+test('the followed shadow box moves in whole shadow-map texels across the light, so shadow edges do not shimmer as the point moves', () => {
+  const rig = createLightRig(new THREE.Scene()), z = new THREE.Vector3(-26, 46, 22).normalize();
+  const x = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), z).normalize(), y = new THREE.Vector3().crossVectors(z, x);
+  for (let i = 0; i < 40; i++) {
+    const px = 3 + i * TEXEL * 0.13, pz = -2 + i * TEXEL * 0.07; rig.follow(px, pz, 1);
+    const t = rig.sun.target.position, ix = t.dot(x) / TEXEL, iy = t.dot(y) / TEXEL;
+    assert.ok(Math.abs(ix - Math.round(ix)) < 1e-6 && Math.abs(iy - Math.round(iy)) < 1e-6, `step ${i}: (${ix}, ${iy}) texels`);
+    assert.ok(t.distanceTo(new THREE.Vector3(px, 1, pz)) < TEXEL, 'and stays within a texel of the point');
+  }
 });

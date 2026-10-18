@@ -14,6 +14,7 @@ export const DEFAULT_PRESETS = Object.freeze({ // Tractor E-5 bedtime: k 0.5 = s
   dusk: Object.freeze({ sky: '#f4a76b', hemi: 0.8, sun: Object.freeze({ color: '#ffa860', intensity: 1.125 }) }),
   night: Object.freeze({ sky: '#1b2440', hemi: 0.3, sun: Object.freeze({ color: '#9fb4ff', intensity: 0.15 }) }),
 });
+const _t = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(); // follow's scratch
 const TOP = ['sky', 'hemiSky', 'ground', 'hemi', 'sun', 'fog', 'presets'];
 const SUN = ['color', 'intensity', 'map', 'box', 'offset', 'near', 'far', 'bias', 'normalBias'];
 const PRESET = ['sky', 'hemiSky', 'ground', 'hemi', 'sun', 'fog'];
@@ -66,7 +67,20 @@ export function createLightRig(scene, opts = {}) {
   const fail = name => { throw Error(`lights: unknown preset '${name}' (known: ${names.join(', ')})`); };
   const get = name => presets[name] ?? fail(name);
   // y: the followed point's height (Rally's stages climb; 3j request 6). Default 0 keeps Tractor and Pig Pens unchanged.
-  function follow(x, z, y = 0) { fx = x; fz = z; fy = y; sun.position.set(x + offset.x, y + offset.y, z + offset.z); sun.target.position.set(x, y, z); }
+  // The box moves in whole shadow-map texels across the light (its x and y), so a moving point does not make shadow edges
+  // shimmer; along the light it moves freely. The drawn box is within a texel of the point.
+  const tx = sun.castShadow ? (sun.shadow.camera.right - sun.shadow.camera.left) / s.map : 0, ty = sun.castShadow ? (sun.shadow.camera.top - sun.shadow.camera.bottom) / s.map : 0;
+  function follow(x, z, y = 0) {
+    fx = x; fz = z; fy = y; _t.set(x, y, z);
+    if (tx > 0) { // the shadow camera's basis, as lookAt builds it from the sun's offset and up
+      _z.copy(offset).normalize(); _x.crossVectors(sun.shadow.camera.up, _z);
+      if (_x.lengthSq() < 1e-12) _x.set(1, 0, 0); else _x.normalize();
+      _y.crossVectors(_z, _x);
+      const a = _t.dot(_x), b = _t.dot(_y);
+      _t.addScaledVector(_x, Math.round(a / tx) * tx - a).addScaledVector(_y, Math.round(b / ty) * ty - b);
+    }
+    sun.target.position.copy(_t); sun.position.copy(_t).add(offset);
+  }
   function lerp(a, b, k) {
     const A = get(a), B = get(b), t = k < 0 ? 0 : k > 1 ? 1 : k;
     sky.copy(A.sky).lerp(B.sky, t);
