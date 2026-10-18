@@ -67,3 +67,13 @@ test('3i: installNet refuses kind fields that are entity parts', () => {
   assert.throws(() => headless(game({ netId: F.uint(1) })), /net: kind 'x' field 'netId' is an entity part; rename it/);
   assert.throws(() => headless(game({ body: F.oneOf(['red']) })), /net: kind 'x' field 'body' must be F\.body\(\)/);
 });
+test('3i: a record that cannot encode (an out-of-range field) costs only its own kind\'s frame: counted, everything else still sent', () => {
+  const w = mp(carts, { peers: 2, argsOf: i => ({ n: i + 1 }) }); w.seconds(1.5);
+  const H = w.host.h.world.net;
+  H.find('crate', 1).hue = 300; // F.uint(1): encode throws
+  const sent = H.stats.sent, unsent = H.stats.unsent;
+  w.seconds(1, (p, k) => k === 0 ? { thr: 1 } : null); // the host drives its cart
+  assert.ok(H.stats.unsent > unsent, 'the bad frame is counted');
+  assert.ok(H.stats.sent > sent, 'other frames still go out');
+  assert.deepEqual(w.diverged({ agree: { cart: 0.5 } }), [], 'the guest still follows the host\'s cart');
+});

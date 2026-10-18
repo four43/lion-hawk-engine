@@ -340,3 +340,9 @@ test('2f: onStep runs after each step, once events are flushed; it unsubscribes'
   const off = e.onStep(en => seen.push(`after:${en.time.step}`)); e.stepN(2); off(); e.stepN(1);
   assert.deepEqual(seen, ['tick', 'after:1', 'tick', 'after:2', 'tick']);
 });
+test('N-4: a throwing onStep listener does not starve the ones after it (the port drains in a later one); the step still rethrows', () => {
+  const g = defineGame({ id: 'os2', start: 's', scenes: { s: {} } }), e = createEngine(g), seen = [];
+  e.onStep(() => { throw new Error('boom'); }); e.onStep(en => seen.push(en.time.step));
+  assert.throws(() => e.stepN(1), /boom/);
+  assert.deepEqual(seen, [1]);
+});

@@ -319,8 +319,10 @@ export function installNet(engine) {
       const pairs = W.pairs[i], b = W.buckets[i]; pairs.length = 0;
       for (let j = 0; j < b.length; j++) { const o = b[j]; o.pair[1] = k.record ? k.record(o.e, o.rec, world, o.base) : o.base(o.e, o.rec); pairs.push(o.pair); }
       objs[k.name] = pairs;
-      if (key) { W.lastKey[i] = step; (keyG ??= []).push(...W.trackers[i].key(objs)); }
-      if (diff) { const g = W.trackers[i].diff(objs)[0]; if (!key && (g.records.length || g.removed.length)) (diffG ??= []).push(g); }
+      try { // a record that cannot encode (a bad field value) costs this kind's frame only; the next keyframe resends what it held back
+        if (key) { W.lastKey[i] = step; (keyG ??= []).push(...W.trackers[i].key(objs)); }
+        if (diff) { const g = W.trackers[i].diff(objs)[0]; if (!key && (g.records.length || g.removed.length)) (diffG ??= []).push(g); }
+      } catch (err) { stats.unsent++; warn(`net: kind '${k.name}' not sent`, err); }
       objs[k.name] = undefined;
     }
     if (keyG) sendFrame(true, self, time, keyG, 0);

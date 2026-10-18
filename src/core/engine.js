@@ -302,7 +302,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     try { drain(); } catch (err) { failure ??= err; }
     try { schedule.run('events.flush', engine, dt); } catch (err) { failure ??= err; }
     stepping = false; step++; syncTime();
-    try { const l = stepFns; for (let i = 0; i < l.length; i++) l[i](engine); } catch (err) { failure ??= err; } // N-4: after the flush and the counter
+    { const l = stepFns; for (let i = 0; i < l.length; i++) try { l[i](engine); } catch (err) { failure ??= err; } } // N-4: after the flush and the counter; each its own try, so a later one (the port's drain) still runs
     outbox.length = 0; // N-3: undrained sends are discarded (no port, no growth)
     if (failure) throw failure;
   } });
