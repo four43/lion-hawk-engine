@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { F, kind, encodeRecord, encodeFrame, decodeFrame, createRegistry, actions, axis, button } from '../src/index.sim.js';
-import { TUNE, SEND, INPUT_BATCH } from '../src/defs/fields.js';
+import { TUNE, SEND, INPUT_BATCH, INPUT_WIRE_MAX } from '../src/defs/fields.js';
 
 const ACT = actions({ thr: axis(), honk: button() });
 // Tractor Pickup 1.8.0's BODY (games/tractor-pickup/src/net/kinds.js) without dirt: F.body() must pack the same bytes (R5)
@@ -65,7 +65,7 @@ test('3i: a driven kind sends its input as { s, list } (N-13); a proxy owner kin
   const r = decodeFrame(buf, reg).groups.get('d').records.get(2);
   assert.equal(r.input.s, 41); assert.equal(r.input.list.length, 2); assert.equal(r.input.list[1].honk, true); assert.ok(Math.abs(r.input.list[0].thr - 0.5) < 1e-4);
   assert.throws(() => encodeRecord(D, 2, { body: pose(0, 0, 0), input: { s: 1, list: [] } }), /bad list/, 'at least one input');
-  assert.throws(() => encodeRecord(D, 2, { body: pose(0, 0, 0), input: { s: 1, list: Array(9).fill(list[0]) } }), /bad list/, 'at most 8');
+  assert.throws(() => encodeRecord(D, 2, { body: pose(0, 0, 0), input: { s: 1, list: Array(INPUT_WIRE_MAX + 1).fill(list[0]) } }), /bad list/, `at most ${INPUT_WIRE_MAX}`);
   const P = kind({ name: 'p', code: 3, authority: 'owner', max: 1, idMin: 1, idMax: 4, fields: { yaw: F.angle(), input: F.actions(ACT) } });
   assert.equal(encodeRecord(P, 1, { yaw: 1, input: list[1] }).length, 2 + 2 + 2 + 1, 'id, yaw, one axis, one flags byte');
 });

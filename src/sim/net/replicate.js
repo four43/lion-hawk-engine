@@ -55,17 +55,17 @@ export function applyFields(k, e, rec) {
     e[name] = rec[name];
   }
 }
-// N-13: the owner's last INPUT_BATCH inputs by owner step; fill(out) sets out.s (the newest step) and out.list (oldest first; the ring's objects)
-export function createInputRing(f) {
-  const slots = Array.from({ length: INPUT_BATCH }, () => ({ s: 0, v: zeroActions(f) }));
+// N-13: the owner's last `size` inputs by owner step (installNet: INPUT_BATCH, or 2 × steps per send when that is more); fill(out) sets out.s (the newest step) and out.list (oldest first; the ring's objects)
+export function createInputRing(f, size = INPUT_BATCH) {
+  const slots = Array.from({ length: size }, () => ({ s: 0, v: zeroActions(f) }));
   let n = 0, head = 0; // head: the next slot written
   return {
     get size() { return n; },
-    push(s, src) { const x = slots[head]; x.s = s; copyActions(f, src, x.v); head = (head + 1) % INPUT_BATCH; if (n < INPUT_BATCH) n++; },
+    push(s, src) { const x = slots[head]; x.s = s; copyActions(f, src, x.v); head = (head + 1) % size; if (n < size) n++; },
     fill(out) {
       out.list.length = n;
-      for (let i = 0; i < n; i++) out.list[i] = slots[(head - n + i + INPUT_BATCH) % INPUT_BATCH].v;
-      out.s = n ? slots[(head - 1 + INPUT_BATCH) % INPUT_BATCH].s : 0; return out;
+      for (let i = 0; i < n; i++) out.list[i] = slots[(head - n + i + size) % size].v;
+      out.s = n ? slots[(head - 1 + size) % size].s : 0; return out;
     },
     clear() { n = 0; head = 0; },
   };

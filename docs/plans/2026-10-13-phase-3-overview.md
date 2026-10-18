@@ -643,7 +643,7 @@ const TRAIN = kind({ name: 'train', code: 4, authority: 'owner', max: 1, idMin: 
 - **Remote modes.**
   - **proxy:** the body is kinematic. In `pre` the next pose = interp sample at `engine.time.wall` (or forecast, D8).
   - **view:** bodiless. The pool is written the same way.
-  - **driven (N-13, N-14).** Inputs come batched in the record (`input` plus a step stamp and up to 8 past inputs). Receivers keep a jitter queue: each local step takes one, holds the last when it is empty, and drops to the newest two when it grows past 4.
+  - **driven (N-13, N-14).** Inputs come batched in the record (`input` plus a step stamp and the inputs before it: 8, or 2 × the steps per send when that is more, up to 64). Receivers keep a jitter queue: each local step takes one, holds the last when it is empty, and drops to the newest `max(2, every − 1)` when it grows past `max(4, every + 1)`, where `every` is the steps per send.
     - On a body snapshot, the snapshot is projected by the one-way latency (`offset` from interp). If the error is under `snapAt` and 30°, velocities are steered toward it over `nudge` steps; otherwise the body is set (`place` with `keep`).
     - Every correction sets `e.netFix` (§4.9).
 - **Determinism.** Everything runs on sim steps, `engine.time.wall` and command `at` stamps, so guest tapes replay alone (#78).

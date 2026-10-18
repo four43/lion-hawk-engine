@@ -31,7 +31,8 @@ export const F = {
 export const REMOTES = Object.freeze(['driven', 'proxy', 'view']), FOLLOWS = Object.freeze(['interp', 'forecast']);
 export const TUNE = Object.freeze({ snapAt: 1.5, nudge: 6, smoothMs: 150 }); // N-14, N-15, N-17 defaults
 export const SEND = Object.freeze({ hz: 20, key: 2 }); // N-11: diffs at hz, a keyframe every `key` seconds
-export const INPUT_BATCH = 8; // N-13: a driven record carries the newest input and up to 7 before it
+export const INPUT_BATCH = 8; // N-13: a driven record carries the newest input and at least 7 before it (2 × steps per send when that is more)
+export const INPUT_WIRE_MAX = 64; // N-13: the most inputs one record may carry (the list's u8 count; only the inputs sent cost bytes)
 const checkKeys = (o, allowed, what, fail) => { for (const k of Object.keys(o)) if (!(k in allowed)) fail(`unknown ${what} key '${k}'`); };
 // { name, code, authority: 'host' | 'owner', max, idMin, idMax, fields, remote?, follow?, tune?, send?, record?, apply?, newer?, spawn?, spawned? }
 export const kind = def => {
@@ -55,7 +56,7 @@ export const kind = def => {
   const send = { ...SEND, ...def.send };
   for (const k of ['hz', 'key']) if (!(send[k] > 0 && Number.isFinite(send[k]))) fail(`send.${k} must be > 0 (got ${send[k]})`);
   for (const h of ['record', 'apply', 'newer', 'spawn', 'spawned']) if (def[h] !== undefined && typeof def[h] !== 'function') fail(`${h} must be a function`);
-  // N-13: a driven kind's input travels as { s: the owner step of the newest input, list: up to INPUT_BATCH snapshots, oldest first }
-  const wire = remote === 'driven' ? { ...fields, input: F.obj({ s: F.uint(4), list: F.list(input, INPUT_BATCH, 1) }) } : fields;
+  // N-13: a driven kind's input travels as { s: the owner step of the newest input, list: up to INPUT_WIRE_MAX snapshots, oldest first }
+  const wire = remote === 'driven' ? { ...fields, input: F.obj({ s: F.uint(4), list: F.list(input, INPUT_WIRE_MAX, 1) }) } : fields;
   return { idMin: 0, ...def, remote, follow, tune: Object.freeze(tune), send: Object.freeze(send), bodies, input, rec: F.obj(wire) };
 };

@@ -12,9 +12,11 @@ export const MAX_ANGLE = Math.PI / 6; // N-14: 30 degrees
 
 // N-13: one remote driven actor's inputs by owner step. offer(batch) takes a record's { s, list } (list[i] is owner step
 // s - (len - 1 - i)); take(out) copies the oldest into out each local step, holds out when empty, and drops to the newest
-// `keep` when more than `high` wait.
-export function createInputQueue(f) {
-  const slots = Array.from({ length: QUEUE.cap }, () => ({ s: 0, v: zeroActions(f) }));
+// `keep` when more than `high` wait. `every` (steps per send) scales them: one send brings `every` new inputs, so high is
+// at least every + 1 and keep every - 1 (QUEUE's values are those at 60 Hz / 20 Hz).
+export function createInputQueue(f, every = 1) {
+  const high = Math.max(QUEUE.high, every + 1), keep = Math.max(QUEUE.keep, every - 1), cap = Math.max(QUEUE.cap, 2 * high);
+  const slots = Array.from({ length: cap }, () => ({ s: 0, v: zeroActions(f) }));
   let head = 0, n = 0, last = -1, used = -1;
   return {
     get size() { return n; }, get used() { return used; }, get last() { return last; },
@@ -22,14 +24,14 @@ export function createInputQueue(f) {
       const len = batch.list.length;
       for (let i = 0; i < len; i++) {
         const s = batch.s - (len - 1 - i); if (s <= last) continue;
-        if (n === QUEUE.cap) { head = (head + 1) % QUEUE.cap; n--; } // full: the oldest goes
-        const x = slots[(head + n) % QUEUE.cap]; x.s = s; copyActions(f, batch.list[i], x.v); n++; last = s;
+        if (n === cap) { head = (head + 1) % cap; n--; } // full: the oldest goes
+        const x = slots[(head + n) % cap]; x.s = s; copyActions(f, batch.list[i], x.v); n++; last = s;
       }
     },
     take(out) {
-      if (n > QUEUE.high) { head = (head + n - QUEUE.keep) % QUEUE.cap; n = QUEUE.keep; }
+      if (n > high) { head = (head + n - keep) % cap; n = keep; }
       if (!n) return false;
-      const x = slots[head]; copyActions(f, x.v, out); used = x.s; head = (head + 1) % QUEUE.cap; n--; return true;
+      const x = slots[head]; copyActions(f, x.v, out); used = x.s; head = (head + 1) % cap; n--; return true;
     },
     clear() { head = 0; n = 0; last = -1; used = -1; },
   };

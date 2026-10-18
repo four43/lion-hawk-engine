@@ -12,6 +12,7 @@ import { createForecast, newPose } from '../forecast.js';
 import { createWarnOnce } from '../limits.js';
 import { defaultRecord, applyFields, newRecord, createInputRing, zeroActions, bodyEntity } from './replicate.js';
 import { createInputQueue, latencyMs, newTarget, project, poseError, decide, nudgeVelocity, writeKinematic, writePool, setNetFix } from './remote.js';
+import { INPUT_BATCH, INPUT_WIRE_MAX } from '../../defs/fields.js';
 
 export const RESERVED = Object.freeze(['id', 'tags', 'model', 'colliders', 'xf', 'sockets', 'net', 'netId', 'netFix']); // entity parts (§4.4)
 
@@ -29,6 +30,13 @@ export function installNet(engine) {
   const index = new Map(kinds.map((k, i) => [k.name, i])), ownerKinds = kinds.filter(k => k.authority === 'owner');
   const every = kinds.map(k => Math.max(1, Math.round(hz / k.send.hz))), keyEvery = kinds.map(k => Math.max(1, Math.round(k.send.key * hz)));
   const gapMs = every.map(n => n * 1000 / hz); // one send interval, ms
+  // N-13: a driven record carries 2 sends' worth of inputs (at least INPUT_BATCH), so a lost diff costs none and none are skipped
+  const batch = kinds.map((k, i) => {
+    if (k.remote !== 'driven') return 0;
+    const n = Math.max(INPUT_BATCH, 2 * every[i]);
+    if (n > INPUT_WIRE_MAX) throw new Error(`net: kind '${k.name}' sends every ${every[i]} steps at ${hz} Hz; a driven kind needs send.hz >= ${Math.ceil(hz * 2 / INPUT_WIRE_MAX)} (2 × steps per send <= ${INPUT_WIRE_MAX} inputs)`);
+    return n;
+  });
   const tunables = {}, stats = { frames: 0, sent: 0, dropped: 0, unsent: 0, spawned: 0, despawned: 0, respawned: 0, kinds: {} };
   for (const k of kinds) { tunables[k.name] = { ...k.tune }; stats.kinds[k.name] = { snaps: 0, nudges: 0, held: 0 }; } // N-17: a live copy per engine
   const players = new Map(), warn = createWarnOnce(), objs = {}; // players: host only, transport peer id -> player number (#77)
@@ -60,7 +68,7 @@ export function installNet(engine) {
     const links = k.bodies.map(b => bodyEntity(e, b));
     return { kind: k, e, id: e.netId, links, last: rec, interp: createInterp(), s: { a: null, b: null, k: 0, at: 0 }, applied: null, pose: newPose(),
       fc: k.follow === 'forecast' && k.remote !== 'driven' ? createForecast(links.length) : null,
-      queue: k.remote === 'driven' ? createInputQueue(k.input) : null, corr: k.remote === 'driven' ? links.map(newTarget) : null };
+      queue: k.remote === 'driven' ? createInputQueue(k.input, every[index.get(k.name)]) : null, corr: k.remote === 'driven' ? links.map(newTarget) : null };
   }
   function spawnRemote(k, id, rec) {
     const e = build(k, id, rec), r = newRemote(k, e, rec); W.byKey.set(keyOf(k, id), e); W.remotes.set(e, r); W.list.push(r); stats.spawned++;
@@ -297,7 +305,7 @@ export function installNet(engine) {
       const e = list[i], ki = index.get(e.net); if (ki === undefined || W.remotes.has(e)) continue;
       const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : e.netId !== self) continue;
       let o = W.own.get(e);
-      if (!o) { const ring = k.remote === 'driven' ? createInputRing(k.input) : null, rec = newRecord(k); W.own.set(e, o = { e, rec, ring, pair: [e.netId, rec], base: (x, out) => defaultRecord(k, x, out, ring) }); }
+      if (!o) { const ring = k.remote === 'driven' ? createInputRing(k.input, batch[ki]) : null, rec = newRecord(k); W.own.set(e, o = { e, rec, ring, pair: [e.netId, rec], base: (x, out) => defaultRecord(k, x, out, ring) }); }
       if (o.ring) o.ring.push(step, e.input); // N-13: every step's input, batched per send tick
       W.buckets[ki].push(o);
     }

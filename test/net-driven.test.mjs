@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mp } from '../testing/index.js';
-import carts, { CART } from './net/fixtures/carts.js';
+import carts, { CART, cartsGame } from './net/fixtures/carts.js';
 await RAPIER.init();
 const argsOf = i => ({ n: i + 1 });
 const cartContacts = p => p.h.events.of('contact').filter(ev => p.h.world.get(ev.a)?.net === 'cart' && p.h.world.get(ev.b)?.net === 'cart');
@@ -60,4 +60,14 @@ test('3i: a displaced replica is nudged back under snapAt and snapped over it; n
   w.host.h.place(c, { at: [x + 5, 0.4, 0] }); w.seconds(0.2);
   assert.equal(st.snaps, s0 + 1); assert.ok(Math.abs(c.xf.p.x - x) < 0.05, 'snapped');
   assert.ok(Math.abs(c.netFix.dp[0] - 5) < 0.1 && Math.abs(c.netFix.dp[2]) < 0.1, `dp ${c.netFix.dp}`);
+});
+test('3i: with more steps between sends than INPUT_BATCH (60 Hz, cart send.hz 5), the host still plays every owner step once (N-13)', () => {
+  const w = mp(cartsGame({ cartSend: { hz: 5 } }), { peers: 2, argsOf, link: { delay: 80 } }); w.seconds(1.5);
+  const r = w.host.h.world.net.remoteOf(w.host.h.world.net.find('cart', 2)), used = [];
+  for (let i = 0; i < 120; i++) { w.step(1, (p, k) => k === 1 ? { thr: -1 } : null); used.push(r.queue.used); }
+  const played = [...new Set(used)], gaps = played.filter((s, i) => i > 0 && s !== played[i - 1] + 1);
+  assert.deepEqual(gaps, [], `owner steps skipped: ${played.join(',')}`);
+});
+test('3i: a driven kind whose sends are too far apart for one record to carry them fails at install, naming the send.hz it needs', () => {
+  assert.throws(() => mp(cartsGame({ cartSend: { hz: 1 } }), { peers: 2, argsOf }), /net: kind 'cart' sends every 60 steps at 60 Hz; a driven kind needs send.hz >= 2/);
 });
