@@ -87,3 +87,27 @@ try { checkRapier(R); console.log('no error'); } catch (e) { console.log(e.messa
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', src], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
   assert.equal(r.stdout.trim(), 'physics: await RAPIER.init() before createEngine', r.stderr);
 });
+test('R-8: a step of 30 dynamic bodies allocates under 2 KB in JS (Rapier 0.21 World.step re-maps every handle after each step; the engine steps the pipeline)', async () => {
+  const { allocRate } = await import('./helpers/alloc.mjs');
+  const ph = createPhysics(R, { hz: 60 });
+  try {
+    const w = ph.world; w.createCollider(R.ColliderDesc.cuboid(30, 0.5, 30).setTranslation(0, -0.5, 0));
+    for (let i = 0; i < 30; i++) { const b = w.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation((i % 6) * 1.5, 1 + i * 0.6, Math.floor(i / 6) * 1.5)); w.createCollider(R.ColliderDesc.cuboid(0.4, 0.4, 0.4), b); }
+    const r = await allocRate(() => ph.step(), 600, { top: 5 });
+    assert.ok(r.perCall < 2048, `${Math.round(r.perCall)} bytes per step:\n${r.top.join('\n')}`);
+  } finally { ph.free(); }
+});
+test('ph.step (the pipeline, without the per-step re-map) gives bit-identical bodies and events to World.step, with bodies added and removed mid-run', () => {
+  const build = w => { w.createCollider(R.ColliderDesc.cuboid(30, 0.5, 30).setTranslation(0, -0.5, 0)); return Array.from({ length: 12 }, (_, i) => { const b = w.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation((i % 4) * 1.1, 1 + i * 0.7, Math.floor(i / 4) * 1.1)); w.createCollider(R.ColliderDesc.cuboid(0.4, 0.4, 0.4).setActiveEvents(R.ActiveEvents.COLLISION_EVENTS), b); return b; }); };
+  const a = createPhysics(R, { hz: 60 }), b = createPhysics(R, { hz: 60 }), ba = build(a.world), bb = build(b.world), ea = [], eb = [];
+  try {
+    for (let s = 0; s < 400; s++) {
+      if (s === 100) { a.world.removeRigidBody(ba[3]); b.world.removeRigidBody(bb[3]); ba.splice(3, 1); bb.splice(3, 1); } // its slot is reused below
+      if (s === 150) for (const [ph, list] of [[a, ba], [b, bb]]) { const n = ph.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(0, 6, 0)); ph.world.createCollider(R.ColliderDesc.ball(0.3).setActiveEvents(R.ActiveEvents.COLLISION_EVENTS), n); list.push(n); }
+      a.step(); b.world.step(b.queue);
+      a.queue.drainCollisionEvents((h1, h2, on) => ea.push([h1, h2, on])); b.queue.drainCollisionEvents((h1, h2, on) => eb.push([h1, h2, on]));
+    }
+    const pose = (w, list) => list.map(x => { const t = x.translation(), r = x.rotation(); return [t.x, t.y, t.z, r.x, r.y, r.z, r.w]; });
+    assert.deepEqual(pose(a.world, ba), pose(b.world, bb)); assert.deepEqual(ea, eb); assert.ok(ea.length > 0, 'there were contacts');
+  } finally { a.free(); b.free(); }
+});

@@ -50,15 +50,29 @@ function applyParams(rw, merged) {
   ip.softBodiesRecovery = r;
 }
 
+// R-8: Rapier 0.21's World.step runs the pipeline, then mapNewSoftBodies(): it walks every body, collider and joint handle
+// and copies its handle maps (getAll), about 0.8 KB of garbage per body per step, to catch soft-body topology changes the
+// step made. Rigid bodies, colliders and joints are mapped when they are created, so without soft bodies the engine steps
+// the pipeline itself. A world with soft bodies, or a Rapier whose World lacks these fields, takes World.step.
+const PIPELINE = ['physicsPipeline', 'gravity', 'integrationParameters', 'islands', 'broadPhase', 'narrowPhase', 'bodies', 'colliders', 'softBodies', 'impulseJoints', 'multibodyJoints', 'ccdSolver'];
+function stepper(w) {
+  if (!PIPELINE.every(k => w[k] != null) || typeof w.physicsPipeline.step !== 'function' || typeof w.softBodies.len !== 'function') return q => w.step(q);
+  const p = w.physicsPipeline;
+  return q => {
+    if (w.softBodies.len() > 0) { w.step(q); return; }
+    p.step(w.gravity, w.integrationParameters, w.islands, w.broadPhase, w.narrowPhase, w.bodies, w.colliders, w.softBodies, w.impulseJoints, w.multibodyJoints, w.ccdSolver, q, undefined);
+  };
+}
+
 export function createPhysics(R, { gravity = [0, -9.81, 0], hz, params, timer = null } = {}) {
   if (!(hz > 0)) throw new Error(`physics: hz must be > 0 (got ${hz})`);
   const merged = mergeParams(params), g = { x: gravity[0], y: gravity[1], z: gravity[2] };
   const ph = {
     R, world: null, queue: null, stats: { stepMs: 0, stepMsTotal: 0 },
     step() {
-      if (timer === null) { ph.world.step(ph.queue); return; }
+      if (timer === null) { run(ph.queue); return; }
       const t0 = timer();
-      ph.world.step(ph.queue);
+      run(ph.queue);
       const ms = timer() - t0;
       ph.stats.stepMs = ms; ph.stats.stepMsTotal += ms;
     },
@@ -68,11 +82,12 @@ export function createPhysics(R, { gravity = [0, -9.81, 0], hz, params, timer = 
     },
     recreate() { ph.free(); return make(); },
   };
+  let run = null;
   function make() {
     const w = new R.World(g);
     w.timestep = 1 / hz;
     applyParams(w, merged);
-    ph.world = w; ph.queue = new R.EventQueue(true);
+    ph.world = w; ph.queue = new R.EventQueue(true); run = stepper(w);
     return ph;
   }
   return make();
