@@ -1,12 +1,12 @@
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { loadConfig } from '../tools/bake/config.js';
 
 const game = (config, pkg) => {
-  const dir = mkdtempSync(join(tmpdir(), 'lh-cfg-'));
+  const dir = tmp('lh-cfg-');
   writeFileSync(join(dir, 'game.config.js'), `export default ${JSON.stringify(config)};\n`);
   if (pkg) writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg));
   return dir;
@@ -33,7 +33,7 @@ test('3d: bad values and a missing config are reported', async () => {
   await assert.rejects(loadConfig(game({ bake: {} })), /config: 'id' must be a non-empty string/);
   await assert.rejects(loadConfig(game({ id: 'g', bake: { palette: 'texture' } })), /'bake\.palette' must be 'vertex' or absent/);
   await assert.rejects(loadConfig(game({ id: 'g', bake: { rename: 'x' } })), /'bake\.rename' must be an object/);
-  await assert.rejects(loadConfig(mkdtempSync(join(tmpdir(), 'lh-cfg-'))), /config: no game\.config\.js in /);
+  await assert.rejects(loadConfig(tmp('lh-cfg-')), /config: no game\.config\.js in /);
 });
 test('3d: animTable false and a partial optimise block are accepted', async () => {
   const c = await loadConfig(game({ id: 'g', bake: { optimise: { meshopt: false }, models: { a: { animTable: false, colliders: false } } } }));

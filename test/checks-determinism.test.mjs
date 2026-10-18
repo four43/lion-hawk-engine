@@ -1,9 +1,9 @@
 // T-10, T-12: two runs agree step for step; a run that leaks state into the next is caught at the exact step;
 // purity is scanned over the roots a game names.
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { determinism, simPurity } from '../testing/checks.js';
@@ -43,7 +43,7 @@ test('determinism takes args and an input function of the step (controller rulin
   assert.equal(scratches.size, 2); assert.equal(calls, 100);
 });
 test('simPurity scans the given roots and reports each hit (T-12)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'lh-purity-'));
+  const dir = tmp('lh-purity-');
   try {
     writeFileSync(join(dir, 'ok.js'), 'export const a = 1;\n');
     assert.deepEqual(simPurity(null, { roots: [dir] }), { ok: true, found: [] });

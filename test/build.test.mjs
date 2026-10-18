@@ -1,13 +1,13 @@
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { build } from 'esbuild';
 import { dedupe } from 'lion-hawk/build';
 
 test('2d: dedupe resolves three from the game root, so engine and game share one copy (#11)', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'lh-dedupe-'));
+  const dir = tmp('lh-dedupe-');
   const w = (p, s) => { mkdirSync(dirname(join(dir, p)), { recursive: true }); writeFileSync(join(dir, p), s); };
   for (const who of ['game', 'engine']) {
     w(`${who}/node_modules/three/package.json`, '{"name":"three","main":"index.js"}');

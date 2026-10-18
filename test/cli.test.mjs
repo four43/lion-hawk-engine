@@ -1,9 +1,9 @@
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { mkdtempSync, existsSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { copyFixture } from './helpers/bakeGame.mjs';
 import { build } from './fixtures/models/make.mjs';
@@ -26,12 +26,12 @@ test('3d: build with no --out and no $<outEnv> exits 2 with the contract message
   const game = copyFixture();
   let r = await run(['build', '--game', game]);
   assert.equal(r.code, 2); assert.match(r.stderr, /build: pass --out or set \$LH_FIXTURE_OUT/);
-  const site = join(mkdtempSync(join(tmpdir(), 'lh-site-')), 'site/exp/fixture');
+  const site = join(tmp('lh-site-'), 'site/exp/fixture');
   r = await run(['build', '--game', game, '--out', site]);
   assert.equal(r.code, 2); assert.ok(!existsSync(site));
-  r = await run(['build', '--game', game, '--mode', 'shared', '--out', mkdtempSync(join(tmpdir(), 'lh-out-'))]);
+  r = await run(['build', '--game', game, '--mode', 'shared', '--out', tmp('lh-out-')]);
   assert.equal(r.code, 2);
-  const out = mkdtempSync(join(tmpdir(), 'lh-out-'));
+  const out = tmp('lh-out-');
   r = await run(['build', '--game', game], { LH_FIXTURE_OUT: out });
   assert.equal(r.code, 0, r.stderr); assert.ok(existsSync(join(out, 'index.html'))); assert.match(r.stdout, /gzip/);
 });
@@ -49,7 +49,7 @@ test('3d: dev keeps serving until killed', async () => {
   const game = copyFixture(), p = spawn(process.execPath, [BIN, 'dev', '--game', game, '--port', '0', '--host', '127.0.0.1']);
   let out = ''; p.stdout.on('data', c => { out += c; });
   try {
-    const url = await new Promise((res, rej) => { const t = setInterval(() => { const m = /dev: fixture at (http:\S+)/.exec(out); if (m) { clearInterval(t); res(m[1]); } }, 50); setTimeout(() => rej(new Error(`no url: ${out}`)), 10000); });
+    const url = await new Promise((res, rej) => { const giveUp = setTimeout(() => { clearInterval(t); rej(new Error(`no url: ${out}`)); }, 10000), t = setInterval(() => { const m = /dev: fixture at (http:\S+)/.exec(out); if (m) { clearInterval(t); clearTimeout(giveUp); res(m[1]); } }, 50); });
     assert.equal((await fetch(url)).status, 200);
     assert.equal(p.exitCode, null);
   } finally { p.kill(); }

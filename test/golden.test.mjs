@@ -1,11 +1,11 @@
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { golden } from '../testing/golden.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'lh-golden-'));
+const dir = tmp('lh-golden-');
 test.after(() => rmSync(dir, { recursive: true, force: true }));
 
 test('first run writes, second run matches', () => {

@@ -3,9 +3,9 @@
 // gameWith({ id: bytes }, bake) writes a one-off game with the fixture registry (3b's real base library, its engine import
 // rewritten to an absolute file URL by copyMaterials) and the given bake config. changeRegistry(dir) adds one material so the
 // registry hash changes.
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
+import { tmp } from './tmp.mjs';
+import { cpSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -26,7 +26,7 @@ export function stubThree(dir) {
 }
 
 export function copyFixture({ baked = true } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'lh-game-'));
+  const dir = tmp('lh-game-');
   cpSync(FIXTURE, dir, { recursive: true, filter: src => baked || relative(FIXTURE, src).split(sep)[0] !== 'baked' });
   copyMaterials(dir);
   stubThree(dir);
@@ -34,7 +34,7 @@ export function copyFixture({ baked = true } = {}) {
 }
 
 export function gameWith(models, bake = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'lh-game-'));
+  const dir = tmp('lh-game-');
   mkdirSync(join(dir, 'assets/models'), { recursive: true });
   copyMaterials(dir);
   for (const [id, bytes] of Object.entries(models)) writeFileSync(join(dir, 'assets/models', `${id}.glb`), bytes);

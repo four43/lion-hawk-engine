@@ -1,15 +1,15 @@
+import { tmp } from './helpers/tmp.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import vm from 'node:vm';
 import { build, ENGINE_VERSION } from '../tools/build/index.js';
 import { copyFixture } from './helpers/bakeGame.mjs';
 
 const quiet = () => {};
-const scratch = () => mkdtempSync(join(tmpdir(), 'lh-out-'));
+const scratch = () => tmp('lh-out-');
 const runPage = html => { const ctx = { window: {} }; ctx.globalThis = ctx; for (const m of html.matchAll(/<script(?: type="module")?>([\s\S]*?)<\/script>/g)) vm.runInNewContext(m[1], ctx); return JSON.parse(JSON.stringify({ window: ctx.window, fixture: ctx.fixture })); }; // JSON clone: vm-realm arrays fail deepStrictEqual's prototype check
 
 test('3d: build writes the page, the baked models, the PWA files and a stamped sw.js; the bundle runs', async () => {
