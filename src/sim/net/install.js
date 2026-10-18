@@ -13,6 +13,7 @@ import { createWarnOnce } from '../limits.js';
 import { defaultRecord, applyFields, newRecord, createInputRing, zeroActions, bodyEntity } from './replicate.js';
 import { createInputQueue, latencyMs, newTarget, project, poseError, decide, nudgeVelocity, writeKinematic, writePool, setNetFix } from './remote.js';
 import { INPUT_BATCH, INPUT_WIRE_MAX } from '../../defs/fields.js';
+const _T = { x: 0, y: 0, z: 0 }, _Q = { x: 0, y: 0, z: 0, w: 1 }; // Rapier's getters fill these (no per-call vectors)
 
 export const RESERVED = Object.freeze(['id', 'tags', 'model', 'colliders', 'xf', 'sockets', 'net', 'netId', 'netFix']); // entity parts (§4.4)
 
@@ -118,7 +119,7 @@ export function installNet(engine) {
     for (let i = 0; i < r.links.length; i++) {
       const ent = r.links[i], c = r.corr[i], b = ent.body; if (!b) continue;
       project(rec[k.bodies[i]], lat, c);
-      if (decide(poseError(b.translation(), b.rotation(), c), tune) === 'nudge') { c.left = tune.nudge; st.nudges++; continue; }
+      if (decide(poseError(b.translation(_T), b.rotation(_Q), c), tune) === 'nudge') { c.left = tune.nudge; st.nudges++; continue; }
       const P = ent.xf.p, Q = ent.xf.q; OLD.p.x = P.x; OLD.p.y = P.y; OLD.p.z = P.z; OLD.q.x = Q.x; OLD.q.y = Q.y; OLD.q.z = Q.z; OLD.q.w = Q.w;
       SNAP_AT[0] = c.p.x; SNAP_AT[1] = c.p.y; SNAP_AT[2] = c.p.z; SNAP_Q[0] = c.q.x; SNAP_Q[1] = c.q.y; SNAP_Q[2] = c.q.z; SNAP_Q[3] = c.q.w;
       world.place(ent, WHERE, HOW); b.setLinvel(c.v, true); b.setAngvel(c.w, true);
@@ -284,7 +285,7 @@ export function installNet(engine) {
         for (let i = 0; i < r.links.length; i++) {
           const c = r.corr[i]; if (c.left <= 0) continue; const ent = r.links[i], b = ent.body;
           if (touching(ent)) { stats.kinds[k.name].held++; continue; } // N-16: the collision is this peer's to resolve; steer after it
-          nudgeVelocity(c, b.translation(), b.rotation(), dt, V, AV); b.setLinvel(V, true); b.setAngvel(AV, true);
+          nudgeVelocity(c, b.translation(_T), b.rotation(_Q), dt, V, AV); b.setLinvel(V, true); b.setAngvel(AV, true);
         }
         continue;
       }

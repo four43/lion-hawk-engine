@@ -18,8 +18,9 @@ export function retained(fn, n, warm = 2000) {
 }
 // Short-lived garbage too: bytes allocated per call of fn over n calls (after `warm`), from V8's sampling heap profiler with
 // objects that minor and major GCs collected kept in the profile. Sampled, so an estimate (the sample interval is 64 bytes).
-// top: the n biggest call sites, 'function file:line <- caller ...', bytes per call.
-export async function allocRate(fn, n, { warm = 300, top = 0 } = {}) {
+// top: the n biggest call sites, 'function file:line <- caller ...', bytes per call. within: a URL substring; `inside` is the
+// bytes per call of the sites whose three innermost frames include such a URL (code there allocated, or called what did).
+export async function allocRate(fn, n, { warm = 300, top = 0, within = null } = {}) {
   const { Session } = await import('node:inspector/promises');
   for (let i = 0; i < warm; i++) fn();
   const s = new Session(); s.connect();
@@ -28,13 +29,16 @@ export async function allocRate(fn, n, { warm = 300, top = 0 } = {}) {
     await s.post('HeapProfiler.startSampling', { samplingInterval: 64, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
     for (let i = 0; i < n; i++) fn();
     const { profile } = await s.post('HeapProfiler.stopSampling');
-    const sites = new Map(); let total = 0;
-    const walk = (node, stack) => {
-      const f = `${node.callFrame.functionName || '(anon)'} ${node.callFrame.url.split('/').slice(-2).join('/')}:${node.callFrame.lineNumber + 1}`, st = [f, ...stack].slice(0, 3);
-      if (node.selfSize) { total += node.selfSize; const k = st.join(' <- '); sites.set(k, (sites.get(k) ?? 0) + node.selfSize); }
-      for (const c of node.children) walk(c, st);
+    const sites = new Map(); let total = 0, inside = 0;
+    const walk = (node, stack, urls) => {
+      const f = `${node.callFrame.functionName || '(anon)'} ${node.callFrame.url.split('/').slice(-2).join('/')}:${node.callFrame.lineNumber + 1}`, st = [f, ...stack].slice(0, 3), us = [node.callFrame.url, ...urls].slice(0, 3);
+      if (node.selfSize) {
+        total += node.selfSize; const k = st.join(' <- '); sites.set(k, (sites.get(k) ?? 0) + node.selfSize);
+        if (within && us.some(u => u.includes(within))) inside += node.selfSize;
+      }
+      for (const c of node.children) walk(c, st, us);
     };
-    walk(profile.head, []);
-    return { perCall: total / n, top: [...sites].sort((a, b) => b[1] - a[1]).slice(0, top).map(([k, v]) => `${Math.round(v / n)} ${k}`) };
+    walk(profile.head, [], []);
+    return { perCall: total / n, inside: inside / n, top: [...sites].sort((a, b) => b[1] - a[1]).slice(0, top).map(([k, v]) => `${Math.round(v / n)} ${k}`) };
   } finally { await s.post('HeapProfiler.disable').catch(() => {}); s.disconnect(); }
 }

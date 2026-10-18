@@ -8,7 +8,8 @@ const ACT = actions({ thr: axis(), honk: button() });
 const TRAIN = kind({ name: 'train', code: 1, authority: 'owner', max: 1, idMin: 1, idMax: 4,
   fields: { body: F.body(), trailer: F.body(), mode: F.oneOf(['drive', 'show']), input: F.actions(ACT) } });
 const PAD = kind({ name: 'pad', code: 2, authority: 'host', max: 4, idMax: 9, fields: { body: F.body(), input: F.actions(ACT), hue: F.uint(1) } });
-const fakeBody = (p, q, v, w) => ({ translation: () => ({ ...p }), rotation: () => ({ ...q }), linvel: () => ({ ...v }), angvel: () => ({ ...w }) });
+const fill = v => (out = {}) => Object.assign(out, v); // Rapier 0.21's getters: fill the target when given, else a new object
+const fakeBody = (p, q, v, w) => ({ translation: fill(p), rotation: fill(q), linvel: fill(v), angvel: fill(w) });
 const Q = { x: 0, y: Math.sin(0.2), z: 0, w: Math.cos(0.2) }, I = { x: 0, y: 0, z: 0, w: 1 };
 
 test('3i: the default record reads Rapier for body, the linked entity for another F.body() field, and e[k] for the rest (N-9)', () => {

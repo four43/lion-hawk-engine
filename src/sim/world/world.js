@@ -20,6 +20,7 @@ const FIXED_PARTS = new Set(['id', 'tags', 'model', 'body', 'colliders', 'socket
 const BODY_KEYS = new Set(['type', 'lock', 'ccd', 'linearDamping', 'angularDamping', 'sleep', 'canSleep', 'mass', 'massProps']);
 const TYPES = { dynamic: DYNAMIC, kinematic: KINEMATIC, fixed: FIXED };
 const IDENTITY = Object.freeze({ x: 0, y: 0, z: 0, w: 1 });
+const _T = { x: 0, y: 0, z: 0 }, _W = { x: 0, y: 0, z: 0 }, _Q = { x: 0, y: 0, z: 0, w: 1 }; // Rapier's getters fill these (no per-call vectors)
 const labelOf = d => (Array.isArray(d.tags) && d.tags.length ? d.tags.join(',') : d.model ?? 'entity');
 const deepFreeze = o => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
 // entity lists are kept in id (= spawn) order: binary search by id
@@ -404,7 +405,7 @@ export function createWorld(engine, opts = {}) {
       for (let i = 0; i < bodied.length; i++) {
         const e = bodied[i], r = e[INTERNAL], body = e.body, asleep = body.isSleeping();
         if (!asleep || r.awake) { // awake now, or awake at the last read: Rapier may sleep a body after moving it
-          const t = body.translation(), q = body.rotation(), o = r.slot * STRIDE + CURR;
+          const t = body.translation(_T), q = body.rotation(_Q), o = r.slot * STRIDE + CURR;
           b[o] = t.x; b[o + 1] = t.y; b[o + 2] = t.z; b[o + 3] = q.x; b[o + 4] = q.y; b[o + 5] = q.z; b[o + 6] = q.w;
         }
         r.awake = asleep ? 0 : 1;
@@ -412,7 +413,7 @@ export function createWorld(engine, opts = {}) {
       // #2: Rapier 0.21 wakes a body inserted asleep on its first step. Put it back to sleep unless something really
       // set it moving (Rally's afterStep thresholds, moved; one step of gravity is 0.04 m/s).
       for (let i = 0; i < sleepers.length; i++) {
-        const body = sleepers[i].body, v = body.linvel(), w = body.angvel();
+        const body = sleepers[i].body, v = body.linvel(_T), w = body.angvel(_W);
         if (Math.hypot(v.x, v.y, v.z) < 0.2 && Math.hypot(w.x, w.y, w.z) < 0.5) body.sleep();
       }
       sleepers.length = 0;
@@ -427,7 +428,7 @@ export function createWorld(engine, opts = {}) {
       h = mix(h, e.id);
       if (r.slot >= 0) { const o = r.slot * STRIDE + CURR; for (let k = 0; k < 7; k++) h = mix(h, b[o + k]); }
       if (r.kind === DYNAMIC) {
-        const v = e.body.linvel(), w = e.body.angvel();
+        const v = e.body.linvel(_T), w = e.body.angvel(_W);
         h = mix(mix(mix(h, v.x), v.y), v.z); h = mix(mix(mix(h, w.x), w.y), w.z);
       }
     }

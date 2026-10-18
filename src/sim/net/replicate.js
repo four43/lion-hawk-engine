@@ -25,12 +25,10 @@ export function newRecord(k) {
   }
   return r;
 }
-// one body's state into out = { p, q, v, w }: from Rapier (its per-call vectors are tolerated, §7.3), or the pool pose of a bodiless entity, still
+// one body's state into out = { p, q, v, w }: from Rapier (its getters fill out's vectors), or the pool pose of a bodiless entity, still
 export function readBody(ent, out) {
   if (ent?.body) {
-    const b = ent.body, t = b.translation(), q = b.rotation(), v = b.linvel(), w = b.angvel();
-    out.p.x = t.x; out.p.y = t.y; out.p.z = t.z; out.q.x = q.x; out.q.y = q.y; out.q.z = q.z; out.q.w = q.w;
-    out.v.x = v.x; out.v.y = v.y; out.v.z = v.z; out.w.x = w.x; out.w.y = w.y; out.w.z = w.z;
+    const b = ent.body; b.translation(out.p); b.rotation(out.q); b.linvel(out.v); b.angvel(out.w);
   } else if (ent?.xf) {
     const P = ent.xf.p, Q = ent.xf.q;
     out.p.x = P.x; out.p.y = P.y; out.p.z = P.z; out.q.x = Q.x; out.q.y = Q.y; out.q.z = Q.z; out.q.w = Q.w;

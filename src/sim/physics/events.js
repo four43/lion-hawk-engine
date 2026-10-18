@@ -4,11 +4,11 @@
 // a/b/sensor/other are entity ids, or null for a raw collider the World does not own.
 export function createEventDrain({ emit, hz, entityOf, materialOf }) {
   let rw = null;
-  const S = { found: false, x: 0, y: 0, z: 0 };
+  const S = { found: false, x: 0, y: 0, z: 0 }, P = { x: 0, y: 0, z: 0 }, A = { x: 0, y: 0, z: 0 }, B = { x: 0, y: 0, z: 0 }; // Rapier's getters fill these
   const idOf = h => entityOf(h)?.id ?? null;
   const onManifold = m => {
     if (S.found || m.numSolverContacts() === 0) return;
-    const p = m.solverContactPoint(0);
+    const p = m.solverContactPoint(0, P);
     S.x = p.x; S.y = p.y; S.z = p.z; S.found = true;
   };
   const onForce = ev => {
@@ -17,7 +17,7 @@ export function createEventDrain({ emit, hz, entityOf, materialOf }) {
     if (c1 && c2) {
       rw.contactPair(c1, c2, onManifold);
       if (!S.found) { // no solver contact this step: the midpoint of the two bodies (or bodiless colliders)
-        const a = (c1.parent() ?? c1).translation(), b = (c2.parent() ?? c2).translation();
+        const a = (c1.parent() ?? c1).translation(A), b = (c2.parent() ?? c2).translation(B);
         S.x = (a.x + b.x) / 2; S.y = (a.y + b.y) / 2; S.z = (a.z + b.z) / 2;
       }
     }
