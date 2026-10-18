@@ -103,6 +103,8 @@ test('3d: kits with the same Textures/colormap.png resolve per source file and n
   assert.deepEqual(await colour('a'), [1, 0, 0]); assert.deepEqual(await colour('b'), [0, 1, 0]);
   const c = await io.read(join(dir, 'baked/models/c.glb')), tex = c.getRoot().listTextures();   // keepTextures: embedded in its own GLB
   assert.equal(tex.length, 1); assert.equal(PNG.sync.read(Buffer.from(tex[0].getImage())).data[1], 255);
+  const uv = async id => !!(await io.read(join(dir, 'baked/models', `${id}.glb`))).getRoot().listMeshes()[0].listPrimitives()[0].getAttribute('TEXCOORD_0');
+  assert.equal(await uv('c'), true, 'keepTextures keeps its UVs'); assert.equal(await uv('a'), false, 'a palette model baked to vertex colours drops its now-unused UVs');
   assert.deepEqual(readdirSync(join(dir, 'baked/models')).sort(), ['a.glb', 'b.glb', 'c.glb']);
 });
 
@@ -113,4 +115,10 @@ test('3d: a partial bake after a source change, and a full bake of a fresh copy 
   await bake({ game: a, ids: ['crate'], log: quiet });
   await bake({ game: b, log: quiet });
   for (const f of ['phys.json', 'manifest.json']) assert.ok(read(a, f).equals(read(b, f)), `${f} differs between partial and full bake`);   // sorted() keys on partial bakes
+});
+test('3d: a model without textures ships no TEXCOORD (prune drops unused attributes; keepTextures models: above)', async () => {
+  const dir = copyFixture({ baked: false }); await bake({ game: dir, log: quiet });
+  const io = await getIO(), semantics = async id => { const doc = await io.read(join(dir, `baked/models/${id}.glb`)); const s = new Set(); for (const m of doc.getRoot().listMeshes()) for (const p of m.listPrimitives()) for (const k of p.listSemantics()) s.add(k); return [...s].sort(); };
+  for (const id of ['cart', 'crate', 'pet', 'ramp']) assert.ok(!(await semantics(id)).some(k => k.startsWith('TEXCOORD_')), `${id}: ${await semantics(id)}`);
+  assert.ok((await semantics('crate')).includes('NORMAL'), 'normals stay');
 });

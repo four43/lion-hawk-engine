@@ -68,7 +68,7 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
     const mesh = col.node.getMesh(); col.node.dispose();
     if (!mesh.listParents().some(p => p.propertyType === 'Node')) mesh.dispose();
   }
-  await optimise(doc, cfg.bake.optimise, { encoder: MeshoptEncoder });
+  await optimise(doc, { ...cfg.bake.optimise, keepAttributes: m.keepTextures }, { encoder: MeshoptEncoder }); // a textured model keeps every attribute
   return { id, sidecar, glb: await io.writeBinary(doc), anim, options: optionsHash(cfg, opts) };
 }
 
