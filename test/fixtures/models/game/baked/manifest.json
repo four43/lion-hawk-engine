@@ -4,32 +4,37 @@
     "cart": {
       "glb": "models/cart.glb",
       "anim": null,
-      "bytes": 6228,
-      "sha256": "e48c6c468cf632cb42f13b745a3769bfa29dcf10b7bd1751f9efefb47cf693bd"
+      "bytes": 6984,
+      "sha256": "e2d6ea7ae6d33b9f8eb264efb1edac8f23c4d481e973835e9aa808ab47269e1f",
+      "options": "6419d7e4d793c8e9"
     },
     "crate": {
       "glb": "models/crate.glb",
       "anim": null,
-      "bytes": 2196,
-      "sha256": "270258652837f47fc8b258d548f2fc38d03fb24ce81436139f57f1464dae7f79"
+      "bytes": 2552,
+      "sha256": "26d207f1c57cdd58cd57bc5d7dc8a1454bf24aeb6520a1c0fbf306f401b580f6",
+      "options": "6419d7e4d793c8e9"
     },
     "palette": {
       "glb": "models/palette.glb",
       "anim": null,
       "bytes": 2136,
-      "sha256": "f41f58534efcbcc3d62d8c8ab4e1523e45cad1a40464ce16d3c598013e4d6519"
+      "sha256": "f41f58534efcbcc3d62d8c8ab4e1523e45cad1a40464ce16d3c598013e4d6519",
+      "options": "4db801dfcc1784ec"
     },
     "pet": {
       "glb": "models/pet.glb",
       "anim": "models/pet.anim.json",
-      "bytes": 5844,
-      "sha256": "5c962bdb87fb75f8228530ef908879045fbd30461e25041d9111dbf4e87b7ee7"
+      "bytes": 6240,
+      "sha256": "7f886c5527bae0e86b9da94d3b19723e327caa3c8784d3b21b6a3403a9c82a07",
+      "options": "2ab8614f78dd9d8e"
     },
     "ramp": {
       "glb": "models/ramp.glb",
       "anim": null,
-      "bytes": 1676,
-      "sha256": "5528139138708ed762bed11cb0a2468cb8740c817d10e8ed28807d9ca80bab5e"
+      "bytes": 2032,
+      "sha256": "d488198e18dabfd3f0229241523f28f278261b55b143c1e5e9633a472ab8bd8e",
+      "options": "dc5ec3be86284063"
     }
   }
 }

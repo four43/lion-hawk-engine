@@ -28,7 +28,8 @@ test('3d: bake writes phys.json, manifest.json, one GLB per model and anim table
   assert.deepEqual(readdirSync(join(dir, 'baked/models')).sort(), ['cart.glb', 'crate.glb', 'palette.glb', 'pet.anim.json', 'pet.glb', 'ramp.glb']);
   for (const [id, m] of Object.entries(man.models)) {
     const glb = read(dir, m.glb);
-    assert.deepEqual(m, { glb: `models/${id}.glb`, anim: id === 'pet' ? 'models/pet.anim.json' : null, bytes: glb.length, sha256: sha256(glb) });
+    assert.deepEqual(m, { glb: `models/${id}.glb`, anim: id === 'pet' ? 'models/pet.anim.json' : null, bytes: glb.length, sha256: sha256(glb), options: m.options });
+    assert.match(m.options, /^[0-9a-f]{16}$/);
   }
   const crate = phys.models.crate;
   assert.deepEqual(crate.source, { file: 'assets/models/crate.glb', sha256: sha256(readFileSync(join(dir, 'assets/models/crate.glb'))) });

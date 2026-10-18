@@ -44,3 +44,13 @@ test('3d: --check reports a changed, added or removed source, the registry hash 
   assert.deepEqual((await bake({ game: dir2, check: true, log: m => noPhysLogs.push(m) })).stale, [{ id: '*', why: 'no phys.json' }]);
   assert.deepEqual(noPhysLogs, ['stale: *: no phys.json']);
 });
+test('3d: --check reports a model whose bake options changed in game.config.js (per model, and global ones for every model)', async () => {
+  const dir = copyFixture({ baked: false }); await bake({ game: dir, log: quiet });
+  const cfgFile = join(dir, 'game.config.js'), cfg = readFileSync(cfgFile, 'utf8');
+  writeFileSync(cfgFile, cfg.replace("ramp: { static: true }", "ramp: { static: false }"));
+  assert.deepEqual((await bake({ game: dir, check: true, log: quiet })).stale, [{ id: 'ramp', why: 'bake options changed' }]);
+  writeFileSync(cfgFile, cfg.replace("paint: { base: 'steel' }", "paint: { base: 'wood' }"));
+  const all = (await bake({ game: dir, check: true, log: quiet })).stale;
+  assert.ok(all.length > 1 && all.every(s => s.why === 'bake options changed'), JSON.stringify(all));
+  writeFileSync(cfgFile, cfg); assert.equal((await bake({ game: dir, check: true, log: quiet })).ok, true, 'back as baked: current');
+});

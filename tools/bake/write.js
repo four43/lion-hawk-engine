@@ -12,18 +12,18 @@ export function readBaked(outDir) {
   return { phys: read('phys.json', null), manifest: read('manifest.json', null) };
 }
 
-// results: [{ id, sidecar, glb: Uint8Array, anim: object | null }]; prev: readBaked() of the same dir; keep: ids carried over
+// results: [{ id, sidecar, glb: Uint8Array, anim: object | null, options: optionsHash }]; prev: readBaked() of the same dir; keep: ids carried over
 // from prev; full: also delete files under models/ that no model owns any more (a removed source)
 export function writeBaked(outDir, { results, engine, materials, prev, keep, full = false }) {
   mkdirSync(join(outDir, 'models'), { recursive: true });
   const models = {}, entries = {};
   for (const id of keep) { if (prev.phys?.models?.[id]) models[id] = prev.phys.models[id]; if (prev.manifest?.models?.[id]) entries[id] = prev.manifest.models[id]; }
-  for (const { id, sidecar, glb, anim } of results) {
+  for (const { id, sidecar, glb, anim, options } of results) {
     writeFileSync(join(outDir, 'models', `${id}.glb`), glb);
     const animFile = join(outDir, 'models', `${id}.anim.json`);
     if (anim) writeFileSync(animFile, JSON.stringify(anim) + '\n'); else rmSync(animFile, { force: true });
     models[id] = sidecar;
-    entries[id] = { glb: `models/${id}.glb`, anim: anim ? `models/${id}.anim.json` : null, bytes: glb.byteLength, sha256: sha256(glb) };
+    entries[id] = { glb: `models/${id}.glb`, anim: anim ? `models/${id}.anim.json` : null, bytes: glb.byteLength, sha256: sha256(glb), options };
   }
   if (full) {
     const owned = new Set(Object.values(entries).flatMap(e => [e.glb, e.anim]).filter(Boolean).map(f => f.slice('models/'.length)));

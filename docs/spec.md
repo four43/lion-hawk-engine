@@ -359,7 +359,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
 ### 6.1 Bake: `lion-hawk bake`
 
 - **[A-1]** Input is `assets/models/*.glb`. Output goes to the game's `baked/` directory, which is committed: optimised GLBs in `baked/models/`, optional `<model>.anim.json` tables beside them, one `baked/phys.json` holding every model's sidecar keyed by model id (the sim imports it as JSON), and `baked/manifest.json` (D1, D2).
-  - *Clarification (phase 3, 0.8.0; 3d C5, C8):* each model may map its own source `file`; output GLBs are self-contained. Re-bakes are byte-identical (sorted keys, 6-decimal rounding, no timestamps). `bake --check` reports stale sources, a changed registry hash or a changed engine major.minor; it does not see config-only changes.
+  - *Clarification (phase 3, 0.8.0; 3d C5, C8):* each model may map its own source `file`; output GLBs are self-contained. Re-bakes are byte-identical (sorted keys, 6-decimal rounding, no timestamps). `bake --check` reports stale sources, a changed registry hash or a changed engine major.minor. *(0.11.2)* It also reports a model whose bake options in `game.config.js` changed: `manifest.json` records a hash of each model's resolved options plus the global `rename`, `palette`, `paint.base` and `optimise`.
 - **[A-2] Checks.** The bake fails, naming the model and node, if:
   - a material name is neither in the registry nor `paint-*`;
   - a `col-*` node has an unsupported shape;

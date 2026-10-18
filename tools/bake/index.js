@@ -1,6 +1,7 @@
 // lion-hawk bake (A-1…A-8 with D2): sources in bake.src → optimised GLBs, anim tables and one phys.json in bake.out.
 // bake({ game, ids, check, log }) → { ok, baked: [ids], stale: [{ id, why }] }. `check` writes nothing: it reports models whose
-// source sha, the registry hash or the engine major.minor differ from phys.json (and sources added or removed).
+// source sha, the registry hash or the engine major.minor differ from phys.json, whose bake options in game.config.js changed
+// (manifest.json's options hash), and sources added or removed.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, extname, basename } from 'node:path';
 import { loadConfig, importFresh } from './config.js';
@@ -16,6 +17,11 @@ export { loadConfig };
 
 export const ENGINE_VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const minor = v => v.split('.').slice(0, 2).join('.');
+const DEFAULT_OPTS = { static: false, keepTextures: false, sockets: [], colliders: true, animTable: null, rename: { materials: {}, nodes: {} } };
+const canonical = v => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v ?? null);
+// everything in game.config.js that changes a model's bake output, hashed (manifest.models[id].options; --check compares it)
+export const optionsHash = (cfg, opts) => sha256(canonical({ model: { ...(opts ?? DEFAULT_OPTS), file: undefined }, rename: cfg.bake.rename,
+  palette: cfg.bake.palette ?? null, paint: cfg.bake.paint.base, optimise: cfg.bake.optimise })).slice(0, 16);
 
 // id → { file (absolute), rel (relative to the game dir), opts }
 export function sources(cfg) {
@@ -44,7 +50,7 @@ export async function loadRegistry(cfg) {
 }
 
 export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = () => {}) {
-  const m = opts ?? { static: false, keepTextures: false, sockets: [], colliders: true, animTable: null, rename: { materials: {}, nodes: {} } };
+  const m = opts ?? DEFAULT_OPTS;
   const io = await getIO(), bytes = readFileSync(file), doc = await io.read(file);
   applyRenames(doc, { materials: { ...cfg.bake.rename.materials, ...m.rename.materials }, nodes: { ...cfg.bake.rename.nodes, ...m.rename.nodes } });
   if (cfg.bake.palette === 'vertex' && !m.keepTextures) paletteToVertex(doc, id);
@@ -63,7 +69,7 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
     if (!mesh.listParents().some(p => p.propertyType === 'Node')) mesh.dispose();
   }
   await optimise(doc, cfg.bake.optimise, { encoder: MeshoptEncoder });
-  return { id, sidecar, glb: await io.writeBinary(doc), anim };
+  return { id, sidecar, glb: await io.writeBinary(doc), anim, options: optionsHash(cfg, opts) };
 }
 
 export async function bake({ game = '.', ids = [], check = false, log = console.log } = {}) {
@@ -79,6 +85,7 @@ export async function bake({ game = '.', ids = [], check = false, log = console.
       const side = phys.models[id];
       if (!side) stale.push({ id, why: 'not baked' });
       else if (side.source.sha256 !== sha256(readFileSync(s.file))) stale.push({ id, why: 'source changed' });
+      else if (prev.manifest?.models?.[id]?.options !== optionsHash(cfg, s.opts)) stale.push({ id, why: 'bake options changed' });
     }
     for (const id of Object.keys(phys.models)) if (!src.has(id)) stale.push({ id, why: 'source removed' });
     for (const s of stale) log(`stale: ${s.id}: ${s.why}`);

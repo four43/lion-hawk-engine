@@ -332,7 +332,7 @@ baked/
 - Inline colliders in `spawn({ colliders })` use **exactly the same entry shape** (`p`, `q`, `part` optional; `material` required).
 
 **CLI** (3d):
-- `lion-hawk bake [--game <dir>] [--check] [ids…]`: `--check` exits 1 when a source sha, the registry hash or the engine major.minor differs from `phys.json`.
+- `lion-hawk bake [--game <dir>] [--check] [ids…]`: `--check` exits 1 when a source sha, the registry hash or the engine major.minor differs from `phys.json`, or a model's bake options differ from the hash in `manifest.json`.
 - `lion-hawk build [--game <dir>] (--out <dir> | $<outEnv>) [--site] [--mode single] [--e2e]`:
   - bundles with esbuild plus `dedupe`;
   - writes `index.html` (template `<!--APP-->`), `assets/models/*`, the PWA files and `sw.js` with `__VERSION__` and `__PRECACHE__` (a JSON list) stamped;
