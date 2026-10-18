@@ -72,7 +72,7 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
     gfx.warm = (opts = {}) => { // 3f C5: made() → [{ material, use }]; userData.lhUse on each material picks the warm mesh
       const list = [];
       for (const e of materials.made?.() ?? []) list.push(e?.isMaterial ? e : e.material);
-      return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []) });
+      return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []), depth: (materials.twins?.() ?? []).concat(opts.depth ?? []) });
     };
     view.gfx = gfx; view.materials = materials;
     const a = render.assets; // without it, no createAssets: 3f's throws on a missing manifest

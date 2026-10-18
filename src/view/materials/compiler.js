@@ -274,7 +274,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
       };
       m.customProgramCacheKey = () => key;
     }
-    m.userData.lhShared = true; m.userData.lh = { depthOf: material.userData.lh?.key };
+    m.userData.lhShared = true; m.userData.lh = { depthOf: material.userData.lh?.key }; m.userData.lhUse = material.userData.lhUse; m.userData.lhSide = material.side; // its casters' mesh kind and side
     depths.set(dk, m);
     return m;
   }
@@ -286,5 +286,6 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     shading, time, get, paint, coverage, extend, apply, repaint, depth,
     furGeometry: (geometry, mask, opts) => furGeometry(geometry, mask, opts),
     keys: () => [...cache.keys()], made: () => [...cache.values()].map(material => ({ material, use: material.userData.lhUse })), dispose,
+    twins: () => [...depths.values()].map(material => ({ material, use: material.userData.lhUse, side: material.userData.lhSide })), // depth twins and their casters' side, for warm's shadow pass
   };
 }

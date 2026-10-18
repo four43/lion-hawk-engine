@@ -17,32 +17,69 @@ export function instancedShadows(root) {
 const WARM_GEO = new THREE.BoxGeometry(0.01, 0.01, 0.01); WARM_GEO.userData.lhShared = true; // compile never uploads it
 const WHITE = new THREE.Color(1, 1, 1);
 export const WARM_USES = Object.freeze(['plain', 'mesh', 'instanced', 'instancedColor', 'skinned']); // 'plain' is 3f's name for 'mesh'
-function warmMesh(m) { // the kind of object decides the program (USE_INSTANCING, USE_INSTANCING_COLOR, USE_SKINNING)
-  const use = m.userData?.lhUse ?? 'mesh';
+function warmMesh(m, use = m.userData?.lhUse ?? 'mesh') { // the kind of object decides the program (USE_INSTANCING, USE_INSTANCING_COLOR, USE_SKINNING)
   if (use === 'mesh' || use === 'plain') return new THREE.Mesh(WARM_GEO, m);
   if (use === 'instanced' || use === 'instancedColor') { const im = new THREE.InstancedMesh(WARM_GEO, m, 1); if (use === 'instancedColor') im.setColorAt(0, WHITE); return im; }
   if (use === 'skinned') { const sm = new THREE.SkinnedMesh(WARM_GEO, m), bone = new THREE.Bone(); sm.add(bone); sm.bind(new THREE.Skeleton([bone])); return sm; }
   throw new Error(`warm: material '${m.name}' has userData.lhUse '${use}' (known: ${WARM_USES.join(', ')})`);
 }
 
+// The shadow pass draws casters with three's own MeshDepthMaterial (or a caster's customDepthMaterial) into a render target,
+// with no fog, and sets the depth material's side from the caster's (WebGLShadowMap getDepthMaterial). Its programs have keys
+// of their own; warm compiles each the same way. DEPTH has the parameters of three's own depth material.
+const DEPTH = new THREE.MeshDepthMaterial(); DEPTH.name = 'lh.warmDepth'; DEPTH.userData.lhShared = true;
+let WARM_RT = null; // 1×1: compiling with any render target bound gives the shadow pass's keys
+const FLIP = { [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide };
+const kindOf = o => o.isInstancedMesh ? (o.instanceColor ? 'instancedColor' : 'instanced') : o.isSkinnedMesh ? 'skinned' : 'mesh';
+// every (depth material, mesh kind, side) the shadow pass may draw. src: the caster's own material, which sets the side
+function depthEntries(renderer, scene, materials, depth) {
+  const vsm = renderer.shadowMap.type === THREE.VSMShadowMap, out = new Map();
+  const add = (m, use, src) => {
+    const side = src.shadowSide ?? (vsm ? src.side : FLIP[src.side ?? THREE.FrontSide]), u = use === 'plain' ? 'mesh' : use, k = `${m.uuid}|${u}|${side}`;
+    if (!out.has(k)) out.set(k, { material: m, use: u, side });
+  };
+  scene.traverse(o => { if (o.isMesh && o.castShadow) for (const src of [o.material].flat()) add(o.customDepthMaterial ?? DEPTH, kindOf(o), src); });
+  for (const m of materials) add(DEPTH, m.userData?.lhUse ?? 'mesh', m); // a compiled material's users may cast (INSTANCED_DEPTH shares DEPTH's program)
+  for (const { material, use, side } of depth) add(material, use, { shadowSide: null, side }); // the compiler's FUR / WIND twins (mc.twins())
+  return [...out.values()];
+}
+const disposeWarm = list => { for (const c of list) { if (c.isInstancedMesh) c.dispose(); else if (c.isSkinnedMesh) c.skeleton.dispose(); } };
+
 // B-2 (Tractor X-4): compile every program while loading, not the first time a mesh comes into view. An iPad compile
 // through ANGLE to Metal takes 50-400 ms. three.js compiles only visible objects, so hidden ones are shown for the
 // synchronous part of compileAsync and hidden again before any frame draws. Hidden lights stay hidden: a light count the
 // frame will not have compiles the wrong program variants. Materials not in the scene yet (the compiler's)
-// go on a warm group for that moment.
-export function warm(renderer, scene, camera, { materials = [] } = {}) {
+// go on a warm group for that moment. With shadows on, the shadow pass's depth programs are compiled too (see depthGroup;
+// depth: [{ material, use }] adds depth twins).
+export function warm(renderer, scene, camera, { materials = [], depth = [] } = {}) {
   const hidden = [];
-  let group = null, done;
+  let group = null, shadows = null, done;
   try {
     for (const m of materials) { group ??= new THREE.Group(); group.add(warmMesh(m)); }
     if (group) { group.name = 'lh.warm'; scene.add(group); }
     scene.traverse(o => { if (!o.visible && !o.isLight) { hidden.push(o); o.visible = true; } });
-    done = renderer.compileAsync ? renderer.compileAsync(scene, camera) : renderer.compile(scene, camera);
+    const compile = (s, t) => renderer.compileAsync ? renderer.compileAsync(s, camera, t) : renderer.compile(s, camera, t);
+    const main = compile(scene);
+    const passes = [main];
+    if (renderer.shadowMap?.enabled && renderer.setRenderTarget) {
+      if (group) scene.remove(group); // its meshes are not casters
+      const prev = renderer.getRenderTarget(), fog = scene.fog; shadows = [];
+      renderer.setRenderTarget(WARM_RT ??= new THREE.WebGLRenderTarget(1, 1)); scene.fog = null;
+      try { // one compile per entry: the program is chosen synchronously, with the side set for that entry
+        for (const e of depthEntries(renderer, scene, materials, depth)) {
+          const side = e.material.side, mesh = warmMesh(e.material, e.use); shadows.push(mesh);
+          e.material.side = e.side;
+          try { passes.push(compile(mesh, scene)); } finally { e.material.side = side; }
+        }
+      } finally { renderer.setRenderTarget(prev); scene.fog = fog; }
+    }
+    done = Promise.all(passes);
   } catch (err) {
     done = Promise.reject(err);
   } finally {
     for (const o of hidden) o.visible = false;
-    if (group) { scene.remove(group); for (const c of group.children) { if (c.isInstancedMesh) c.dispose(); else if (c.isSkinnedMesh) c.skeleton.dispose(); } }
+    if (group) { scene.remove(group); disposeWarm(group.children); }
+    if (shadows) disposeWarm(shadows);
   }
   return Promise.resolve(done).then(() => undefined);
 }

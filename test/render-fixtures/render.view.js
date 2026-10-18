@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { boot, defineView } from '../../src/view/boot.js';
 import { snapshot } from '../../src/view/render/snapshot.js';
-import { programCount } from '../../src/view/render/hygiene.js';
+import { programCount, instancedShadows } from '../../src/view/render/hygiene.js';
 import { createTiltShift } from '../../src/view/render/tiltShift.js';
 import countdown from '../fixtures/countdown.js';
 
@@ -37,6 +37,16 @@ fx.warm = async () => {
   extra.userData.lhUse = 'instanced';
   await g.warm({ materials: [extra] });
   return { before, after: programCount(g.renderer), hidden: fx.hidden.visible };
+};
+fx.cold = async (later = false) => { // warm before any frame: the first frame (shadow pass included) must then compile nothing
+  const g = fx.view.gfx, crate = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshLambertMaterial({ color: '#888888' }), 1);
+  crate.castShadow = true; crate.position.x = 1.2; instancedShadows(crate); g.scene.add(crate);
+  const mc = fx.view.materials, grass = mc.get('steel', { wind: { fade: [30, 60] } }); // a WIND caster through its depth twin
+  const tuft = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.2), grass); tuft.castShadow = true; tuft.customDepthMaterial = mc.depth(grass); tuft.position.x = -1.2;
+  if (!later) g.scene.add(tuft); // later: made before warm (as preloaded assets are), drawn only after it
+  await g.warm();
+  const warmed = programCount(g.renderer); if (later) g.scene.add(tuft); window.engine.render(0);
+  return { warmed, drawn: programCount(g.renderer), errors: g.renderer.getContext().getError() };
 };
 fx.snap = (opts = {}) => {
   const g = fx.view.gfx, info = {}, alpha = g.renderer.getClearAlpha();

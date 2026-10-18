@@ -79,6 +79,17 @@ test('warm compiles the hidden toon sphere and an instanced material, and leaves
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });
+test('warm before the first frame also compiles the shadow pass (plain and instanced depth, WIND twins): that frame compiles nothing (M-12)', async t => {
+  if (skip) return t.skip(skip);
+  let game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
+  try {
+    for (const later of [false, true]) {
+      if (later) { await game.close(); game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' }); }
+      const r = await game.page.evaluate(l => window.__fx.cold(l), later);
+      assert.equal(r.drawn, r.warmed, `${later ? 'twin drawn after warm' : 'all in the scene'}: programs ${r.warmed} after warm -> ${r.drawn} after the first frame`); assert.equal(r.errors, 0);
+    }
+  } finally { await game.close(); }
+});
 test('snapshot: a PNG with a clear corner and the red box in the middle, square and [w, h]; renderer and scene untouched (RF5)', async t => {
   if (skip) return t.skip(skip);
   const game = await openGame(chrome.browser, base, { preset: 'desktop', render: 'manual' });
