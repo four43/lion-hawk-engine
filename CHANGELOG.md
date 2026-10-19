@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-10-19
 
 - `boot` calls a view half's `frame` on the half again (#139: the allocation-free render slot dropped `this`).
 - `lion-hawk/playwright`: `openGame` fakes `navigator.getGamepads` by default (`pads: 'fake' | 'host'`), so the test machine's controllers never reach a test; `game.pad(state)` scripts a standard pad and `game.frames(n)` waits n animation frames (#140).
