@@ -32,7 +32,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const seats = createSeats(engine, { getGamepads, target, doc, storage, onError: report });
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id), // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
     seats: o => { seats.enable(o); return seats.list; }, context: (name, def) => seats.context(name, def), device: (kind, spec) => seats.kind(kind, spec),
-    onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), get localPlayers() { return seats.list; } };
+    onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), gamepad: dev => seats.gamepad(dev), get localPlayers() { return seats.list; } };
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
   // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
   const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);

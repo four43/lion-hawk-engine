@@ -13,7 +13,7 @@ test('without enable() one seat holds every device: keyboard, touch and each pad
   slots[0] = pad(0); frame();
   slots[2] = pad(2, { id: WHEEL }); frame();
   assert.deepEqual(lp.devices.slice(2).map(d => [d.kind, d.index, d.id, d.lost]), [['pad', 0, XBOX, false], ['pad', 2, WHEEL, false]]);
-  assert.deepEqual(ev, [['seat.device', 0, 'pad', 'add'], ['seat.device', 0, 'pad', 'add']]);
+  assert.deepEqual(ev, [['seat.seen', null, 'pad'], ['seat.device', 0, 'pad', 'add'], ['seat.seen', null, 'pad'], ['seat.device', 0, 'pad', 'add']]);
 });
 
 test("lp.pads and lp.pad are this frame's Gamepad objects; lp.pad is the pad pressed last (C-7)", () => {
@@ -151,15 +151,14 @@ test('regain: a press goes to the seat that lost a pad with the same id, at any 
   assert.equal(e.controllerOf(2).player, 3, 'the seat kept its player');
 });
 
-test('with no same-id pad, a press fills the seat whose pad was lost first, before join runs (C-9)', () => {
-  let joins = 0;
-  const { e, seats, slots, frame } = setup(); seats.enable({ join: () => { joins++; return 'new'; } });
-  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+test('with the default join and no same-id pad, a press fills the seat whose pad was lost first (C-9)', () => {
+  const { e, seats, slots, frame } = setup(); seats.enable();
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); slots[2] = pad(2, { down: [0] }); frame(); e.stepN(1); frame();
   const a = seats.list[1].devices[0], b = seats.list[2].devices[0];
-  slots[1] = null; frame(); slots[0] = null; frame(); // b (seat 2) lost first
+  slots[2] = null; frame(); slots[1] = null; frame(); // b (seat 2) lost first
   slots[5] = pad(5, { id: WHEEL, down: [0] }); frame();
   assert.equal(b.lost, false); assert.equal(b.id, WHEEL); assert.equal(b.index, 5);
-  assert.equal(a.lost, true); assert.equal(joins, 2);
+  assert.equal(a.lost, true); assert.equal(seats.list.length, 3, 'no new seat');
 });
 
 test("index reuse: another product on a held pad's index is lost-and-new, and pairs only on a press (review focus)", () => {
@@ -281,4 +280,112 @@ test('a failing kind read() clears its held unit each frame without losing it, a
   assert.equal(e.controllerOf(0).input.snapshot.gas, 0, 'no stuck throttle'); assert.equal(dev.lost, false); assert.equal(seats.list[0].lost, false);
   fail = false; frame(); e.stepN(1);
   assert.equal(e.controllerOf(0).input.snapshot.gas, 1, 'the unit drives again'); assert.equal(dev.lost, false);
+});
+
+// final review fixes (plan 2): axis anchors, late enable, seats.gamepad, seat.seen, leaving claims, custom-join regain
+const hold = (frame, n, set) => { for (let i = 0; i < n; i++) { set(); frame(); } };
+
+test('a pedal that reads 0 until touched and then rests at -1 re-anchors: a press to +1 is an edge for capture and lp.pad (final review 1a)', async () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  const wheel = axes => pad(1, { id: WHEEL, axes });
+  slots[0] = pad(0); slots[1] = wheel([0.01, 0, 0, 0]); frame(); // the pedal (axis 2) is not reported yet: exactly 0
+  slots[0] = pad(0, { down: [0] }); slots[1] = wheel([0.01, 0, 0, 0]); frame();
+  assert.equal(lp.pad, slots[0]);
+  hold(frame, 10, () => { slots[0] = pad(0); slots[1] = wheel([0.01, 0, -1, 0]); });
+  assert.equal(lp.pad, slots[0], 'the first reading of an unreported axis is its rest, not a press');
+  let got; const p = lp.bindings.capture(); p.then(v => { got = v; });
+  slots[0] = pad(0); slots[1] = wheel([0.01, 0, 1, 0]); frame();
+  assert.equal(lp.pad, slots[1], 'lp.pad follows the pedal');
+  assert.deepEqual(await p, { device: lp.devices[3], input: 'axis:2' }); assert.ok(got);
+});
+
+test('a trigger held at +1 on first sight, released to -1 and left there re-anchors, so a later press is an edge (final review 1b)', () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  slots[0] = pad(0, { axes: [0.01, 0.01, 1, 0.01] }); slots[1] = pad(1); frame();
+  hold(frame, 12, () => { slots[0] = pad(0, { axes: [0.01, 0.01, -1, 0.01] }); slots[1] = pad(1); });
+  slots[0] = pad(0, { axes: [0.01, 0.01, -1, 0.01] }); slots[1] = pad(1, { down: [0] }); frame();
+  assert.equal(lp.pad, slots[1]);
+  slots[0] = pad(0, { axes: [0.01, 0.01, 1, 0.01] }); slots[1] = pad(1); frame();
+  assert.equal(lp.pad, slots[0], 'the press from the learned rest is use');
+});
+
+test('a pad whose axes array grows anchors each new axis at its first reading (final review 1c)', () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  slots[0] = pad(0, { axes: [] }); slots[1] = pad(1); frame();
+  slots[0] = pad(0, { axes: [] }); slots[1] = pad(1, { down: [0] }); frame();
+  assert.equal(lp.pad, slots[1]);
+  slots[0] = pad(0, { axes: [0.01, 0.01, -1, 0.01] }); slots[1] = pad(1); frame();
+  assert.equal(lp.pad, slots[1], 'a new axis at -1 is resting, not pressed');
+  slots[0] = pad(0, { axes: [0.01, 0.01, 1, 0.01] }); slots[1] = pad(1); frame();
+  assert.equal(lp.pad, slots[0], 'a move from that anchor is use');
+});
+
+test('enable() after boot: seat 0 keeps its last-used pad; every other pad is released and joins through join (final review 2)', () => {
+  const { e, seats, slots, frame } = setup(), s0 = seats.list[0];
+  seats.context('drive', { pads: [{ match: () => true, bindings: { buttons: { 7: ['gas', 1] } } }] }); s0.contexts.add('drive');
+  slots[0] = pad(0); slots[1] = pad(1); frame();
+  slots[0] = pad(0); slots[1] = pad(1, { down: [7] }); frame(); e.stepN(1);
+  assert.equal(e.input.snapshot.gas, 1, 'pad 1 drives seat 0 before enable');
+  const [p0, p1] = s0.devices.filter(d => d.kind === 'pad');
+  slots[0] = pad(0, { down: [3] }); slots[1] = pad(1, { down: [7] }); frame(); // pad 0 is used last; pad 1 still holds gas
+  seats.enable({}); frame(); e.stepN(1);
+  assert.deepEqual(s0.devices.filter(d => d.kind === 'pad'), [p0], 'seat 0 keeps only pad 0');
+  assert.deepEqual(seats.unpaired(), [p1]);
+  assert.equal(e.input.snapshot.gas, 0, "the released pad's held input is cleared");
+  slots[1] = pad(1); frame(); slots[1] = pad(1, { down: [0] }); frame();
+  assert.equal(seats.list[1]?.seat, 1); assert.equal(seats.list[1].pending, true);
+  e.stepN(1); frame();
+  assert.equal(seats.list[1].pending, false); assert.deepEqual(seats.list[1].devices, [p1]);
+  assert.deepEqual(s0.devices.filter(d => d.kind === 'pad'), [p0]);
+});
+
+test('enable() after boot with no press yet: seat 0 keeps its first pad (final review 2)', () => {
+  const { e, seats, slots, frame } = setup(), s0 = seats.list[0];
+  slots[0] = pad(0); slots[1] = pad(1); frame();
+  const [p0, p1] = s0.devices.filter(d => d.kind === 'pad');
+  seats.enable({});
+  assert.deepEqual(s0.devices.filter(d => d.kind === 'pad'), [p0]); assert.deepEqual(seats.unpaired(), [p1]);
+  slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+  assert.deepEqual(seats.list.map(s => [s.seat, s.pending, s.devices.filter(d => d.kind === 'pad').map(d => d.index)]), [[0, false, [0]], [1, false, [1]]]);
+});
+
+test('seats.gamepad(dev) is the live Gamepad of a paired or unpaired pad, else null; seat.seen fires once per pad (final review 3)', () => {
+  const { seats, slots, ev, frame } = setup(); seats.enable();
+  slots[0] = pad(0); frame();
+  const [dev] = seats.unpaired().filter(d => d.kind === 'pad');
+  assert.equal(seats.gamepad(dev), slots[0], 'unpaired');
+  slots[0] = pad(0, { down: [0] }); frame();
+  assert.equal(seats.list[0].devices[2], dev); assert.equal(seats.gamepad(dev), slots[0], "paired: this frame's Gamepad");
+  assert.equal(seats.gamepad(seats.list[0].devices[0]), null, 'a keyboard has no Gamepad');
+  assert.equal(seats.gamepad({ kind: 'pad', index: 0 }), null, 'not a device of this page');
+  slots[0] = null; frame(); assert.equal(seats.gamepad(dev), null, 'lost');
+  slots[0] = pad(0); frame(); slots[1] = pad(1, { id: WHEEL }); frame();
+  assert.deepEqual(ev.filter(x => x[0] === 'seat.seen'), [['seat.seen', null, 'pad'], ['seat.seen', null, 'pad']], 'index 0 with the same id is not seen twice');
+});
+
+test('seat.seen fires before the device is used, with a device gamepad() can read (final review 3)', () => {
+  const { seats, slots, frame } = setup(), got = [];
+  seats.on(x => { if (x.type === 'seat.seen') got.push(seats.gamepad(x.device)); });
+  slots[0] = pad(0); frame();
+  assert.deepEqual(got, [slots[0]]);
+});
+
+test('claim on a seat that is leaving throws (final review 5)', () => {
+  const { e, seats, slots, frame } = setup(); seats.enable();
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+  const s1 = seats.list[1]; s1.leave();
+  assert.throws(() => s1.claim(seats.list[0].devices[0]), /seats: seat 1 is leaving/);
+});
+
+test('with a custom join, only a pad with the same id regains a lost seat directly; another id goes through join (final review 6)', () => {
+  const asked = [];
+  const { e, seats, slots, ev, frame } = setup(); seats.enable({ join: dev => { asked.push(dev.id); return dev.index === 0 ? 0 : 'new'; } });
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+  const lost = seats.list[1].devices[0]; asked.length = 0;
+  slots[1] = null; frame();
+  slots[4] = pad(4, { id: WHEEL, down: [0] }); frame();
+  assert.deepEqual(asked, [WHEEL], 'the wheel asked join'); assert.equal(lost.lost, true);
+  assert.equal(ev.some(x => x[0] === 'seat.regained'), false);
+  slots[5] = pad(5, { down: [0] }); frame();
+  assert.deepEqual(asked, [WHEEL], 'the same id regains without asking'); assert.equal(lost.lost, false); assert.equal(lost.index, 5);
 });

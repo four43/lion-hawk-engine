@@ -7,7 +7,8 @@ import { bindGamepad } from './gamepad.js';
 import { bindKeyboard } from './keyboard.js';
 import { NONE, checkContext, resolvePad, resolveKeys, resolveTouch, schemeKeysOf, mappableOf, inputKind } from './contexts.js';
 import { createProfiles, deviceKey } from './profiles.js';
-export const JOIN_AXIS = 0.5; // an axis this far from its rest value is a press (join, regain, capture, lp.pad)
+export const JOIN_AXIS = 0.5; // an axis this far from its anchor is a press (join, regain, capture, lp.pad)
+const STILL = 0.02, STILL_POLLS = 10; // an axis moving less than STILL per poll for STILL_POLLS polls re-anchors where it sits
 const NO = Object.freeze([]);
 
 export function createSeats(engine, { getGamepads, target = globalThis, doc, storage, onError = err => console.warn(err.message) } = {}) {
@@ -21,6 +22,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const known = new Set();       // every device this page has
   let opts = null, losses = 0;
   const leftAt = new WeakMap(); // leaving seat -> engine.time.step when leave() was called
+  const seenPads = new Set();   // 'index|id' of every pad this page has seen, for seat.seen
   const defs = new Map();         // context name -> checked context
   const stacks = new WeakMap();   // seat -> [{ name, priority, order }], highest priority first
   const binds = new WeakMap();    // seat -> [{ dev, mod }]: the device modules writing its controller's input
@@ -54,7 +56,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     }
     if (out === undefined) binds.set(lp, out = []);
     else for (let i = out.length - 1; i >= 0; i--) if (only === undefined || out[i].dev === only) { out[i].mod.dispose?.(); out.splice(i, 1); }
-    const to = { input: lp.controller.input };
+    const to = { input: lp.controller.input, command: (...a) => engine.command(...a) }; // a touch device may send commands (bindPointer)
     for (let i = 0; i < lp.devices.length; i++) {
       const dev = lp.devices[i]; if (dev.lost || (only !== undefined && dev !== only)) continue;
       if (dev.kind === 'pad') {
@@ -209,7 +211,9 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const start = lp => { if (opts !== null) for (const c of opts.contexts) { if (Array.isArray(c)) lp.contexts.add(c[0], c[1]); else lp.contexts.add(c); } };
   // [C-10] declare (or replace) a context; each new keyboard scheme it names is a device on seat 0 ([C-8])
   const context = (name, def) => {
-    defs.set(name, checkContext(name, def));
+    const c = checkContext(name, def);
+    if (!engine.game.id && (c.pads.some(x => x.mappable !== undefined) || Object.values(c.keys).some(x => x.mappable !== undefined))) throw new Error('seats: a game with mappable bindings needs an id'); // [C-13] else saves land under lh.bindings.undefined
+    defs.set(name, c);
     for (const s of Object.keys(defs.get(name).keys)) if (!keysBy.has(s)) { const d = { kind: 'keys', scheme: s }; keysBy.set(s, d); known.add(d); attach(list[0], d); }
     schemeKeys.clear(); for (const [s, ks] of schemeKeysOf(defs)) schemeKeys.set(s, ks);
     for (let k = 0; k < list.length; k++) if (list[k].contexts.has(name)) changed(list[k]);
@@ -218,8 +222,9 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const newPad = (p, index) => {
     const dev = { kind: 'pad', index, id: String(p.id ?? ''), mapping: String(p.mapping ?? ''), lost: false };
     const view = { id: dev.id, index, mapping: dev.mapping, axes: NO, buttons: [] }; // what this pad's bindings read
-    info.set(dev, { live: p, btn: [], hot: [], rest: null, edge: false, kind: null, at: -1, lostAt: 0, mask: [], view, one: [view] });
+    info.set(dev, { live: p, btn: [], hot: [], anchor: [], prev: [], still: [], zero: [], edge: false, kind: null, at: -1, lostAt: 0, mask: [], view, one: [view] });
     known.add(dev);
+    const k = index + '|' + dev.id; if (!seenPads.has(k)) { seenPads.add(k); emit('seat.seen', null, dev); } // view-only, e.g. a one-time haptics reset
     return dev;
   };
   // this frame's Gamepad as the bindings see it: its axes, and its buttons with masked ones up (reused objects, R-8)
@@ -239,13 +244,25 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.update?.(dt, raw); }
   };
 
-  // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its rest value, this frame; s.kind / s.at name the first such input
+  // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its anchor, this frame; s.kind / s.at name the
+  // first such input. An axis anchors at its first reading (a pedal at +-1 or a trigger at -1 is not a press), again at its
+  // first non-zero reading if it read exactly 0 until then (Firefox reports 0 until an axis is first touched), and again
+  // wherever it has sat still for STILL_POLLS polls, so a pedal that rests somewhere new presses from there. Per-axis state
+  // lives in arrays that only grow when the pad reports more axes (R-8).
   const edges = (s, p) => {
     s.edge = false;
     const b = p.buttons ?? NO, a = p.axes ?? NO;
-    if (s.rest === null) s.rest = Array.from(a, v => v ?? 0); // the first reading is the rest value: pedals at +-1, triggers at -1 are not presses
     for (let i = 0; i < b.length; i++) { const d = b[i]?.pressed === true; if (d && !s.btn[i] && !s.edge) { s.edge = true; s.kind = 'button'; s.at = i; } s.btn[i] = d; }
-    for (let i = 0; i < a.length; i++) { const h = Math.abs((a[i] ?? 0) - (s.rest[i] ?? 0)) > JOIN_AXIS; if (h && !s.hot[i] && !s.edge) { s.edge = true; s.kind = 'axis'; s.at = i; } s.hot[i] = h; }
+    for (let i = 0; i < a.length; i++) {
+      const v = a[i] ?? 0;
+      if (i >= s.anchor.length) { s.anchor[i] = s.prev[i] = v; s.still[i] = 0; s.zero[i] = v === 0; s.hot[i] = false; continue; }
+      if (s.zero[i] && v !== 0) { s.zero[i] = false; s.anchor[i] = s.prev[i] = v; s.still[i] = 0; s.hot[i] = false; continue; }
+      s.still[i] = Math.abs(v - s.prev[i]) < STILL ? s.still[i] + 1 : 0; s.prev[i] = v;
+      if (s.still[i] >= STILL_POLLS) { s.anchor[i] = v; s.still[i] = 0; }
+      const h = Math.abs(v - s.anchor[i]) > JOIN_AXIS;
+      if (h && !s.hot[i] && !s.edge) { s.edge = true; s.kind = 'axis'; s.at = i; }
+      s.hot[i] = h;
+    }
   };
 
   const attach = (lp, dev) => {
@@ -271,7 +288,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   };
   // [C-8] an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
   const offer = dev => {
-    const back = regain(dev); if (back !== null) return back;
+    const back = regain(dev, opts !== null && opts.custom); if (back !== null) return back;
     if (opts === null) { attach(list[0], dev); return dev; }
     const r = opts.join(dev);
     if (r === null || r === undefined) return dev;
@@ -283,16 +300,17 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     attach(to ?? open(seat), dev);
     return dev;
   };
-  // [C-9] a seat waiting for a lost device of this kind gets the press first: the same product id, else the device lost
-  // longest ago. The lost device object is reused, so the seat, its saved bindings and a game holding it keep one device.
-  const regain = dev => {
+  // [C-9] a seat waiting for a lost device of this kind gets the press first: the same product id, else (with the default
+  // join only; a custom join decides for another id) the device lost longest ago. The lost device object is reused, so the
+  // seat, its saved bindings and a game holding it keep one device.
+  const regain = (dev, sameOnly) => {
     let best = null, same = false;
     for (let k = 0; k < list.length; k++) {
       if (list[k].leaving) continue; // a seat that is leaving takes nothing back
       const ds = list[k].devices;
       for (let i = 0; i < ds.length; i++) {
         const d = ds[i]; if (!d.lost || d.kind !== dev.kind) continue;
-        const m = d.id === dev.id;
+        const m = d.id === dev.id; if (sameOnly && !m) continue;
         if (best === null || (m && !same) || (m === same && info.get(d).lostAt < info.get(best).lostAt)) { best = d; same = m; }
       }
     }
@@ -313,6 +331,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const claim = (lp, dev) => {
     if (!known.has(dev)) throw new Error('seats: claim needs a device from this page (lp.devices, seats.unpaired() or a seat event)');
     if (!list.includes(lp)) throw new Error(`seats: seat ${lp.seat} has left`);
+    if (lp.leaving) throw new Error(`seats: seat ${lp.seat} is leaving`);
     attach(lp, dev);
   };
   const release = (lp, dev) => {
@@ -320,6 +339,8 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     detach(lp, dev);
     if (dev.lost) { info.delete(dev); known.delete(dev); }
   };
+  // the live Gamepad of a pad device of this page, paired or not; null for a lost pad or another kind ([C-7])
+  const gamepad = dev => (dev?.kind === 'pad' ? info.get(dev)?.live ?? null : null);
   const unpaired = () => { const out = []; for (const d of known) if (!holder.has(d)) out.push(d); return out; };
   // keyboard join: a key of an unpaired scheme offers that scheme's device ('all' takes every key; Task 4 fills schemeKeys)
   const GUARD = 'input, textarea, select, [contenteditable]';
@@ -342,7 +363,13 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     if (!Number.isInteger(max) || max < 1 || max > 16) throw new Error('seats: max must be an integer in 1..16');
     if (join !== undefined && typeof join !== 'function') throw new Error('seats: join must be a function');
     if (!Array.isArray(contexts)) throw new Error('seats: contexts must be a list of names or [name, priority]');
-    opts = { max, join: join ?? defaultJoin, contexts };
+    const first = opts === null;
+    opts = { max, join: join ?? defaultJoin, custom: join !== undefined, contexts };
+    if (first) { // seat 0 held every pad until now: it keeps the one used last, and the rest join through join on their next press
+      const z = seatOf(0), last = usedLast.get(z);
+      const keep = last !== undefined && !last.lost ? last : z.devices.find(d => d.kind === 'pad' && !d.lost);
+      for (let i = z.devices.length - 1; i >= 0; i--) { const d = z.devices[i]; if (d.kind === 'pad' && d !== keep) release(z, d); }
+    }
     for (let k = 0; k < list.length; k++) start(list[k]);
   };
   const freeSeat = () => { for (let n = 0; n < opts.max; n++) if (seatOf(n) === undefined) return n; return -1; };
@@ -422,7 +449,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
 
   return {
     list, // view.localPlayers, in seat order
-    on, enable, unpaired, context, kind,
+    on, enable, unpaired, context, kind, gamepad,
     update(dt, raw = dt) { sync(); poll(); readKinds(); refresh(); views(); drive(dt, raw); },
     dispose() {
       target.removeEventListener?.('keydown', onKey);

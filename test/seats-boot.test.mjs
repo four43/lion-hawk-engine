@@ -57,3 +57,16 @@ test('a steady frame with two seats, two pads and a context allocates under 128 
   const r = await allocRate(frame, 2000, { warm: 500, top: 8, within: VIEW });
   assert.ok(r.inside < 128, `${Math.round(r.inside)} bytes per frame in view code:\n${r.top.join('\n')}`);
 });
+
+test('view.gamepad(dev) is the live Gamepad of a pad device; seat.seen reaches view.onSeat (final review 3)', () => {
+  const seen = [];
+  const halves = defineView({ scenes: { field: { enter(e, view) { view.onSeat(x => { if (x.type === 'seat.seen') seen.push(view.gamepad(x.device)); }); view.seats(); } } } });
+  const { app, slots, frame } = start(halves);
+  try {
+    slots[0] = pad(0); frame();
+    assert.deepEqual(seen, [slots[0]]);
+    const [dev] = app.view.unpaired().filter(d => d.kind === 'pad');
+    slots[0] = pad(0); frame();
+    assert.equal(app.view.gamepad(dev), slots[0]);
+  } finally { app.dispose(); }
+});

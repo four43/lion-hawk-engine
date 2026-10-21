@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, pad, XBOX, WHEEL } from './helpers/seats.mjs';
 import { bindHold } from '../src/view/touch.js';
+import { bindPointer } from '../src/view/pointer.js';
 import { checkContext, resolvePad, resolveKeys, mappableOf } from '../src/view/contexts.js';
 
 const DRIVE = {
@@ -128,7 +129,7 @@ test('touch: engine => devices is called with the seat input, one device or a li
   slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame(); // seat 0 holds pad 0, seat 1 is open with pad 1
   const s0 = seats.list[0], s1 = seats.list[1], touchDev = s0.devices.find(d => d.kind === 'touch');
   s0.contexts.add('hud'); s1.contexts.add('hud');
-  assert.deepEqual(seen, [['input']], 'only seat 0 holds touch; called once with { input }');
+  assert.deepEqual(seen, [['input', 'command']], 'only seat 0 holds touch; called once with { input, command }');
   press(btn, 'pointerdown'); frame(); e.stepN(1);
   assert.equal(snap(e, 0).horn.down, true); assert.equal(snap(e, 1).horn.down, false);
   press(btn, 'pointerup');
@@ -176,4 +177,14 @@ test('a released keyboard scheme leaves no held action behind (T3)', () => {
   assert.equal(snap(e, 0).gas, 1);
   s0.release(d); frame(); e.stepN(1);
   assert.equal(snap(e, 0).gas, 0);
+});
+
+test('touch: a context returning bindPointer sends its commands through the engine (final review 4)', () => {
+  const { e, seats, frame, window, document } = setup(), sent = [];
+  const el = document.createElement('div'); document.body.appendChild(el);
+  e.command = (type, data) => { sent.push([type, data.phase]); };
+  seats.context('board', { touch: eng => bindPointer(eng, { surface: el, type: 'tap', at: () => ({}), doc: document }) });
+  seats.list[0].contexts.add('board'); frame();
+  assert.doesNotThrow(() => el.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 1, button: 0, bubbles: true, cancelable: true })));
+  assert.deepEqual(sent, [['tap', 'down']]);
 });

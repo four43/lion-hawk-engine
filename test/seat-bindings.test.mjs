@@ -2,7 +2,10 @@
 // [C-12], [C-13]: player-mappable bindings, profiles in localStorage, capture (plan 2026-10-21-local-players-2).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, pad, memory, XBOX, DUALSENSE } from './helpers/seats.mjs';
+import { setup, pad, memory, game, XBOX, DUALSENSE } from './helpers/seats.mjs';
+import { createSeats } from '../src/view/seats.js';
+import { createEngine } from '../src/index.sim.js';
+import { dom } from './helpers/dom.mjs';
 
 const DRIVE = {
   pads: [{ match: p => p.mapping === 'standard', bindings: { buttons: { 6: ['brake', 1], 7: ['gas', 1] } }, mappable: { Brake: 'button:6', Gas: 'button:7' } }],
@@ -137,4 +140,12 @@ test('two seats on one profile name keep each other\'s mappings (review fix)', (
   s0.bindings.profile = 'Sam'; s1.bindings.profile = 'Sam';
   s0.bindings.map('Brake', dev, 'button:4'); s1.bindings.map('Gas', d1, 'button:5');
   assert.deepEqual(JSON.parse(store.m.get('lh.bindings.seats.Sam')), { [`pad:${XBOX}`]: { Brake: 'button:4' }, [`pad:${DUALSENSE}`]: { Gas: 'button:5' } });
+});
+
+test('a mappable context needs a game id: no lh.bindings.undefined.* (final review 7)', () => {
+  const { window, document } = dom(), real = createEngine(game);
+  const e = Object.create(real, { game: { value: { ...real.game, id: undefined } } });
+  const seats = createSeats(e, { getGamepads: () => [], target: window, doc: document, storage: memory() });
+  assert.throws(() => seats.context('drive', DRIVE), /seats: a game with mappable bindings needs an id/);
+  assert.doesNotThrow(() => seats.context('plain', { keys: { all: { bindings: { w: ['gas', 1] } } } }), 'no mappable: no id needed');
 });
