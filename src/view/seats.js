@@ -10,7 +10,7 @@ import { createProfiles, deviceKey } from './profiles.js';
 export const JOIN_AXIS = 0.5; // an axis this far from its rest value is a press (join, regain, capture, lp.pad)
 const NO = Object.freeze([]);
 
-export function createSeats(engine, { getGamepads, target = globalThis, doc, storage } = {}) {
+export function createSeats(engine, { getGamepads, target = globalThis, doc, storage, onError = err => console.warn(err.message) } = {}) {
   const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? NO);
   doc ??= target.document ?? globalThis.document;
   const list = [], listeners = [];
@@ -111,33 +111,46 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     if (typeof name !== 'string' || name === '' || name === 'pad' || name === 'keys' || name === 'touch') throw new Error("seats.device: kind must be a new name ('pad', 'keys' and 'touch' are built in)");
     for (let i = 0; i < kindList.length; i++) if (kindList[i].kind === name) throw new Error(`seats.device: kind '${name}' is already registered`);
     if (typeof spec?.read !== 'function') throw new Error(`seats.device: kind '${name}' needs read()`);
-    kindList.push({ kind: name, read: spec.read, devs: [], byKey: new Map() });
+    kindList.push({ kind: name, read: spec.read, devs: [], byKey: new Map(), failed: false });
   };
+  // a custom device is outside the engine's control: its faults are reported once (until it recovers) and never stop the other seats
+  const warn = (K, what, err) => { try { onError(new Error(`seats.device: kind '${K.kind}' ${what}: ${err?.message ?? err}`)); } catch { /* a throwing reporter must not stop the frame */ } };
   const readKinds = () => {
     if (kindList.length === 0) return;
     frameNo++;
     for (let n = 0; n < kindList.length; n++) {
-      const K = kindList[n], units = K.read() ?? NO;
-      for (let i = 0; i < units.length; i++) {
-        const u = units[i], key = typeof u.key === 'string' ? u.key : String(u.key);
-        let dev = K.byKey.get(key), fresh = false;
-        if (dev === undefined) {
-          dev = { kind: K.kind, key, id: String(u.id ?? ''), lost: false };
-          K.byKey.set(key, dev); K.devs.push(dev); known.add(dev); fresh = true;
-          info.set(dev, { live: u, seen: 0, act: false, edge: false, lostAt: 0, source: K.kind + ':' + key, checked: null });
-        }
-        const s = info.get(dev), a = u.active === true;
-        s.seen = frameNo; s.live = u; s.edge = a && !s.act; s.act = a;
-        if (!holder.has(dev) && (s.edge || (fresh && opts === null))) dev = offer(dev);
-        const lp = holder.get(dev);
-        if (lp !== undefined && !lp.pending && !lp.leaving && lp.controller && u.values) {
-          const st = info.get(dev);
-          if (st.checked !== lp.controller) { // once per unit and seat: an unknown action would otherwise throw every frame
-            st.checked = lp.controller; st.bad = false;
-            for (const act in u.values) if (!(act in lp.controller.input.kinds)) { st.bad = true; throw new Error(`seats.device: kind '${K.kind}' wrote unknown action '${act}'`); }
+      const K = kindList[n];
+      try {
+        const units = K.read() ?? NO;
+        if (!Array.isArray(units)) throw new Error('read() must return an array');
+        for (let i = 0; i < units.length; i++) {
+          const u = units[i], kt = typeof u?.key;
+          if (u === null || u === undefined || (kt !== 'string' && kt !== 'number')) continue; // not a unit: skipped
+          const key = kt === 'string' ? u.key : String(u.key);
+          let dev = K.byKey.get(key), fresh = false;
+          if (dev === undefined) {
+            dev = { kind: K.kind, key, id: String(u.id ?? ''), lost: false };
+            K.byKey.set(key, dev); K.devs.push(dev); known.add(dev); fresh = true;
+            info.set(dev, { live: u, seen: 0, act: false, edge: false, lostAt: 0, source: K.kind + ':' + key, bad: false });
           }
-          if (st.bad !== true) lp.controller.input.device(u.values, st.source); // a unit with an unknown action writes nothing after the one report
+          const s = info.get(dev);
+          if (s.seen === frameNo) continue; // two units with one key in a read: the first wins
+          const a = u.active === true;
+          s.seen = frameNo; s.live = u; s.edge = a && !s.act; s.act = a;
+          if (!holder.has(dev) && (s.edge || (fresh && opts === null))) dev = offer(dev);
+          const lp = holder.get(dev);
+          if (lp !== undefined && !lp.pending && !lp.leaving && lp.controller && u.values) {
+            const st = info.get(dev), kinds = lp.controller.input.kinds;
+            let bad = null; // every write is checked: an unknown action skips this frame's write and is reported once until the values are valid again
+            for (const act in u.values) if (!(act in kinds)) { bad = act; break; }
+            if (bad === null) { st.bad = false; lp.controller.input.device(u.values, st.source); }
+            else { if (!st.bad) { st.bad = true; warn(K, 'unit', `wrote unknown action '${bad}'`); } lp.controller.input.clearDevice(st.source); }
+          }
         }
+        K.failed = false;
+      } catch (err) {
+        if (!K.failed) { K.failed = true; warn(K, 'failed', err); }
+        continue; // treated as no units this frame, but no loss pass: a transient error drops nobody
       }
       for (let i = K.devs.length - 1; i >= 0; i--) {
         const dev = K.devs[i];

@@ -235,16 +235,38 @@ test('a game device kind: units pair on a press, write their values on their sea
   assert.throws(() => seats.kind('wheel', {}), /seats.device: kind 'wheel' needs read\(\)/);
 });
 
-test('a game device kind: releasing a held unit clears its source, and an unknown action throws once (C-6)', () => {
+test('a game device kind: releasing a held unit clears its source (C-6)', () => {
   const { e, seats, frame } = setup(); seats.enable({ join: () => 0 });
-  let units = [{ key: 'h', id: 'X', active: true, values: { gas: 0.5 } }];
+  const units = [{ key: 'h', id: 'X', active: true, values: { gas: 0.5 } }];
   seats.kind('pedals', { read: () => units });
   frame(); e.stepN(1);
   const dev = seats.list[0].devices.find(d => d.kind === 'pedals');
   assert.equal(e.input.snapshot.gas, 0.5);
   seats.list[0].release(dev); frame(); e.stepN(1);
   assert.equal(e.input.snapshot.gas, 0, 'a unit that left its seat writes nothing');
-  units = [{ key: 'g', id: 'Y', active: true, values: { nope: 1 } }];
-  assert.throws(() => frame(), /seats.device: kind 'pedals' wrote unknown action 'nope'/);
-  assert.doesNotThrow(() => frame(), 'reported once, not every frame');
+});
+
+test('a game device kind: an unknown action is reported once, skips that write, and recovers (C-6)', () => {
+  const errs = [], { e, seats, frame } = setup({ onError: x => errs.push(x.message) }); seats.enable({ join: () => 0 });
+  let values = { gas: 0.5 };
+  seats.kind('pedals', { read: () => [{ key: 'h', id: 'X', active: true, values }] });
+  frame(); e.stepN(1); assert.equal(e.input.snapshot.gas, 0.5);
+  values = { gas: 0.9, nope: 1 }; frame(); frame(); e.stepN(1);
+  assert.deepEqual(errs, ["seats.device: kind 'pedals' unit: wrote unknown action 'nope'"], 'reported once');
+  assert.equal(e.input.snapshot.gas, 0, 'the bad frame writes nothing');
+  values = { gas: 0.7 }; frame(); e.stepN(1);
+  assert.equal(e.input.snapshot.gas, 0.7, 'valid values are written again'); assert.equal(errs.length, 1);
+});
+
+test('a game device kind: a bad kind does not stop the other seats; bad units are skipped (C-6)', () => {
+  const errs = [], { e, seats, slots, frame } = setup({ onError: x => errs.push(x.message) }); seats.enable({ join: () => 0 });
+  seats.kind('broken', { read: () => { throw new Error('boom'); } });
+  seats.kind('mixed', { read: () => [null, { key: undefined, active: true, values: { gas: 1 } }, { key: 'a', id: 'A', active: true, values: { gas: 0.4 } }, { key: 'a', id: 'B', active: true, values: { gas: 1 } }] });
+  seats.kind('nonarray', { read: () => 5 });
+  slots[0] = pad(0, { down: [0] });
+  frame(); frame(); e.stepN(1);
+  assert.equal(e.input.snapshot.gas, 0.4, 'the valid unit drives, the first of two equal keys wins');
+  assert.deepEqual(seats.list[0].devices.filter(d => d.kind === 'mixed').map(d => d.key), ['a']);
+  assert.deepEqual(errs, ["seats.device: kind 'broken' failed: boom", "seats.device: kind 'nonarray' failed: read() must return an array"], 'each reported once');
+  assert.equal(seats.list[0].pad !== null, true, 'the pad seat is still served');
 });
