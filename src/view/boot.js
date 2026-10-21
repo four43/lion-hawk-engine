@@ -7,13 +7,19 @@ import { installEngine } from './hook.js';
 import { createPipeline, checkRender } from './render/pipeline.js';
 import { bindMenuNav } from './menuNav.js';
 import { createSeats } from './seats.js';
+import { createHaptics } from './haptics.js';
 
-export function defineView({ scenes, render } = {}) {
+export function defineView({ scenes, render, haptics } = {}) {
   if (!scenes || typeof scenes !== 'object') throw new Error('defineView: scenes required');
   for (const [n, s] of Object.entries(scenes)) for (const h of ['enter', 'exit', 'frame', 'built']) if (s[h] !== undefined && typeof s[h] !== 'function') throw new Error(`defineView: scene '${n}'.${h} must be a function`);
   checkRender(render); // overview §4.6: with render, boot builds the renderer, lights, compiler, assets, sync and audio
+  // [C-14] haptics: { autoStop: false } turns the engine's rumble stops off
+  if (haptics !== undefined && (haptics === null || typeof haptics !== 'object' || Object.keys(haptics).some(k => k !== 'autoStop') || (haptics.autoStop !== undefined && typeof haptics.autoStop !== 'boolean'))) {
+    throw new Error('defineView: haptics must be { autoStop: boolean }');
+  }
   const out = { scenes: Object.freeze({ ...scenes }) };
   if (render !== undefined) out.render = Object.freeze({ ...render });
+  if (haptics !== undefined) out.haptics = Object.freeze({ ...haptics });
   return Object.freeze(out);
 }
 
@@ -30,6 +36,8 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames', timer });
   // [C-5]–[C-13] seats: one seat holding every device until view.seats() is called; polled before the game's devices
   const seats = createSeats(engine, { getGamepads, target, doc, storage, onError: report });
+  // [C-14] the haptics lifecycle: stops the rumble a hide, blur or pausing overlay would leave running; after the seats
+  const haptics = halves.haptics?.autoStop === false ? null : createHaptics(engine, { seats, target, doc });
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id), // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
     seats: o => { seats.enable(o); return seats.list; }, context: (name, def) => seats.context(name, def), device: (kind, spec) => seats.kind(kind, spec),
     onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), gamepad: dev => seats.gamepad(dev), get localPlayers() { return seats.list; } };
@@ -37,7 +45,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
   const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);
   view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads }) : null;
-  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : [])], onError: report });
+  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : [])], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
   (doc.head ?? doc.documentElement).appendChild(sa);

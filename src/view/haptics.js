@@ -49,6 +49,7 @@ export function createHaptics(engine, { seats, target = globalThis, doc, frames 
       return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
     },
     get stopping() { return left; },
+    // A game's own rumble in the STOP_FRAMES after a pausing overlay opens is cancelled by design (a pause menu's rumble loses its first ~1/3 s).
     // the frame a pausing overlay appears is a trigger (its first round); otherwise run the next round while any are left.
     // The driver does not tick while the page is hidden, so a hide's remaining rounds run once it is back.
     update() {
