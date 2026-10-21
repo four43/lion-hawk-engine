@@ -13,7 +13,7 @@ import { createWarnOnce } from '../limits.js';
 import { defaultRecord, applyFields, newRecord, createInputRing, zeroActions, bodyEntity } from './replicate.js';
 import { createInputQueue, latencyMs, newTarget, project, poseError, decide, nudgeVelocity, writeKinematic, writePool, setNetFix } from './remote.js';
 import { INPUT_BATCH, INPUT_WIRE_MAX } from '../../defs/fields.js';
-import { SEATS } from '../../core/players.js';
+import { SEATS, PLAYER_KIND, GAME_KIND } from '../../core/players.js';
 const _T = { x: 0, y: 0, z: 0 }, _Q = { x: 0, y: 0, z: 0, w: 1 }; // Rapier's getters fill these (no per-call vectors)
 
 export const RESERVED = Object.freeze(['id', 'tags', 'model', 'colliders', 'xf', 'sockets', 'net', 'netId', 'netFix']); // entity parts (§4.4)
@@ -30,6 +30,8 @@ export function installNet(engine) {
     if (f === 'owner' && k.authority === 'owner') throw new Error(`net: kind '${k.name}' field 'owner' is the owner kind's authority; rename it`);
   }
   const index = new Map(kinds.map((k, i) => [k.name, i])), ownerKinds = kinds.filter(k => k.authority === 'owner');
+  const PK = reg.byName.get(PLAYER_KIND), GK = reg.byName.get(GAME_KIND), pki = index.get(PLAYER_KIND), gki = index.get(GAME_KIND); // N-22
+  // B3: both are undefined with join: 'manual' (netConfig adds the kinds only for the engine join), and nothing below sends them
   const every = kinds.map(k => Math.max(1, Math.round(hz / k.send.hz))), keyEvery = kinds.map(k => Math.max(1, Math.round(k.send.key * hz)));
   const gapMs = every.map(n => n * 1000 / hz); // one send interval, ms
   // N-13: a driven record carries 2 sends' worth of inputs (at least INPUT_BATCH), so a lost diff costs none and none are skipped
@@ -63,6 +65,12 @@ export function installNet(engine) {
     own: new WeakMap(), buckets: kinds.map(() => []), bucketN: kinds.map(() => 0), pairs: kinds.map(() => []), keyG: [], diffG: [], // what this peer sends
     fwd: new Map(), gone: [], // host: each guest's newest owner records to pass on (C-3), and removals of players who left
   });
+  // N-22: a roster entry or the game state as an own record (reused per object like an entity's: R-8); id is its number, or 0
+  const ownState = (k, x, id) => {
+    let o = W.own.get(x);
+    if (!o) { const rec = newRecord(k); W.own.set(x, o = { e: x, rec, ring: null, pair: [id, rec], base: (y, out) => defaultRecord(k, y, out, null) }); }
+    o.pair[0] = id; return o;
+  };
   function sync() {
     const w = engine.world ?? null;
     if (w !== world) { world = w; serial = w ? w.serial : -1; W = w ? fresh() : null; if (w) w.net = ctl; }
@@ -95,7 +103,9 @@ export function installNet(engine) {
     W.byKey.clear(); W.remotes.clear();
     for (let j = 0; j < W.list.length; j++) {
       const r = W.list[j], k = r.kind;
-      r.e = build(k, r.id, r.last); r.links = k.bodies.map(b => bodyEntity(r.e, b)); r.applied = null;
+      if (role === 'host') { // a guest's record never halts the host: a replica its hooks cannot rebuild is dropped (security)
+        try { r.e = build(k, r.id, r.last); } catch (err) { dropped(k, r.id, err); W.list.splice(j--, 1); continue; }
+      } else r.e = build(k, r.id, r.last); r.links = k.bodies.map(b => bodyEntity(r.e, b)); r.applied = null;
       if (r.corr) for (let i = 0; i < r.corr.length; i++) r.corr[i].left = 0;
       W.byKey.set(keyOf(k, r.id), r.e); W.remotes.set(r.e, r); stats.respawned++;
       if (k.remote === 'driven' || r.fc) apply(r, r.last, null); // interp kinds are applied by the next lh.net.recv (applied = null)
@@ -111,11 +121,15 @@ export function installNet(engine) {
     shape(k, desc, rec.body ?? null);
     desc.net = k.name; desc.netId = id; if (k.authority === 'owner') desc.owner = id;
     if (k.input && desc.input === undefined) desc.input = zeroActions(k.input);
-    let e; replicating++;
+    let e = null, made = null; replicating++;
     try {
       e = world.spawn(desc);
-      for (let i = 0; i < subs.length; i += 2) world.add(e, subs[i], world.spawn(shape(k, { ...subs[i + 1] }, rec[subs[i]])));
+      for (let i = 0; i < subs.length; i += 2) { const s = world.spawn(shape(k, { ...subs[i + 1] }, rec[subs[i]])); (made ??= []).push(s); world.add(e, subs[i], s); }
       k.spawned?.(e, world, rec);
+    } catch (err) { // a hook or contract throw leaves no half-built replica behind
+      if (made) for (let i = 0; i < made.length; i++) world.despawn(made[i]);
+      if (e) world.despawn(e);
+      throw err;
     } finally { replicating--; }
     return e;
   }
@@ -126,6 +140,9 @@ export function installNet(engine) {
     try { for (let i = 0; i < r.links.length; i++) if (r.links[i] !== e) world.despawn(r.links[i]); world.despawn(e); } finally { replicating--; }
     stats.despawned++;
   }
+  // host: a game hook (spawn, spawned, apply) or a kind contract threw on a guest's record. A guest's data never halts the host: the
+  // record is dropped, the rest of the frame applies, and the game hears it once per peer and kind (security, Task 6 ruling)
+  const dropped = (k, id, err) => warn(`net: '${k.name}' record of ${bindings.get(id)?.peer ?? `player ${id}`} dropped`, err);
   const apply = (r, rec, s) => { if (r.kind.apply) r.kind.apply(r.e, rec, world, s); else applyFields(r.kind, r.e, rec); };
   const SNAP_AT = [0, 0, 0], SNAP_Q = [0, 0, 0, 1], WHERE = { at: SNAP_AT }, HOW = { q: SNAP_Q, keep: true }, OLD = newPose();
   function correct(r, rec) { // N-14: on a body snapshot, per body: project by the latency, then nudge or snap
@@ -402,6 +419,7 @@ export function installNet(engine) {
       if (op === 'spawn' || op === 'add') {
         const d = op === 'spawn' ? x : { net: value, netId: x.netId, owner: x.owner }, k = reg.byName.get(d.net);
         if (!k) throw new Error(`net: unknown kind '${d.net}'`);
+        if (k === PK || k === GK) throw new Error(`net: '${k.name}' is the engine's: write engine.players or engine.gameState (N-22)`);
         if (!Number.isInteger(d.netId) || d.netId < k.idMin || d.netId > k.idMax) throw new Error(`net: '${k.name}' netId must be an integer in ${k.idMin}..${k.idMax} (got ${d.netId})`);
         if (k.authority === 'owner' && d.owner !== d.netId) throw new Error(`net: '${k.name}' is an owner kind: owner must equal netId (got owner ${d.owner}, netId ${d.netId})`);
         if (role === 'guest' && k.authority === 'host') throw new Error(`net: a guest may not spawn '${k.name}' ${d.netId}: only replication spawns host kinds (E-7)`);
@@ -434,7 +452,17 @@ export function installNet(engine) {
     stats.frames++;
     if (role === 'host') keepForRelay(f, peerNums.get(d.from));
     const ch = W.store.apply(f);
-    for (let i = 0; i < ch.length; i++) { const c = ch[i], k = reg.byName.get(c.kind); if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); }
+    for (let i = 0; i < ch.length; i++) {
+      const c = ch[i], k = reg.byName.get(c.kind);
+      if (k === PK) { // N-21: the guest's roster is the host's
+        if (c.rec) seats.roster.apply(c.id, c.rec, locals.has(c.id));
+        else { const p = seats.roster.get(c.id); if (p) seats.roster.remove(c.id, p.active ? 'left' : 'expired'); }
+        continue;
+      }
+      if (k === GK) { if (c.rec) seats.roster.applyGame(c.rec); continue; }
+      if (role !== 'host') { if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); continue; } // host data is trusted
+      try { if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); } catch (err) { dropped(k, c.id, err); } // this record only
+    }
     forgetRemoved(f);
   });
   engine.builtin('net.hello', (e, d) => { // host (N-19): only from a port (from: a transport peer id)
@@ -443,7 +471,7 @@ export function installNet(engine) {
     if (!d.seats.includes(0)) { refuse(d.from, 0, 'seats'); return; } // S5: a page joins with its seat 0, or not at all
     const out = [], order = [...new Set(d.seats)].sort((a, b) => a - b);
     for (const seat of order) { // no seat without seat 0; past maxSeats (or a full room) one refusal ends the answer (DoS: not one per seat)
-      const n = admitSeat(d.from, d.key, seat); if (n) out.push({ seat, number: n }); else if (seat === 0 || lastReason === 'seats' || lastReason === 'full') break;
+      const n = admitSeat(d.from, d.key, seat); if (n) out.push({ seat, number: n }); else if (seat === 0 || lastReason === 'seats' || lastReason === 'full' || lastReason === 'admit') break;
     }
     if (out.length) engine.net.send(d.from, { t: 'net.welcome', players: out }, true);
   });
@@ -483,6 +511,7 @@ export function installNet(engine) {
     for (let i = 0; i < cs.length && !hit; i++) { self1 = cs[i].collider; rw.contactPairsWith(self1, onPair); }
     self1 = null; return hit;
   }
+  const sampled = (r, k, s) => { if (k.apply) k.apply(r.e, s.b, world, s); else if (s.b !== r.applied) { applyFields(k, r.e, s.b); r.applied = s.b; } };
   engine.system('lh.net.recv', () => {
     if (!sync() || !W.list.length) return;
     const now = engine.time.wall, list = W.list;
@@ -501,7 +530,8 @@ export function installNet(engine) {
       if (!r.interp.sampleInto(now, r.s)) continue;
       const s = r.s;
       for (let i = 0; i < r.links.length; i++) { const name = k.bodies[i]; lerpPose(s.a[name], s.b[name], s.k, r.pose); writeLink(r.links[i], r.pose); }
-      if (k.apply) k.apply(r.e, s.b, world, s); else if (s.b !== r.applied) { applyFields(k, r.e, s.b); r.applied = s.b; }
+      if (role !== 'host') { sampled(r, k, s); continue; } // a guest: the host's records are trusted (a game bug stays loud)
+      try { sampled(r, k, s); } catch (err) { r.applied = s.b; dropped(k, r.id, err); }
     }
   }, { stage: 'pre', before: ['lh.scene'] });
 
@@ -521,6 +551,11 @@ export function installNet(engine) {
       if (!o) { const ring = k.remote === 'driven' ? createInputRing(k.input, batch[ki]) : null, rec = newRecord(k); W.own.set(e, o = { e, rec, ring, pair: [e.netId, rec], base: (x, out) => defaultRecord(k, x, out, ring) }); }
       if (o.ring) o.ring.push(step, e.input); // N-13: every step's input, batched per send tick
       W.buckets[ki][W.bucketN[ki]++] = o;
+    }
+    if (role === 'host' && PK) { // N-22: the roster and the game state are the host's records (engine join only, B3)
+      const ps = seats.roster.list;
+      for (let i = 0; i < ps.length; i++) W.buckets[pki][W.bucketN[pki]++] = ownState(PK, ps[i], ps[i].number);
+      W.buckets[gki][W.bucketN[gki]++] = ownState(GK, seats.roster.game, 0);
     }
     for (let i = 0; i < W.buckets.length; i++) if (W.buckets[i].length !== W.bucketN[i]) W.buckets[i].length = W.bucketN[i];
     if (role === 'host' ? !peerNums.size : hostId === null) return; // nobody to send to: a joiner's first keyframe has everything
