@@ -7,12 +7,14 @@ import { createSchedule, STEP_STAGES } from './schedule.js';
 import { createLoop } from './loop.js';
 import { actions as defineActions, createInput } from './actions.js';
 import { createControllers } from './controllers.js';
+import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS } from './players.js';
+import { F } from '../defs/fields.js';
 import { createUi } from './ui.js';
 import { checkNav, topNav, menuOwnsInput } from './nav.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
 import { createRegistry } from '../sim/replica.js';
 import { installWorld, checkPhysics } from '../sim/world/install.js';
-import { installNet } from '../sim/net/install.js';
+import { installNet, RESERVED as NET_RESERVED } from '../sim/net/install.js';
 
 // [I-7] reserved keys a port sets on any command's data (#77); a schema may not declare them
 const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
@@ -35,6 +37,20 @@ export function defineGame(spec) {
     for (const r in RESERVED) if (Object.hasOwn(c.schema, r)) fail(`commands.${k}.schema may not declare reserved key '${r}'`);
     commands[k] = c.handler; schemas[k] = c.schema;
   }
+  // [C-5] lh.seat is the engine's command, checked at issue (N-3): bad data never reaches a step
+  if (Object.hasOwn(commands, 'lh.seat')) fail("commands.lh.seat is the engine's ([C-5])");
+  schemas['lh.seat'] = { op: F.oneOf(['join', 'leave']), seat: F.uint(1, 15) };
+  // [N-22] player and game state fields; `state` stays the [D-4] debug-state function
+  if (spec.state !== undefined && typeof spec.state !== 'function') fail('state is the debug-state function ([D-4]); declare game state fields as gameState');
+  const player = spec.player ?? {}, gameState = spec.gameState ?? {};
+  for (const [what, f] of [['player', player], ['gameState', gameState]]) {
+    try { checkFields(f, what); } catch (err) { fail(err.message); }
+    for (const k in f) if (f[k].body === true || k === 'input') fail(`${what}.${k}: F.body() and 'input' belong to pawns, not ${what}`);
+    for (const k in f) if (NET_RESERVED.includes(k)) fail(`${what}.${k} is an entity part's name; rename it`); // N7: lh.player / lh.game would fail at installNet
+  }
+  for (const k of PLAYER_RESERVED) if (Object.hasOwn(player, k)) fail(`player.${k} is an engine field`);
+  try { F.obj({ ...PLAYER_BASE, ...player }); } catch (err) { fail(`player: ${err.message}`); }
+  try { F.obj(gameState); } catch (err) { fail(`gameState: ${err.message}`); }
   for (const [name, s] of Object.entries(spec.scenes)) {
     for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
     checkNav(name, s.nav, fail); // U-9
@@ -44,7 +60,7 @@ export function defineGame(spec) {
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
   const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail);
-  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands, schemas, net });
+  return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands, schemas, net, player, gameState });
 }
 // the game net config (N-3): every limit a port applies, and every wire tag naming a schema'd command (built once to check it)
 function netConfig(n, schemas, fail) {
@@ -92,6 +108,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     controllers.gate(menuOwnsInput(game, sceneView.overlays)); // U-9: a menu with input 'menu' on top gates the devices (only the stack changes it)
   };
   const events = createEvents({ now: () => step });
+  // [N-21], [N-22]: the roster and the game state; offline, the page's seats (seat 0 is player 1 from the start, no event)
+  const roster = createRoster(game, { emit: (t, d) => events.emit(t, d) });
+  roster.add(1, { seat: 0, local: true, quiet: true });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
   // #105: the args an open overlay entered with (its ctx.args), for its view half; undefined when it is not an open overlay
   sceneView.overlayArgs = name => { for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === name) return stack[i].ctx.args; return undefined; };
@@ -368,6 +387,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     game, seed: base.seed, events, input, loop, commands, loading, net,
     controllers: controllers.list, // [C-1] live: seats in seat order, then bots
     controllerOf: seat => controllers.of(seat), // [C-1] the seat's controller, or undefined
+    players: roster.list, // [N-21] live: one entry per active or inactive number, in number order
+    gameState: roster.game, // [N-22] live: lh.game's fields
     controller({ bot } = {}) {
       if (bot !== true) throw new Error('engine.controller: only bots are made directly (seats join with the lh.seat command)');
       return controllers.make({ bot: true });
@@ -442,6 +463,9 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       return s;
     },
   };
+  // the net part's seam (not public API): it numbers seats online through `route`, and hears offline seat changes through `changed`
+  const seats = { controllers, roster, route: null, changed: null };
+  Object.defineProperty(engine, SEATS, { value: seats });
   schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
   schedule.add('lh.input', () => { controllers.applyInputs(); if (rec) recordInput(); }, { stage: 'input.apply' });
   // U-9: Back runs the topmost menu's nav.back (an action pressed next step, or a function); none is a no-op. Open
@@ -459,7 +483,13 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
   schedule.add('lh.possess', () => controllers.copy(), { stage: 'input.apply', after: ['lh.commands'] }); // [I-4]
-  engine.builtin('lh.seat', (e, d) => controllers.seat(d?.op, d?.seat)); // [C-5]: plan 3 routes it through the host online
+  engine.builtin('lh.seat', (e, d) => { // [C-5]: checked by its schema at issue; online the net part numbers it ([N-19], B1)
+    if (seats.route?.(d.op, d.seat)) return; // the offline path below numbers from the controllers alone: solo only
+    const had = controllers.of(d.seat), c = controllers.seat(d.op, d.seat);
+    if (d.op === 'join' && !had) roster.add(c.player, { seat: d.seat, local: true });
+    if (d.op === 'leave' && had && d.seat !== 0) roster.remove(had.player);
+    seats.changed?.();
+  });
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   worlds = installWorld(engine, { timer }); // §4.1, §4.4: checks physics.rapier, adds lh.world.swap and lh.physics.*

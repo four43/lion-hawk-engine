@@ -74,19 +74,23 @@ export function createControllers(schema, { input, emit, world }) {
       for (let i = 0; i < list.length; i++) {
         const c = list[i], e = c.pawn; if (!e) continue;
         if (w === undefined || w.get(e.id) !== e) { drop(c, 'despawned'); continue; }
+        if (e.net !== undefined && w.net?.remoteOf?.(e) !== undefined) { drop(c, 'remote'); continue; } // another peer simulates it now
         fill(c);
       }
     },
-    // the lh.seat command's effect, offline numbering (solo/host: lowest free number); plan 3 asks the host online
-    seat(op, seat) {
+    // the lh.seat command's effect; n: the number the net part chose (default: the lowest free)
+    seat(op, seat, n) {
       if (op !== 'join' && op !== 'leave') throw new Error("lh.seat: op must be 'join' or 'leave'");
       if (!Number.isInteger(seat) || seat < 0 || seat > MAX_SEAT) throw new Error(`lh.seat: seat must be an integer in 0..${MAX_SEAT}`);
       const c = this.of(seat);
       if (op === 'join') {
         if (c) return c;
-        const n = make({ seat, player: freeNumber() });
-        emit('controller.joined', { controller: n.id, seat, player: n.player });
-        return n;
+        const p = n ?? freeNumber();
+        if (!Number.isInteger(p) || p < 1 || p > 255) throw new Error(`lh.seat: player number must be an integer in 1..255 (got ${p})`);
+        if (list.some(x => x.player === p)) throw new Error(`lh.seat: player ${p} is taken`);
+        const made = make({ seat, player: p });
+        emit('controller.joined', { controller: made.id, seat, player: p });
+        return made;
       }
       if (!c || seat === 0) return null; // seat 0 is the page's first player and never leaves
       remove(c); emit('controller.left', { controller: c.id, seat, player: c.player });
