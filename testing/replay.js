@@ -28,6 +28,7 @@ export function replay(game, tape, { invariants } = {}) {
   };
   // the recorded snapshot values so far, set (not held) before every replayed step, so nothing stays held afterwards
   const vals = {};
+  const seen = new Set(); // seats that have had a controller during this replay (a seat that left is skipped)
   const seatVals = new Map(); // seat -> recorded values so far (seat 0 is vals)
   const apply = k => {
     const x = at.get(k); if (!x) return;
@@ -39,7 +40,9 @@ export function replay(game, tape, { invariants } = {}) {
     apply(k); e.input.set(vals);
     for (const [s, v] of seatVals) {
       const c = e.controllers.find(x => x.seat === s);
-      if (!c) throw new Error(`replay: seat ${s} has input but no controller at step ${k}`);
+      if (c) seen.add(s);
+      else if (seen.has(s)) continue;
+      else throw new Error(`replay: seat ${s} has input but no controller at step ${k}`);
       c.input.set(v);
     }
     h.step(1);

@@ -32,3 +32,21 @@ test('a tape with seat input but no seat join throws a readable error', () => {
   const bad = { v: 1, game: 'seats-tape', seed: 1, scene: 'field', args: undefined, hz: 60, wall0: 0, end: 1, log: [{ step: 0, seats: { 2: { steer: 1 } } }] };
   assert.throws(() => replay(game, bad), /replay: seat 2 has input but no controller at step 0/);
 });
+
+test('a seat that leaves and rejoins replays step for step (fix round 1)', () => {
+  trace.length = 0;
+  const e = createEngine(game, { record: true });
+  e.command('lh.seat', { op: 'join', seat: 1 }); e.stepN(1);
+  e.controllers[1].input.set({ steer: 0.5 }); e.stepN(1);
+  e.command('lh.seat', { op: 'leave', seat: 1 }); e.stepN(1);
+  e.stepN(2);
+  e.command('lh.seat', { op: 'join', seat: 1 }); e.stepN(1);
+  e.controllers[1].input.set({ steer: -1 }); e.stepN(1);
+  e.stepN(1);
+  const tape = e.tape(), live = trace.slice();
+  trace.length = 0;
+  assert.doesNotThrow(() => replay(game, tape));
+  // a tape replays up to its last recorded entry (existing behavior), so trailing idle steps are not re-run
+  assert.ok(trace.some(t => t[1] === -1));
+  assert.deepEqual(trace, live.slice(0, trace.length));
+});
