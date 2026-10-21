@@ -4,15 +4,18 @@
 // N-4: every stamp and rate window reads the injected clock. The port never steps the engine.
 import { createRegistry, decodeFrame, frameToJson, isFrame, DECODED } from '../sim/replica.js';
 import { wireCodec } from '../sim/schema.js';
+import { peerKey, keyWords } from './key.js';
 import { createRate, createWarnOnce } from '../sim/limits.js';
 
 const EVENTS = ['peer', 'peerLeft', 'peerAway', 'peerBack', 'hostAway', 'hostBack', 'closed'];
-export function createPort(engine, { transport, role, clock = () => performance.now(), onWarn } = {}) {
+export function createPort(engine, { transport, role, clock = () => performance.now(), onWarn, key = peerKey() } = {}) {
   const cfg = engine.game.net;
   if (!cfg) throw new Error('port: the game has no net config (defineGame({ net }))');
   if (role !== 'host' && role !== 'guest') throw new Error("port: role must be 'host' or 'guest'");
   if (!transport || typeof transport.on !== 'function' || typeof transport.send !== 'function') throw new Error('port: transport must be a net (N-1)');
   if (!!transport.isHost !== (role === 'host')) throw new Error(`port: role '${role}' does not match the transport (isHost ${!!transport.isHost})`);
+  const words = Array.isArray(key) ? key : keyWords(key); // N-18: to the sim in net.open, so a tape replays the same join
+  if (words.length !== 4 || !words.every(w => Number.isInteger(w) && w >= 0 && w <= 0xffffffff)) throw new Error('port: key must be a UUID or four uint32 words (N-18)');
   const host = role === 'host', limits = cfg.rates[role], reg = createRegistry(cfg.kinds, { maxSender: cfg.maxSender });
   // the wire tables: tag -> command type, and tag -> that command's schema (defineGame checked every type has one)
   const side = dir => { const types = cfg.wire[dir], table = {}; for (const tag in types) table[tag] = engine.game.schemas[types[tag]]; return { types, codec: wireCodec(table, { codec: cfg.codec }) }; };
@@ -61,6 +64,6 @@ export function createPort(engine, { transport, role, clock = () => performance.
     } catch (e) { stats.unsent++; warn('net: send', e); } // M-44
   };
   offs.push(engine.onStep(e => e.net.drain(send)));
-  issue('net.open', { role, id: transport.id, hostId: transport.hostId ?? null, at: clock() });
+  issue('net.open', { role, id: transport.id, hostId: transport.hostId ?? null, at: clock(), key: [...words] });
   return { transport, role, stats, close() { while (offs.length) offs.pop()(); } };
 }

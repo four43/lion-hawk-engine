@@ -4,6 +4,7 @@
 // N-4: the hub clock is the ports' clock and every engine's wall clock (a late peer starts at wall0 = hub.now).
 // 3i: drop(peer) (gone for good, not stepped), blackout(seconds, { kinds }) (frames dropped at send, #94) and diverged({ agree })
 // over `net` entities (each authority entity against its replica on every other live peer).
+// plan 3: per-seat inputs, seat(peer, op, seat), rejoin(peer, { wall0 }) and per-peer keys (T-22)
 import { headless } from './headless.js';
 import { createMemoryHub, createPort } from '../src/index.net.js';
 import { rng } from '../src/core/rng.js';
@@ -16,19 +17,32 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
   const at = clock ?? (() => hub.now), list = [], reg = createRegistry(game.net.kinds, { maxSender: game.net.maxSender });
   const kindOf = (name, what) => { const k = reg.byName.get(name); if (!k) throw new Error(`mp: ${what}: unknown kind '${name}'`); return k; };
   let k = 0; // hub.now is k * 1000 / hz, the engines' own virtual-wall formula: peers created at the start are exact; a late peer's wall0 + m * 1000 / hz can be an ulp off (field note #93)
-  const addPeer = ({ wall0 = hub.now } = {}) => { // wall0: a peer whose clock starts elsewhere (a rejoin with a lower clock)
-    const index = list.length, name = index ? `guest${index}` : 'host';
-    const h = headless(game, { seed, args: argsOf(index, name), record, wall0 });
-    const net = index ? hub.join() : hub.host();
-    const port = createPort(h.engine, { transport: net, role: index ? 'guest' : 'host', clock: at, onWarn: onWarn && ((kind, e) => onWarn(p, kind, e)) });
-    const p = { index, name, h, engine: h.engine, net, port, dropped: false }; list.push(p); return p;
+  // a page: a fresh engine on a new transport (a reload has a new transport id; its key is kept, N-18)
+  const connect = (p, wall0) => {
+    p.h = headless(game, { seed, args: argsOf(p.index, p.name), record, wall0 }); p.engine = p.h.engine;
+    p.net = p.index ? hub.join() : hub.host();
+    p.port = createPort(p.engine, { transport: p.net, role: p.index ? 'guest' : 'host', clock: at, key: p.key, onWarn: onWarn && ((kind, e) => onWarn(p, kind, e)) });
+    p.dropped = false; return p;
+  };
+  const addPeer = ({ wall0 = hub.now, key } = {}) => { // wall0: a peer whose clock starts elsewhere (a rejoin with a lower clock)
+    const index = list.length, p = { index, name: index ? `guest${index}` : 'host', key: key ?? [index + 1, 0, 0, 0] };
+    list.push(p); return connect(p, wall0);
+  };
+  // [T-22] { 0: snap, 1: snap }: every key a seat number; anything else is seat 0's snapshot
+  const perSeat = s => { let any = false; for (const k in s) { if (!/^\d+$/.test(k)) return false; any = true; } return any; };
+  const setInputs = (p, snap) => {
+    if (!perSeat(snap)) return p.engine.input.set(snap);
+    for (const s in snap) {
+      const c = p.engine.controllerOf(+s); if (!c) throw new Error(`mp: ${p.name} has no seat ${s}`);
+      if (snap[s] != null) c.input.set(snap[s]);
+    }
   };
   const one = inputs => {
     k++; hub.tick(k * 1000 / hz);
     for (let i = 0; i < list.length; i++) { // peers added by a beforeStep wait for the next step
       const p = list[i]; if (p.dropped) continue; beforeStep?.(p, i);
       const snap = typeof inputs === 'function' ? inputs(p, i) : inputs?.[i];
-      if (snap != null) p.engine.input.set(snap);
+      if (snap != null) setInputs(p, snap);
       p.h.step(1);
     }
   };
@@ -48,6 +62,14 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
     drop(peer) {
       const p = peerOf(peer); if (p.dropped) throw new Error(`mp: ${p.name} is already dropped`);
       p.dropped = true; p.port.close(); hub.leave(p.net.id, 'dropped'); return w;
+    },
+    seat(peer, op, seat) { peerOf(peer).engine.command('lh.seat', { op, seat }); return w; }, // [T-22]: recorded like any command
+    // [T-22] a dropped guest comes back as a reload does: a fresh engine on a new transport id, with the same key (N-18, N-23)
+    rejoin(peer, { wall0 = hub.now } = {}) { // wall0: a real reload's clock starts lower than the room's (S3)
+      const p = peerOf(peer);
+      if (p.index === 0) throw new Error('mp: the host cannot rejoin (its room closed)');
+      if (!p.dropped) throw new Error(`mp: ${p.name} is not dropped (drop it first)`);
+      connect(p, wall0); return w;
     },
     // replica frames sent in the next `seconds` are lost (all of them, or those carrying one of `kinds`); JSON messages pass (#94: decided at send)
     blackout(seconds, { kinds } = {}) {
