@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseFlags, FLAGS } from '../src/core/flags.js';
 
 test('defaults when nothing is set', () => {
-  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, lhRender: false, seed: null, slow: null, replay: null, extra: {} });
+  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, lhRender: false, seed: null, slow: null, replay: null, extra: {}, debugs: [] });
 });
 test('booleans: present means on, unless 0 or false', () => {
   const f = parseFlags('?tune&fps=1&mute=0&debug=false&lh-test');
@@ -25,4 +25,12 @@ test('slow and replay, unknown params land in extra, result is frozen', () => {
 test('2d: ?lh-test=render turns on manual rendering (#47)', () => {
   const f = parseFlags('?lh-test=render'); assert.equal(f.lhTest, true); assert.equal(f.lhRender, true);
   assert.equal(parseFlags('?lh-test').lhRender, false);
+});
+
+test('D-7: ?debug=<topics> lists its topics in debugs; a bare or off ?debug has none', () => {
+  const f = parseFlags('?debug=pads');
+  assert.equal(f.debug, true); assert.deepEqual(f.debugs, ['pads']); assert.ok(Object.isFrozen(f.debugs));
+  assert.deepEqual(parseFlags('?debug').debugs, []);
+  assert.deepEqual(parseFlags('?debug=pads, net').debugs, ['pads', 'net']);
+  assert.deepEqual(parseFlags('?debug=0').debugs, []); assert.equal(parseFlags('?debug=0').debug, false);
 });

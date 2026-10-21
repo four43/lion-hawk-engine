@@ -38,6 +38,11 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const seats = createSeats(engine, { getGamepads, target, doc, storage, onError: report });
   // [C-14] the haptics lifecycle: stops the rumble a hide, blur or pausing overlay would leave running; after the seats
   const haptics = halves.haptics?.autoStop === false ? null : createHaptics(engine, { seats, target, doc });
+  // [D-7] ?debug=pads: the pad bench. Only behind the flag: a slot device and a dynamic import (inlined by the build, never
+  // evaluated without the flag), so a page without it pays nothing. The bench gets a read-only view of the seats.
+  const benchOn = flags.debugs?.includes('pads') === true;
+  let bench = null;
+  const benchSlot = benchOn ? { update() { bench?.update(); }, dispose() { bench?.dispose(); bench = null; } } : null;
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id), // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
     seats: o => { seats.enable(o); return seats.list; }, context: (name, def) => seats.context(name, def), device: (kind, spec) => seats.kind(kind, spec),
     onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), gamepad: dev => seats.gamepad(dev), get localPlayers() { return seats.list; } };
@@ -45,7 +50,7 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
   const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);
   view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads }) : null;
-  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : [])], onError: report });
+  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : []), ...(benchSlot ? [benchSlot] : [])], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
   (doc.head ?? doc.documentElement).appendChild(sa);
@@ -148,6 +153,12 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     driver.manual(flags.lhRender ? 'all' : true); // devices update and frames render every rAF (not with ?lh-test=render, #47), but the sim never steps
     const st = doc.createElement('style'); st.textContent = '*{transition:none!important;animation:none!important}';
     (doc.head ?? doc.documentElement).appendChild(st);
+  }
+  if (benchOn) {
+    import('./bench/pads.js').then(m => {
+      if (disposed) return;
+      bench = m.openPadBench({ get localPlayers() { return seats.list; }, unpaired: () => seats.unpaired(), gamepad: d => seats.gamepad(d), onSeat: fn => seats.on(fn) }, { doc, haptics });
+    }).catch(report);
   }
   driver.start();
   return { engine, driver, ui, hook, view, dispose };
