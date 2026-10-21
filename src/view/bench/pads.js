@@ -94,7 +94,7 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
 
   // haptics on the selected pad
   const act = () => current?.vibrationActuator ?? null;
-  const hplay = (type, params, label, quiet = false) => play(act(), type, params, { log: hlog, label, quiet, timer, alive: () => !closed });
+  const hplay = (type, params, label, quiet = false, a = act()) => play(a, type, params, { log: hlog, label, quiet, timer, alive: () => !closed });
   const reset = label => {
     const a = act(); if (typeof a?.reset !== 'function') return;
     try { Promise.resolve(a.reset()).then(r => hlog(`${label}: ${r}`, 'ok'), e => hlog(`${label}: ${e?.name}: ${e?.message}`, 'err')); }
@@ -114,10 +114,11 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
   const stopSeq = () => { for (const t of seq) timer.clearTimeout(t); seq = []; };
   const runPattern = p => {
     stopSeq();
-    if (!act()) { hlog(`${p.name}: this pad has no vibrationActuator`, 'err'); return; }
-    if (p.trig && supports(act()).trigger === false) hlog(`${p.name}: the pad does not list trigger-rumble; expect an error`, 'err');
+    const a = act(); // the pattern stays on the pad it started on
+    if (!a) { hlog(`${p.name}: this pad has no vibrationActuator`, 'err'); return; }
+    if (p.trig && supports(a).trigger === false) hlog(`${p.name}: the pad does not list trigger-rumble; expect an error`, 'err');
     hlog(`${p.name}: ${p.steps.length} effect(s)`);
-    p.steps.forEach(([at, type, params], i) => { seq.push(timer.setTimeout(() => { hplay(type, params, p.name, i < p.steps.length - 1); }, at)); });
+    p.steps.forEach(([at, type, params], i) => { seq.push(timer.setTimeout(() => { hplay(type, params, p.name, i < p.steps.length - 1, a); }, at)); });
   };
   for (const p of PATTERNS) {
     const b = doc.createElement('button'); b.type = 'button'; b.textContent = `${p.name}${p.trig ? ' (triggers)' : ''}`; b.title = p.sub;
@@ -240,6 +241,15 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
       renderPad(current, current ? stats.get(sel) : null);
       live(t);
     },
-    dispose() { closed = true; offSeat(); offStop?.(); stopSeq(); root.remove(); style.remove(); },
+    dispose() {
+      if (closed) return;
+      // leave no pad rumbling: stop patterns and live taps, then zero every reachable pad, before the bench goes quiet
+      stopSeq(); lst = liveState();
+      for (const d of padDevices()) {
+        const a = view.gamepad(d)?.vibrationActuator; if (!a) continue;
+        try { Promise.resolve(a.playEffect?.('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })).catch(() => {}); } catch { /* no rumble to stop */ }
+        try { Promise.resolve(a.reset?.()).catch(() => {}); } catch { /* none */ }
+      }
+      closed = true; offSeat(); offStop?.(); root.remove(); style.remove(); },
   };
 }

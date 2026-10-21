@@ -85,9 +85,10 @@ export const PATTERNS = Object.freeze([
 ]);
 
 // one playEffect, logged; unless quiet, a watchdog reports a promise the browser never settles (seen on Linux hidraw)
-// alive(): false once the caller is closed; a late watchdog then stays silent. Missing params count as {}.
+// alive(): false once the caller is closed; play then does nothing and a late watchdog stays silent. Missing params count as {}.
 export async function play(a, type, params, { log = () => {}, label = type, quiet = false, timer = globalThis, alive = () => true } = {}) {
   params = params ?? {};
+  if (!alive()) return null; // closed: no actuator call, no log
   if (!a) { if (!quiet) log(`${label}: this pad has no vibrationActuator`, 'err'); return null; }
   if (typeof a.playEffect !== 'function') { if (!quiet) log(`${label}: vibrationActuator has no playEffect() in this browser`, 'err'); return null; }
   if (!quiet) log(`${label}: playEffect("${type}", ${JSON.stringify(params)})`, '');

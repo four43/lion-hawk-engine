@@ -173,3 +173,32 @@ test('play() with undefined params is an unhandled-rejection-free {} (plan 4 tas
   assert.equal(await play(a, 'dual-rumble', undefined, { log: t => lines.push(t), timer: fakeTimer() }), 'complete');
   assert.match(lines.join('\n'), /playEffect\("dual-rumble", \{\}\)/);
 });
+
+test('closing the bench zeroes the pads it could reach: a long play ends in a zero dual-rumble then reset, nothing after (fix round 1)', async () => {
+  const { slots, tick, el, bench, timer } = rig(), a = actuator();
+  slots[0] = pad(0, { act: a }); tick();
+  el('[data-bench="dr-dur"]').value = '5000';
+  el('[data-hap="dual"]').click(); await flush();
+  bench.dispose(); await flush(); timer.run(); tick(3); await flush();
+  assert.deepEqual(a.calls.slice(-2), [['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }], ['reset']]);
+  assert.equal(a.calls.length, 3);
+});
+
+test('disposing during the self-test stops its second run: no trigger-rumble after the dispose (fix round 1)', async () => {
+  const { slots, tick, el, bench } = rig(), a = actuator();
+  slots[0] = pad(0, { act: a }); tick();
+  el('[data-bench="self-test"]').click();
+  assert.equal(a.calls.length, 1, 'the body run started');
+  bench.dispose(); await flush();
+  assert.ok(!a.calls.some(c => c[1] === 'trigger-rumble'));
+  assert.deepEqual(a.calls.at(-1), ['reset']);
+});
+
+test('a pattern stays on the pad it started on when another tab is picked (fix round 1)', () => {
+  const { slots, tick, el, timer, document } = rig(), a = actuator(), b = actuator();
+  slots[0] = pad(0, { act: a }); slots[1] = pad(1, { act: b }); tick();
+  [...document.querySelectorAll('[data-bench="patterns"] button')].find(x => x.textContent.startsWith('Heartbeat')).click();
+  const [t0, t1] = el('[data-bench="tabs"]').children; t1.click(); tick();
+  timer.run();
+  assert.equal(a.calls.length, 6); assert.equal(b.calls.length, 0);
+});
