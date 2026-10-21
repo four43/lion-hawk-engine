@@ -224,7 +224,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   // [T-9] recording: only what comes from outside the sim. An op is external when no step, transition drain or boot is
   // running and no other recorded op is (a tap whose action calls go() records the tap only). `rec` exists only when
   // recording, so a plain engine allocates nothing here.
-  const rec = record ? { depth: 0, log: [], last: null } : null;
+  const rec = record ? { depth: 0, log: [], seats: null } : null;
   const copy = x => JSON.parse(JSON.stringify(x ?? null));
   // recorded payloads must be plain JSON (plain objects/arrays, finite numbers, strings, booleans, null), so the tape and
   // the replay see exactly what the handlers saw; returns a fresh copy, checked at issue
@@ -253,11 +253,21 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     if (top) (entryAt(step).ops ??= []).push(o); // under the step it precedes
     return r;
   };
-  const recordInput = () => { // after input.apply: the snapshot's changed values (axes as numbers, buttons as down)
-    const last = rec.last ??= Object.fromEntries(Object.keys(input.kinds).map(n => [n, input.kinds[n] === 'axis' ? 0 : false]));
-    for (const n in last) {
-      const v = input.kinds[n] === 'axis' ? input.snapshot[n] : input.snapshot[n].down;
-      if (v !== last[n]) { last[n] = v; (entryAt(step).input ??= {})[n] = v; }
+  const recordInput = () => { // after the controllers' apply: each seat's changed values (axes as numbers, buttons as down)
+    const seats = rec.seats ??= new Map(); // seat -> last recorded values; bots are sim-driven and not recorded
+    const cs = controllers.list;
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i]; if (c.seat === null) continue;
+      const kinds = c.input.kinds, snap = c.input.snapshot;
+      let last = seats.get(c.seat);
+      if (!last) seats.set(c.seat, last = Object.fromEntries(Object.keys(kinds).map(n => [n, kinds[n] === 'axis' ? 0 : false])));
+      for (const n in last) {
+        const v = kinds[n] === 'axis' ? snap[n] : snap[n].down;
+        if (v === last[n]) continue;
+        last[n] = v;
+        const x = entryAt(step);
+        if (c.seat === 0) (x.input ??= {})[n] = v; else ((x.seats ??= {})[c.seat] ??= {})[n] = v;
+      }
     }
   };
   const commands = { get pending() { return cmds.length; }, get dropped() { return dropped; }, handles };

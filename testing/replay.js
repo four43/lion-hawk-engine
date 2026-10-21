@@ -28,9 +28,21 @@ export function replay(game, tape, { invariants } = {}) {
   };
   // the recorded snapshot values so far, set (not held) before every replayed step, so nothing stays held afterwards
   const vals = {};
-  const apply = k => { const x = at.get(k); if (!x) return; for (const o of x.ops ?? []) op(o); if (x.input) Object.assign(vals, x.input); };
+  const seatVals = new Map(); // seat -> recorded values so far (seat 0 is vals)
+  const apply = k => {
+    const x = at.get(k); if (!x) return;
+    for (const o of x.ops ?? []) op(o);
+    if (x.input) Object.assign(vals, x.input);
+    for (const s in x.seats ?? {}) Object.assign(seatVals.get(+s) ?? (seatVals.set(+s, {}), seatVals.get(+s)), x.seats[s]);
+  };
   for (let k = 0; k < end; k++) {
-    apply(k); e.input.set(vals); h.step(1);
+    apply(k); e.input.set(vals);
+    for (const [s, v] of seatVals) {
+      const c = e.controllers.find(x => x.seat === s);
+      if (!c) throw new Error(`replay: seat ${s} has input but no controller at step ${k}`);
+      c.input.set(v);
+    }
+    h.step(1);
     const want = sums.get(k + 1);
     if (want !== undefined) { const got = h.checksum(); if (got !== want) throw new Error(`replay: checksum differs at step ${k + 1} (tape ${want}, replay ${got})`); }
   }
