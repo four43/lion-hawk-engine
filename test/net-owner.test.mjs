@@ -21,7 +21,7 @@ test('3i: a player who leaves is despawned on the host and, by the relay, on the
   w.drop(w.guests[0]); w.seconds(0.3);
   assert.equal(host.net.find('cart', 2), undefined); assert.equal(host.stats.bodies, b0 - 1);
   assert.equal(g2.net.find('cart', 2), undefined, 'the relay removed it'); assert.equal(g2.stats.bodies, b2 - 1);
-  assert.deepEqual([...host.net.players.values()], [3]);
+  assert.deepEqual([...host.net.bindings.keys()], [3]);
 });
 test('3i: when the host leaves, a guest goes solo: other carts go, host kinds stay as plain local entities (M-41)', () => {
   const w = mp(carts, { peers: 3, argsOf }); w.seconds(2);

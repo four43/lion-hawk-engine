@@ -12,7 +12,7 @@ test('3i: w.drop(guest) leaves the room for good: it is not stepped and the host
   const g1 = w.guests[0]; w.drop(g1); const step = g1.engine.time.step; w.seconds(0.5);
   assert.equal(g1.dropped, true); assert.equal(g1.engine.time.step, step, 'a dropped peer is not stepped');
   assert.deepEqual(w.live.map(p => p.name), ['host', 'guest2']);
-  assert.deepEqual([...w.host.h.world.net.players.values()], [3]);
+  assert.deepEqual([...w.host.h.world.net.bindings.keys()], [3]);
   assert.throws(() => w.drop(g1), /mp: guest1 is already dropped/);
   assert.throws(() => w.drop(9), /mp: no such peer/);
 });

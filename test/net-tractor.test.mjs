@@ -66,7 +66,7 @@ test('3i: a player number reused after a leave, with a lower clock, replicates a
   const fresh = w.addPeer({ wall0: 0 }); // a fresh player 2 whose clock is far below the old one's
   w.seconds(1);
   assert.ok(fresh.engine.time.wall < oldClock, 'the new clock is lower');
-  assert.deepEqual([...H.players.values()].sort(), [2, 3]);
+  assert.deepEqual([...H.bindings.keys()].sort(), [2, 3]);
   for (const [name, net] of [['host', H], ['guest 3', G3]]) assert.ok(net.find('train', 2), `${name} sees the new player 2's train`);
   const z = [H, G3].map(n => n.find('train', 2).xf.p.z);
   w.seconds(1, (p, i) => i === 3 ? { thr: 1 } : null);

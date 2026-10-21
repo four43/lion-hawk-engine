@@ -95,7 +95,7 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
           const ents = a.h.world.with('net');
           for (let i = 0; i < ents.length; i++) {
             const e = ents[i]; if (e.net !== name || net.remoteOf(e)) continue;
-            if (kd.authority === 'host' ? net.role !== 'host' : !(net.self > 0 && e.netId === net.self)) continue;
+            if (kd.authority === 'host' ? net.role !== 'host' : !net.locals?.has(e.netId)) continue;
             for (const b of up) {
               if (b === a) continue;
               const o = b.h.world?.net?.find(name, e.netId);

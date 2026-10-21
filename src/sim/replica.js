@@ -92,8 +92,9 @@ export function encodeFrame({ key, sender, time, groups }) {
   return scratch.buffer.slice(0, c.o);
 }
 export const isFrame = buf => buf instanceof ArrayBuffer && buf.byteLength >= HEAD && (new Uint8Array(buf)[0] === FRAME.KEY || new Uint8Array(buf)[0] === FRAME.DIFF);
-// -> { key, sender, time, groups: Map(kindName -> { records: Map(id -> rec), removed: [id] }) } or null. Every record must be one the sender is the
-// authority for (M-50: a device speaks only for itself), and only the host sends a host kind's group; every id appears once; a keyframe removes nothing by name (what it leaves out is gone).
+// -> { key, sender, time, groups: Map(kindName -> { records: Map(id -> rec), removed: [id] }) } or null. Every host-kind record or removal must come
+// from the host (sender 1); owner-kind ids only need to be in range: the host's net part checks them against the frame's peer (N-24, M-50), since
+// one frame carries every seat of a peer. Only the host sends a host kind's group; every id appears once; a keyframe removes nothing by name (what it leaves out is gone).
 export function decodeFrame(buf, reg) {
   if (!isFrame(buf) || buf.byteLength > MAX_FRAME) return null;
   try {
@@ -106,12 +107,12 @@ export function decodeFrame(buf, reg) {
       const records = new Map();
       for (let j = 0; j < count; j++) {
         const id = v.getUint16(c.o, true); c.o += 2;
-        if (id < k.idMin || id > k.idMax || records.has(id) || (k.authority === 'host' ? sender !== 1 : id !== sender)) return null;
+        if (id < k.idMin || id > k.idMax || records.has(id) || (k.authority === 'host' && sender !== 1)) return null;
         records.set(id, get(c, k.rec));
       }
       const rc = v.getUint16(c.o, true); c.o += 2; if (rc > k.max || (key && rc)) return null;
       const removed = [];
-      for (let j = 0; j < rc; j++) { const id = v.getUint16(c.o, true); c.o += 2; if (id < k.idMin || id > k.idMax || (k.authority === 'owner' && id !== sender) || (k.authority === 'host' && sender !== 1)) return null; removed.push(id); }
+      for (let j = 0; j < rc; j++) { const id = v.getUint16(c.o, true); c.o += 2; if (id < k.idMin || id > k.idMax || (k.authority === 'host' && sender !== 1)) return null; removed.push(id); }
       groups.set(k.name, { records, removed });
     }
     return c.o === buf.byteLength ? { key, sender, time, groups } : null;
@@ -155,8 +156,10 @@ export function createTracker(kinds) {
 // record (kind.newer: an animal with a lower ownership number). A keyframe replaces every object of its sender's authority: what it leaves
 // out is removed, unless newer data came for it. apply() returns the accepted changes: [{ kind, id, rec }] (rec null: removed).
 export function createStore(kinds) {
-  const maps = new Map(kinds.map(k => [k.name, new Map()])); // id -> { rec (null: removed), t }
-  const authority = (k, id, sender) => k.authority === 'host' ? sender === 1 : id === sender;
+  const maps = new Map(kinds.map(k => [k.name, new Map()])); // id -> { rec (null: removed), t, s: the sender that wrote it }
+  // a keyframe ends the objects its sender speaks for: a host kind's are the host's (sender 1); an owner kind's are those this sender
+  // last wrote (N-24: one frame carries every seat of a peer, so an owner object is its writer's, not only id === sender)
+  const authority = (k, e, sender) => k.authority === 'host' ? sender === 1 : e.s === sender;
   return {
     get: (kind, id) => maps.get(kind).get(id)?.rec ?? null,
     all(kind) { const out = new Map(); for (const [id, e] of maps.get(kind)) if (e.rec) out.set(id, e.rec); return out; },
@@ -164,9 +167,9 @@ export function createStore(kinds) {
       const changes = [];
       for (const k of kinds) {
         const g = f.groups.get(k.name); if (!g) continue; const m = maps.get(k.name);
-        for (const [id, rec] of g.records) { const e = m.get(id); if (e && (f.time <= e.t || (e.rec && k.newer && !k.newer(e.rec, rec)))) continue; if (e) { e.rec = rec; e.t = f.time; } else m.set(id, { rec, t: f.time }); changes.push({ kind: k.name, id, rec }); } // an entry is updated in place (R-8)
-        for (const id of g.removed) { const e = m.get(id); if (e && f.time <= e.t) continue; const had = e?.rec; if (e) { e.rec = null; e.t = f.time; } else m.set(id, { rec: null, t: f.time }); if (had) changes.push({ kind: k.name, id, rec: null }); }
-        if (f.key) for (const [id, e] of m) if (!g.records.has(id) && authority(k, id, f.sender) && e.t < f.time) { const had = e.rec; e.rec = null; e.t = f.time; if (had) changes.push({ kind: k.name, id, rec: null }); }
+        for (const [id, rec] of g.records) { const e = m.get(id); if (e && (f.time <= e.t || (e.rec && k.newer && !k.newer(e.rec, rec)))) continue; if (e) { e.rec = rec; e.t = f.time; e.s = f.sender; } else m.set(id, { rec, t: f.time, s: f.sender }); changes.push({ kind: k.name, id, rec }); } // an entry is updated in place (R-8)
+        for (const id of g.removed) { const e = m.get(id); if (e && f.time <= e.t) continue; const had = e?.rec; if (e) { e.rec = null; e.t = f.time; e.s = f.sender; } else m.set(id, { rec: null, t: f.time, s: f.sender }); if (had) changes.push({ kind: k.name, id, rec: null }); }
+        if (f.key) for (const [id, e] of m) if (!g.records.has(id) && authority(k, e, f.sender) && e.t < f.time) { const had = e.rec; e.rec = null; e.t = f.time; if (had) changes.push({ kind: k.name, id, rec: null }); }
       }
       return changes;
     },

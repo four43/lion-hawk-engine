@@ -13,6 +13,7 @@ import { createWarnOnce } from '../limits.js';
 import { defaultRecord, applyFields, newRecord, createInputRing, zeroActions, bodyEntity } from './replicate.js';
 import { createInputQueue, latencyMs, newTarget, project, poseError, decide, nudgeVelocity, writeKinematic, writePool, setNetFix } from './remote.js';
 import { INPUT_BATCH, INPUT_WIRE_MAX } from '../../defs/fields.js';
+import { SEATS } from '../../core/players.js';
 const _T = { x: 0, y: 0, z: 0 }, _Q = { x: 0, y: 0, z: 0, w: 1 }; // Rapier's getters fill these (no per-call vectors)
 
 export const RESERVED = Object.freeze(['id', 'tags', 'model', 'colliders', 'xf', 'sockets', 'net', 'netId', 'netFix']); // entity parts (§4.4)
@@ -40,8 +41,21 @@ export function installNet(engine) {
   });
   const tunables = {}, stats = { frames: 0, sent: 0, dropped: 0, unsent: 0, spawned: 0, despawned: 0, respawned: 0, kinds: {} };
   for (const k of kinds) { tunables[k.name] = { ...k.tune }; stats.kinds[k.name] = { snaps: 0, nudges: 0, held: 0 }; } // N-17: a live copy per engine
-  const players = new Map(), warn = createWarnOnce(), objs = {}; // players: host only, transport peer id -> player number (#77)
-  let role = 'solo', hostId = null, self = 0, world = null, serial = -1, W = null, replicating = 0;
+  const seats = engine[SEATS]; // { controllers, roster, route, changed } (engine.js): this page's seats and the roster
+  if (!seats) throw new Error('net: the engine has no seats seam (local players plan 3)');
+  const bindings = new Map(), peerNums = new Map(), locals = new Set(), confirmed = new Set(), warn = createWarnOnce(), objs = {};
+  // bindings: host only, player number -> { peer, key, seat } (N-20); peerNums: transport peer id -> its numbers; locals: this page's
+  // numbers (N-24); confirmed: this page's seats whose number is the room's (every seat solo or host; a guest's once welcomed)
+  let role = 'solo', hostId = null, self = 0, world = null, serial = -1, W = null, replicating = 0, joins = 0;
+  function refreshLocals() { // N-24: the numbers of this page's seats that are the room's; self is seat 0's (the host's is 1)
+    locals.clear();
+    const cs = seats.controllers.list;
+    for (let i = 0; i < cs.length; i++) { const c = cs[i]; if (c.seat !== null && c.player > 0 && confirmed.has(c.seat)) locals.add(c.player); }
+    self = role === 'host' ? 1 : confirmed.has(0) ? engine.controllerOf(0)?.player ?? 0 : 0;
+    seats.roster.relocal(n => locals.has(n));
+  }
+  const confirmAll = () => { confirmed.clear(); for (const c of seats.controllers.list) if (c.seat !== null) confirmed.add(c.seat); };
+  seats.changed = () => { confirmAll(); refreshLocals(); }; // an offline lh.seat (engine.js): solo only, since route() takes every online one (B1)
   const keyOf = (k, id) => k.code * 65536 + id;
   const fresh = () => ({
     store: createStore(kinds), trackers: kinds.map(k => createTracker([k])), lastKey: kinds.map(() => -Infinity),
@@ -145,18 +159,24 @@ export function installNet(engine) {
     for (const k of ownerKinds) { const g = f.groups.get(k.name); if (g) for (const id of g.removed) W.store.forget(k.name, id); }
   }
 
-  // ---- the host's relay (N-10, C-3): each guest's newest owner records, passed on with that guest's clock ----
-  function keepForRelay(f) {
-    for (const k of ownerKinds) {
-      const g = f.groups.get(k.name); if (!g) continue;
-      const rec = g.records.get(f.sender) ?? (g.removed.includes(f.sender) ? null : undefined); if (rec === undefined) continue;
-      let m = W.fwd.get(f.sender); if (!m) W.fwd.set(f.sender, m = new Map());
-      const old = m.get(k.name); if (old && f.time <= old.time) continue;
-      if (old) { old.time = f.time; old.rec = rec; old.fresh = true; } else m.set(k.name, { time: f.time, rec, fresh: true });
-    }
+  // ---- the host's relay (N-10, C-3, N-24): each guest's newest owner records, by owner number, passed on with that guest's clock ----
+  let rk = null, rt = 0, rn = null; // keepOne's kind, time and the sending peer's numbers (one callback, made once: R-8)
+  const keepOne = (n, rec) => {
+    if (!rn.has(n)) return; // S2: a removal of a number this peer no longer holds is not passed on (fromPeer let it through)
+    let m = W.fwd.get(n); if (!m) W.fwd.set(n, m = new Map());
+    const old = m.get(rk.name); if (old && rt <= old.time) return;
+    if (old) { old.time = rt; old.rec = rec; old.fresh = true; } else m.set(rk.name, { time: rt, rec, fresh: true });
+  };
+  const keepRec = (rec, n) => keepOne(n, rec);
+  function keepForRelay(f, nums) { // a peer with several seats sends them in one frame: each record is kept under its own number
+    rt = f.time; rn = nums;
+    for (const k of ownerKinds) { const g = f.groups.get(k.name); if (!g) continue; rk = k; g.records.forEach(keepRec); for (let j = 0; j < g.removed.length; j++) keepOne(g.removed[j], null); }
+    rk = null; rn = null;
   }
+  const leaving = n => { for (let j = 0; j < W.gone.length; j++) if (W.gone[j].n === n) return true; return false; };
   function relay(step) { // on send ticks only
     for (const [n, m] of W.fwd) {
+      if (leaving(n)) continue; // S3: a number given again waits until its old object's removals are out
       let time = 0, kg = null, dg = null;
       for (const k of ownerKinds) {
         const x = m.get(k.name); if (!x) continue; const i = index.get(k.name), key = W.lastKey[i] === step;
@@ -173,45 +193,101 @@ export function installNet(engine) {
       if (--g.left <= 0) W.gone.splice(j, 1);
     }
   }
-  function unbind(peer) {
-    const n = players.get(peer); if (n === undefined) return; players.delete(peer);
+  const numberAt = (peer, seat) => { for (const [n, b] of bindings) if (b.peer === peer && b.seat === seat) return n; return undefined; };
+  function bind(n, peer, key, seat) { // host: player n is this peer's seat (N-20)
+    const old = bindings.get(n);
+    if (old && old.peer !== peer) throw new Error(`net: player ${n} is already bound to ${old.peer}`);
+    const again = old !== undefined && old.seat === seat, prev = numberAt(peer, seat);
+    if (prev !== undefined && prev !== n) unbindNumber(prev); // the seat had another number
+    bindings.set(n, { peer, key, seat }); let s = peerNums.get(peer); if (!s) peerNums.set(peer, s = new Set()); s.add(n);
+    if (!seats.roster.get(n)) seats.roster.add(n, { seat, local: false, join: joins = (joins + 1) % 256 });
+    if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
+    if (W && !again) { // a reused number starts fresh: no old relay clock, no store entry
+      W.fwd.delete(n);
+      for (const k of ownerKinds) W.store.forget(k.name, n);
+      // S3: its pending removals stay. relay() sends them before any new record of n (leaving), so every other guest's store drops
+      // the old object and its clock first, and a reload's lower clock is accepted after them
+    }
+  }
+  function unbindNumber(n, { keep = false } = {}) { // its replicas go; keep: the roster entry stays (inactive, N-23)
+    const b = bindings.get(n); if (!b) return; bindings.delete(n);
+    const s = peerNums.get(b.peer); if (s) { s.delete(n); if (!s.size) peerNums.delete(b.peer); }
+    if (!keep) seats.roster.remove(n);
     if (!sync()) return;
     let time = 0; const m = W.fwd.get(n); if (m) for (const x of m.values()) if (x.time > time) time = x.time; W.fwd.delete(n);
     for (const k of ownerKinds) { const e = W.byKey.get(keyOf(k, n)); if (e) despawnRemote(e); W.store.forget(k.name, n); }
     W.gone.push({ n, time: time + 1, left: REPEAT });
   }
+  const unbindPeer = peer => { const s = peerNums.get(peer); if (s) for (const n of [...s]) unbindNumber(n); };
+  // N-24: the frame's sender and every owner record in it are numbers bound to `peer` (M-50: a device speaks for itself), and no
+  // removal names another peer's number. S2: a removal of a free number (a seat that just left, still in REPEAT diffs) is ignored
+  let mine = null, ok = true;
+  const speakRec = (rec, id) => { if (!mine.has(id)) ok = false; };
+  function fromPeer(peer, f) {
+    mine = peerNums.get(peer); if (!mine || !mine.has(f.sender)) { mine = null; return false; }
+    ok = true;
+    for (let i = 0; i < ownerKinds.length && ok; i++) {
+      const g = f.groups.get(ownerKinds[i].name); if (!g) continue;
+      g.records.forEach(speakRec);
+      for (let j = 0; j < g.removed.length; j++) { const n = g.removed[j]; if (!mine.has(n) && bindings.has(n)) ok = false; }
+    }
+    mine = null; return ok;
+  }
+  // B1: a number this page's seat may take: free in the controllers and the roster (the roster holds the room's numbers: on the host
+  // every guest's, on a guest the host's records from Task 7), so a number online never comes from the controllers alone
+  const freeLocal = () => { let n = 1; while (seats.controllers.list.some(x => x.player === n) || seats.roster.get(n)) n++; return n; };
+  // [C-5] lh.seat online, every role but solo (B1). The host's new seat is the room's at once; a guest's is not until the game (manual
+  // join: the self setter, seat 0 only) or the host (Task 6) names it
+  seats.route = (op, seat) => {
+    if (role === 'solo') return false;
+    const c = engine.controllerOf(seat);
+    if (op === 'join') {
+      if (c) return true;
+      const n = freeLocal(); seats.controllers.seat('join', seat, n);
+      if (role === 'host') { seats.roster.add(n, { seat, local: true, join: joins = (joins + 1) % 256 }); confirmed.add(seat); }
+    } else {
+      if (!c || seat === 0) return true; // seat 0 is the page's first player and never leaves
+      const n = c.player; seats.controllers.seat('leave', seat); confirmed.delete(seat);
+      if (role === 'host') seats.roster.remove(n);
+    }
+    refreshLocals(); return true;
+  };
   function sendFrame(key, sender, time, groups, except) {
     let buf; try { buf = encodeFrame({ key, sender, time, groups }); } catch (err) { stats.unsent++; warn('net: frame not sent', err); return; }
-    if (role === 'host') { for (const [peer, n] of players) if (n !== except) { engine.net.send(peer, buf, key); stats.sent++; } }
+    // except: a number whose own peer is skipped (the relay); 0 sends to every peer
+    if (role === 'host') { for (const [peer, nums] of peerNums) if (!nums.has(except)) { engine.net.send(peer, buf, key); stats.sent++; } }
     else if (hostId !== null) { engine.net.send(hostId, buf, key); stats.sent++; }
   }
   function goSolo() { // M-41: the room closed. Other players' entities go; host-kind replicas stay as plain local entities
     if (sync()) for (let i = W.list.length - 1; i >= 0; i--) { const r = W.list[i]; if (r.kind.authority === 'owner') despawnRemote(r.e); else forgetRemote(r); }
-    role = 'solo'; hostId = null; players.clear();
+    role = 'solo'; hostId = null; bindings.clear(); peerNums.clear();
+    const R = seats.roster;
+    for (let i = R.list.length - 1; i >= 0; i--) { const p = R.list[i]; if (!p.local) R.remove(p.number); } // N-25: this page's players stay
+    for (const c of seats.controllers.list) if (c.seat !== null && !R.get(c.player)) R.add(c.player, { seat: c.seat, local: true, quiet: true }); // a seat the room never numbered (B1)
+    confirmAll(); refreshLocals();
   }
 
   const ctl = {
     get role() { return role; }, get hostId() { return hostId; },
-    get self() { return self; },
-    set self(n) {
+    get self() { return self; }, get locals() { return locals; }, get bindings() { return bindings; },
+    set self(n) { // the manual join (#77): the game names this page's number; a guest's seat 0 takes it. Solo: seat 0's number, ignored (N5)
       if (!Number.isInteger(n) || n < 0 || n > cfg.maxSender) throw new Error(`net: self must be a player number 0..${cfg.maxSender} (got ${n})`);
       if (role === 'host' && n !== 1) throw new Error('net: the host is player 1');
-      self = n; if (sync()) W.lastKey.fill(-Infinity);
-    },
-    players, tunables, stats,
-    player(peer, n) { // host: bind a transport peer to its player number (#77); n = 0 unbinds
-      if (role !== 'host') throw new Error('net: only the host binds players');
-      if (typeof peer !== 'string') throw new Error('net: player(peer, n): peer must be a transport peer id');
-      if (n === 0) return unbind(peer);
-      if (!Number.isInteger(n) || n < 2 || n > cfg.maxSender) throw new Error(`net: player number must be 2..${cfg.maxSender} (got ${n})`);
-      for (const [p, m] of players) if (m === n && p !== peer) throw new Error(`net: player ${n} is already bound to ${p}`);
-      const again = players.get(peer) === n; players.set(peer, n);
-      if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
-      if (W && !again) { // a reused number starts fresh: no old relay clock, no pending removals, no store entry
-        W.fwd.delete(n);
-        for (let j = W.gone.length - 1; j >= 0; j--) if (W.gone[j].n === n) W.gone.splice(j, 1);
-        for (const k of ownerKinds) W.store.forget(k.name, n);
+      if (role === 'guest') {
+        if (n === 0) confirmed.delete(0);
+        else { const c = engine.controllerOf(0); if (c.player !== n) seats.controllers.renumber(c.player, n); confirmed.add(0); }
       }
+      refreshLocals(); if (sync()) W.lastKey.fill(-Infinity);
+    },
+    tunables, stats,
+    player(peer, a, b) { // host: bind a transport peer's seat to its number by hand (#77, N-20); n = 0 unbinds; player(peer, n) is seat 0
+      if (role !== 'host') throw new Error('net: only the host binds players');
+      if (typeof peer !== 'string') throw new Error('net: player(peer, seat, n): peer must be a transport peer id');
+      const seat = b === undefined ? 0 : a, n = b === undefined ? a : b;
+      if (!Number.isInteger(seat) || seat < 0 || seat > 15) throw new Error(`net: player(peer, seat, n): seat must be an integer in 0..15 (got ${seat})`);
+      if (n === 0) { if (b === undefined) unbindPeer(peer); else { const m = numberAt(peer, seat); if (m !== undefined) unbindNumber(m); } return; }
+      if (!Number.isInteger(n) || n < 2 || n > cfg.maxSender) throw new Error(`net: player number must be 2..${cfg.maxSender} (got ${n})`);
+      bind(n, peer, null, seat);
     },
     find(name, netId) {
       const k = reg.byName.get(name); if (!k) throw new Error(`net: unknown kind '${name}'`);
@@ -232,29 +308,33 @@ export function installNet(engine) {
         if (!Number.isInteger(d.netId) || d.netId < k.idMin || d.netId > k.idMax) throw new Error(`net: '${k.name}' netId must be an integer in ${k.idMin}..${k.idMax} (got ${d.netId})`);
         if (k.authority === 'owner' && d.owner !== d.netId) throw new Error(`net: '${k.name}' is an owner kind: owner must equal netId (got owner ${d.owner}, netId ${d.netId})`);
         if (role === 'guest' && k.authority === 'host') throw new Error(`net: a guest may not spawn '${k.name}' ${d.netId}: only replication spawns host kinds (E-7)`);
-        if (role !== 'solo' && k.authority === 'owner' && d.netId !== self) throw new Error(`net: player ${self} may not spawn '${k.name}' ${d.netId}: only its owner does (E-7)`);
+        if (role !== 'solo' && k.authority === 'owner' && !locals.has(d.netId)) throw new Error(`net: ${locals.size > 1 ? `players ${[...locals].join(', ')}` : `player ${self}`} may not spawn '${k.name}' ${d.netId}: only its owner does (E-7)`);
         return;
       }
       if (sync() && W.remotes.has(x)) throw new Error(`net: '${x.net}' ${x.netId} is replicated: only replication may ${op === 'despawn' ? 'despawn it' : 'change its \'net\' part'} (E-7)`);
     },
   };
+  confirmAll(); refreshLocals();
 
   // ---- built-in handlers (3c seam): before the game's handler for the same type ----
   engine.builtin('net.open', (e, d) => {
     if (sync()) { for (let i = W.list.length - 1; i >= 0; i--) despawnRemote(W.list[i].e); W = fresh(); }
-    role = d.role; hostId = d.hostId; players.clear(); self = role === 'host' ? 1 : 0; // #77: a guest's number is the game's to set
+    role = d.role; hostId = d.hostId; bindings.clear(); peerNums.clear();
+    // #77, N-25: a guest's numbers are the host's to give; its roster restarts from the host's records (B1: never a stale offline entry)
+    if (role === 'host') confirmAll(); else { confirmed.clear(); seats.roster.clear(); }
+    refreshLocals();
   });
   engine.builtin('net.peer', (e, d) => {
-    if (d.event === 'peerLeft' && role === 'host') unbind(d.id);
+    if (d.event === 'peerLeft' && role === 'host') unbindPeer(d.id);
     if (d.event === 'closed') goSolo();
   });
   engine.builtin('net.frame', (e, d) => {
     if (role === 'solo' || !self || !sync()) { stats.dropped++; return; }
     let f = d[DECODED]; if (!f) try { f = frameFromJson(d.frame, reg); } catch (err) { stats.dropped++; warn('net: frame', err); return; } // a replayed tape has only the JSON
-    if (role === 'host' ? players.get(d.from) !== f.sender : d.from !== hostId) { stats.dropped++; return; } // #77, M-50
-    if (f.sender === self) return;
+    if (role === 'host' ? !fromPeer(d.from, f) : d.from !== hostId) { stats.dropped++; return; } // #77, M-50, N-24, S2
+    if (locals.has(f.sender)) return;
     stats.frames++;
-    if (role === 'host') keepForRelay(f);
+    if (role === 'host') keepForRelay(f, peerNums.get(d.from));
     const ch = W.store.apply(f);
     for (let i = 0; i < ch.length; i++) { const c = ch[i], k = reg.byName.get(c.kind); if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); }
     forgetRemoved(f);
@@ -304,16 +384,16 @@ export function installNet(engine) {
     // R-8: buckets, pairs and the group lists are refilled by index and trimmed only when their count changes (length = 0 then
     // push would drop and regrow their storage every step)
     for (let i = 0; i < W.buckets.length; i++) W.bucketN[i] = 0;
-    for (let i = 0; i < list.length; i++) { // this peer's authority entities: host kinds on the host, its own owner-kind entity everywhere
+    for (let i = 0; i < list.length; i++) { // this peer's authority entities: host kinds on the host, its own owner-kind entities (every seat's) everywhere
       const e = list[i], ki = index.get(e.net); if (ki === undefined || W.remotes.has(e)) continue;
-      const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : e.netId !== self) continue;
+      const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : !locals.has(e.netId)) continue;
       let o = W.own.get(e);
       if (!o) { const ring = k.remote === 'driven' ? createInputRing(k.input, batch[ki]) : null, rec = newRecord(k); W.own.set(e, o = { e, rec, ring, pair: [e.netId, rec], base: (x, out) => defaultRecord(k, x, out, ring) }); }
       if (o.ring) o.ring.push(step, e.input); // N-13: every step's input, batched per send tick
       W.buckets[ki][W.bucketN[ki]++] = o;
     }
     for (let i = 0; i < W.buckets.length; i++) if (W.buckets[i].length !== W.bucketN[i]) W.buckets[i].length = W.bucketN[i];
-    if (role === 'host' ? !players.size : hostId === null) return; // nobody to send to: a joiner's first keyframe has everything
+    if (role === 'host' ? !peerNums.size : hostId === null) return; // nobody to send to: a joiner's first keyframe has everything
     const time = Math.floor(engine.time.wall) >>> 0;
     let nKey = 0, nDiff = 0, ownerDue = false; const keyG = W.keyG, diffG = W.diffG;
     for (let i = 0; i < kinds.length; i++) {

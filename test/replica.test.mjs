@@ -54,7 +54,7 @@ test('bad frames decode to null (M-50)', () => {
   b = bytes(); b[7] = 99; assert.equal(decodeFrame(b.buffer, REG), null, 'unknown kind');
   b = bytes(); b[12] = 0xf0; assert.equal(decodeFrame(b.buffer, REG), null, 'unused flag bits'); // head 7, kind 1, count 2, id 2: flags
   assert.equal(decodeFrame(encodeFrame({ key: false, sender: 2, time: 1, groups: [{ kind: CRATE, records: [] }] }), REG), null, 'a guest sending a host kind, even empty');
-  assert.equal(decodeFrame(encodeFrame({ key: false, sender: 2, time: 1, groups: [{ kind: CART, records: [[3, { yaw: 0, q: { x: 0, y: 0, z: 0, w: 1 }, pad: {} }]] }] }), REG), null, 'a guest sending another cart');
+  assert.ok(decodeFrame(encodeFrame({ key: false, sender: 2, time: 1, groups: [{ kind: CART, records: [[3, { yaw: 0, q: { x: 0, y: 0, z: 0, w: 1 }, pad: {} }]] }] }), REG), 'owner ids are the host net part\'s to check (N-24)');
   assert.equal(decodeFrame(encodeFrame({ key: true, sender: 1, time: 1, groups: [{ kind: CRATE, records: [], removed: [3] }] }), REG), null, 'a keyframe that removes by name');
 });
 test('a diff has only changed objects for REPEAT diffs; a removed object is named REPEAT times (M-23)', () => {
@@ -135,4 +135,11 @@ test('F.actions: a second flags byte for more than 8 buttons; decode rejects str
   const buf = encodeFrame({ key: false, sender: 1, time: 1, groups: [{ kind: K, records: [[1, { pad }]] }] }), b = new Uint8Array(buf);
   assert.deepEqual([b[12], b[13]], [1, 2]); assert.deepEqual(decodeFrame(buf, reg).groups.get('pad').records.get(1).pad, pad);
   const bad = b.slice(); bad[13] = 0x06; assert.equal(decodeFrame(bad.buffer, reg), null, 'bit 2 of the second byte has no button');
+});
+test('a keyframe ends the owner objects its sender last wrote, whatever their ids (N-24)', () => {
+  const SEATED = kind({ name: 'seated', code: 7, authority: 'owner', max: 4, idMin: 1, idMax: 4, fields: { x: F.uint(1) } }), reg = createRegistry([SEATED]);
+  const s = createStore([SEATED]), at = (time, records, key, sender) => s.apply(decodeFrame(encodeFrame({ key, sender, time, groups: [{ kind: SEATED, records, removed: [] }] }), reg));
+  at(10, [[2, { x: 1 }], [4, { x: 1 }]], false, 2); at(10, [[3, { x: 1 }]], false, 3);
+  assert.deepEqual(at(20, [[2, { x: 2 }]], true, 2).map(c => [c.id, c.rec === null]), [[2, false], [4, true]], 'seat 1 of the same peer left');
+  assert.ok(s.get('seated', 3), 'another sender\'s object stays');
 });

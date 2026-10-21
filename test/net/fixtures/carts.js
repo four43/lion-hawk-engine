@@ -11,7 +11,7 @@ export const DRIVE = { force: 800, damp: 200 }; // N and N·s/m: 4 m/s flat out 
 const box = (half, material) => ({ shape: 'box', half, p: [0, 0, 0], q: [0, 0, 0, 1], material });
 export const cartDesc = () => ({ body: { type: 'dynamic', lock: { rot: true }, mass: 100 }, colliders: [box([0.5, 0.4, 0.5], 'ice')], contacts: { min: 1 } });
 export const crateDesc = () => ({ body: { type: 'dynamic', mass: 20 }, colliders: [box([0.3, 0.3, 0.3], 'plastic')] });
-const cartKind = send => kind({ name: 'cart', code: 1, authority: 'owner', max: 1, idMin: 1, idMax: 4, fields: { body: F.body(), input: F.actions(ACTIONS) }, spawn: () => cartDesc(), ...(send && { send }) });
+const cartKind = send => kind({ name: 'cart', code: 1, authority: 'owner', max: 4, idMin: 1, idMax: 4, fields: { body: F.body(), input: F.actions(ACTIONS) }, spawn: () => cartDesc(), ...(send && { send }) }); // max 4: a peer's seats share one frame (N-24)
 export const CART = cartKind();
 export const CRATE = kind({ name: 'crate', code: 2, authority: 'host', max: 16, idMin: 1, idMax: 16, fields: { body: F.body(), hue: F.uint(1) }, spawn: () => crateDesc() });
 export const FLAG = kind({ name: 'flag', code: 3, authority: 'host', remote: 'view', max: 4, idMin: 1, idMax: 4, fields: { body: F.body(), up: F.bool() } });

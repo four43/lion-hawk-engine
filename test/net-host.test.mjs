@@ -15,7 +15,7 @@ test('3i: world.net is the engine\'s controller; the host is player 1 and binds 
   const w = mp(carts, { peers: 3, argsOf }); w.step(2);
   const [h, g1, g2] = w.peers.map(p => p.h.world.net);
   assert.equal(w.host.engine.netPart, h); assert.equal(installNet(w.host.engine), h, 'idempotent');
-  assert.equal(h.role, 'host'); assert.equal(h.self, 1); assert.deepEqual([...h.players.values()], [2, 3]);
+  assert.equal(h.role, 'host'); assert.equal(h.self, 1); assert.deepEqual([...h.bindings.keys()], [2, 3]);
   assert.equal(g1.role, 'guest'); assert.equal(g1.self, 2); assert.equal(g2.self, 3);
   assert.throws(() => { g1.self = 9; }, /net: self must be a player number 0\.\.4 \(got 9\)/);
   assert.throws(() => { h.self = 2; }, /net: the host is player 1/);
