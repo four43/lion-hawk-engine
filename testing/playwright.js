@@ -48,6 +48,9 @@ export function formatFailure(what, f, maxSteps) {
 }
 
 // The driver. `page` and `context` are Playwright objects (or fakes in unit tests); one page.evaluate per method.
+// [T-24] a fake pad's index: an integer in 0..15
+const padIndex = i => { if (!Number.isInteger(i) || i < 0 || i > 15) throw new Error(`playwright: pad index must be an integer in 0..15 (got ${JSON.stringify(i)})`); return i; };
+
 export function gameDriver({ page, context, preset, presetName, errors = [] }) {
   let cdp = null;
   const ev = (fn, arg) => page.evaluate(fn, arg);
@@ -175,10 +178,18 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
       hold: p => ev(p => window.engine.input.hold(p), p),
       release: (...n) => ev(n => window.engine.input.release(...n), n),
     },
-    // U-7, I-8: the page's fake pad (open's default pads: 'fake'). pad({ a: true, start: true, axes: [x, y], id }) sets
-    // which standard buttons are down and the left stick; pad(null) unplugs it. Devices read it on the next frame, so
-    // follow with frames() before stepping.
-    pad: state => ev(st => window.__lhSetPad(st), state ?? null),
+    // [T-24] fake pads (open's default pads: 'fake'). pad(index, state) plugs or updates pad `index`; pad(state) is pad 0,
+    // as before. state: the standard buttons down ({ a: true, lt: true, ... }), axes, and optional id, mapping and effects
+    // (the actuator's list; effects: null gives this state no vibrationActuator). pad(null) and pad(index, null) unplug, as
+    // unplug(index) does (gamepaddisconnected fires; plugging an empty slot fires gamepadconnected). haptics(index) is
+    // { effects, calls } of that index's actuator ({ op: 'playEffect', type, params } / { op: 'reset' }), or null. Devices
+    // read a change on the next frame, so follow with frames() before stepping.
+    pad: async (index, state) => {
+      if (typeof index !== 'number') { state = index; index = 0; }
+      return ev(([i, st]) => window.__lhSetPad(i, st), [padIndex(index), state ?? null]);
+    },
+    unplug: async index => ev(i => window.__lhUnplug(i), padIndex(index)),
+    haptics: async index => ev(i => window.__lhHaptics(i), padIndex(index)),
     frames: (n = 2) => ev(n => new Promise(r => { const f = k => k ? requestAnimationFrame(() => f(k - 1)) : r(); f(n); }), n),
     async tap(testid) {
       const loc = page.locator(`[data-testid="${testid}"]`);
@@ -249,17 +260,45 @@ export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } 
 export function openGame(browser, url, opts) { return open(browser, url, opts); }
 // `prepare(context, page)` runs before navigation (peers() exposes the bridge there)
 // a page's navigator.getGamepads() with pads: 'fake' (the default): none until game.pad() plugs one in, so a controller on
-// the test machine (or Steam's virtual pad) never reaches a test
+// the test machine (or Steam's virtual pad) never reaches a test. [T-24] any number of pads, connect and disconnect events,
+// and a recording vibrationActuator per index (kept until a pad with another id plugs in there).
 const FAKE_PADS = () => {
   const NAMES = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, select: 8, start: 9, ls: 10, rs: 11, up: 12, down: 13, left: 14, right: 15 };
-  let pads = [];
-  window.__lhSetPad = st => {
-    if (!st) { pads = []; return; }
+  const ID = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e)', EFFECTS = ['dual-rumble', 'trigger-rumble'];
+  const pads = [], acts = []; // by index: the plugged pad (or null), and { id, a } its actuator
+  const fire = (type, gamepad) => { const e = new Event(type); Object.defineProperty(e, 'gamepad', { value: gamepad }); window.dispatchEvent(e); };
+  const actuator = () => {
+    const a = {
+      effects: [...EFFECTS], calls: [],
+      playEffect(type, params = {}) {
+        a.calls.push({ op: 'playEffect', type, params: { ...params } });
+        return a.effects.includes(type) ? Promise.resolve('complete') : Promise.reject(new DOMException(`${type} is not supported by this pad`, 'NotSupportedError'));
+      },
+      reset() { a.calls.push({ op: 'reset' }); return Promise.resolve('complete'); },
+    };
+    return a;
+  };
+  window.__lhUnplug = index => {
+    const p = pads[index]; if (!p) return;
+    pads[index] = null;
+    while (pads.length && !pads[pads.length - 1]) pads.length--;
+    fire('gamepaddisconnected', { ...p, connected: false });
+  };
+  window.__lhSetPad = (index, st) => {
+    if (!st) { window.__lhUnplug(index); return; }
     const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
     for (const [k, i] of Object.entries(NAMES)) if (st[k]) buttons[i] = { pressed: true, touched: true, value: 1 };
-    pads = [{ id: st.id ?? 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e)', index: 0, connected: true, mapping: 'standard', timestamp: performance.now(), axes: [...(st.axes ?? [0, 0]), 0, 0].slice(0, 4), buttons }];
+    const axes = [...(st.axes ?? [])]; while (axes.length < 4) axes.push(0);
+    const id = st.id ?? ID, fresh = !pads[index];
+    if (!acts[index] || acts[index].id !== id) acts[index] = { id, a: actuator() };
+    const a = acts[index].a;
+    if (Array.isArray(st.effects)) a.effects = [...st.effects];
+    while (pads.length < index) pads.push(null);
+    pads[index] = { id, index, connected: true, mapping: st.mapping ?? 'standard', timestamp: performance.now(), axes, buttons, vibrationActuator: st.effects === null ? null : a };
+    if (fresh) fire('gamepadconnected', pads[index]);
   };
-  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value: () => pads });
+  window.__lhHaptics = index => { const x = acts[index]; return x ? { effects: [...x.a.effects], calls: x.a.calls.map(c => ({ ...c, ...(c.params ? { params: { ...c.params } } : {}) })) } : null; };
+  Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value: () => pads.slice() });
 };
 async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript, pads = 'fake' } = {}, prepare) {
   if (pads !== 'fake' && pads !== 'host') throw new Error("playwright: pads must be 'fake' or 'host'");

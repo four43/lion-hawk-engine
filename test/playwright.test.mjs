@@ -119,3 +119,12 @@ test('2f: openGame adds initScript to the context before the page loads (#74)', 
   assert.deepEqual(calls.map(c => c[1]).slice(0, 1), ['window.x = 1'], "pads: 'host' keeps the machine's controllers");
   await assert.rejects(openGame(browser, 'http://x/', { pads: 'none' }), /pads must be 'fake' or 'host'/);
 });
+
+test('T-24: game.pad(state) is pad 0, pad(index, state) any pad; unplug and haptics name an index 0..15 (review focus)', async () => {
+  const calls = [];
+  const g = fake(async (fn, a) => { calls.push(a); return null; });
+  await g.pad({ a: true }); await g.pad(3, { b: true }); await g.pad(null); await g.pad(2, null); await g.unplug(1); await g.haptics(0);
+  assert.deepEqual(calls, [[0, { a: true }], [3, { b: true }], [0, null], [2, null], 1, 0]);
+  for (const bad of [-1, 16, 1.5, '1']) await assert.rejects(g.unplug(bad), /playwright: pad index must be an integer in 0\.\.15/);
+  await assert.rejects(g.pad(16, {}), /pad index must be an integer in 0\.\.15 \(got 16\)/);
+});
