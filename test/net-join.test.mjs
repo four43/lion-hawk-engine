@@ -1,0 +1,174 @@
+// test/net-join.test.mjs
+// [N-19], [N-20], [N-24], [N-25]: the engine join (plan 2026-10-21-local-players-3, Task 6).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mp, replay } from '../testing/index.js';
+import { createRegistry, decodeFrame } from '../src/index.sim.js';
+import { createMemoryHub, createPort } from '../src/index.net.js';
+import RAPIER from '@dimforge/rapier3d-compat';
+import seats, { seatsGame, pawnsGame } from './net/fixtures/seats.js';
+
+await RAPIER.init(); // the pawns room (Task 5's note) has bodies
+
+const spy = (p, pick) => { const out = [], send = p.net.send.bind(p.net); p.net.send = (to, d, r) => { const x = pick(d); if (x) out.push(x); return send(to, d, r); }; return out; };
+
+test('the engine joins guests in hello order; a guest\'s seat 0 is renumbered (N-19, N-20, N-25)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1);
+  const H = w.host.h.world.net, [g1, g2] = w.guests;
+  assert.deepEqual([...H.bindings].map(([n, b]) => [n, b.peer, b.key, b.seat]), [[2, g1.net.id, [2, 0, 0, 0], 0], [3, g2.net.id, [3, 0, 0, 0], 0]]);
+  assert.equal(g1.h.world.net.self, 2); assert.equal(g1.engine.controllerOf(0).player, 2); assert.deepEqual([...g2.h.world.net.locals], [3]);
+  assert.deepEqual(g1.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2]]);
+  for (const p of w.peers) for (const n of [1, 2, 3]) assert.ok(p.h.world.net.find('dot', n), `${p.name} has dot ${n}`);
+});
+
+test('a guest\'s second seat asks with net.seat; its records ride seat 0\'s frame (N-19, N-24)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1);
+  const g = w.guests[0], reg = createRegistry(seats.net.kinds, { maxSender: 8 });
+  const frames = spy(g, d => d instanceof ArrayBuffer && decodeFrame(d, reg));
+  w.seat(1, 'join', 1); w.seconds(0.5);
+  assert.equal(g.engine.controllerOf(1).player, 4, 'the host gave the lowest free number');
+  assert.deepEqual([...g.h.world.net.locals], [2, 4]);
+  assert.deepEqual(w.host.h.world.net.bindings.get(4), { peer: g.net.id, key: [2, 0, 0, 0], seat: 1 });
+  assert.ok(frames.length && frames.every(f => f.sender === 2), 'one sender: the peer\'s seat 0');
+  assert.ok(frames.some(f => [...(f.groups.get('dot')?.records.keys() ?? [])].join() === '2,4'), 'both seats in one frame');
+  assert.ok(w.peers[2].h.world.net.find('dot', 4), 'relayed to the other guest');
+  w.seconds(0.5, [null, { 1: { x: 0.5 } }]);
+  assert.ok(Math.abs(w.host.h.world.net.find('dot', 4).x - 5) < 0.1, 'seat 1\'s input moves its own dot');
+});
+
+test('a guest that joins with two seats is renumbered without a clash (N-25, review focus)', () => {
+  const w = mp(seats, { peers: 2 }); w.seat(1, 'join', 1); w.seconds(1); // seat 1 took 2 before the welcome said seat 0 is 2
+  const g = w.guests[0];
+  assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [2, 3]);
+  assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3]]);
+  assert.deepEqual([...g.h.world.net.locals], [2, 3]);
+});
+
+test('a seat that joins between the hello and the welcome is asked for after the welcome (N-19, N-25, S1)', () => {
+  const w = mp(seats, { peers: 2 }); w.step(1); // step 1: the first hello goes out, with seat 0 only
+  w.seat(1, 'join', 1); w.seconds(1); // step 2: seat 1 joins on number 2 (free on this page); step 3: the welcome names seat 0 alone
+  const g = w.guests[0];
+  assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [2, 3]);
+  assert.deepEqual([...g.h.world.net.locals], [2, 3]);
+  assert.deepEqual(w.host.h.world.net.bindings.get(3), { peer: g.net.id, key: [2, 0, 0, 0], seat: 1 });
+  assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3]], 'seat 1 reports its number from before it moved aside');
+});
+
+test('the host\'s own second seat is admitted like a guest\'s (N-19, N-20)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  w.seat(0, 'join', 1); w.seconds(0.5);
+  assert.equal(w.host.engine.controllerOf(1).player, 3, 'player 2 is the guest');
+  assert.deepEqual([...w.host.h.world.net.locals], [1, 3]);
+  assert.ok(w.guests[0].h.world.net.find('dot', 3), 'the host\'s frame carries both of its seats');
+  assert.deepEqual(w.host.engine.players.map(p => [p.number, p.seat, p.local]), [[1, 0, true], [2, 0, false], [3, 1, true]]);
+});
+
+test('maxPlayers and maxSeats refuse with a reason; a refused page stops asking (N-19)', () => {
+  const w = mp(seatsGame({ maxPlayers: 2, maxSeats: 1 }), { peers: 3 }); w.seconds(1);
+  const [g1, g2] = w.guests;
+  assert.deepEqual(g2.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'full']]);
+  assert.equal(g2.h.world.net.self, 0); assert.equal(w.host.h.world.net.bindings.size, 1);
+  const hellos = spy(g2, d => d?.t === 'net.hello' && d); w.seconds(2); assert.equal(hellos.length, 0);
+  w.seat(1, 'join', 1); w.seconds(0.5);
+  assert.equal(g1.engine.controllerOf(1), undefined, 'the refused seat left');
+  assert.deepEqual(g1.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[1, 'seats']]);
+});
+
+test('a game\'s admit decides; a taken number is loud (N-19)', () => {
+  const w = mp(seatsGame({ reasons: ['locked'], admit: ({ key }) => key[0] === 3 ? { refuse: 'locked' } : 7 }), { peers: 3 }); w.seconds(1);
+  assert.equal(w.guests[0].h.world.net.self, 7);
+  assert.deepEqual(w.guests[1].h.events.of('player.refused').map(e => e.reason), ['locked']);
+  w.seat(1, 'join', 1);
+  assert.throws(() => w.seconds(0.5), /net\.admit: player 7 is taken/);
+});
+
+test('a hello with another schema is refused; a repeated hello gets the same answer (N-6, N-19, M-19)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const g = w.guests[0];
+  g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [0], schema: (seats.net.schema + 1) >>> 0 }, true);
+  g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [0], schema: seats.net.schema }, true);
+  w.seconds(0.3);
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'schema']]);
+  assert.deepEqual([...w.host.h.world.net.bindings.keys()], [2], 'no second number for the same seat');
+});
+
+test('a hello without seat 0 is refused whole and binds nothing (N-19, S5)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const g = w.guests[0];
+  g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [1, 2], schema: seats.net.schema }, true);
+  w.seconds(0.3);
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'seats']]);
+  assert.deepEqual(w.host.h.events.of('player.joined').map(e => e.number), [2], 'seats 1 and 2 never got numbers');
+  assert.deepEqual([...w.host.h.world.net.bindings].map(([n, b]) => [n, b.seat]), [[2, 0]]);
+});
+
+test('a page that was a guest hosts with seat 0 as player 1, in the controllers and the roster (N-20, S6)', () => {
+  const w = mp(seats, { peers: 2 }); w.seat(1, 'join', 1); w.seconds(1); // the guest's seats are 2 and 3
+  const g = w.guests[0]; w.drop(w.host); w.seconds(0.2);
+  assert.equal(g.h.world.net.role, 'solo'); assert.deepEqual(g.engine.players.map(p => p.number), [2, 3], 'solo keeps the room\'s numbers');
+  const hub = createMemoryHub(); createPort(g.engine, { transport: hub.host(), role: 'host', clock: () => hub.now, key: g.key }); g.h.step(1);
+  assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [1, 3]);
+  assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3], [0, 2, 1]]);
+  assert.deepEqual(g.engine.players.map(p => [p.number, p.seat, p.local]), [[1, 0, true], [3, 1, true]]);
+  assert.deepEqual([...g.h.world.net.locals], [1, 3]); assert.equal(g.h.world.net.self, 1);
+});
+
+test('a guest seat that leaves is unbound on the host; its dot goes everywhere (N-19)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1); w.seat(1, 'join', 1); w.seconds(0.5);
+  w.seat(1, 'leave', 1); w.seconds(0.5);
+  assert.equal(w.host.h.world.net.bindings.has(4), false);
+  assert.equal(w.host.h.world.net.find('dot', 4), undefined); assert.equal(w.peers[2].h.world.net.find('dot', 4), undefined);
+});
+
+test('every peer\'s tape of an engine join replays alone (T-9, #78, N-18)', () => {
+  const w = mp(seats, { peers: 2, record: true }); w.seconds(1); w.seat(1, 'join', 1); w.step(1); // the seat exists once its lh.seat ran
+  w.seconds(1, [null, { 0: { x: 1 }, 1: { x: -1 } }]);
+  for (const p of w.peers) assert.equal(replay(seats, p.h.tape()).checksum(), p.h.checksum(), p.name);
+});
+
+// ---- carried items (Task 4's note, Task 5's note, plan 2's M4) ----
+
+test('the peer key never reaches a guest: no message or frame a guest receives carries a key word (N-18, Task 4 note)', () => {
+  const K = [[0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f], [0x1f83d9ab, 0x5be0cd19, 0x6a09e667, 0xcbbb9d5d]]; // distinctive words: no frame field holds one by chance
+  const w = mp(seats, { peers: 1 });
+  const got = []; w.hub.drop = (from, to, data) => { if (to !== w.host.net.id) got.push(data); return false; };
+  w.addPeer({ key: K[0] }); w.addPeer({ key: K[1] });
+  w.seconds(1); w.seat(1, 'join', 1); w.seat(2, 'join', 1); w.step(1); w.seconds(1, [null, { 0: { x: 1 }, 1: { x: -1 } }, { 0: { x: 0.5 } }]);
+  w.seat(1, 'leave', 1); w.seconds(0.5);
+  assert.deepEqual([...w.host.h.world.net.bindings.values()].map(b => b.key), [K[0], K[1], K[1]], 'the host holds the guests\' keys (guest1\'s seat 1 left)');
+  const frames = got.filter(d => d instanceof ArrayBuffer), msgs = got.filter(d => !(d instanceof ArrayBuffer));
+  assert.ok(frames.length > 10 && msgs.some(m => JSON.stringify(m).includes('net.welcome')), 'the guests heard frames and welcomes');
+  const words = K.flat();
+  for (const d of frames) {
+    const v = new DataView(d);
+    for (let i = 0; i + 4 <= d.byteLength; i++) for (const k of words) assert.ok(v.getUint32(i, true) !== k && v.getUint32(i, false) !== k, 'a frame carries a key word');
+  }
+  for (const m of msgs) { const s = JSON.stringify(m); for (const k of words) assert.ok(!s.includes(String(k)), `a message carries a key word: ${s}`); }
+});
+
+test('a guest with two seats joins through the engine join; a third peer sees both pawns move as driven remotes (N-19, N-24, Task 5 note)', () => {
+  const g = pawnsGame(), w = mp(g, { peers: 3 }); w.seat(1, 'join', 1); w.seconds(1);
+  const [a, b] = w.guests;
+  assert.deepEqual([a.engine.controllerOf(0).player, a.engine.controllerOf(1).player], [2, 3]);
+  assert.deepEqual([...w.host.h.world.net.bindings].map(([n, x]) => [n, x.peer, x.seat]), [[2, a.net.id, 0], [3, a.net.id, 1], [4, b.net.id, 0]]);
+  const B = b.h.world.net, at = n => B.find('pawn', n).xf.p.x;
+  const x0 = [at(2), at(3)];
+  w.seconds(1.5, [null, { 0: { x: 1 }, 1: { x: -1 } }, null]);
+  for (const n of [2, 3]) assert.equal(B.remoteOf(B.find('pawn', n))?.kind.remote, 'driven', `pawn ${n} is a driven replica on the third peer`);
+  assert.ok(at(2) - x0[0] > 1, `seat 0's pawn moved +x (${x0[0]} -> ${at(2)})`);
+  assert.ok(at(3) - x0[1] < -1, `seat 1's pawn moved -x (${x0[1]} -> ${at(3)})`);
+  const A = a.h.world.net;
+  for (const n of [2, 3]) assert.ok(Math.abs(A.find('pawn', n).xf.p.x - at(n)) < 0.5, `the third peer follows the owner's pawn ${n}`);
+});
+
+test('a refused seat is visible to the view: player.refused on the host for its own seat, the guest\'s seat leaves (M4)', () => {
+  const w = mp(seatsGame({ maxSeats: 1 }), { peers: 2 }); w.seconds(1);
+  w.seat(0, 'join', 1); w.step(1);
+  assert.equal(w.host.engine.controllerOf(1), undefined, 'the host\'s seat 1 was not admitted');
+  assert.deepEqual(w.host.h.events.of('player.refused').map(e => [e.seat, e.reason, e.local]), [[1, 'seats', true]]);
+  const g = w.guests[0]; w.seat(1, 'join', 1); w.step(1);
+  assert.ok(g.engine.controllerOf(1), 'a guest\'s seat plays at once while it asks');
+  w.seconds(0.3);
+  assert.equal(g.engine.controllerOf(1), undefined, 'refused: the controller is gone');
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason, e.local]), [[1, 'seats', true]]);
+});
