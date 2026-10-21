@@ -28,7 +28,7 @@ test('possess copies the snapshot into e.input every step; buttons keep the snap
   const { cs, ev, w } = setup(), c = cs.list[0], car = w.current.spawn({ tags: ['car'] });
   c.possess(car);
   assert.equal(c.pawn, car);
-  assert.deepEqual(ev.at(-1), { type: 'controller.possess', seat: 0, player: 1, pawn: car.id });
+  assert.deepEqual(ev.at(-1), { type: 'controller.possess', controller: 1, seat: 0, player: 1, pawn: car.id });
   c.input.set({ steer: 0.5, horn: true }); cs.applyInputs(); cs.copy();
   assert.equal(car.input, c.input.snapshot, 'a pawn without its own input object gets the snapshot itself');
   assert.equal(car.input.steer, 0.5); assert.equal(car.input.horn.pressed, true);
@@ -155,4 +155,76 @@ test('a pausing menu gates every controller, not only seat 0 (U-9)', () => {
   e.overlay('menu'); e.stepN(1);
   assert.equal(e.controllers[0].input.gated, true); assert.equal(bot.input.gated, true);
   assert.throws(() => e.controller({}), /engine.controller: only bots are made directly/);
+});
+
+// ---- final-review fixes ----
+test('a released net pawn has its own input zeroed in place (C-3)', () => {
+  const { cs, w } = setup(), c = cs.list[0], inp = { steer: 0, horn: false };
+  const train = w.current.spawn({ net: 'train', input: inp });
+  c.possess(train); c.input.set({ steer: 0.5, horn: true }); cs.applyInputs(); cs.copy();
+  assert.deepEqual(train.input, { steer: 0.5, horn: true });
+  c.unpossess();
+  assert.equal(train.input, inp, 'same object'); assert.deepEqual(train.input, { steer: 0, horn: false });
+});
+
+test('possess fills the pawn at once, snapshot pointer or key copy (C-3)', () => {
+  const { cs, w } = setup(), c = cs.list[0], a = w.current.spawn({}), b = w.current.spawn({ input: { steer: 0, horn: false } });
+  c.input.set({ steer: 0.4, horn: true }); cs.applyInputs();
+  c.possess(a); assert.equal(a.input, c.input.snapshot);
+  c.possess(b); assert.deepEqual(b.input, { steer: 0.4, horn: true });
+});
+
+test('a pawn spawned and possessed in a pre system sees this step\'s input in post (C-3)', () => {
+  const e = createEngine(game); let seen, done = false;
+  e.system('mk', en => { if (done) return; done = true; e.controllers[0].possess(en.world.spawn({})); }, { stage: 'pre' });
+  e.system('rd', () => { const p = e.controllers[0].pawn; if (p) seen = p.input.steer; }, { stage: 'post' });
+  e.input.set({ steer: 0.3 }); e.stepN(1);
+  assert.equal(seen, 0.3);
+});
+
+test('dispose throws on a seated controller; bots dispose; seat leave still works (C-1)', () => {
+  const { cs } = setup(), bot = cs.make({ bot: true });
+  assert.throws(() => cs.list[0].dispose(), /controller.dispose: seats leave with the lh.seat command/);
+  cs.seat('join', 1);
+  assert.throws(() => cs.of(1).dispose(), /seats leave with the lh.seat command/);
+  bot.dispose(); assert.equal(cs.list.length, 2);
+  cs.seat('leave', 1); assert.equal(cs.list.length, 1);
+});
+
+test('possess on a disposed controller throws (C-2)', () => {
+  const { cs, w } = setup(), bot = cs.make({ bot: true });
+  bot.dispose();
+  assert.throws(() => bot.possess(w.current.spawn({})), /controller.possess: controller was disposed/);
+});
+
+test('renumber moves a player number and emits controller.renumbered (N-20)', () => {
+  const { cs, ev } = setup(); cs.seat('join', 1);
+  const c = cs.of(1);
+  cs.renumber(2, 5);
+  assert.equal(c.player, 5);
+  assert.deepEqual(ev.at(-1), { type: 'controller.renumbered', controller: c.id, seat: 1, from: 2, to: 5 });
+  assert.throws(() => cs.renumber(2, 3), /controllers.renumber: no controller is player 2/);
+  assert.throws(() => cs.renumber(5, 1), /controllers.renumber: player 1 is taken/);
+});
+
+test('controller ids are monotonic and ride on every controller event (C-2)', () => {
+  const { cs, ev, w } = setup(), car = w.current.spawn({});
+  assert.equal(cs.list[0].id, 1);
+  cs.seat('join', 1); const s1 = cs.of(1); assert.equal(s1.id, 2);
+  s1.possess(car); s1.unpossess(); cs.renumber(2, 4); cs.seat('leave', 1);
+  assert.deepEqual(ev.map(e => e.type), ['controller.joined', 'controller.possess', 'controller.unpossess', 'controller.renumbered', 'controller.left']);
+  assert.ok(ev.every(e => e.controller === 2));
+  assert.equal(cs.make({ bot: true }).id, 3);
+});
+
+test('of(seat) and engine.controllerOf look a seat up (C-1)', () => {
+  const e = createEngine(game);
+  assert.equal(e.controllerOf(0), e.controllers[0]); assert.equal(e.controllerOf(1), undefined);
+  e.command('lh.seat', { op: 'join', seat: 1 }); e.stepN(1);
+  assert.equal(e.controllerOf(1), e.controllers[1]);
+});
+
+test('createControllers is not a public export', async () => {
+  const idx = await import('../src/index.sim.js');
+  assert.equal('createControllers' in idx, false);
 });

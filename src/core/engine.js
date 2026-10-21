@@ -367,6 +367,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   const engine = {
     game, seed: base.seed, events, input, loop, commands, loading, net,
     controllers: controllers.list, // [C-1] live: seats in seat order, then bots
+    controllerOf: seat => controllers.of(seat), // [C-1] the seat's controller, or undefined
     controller({ bot } = {}) {
       if (bot !== true) throw new Error('engine.controller: only bots are made directly (seats join with the lh.seat command)');
       return controllers.make({ bot: true });

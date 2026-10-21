@@ -8,29 +8,43 @@ const MAX_SEAT = 15;
 
 export function createControllers(schema, { input, emit, world }) {
   const list = [], holder = new Map(); // pawn -> controller
-  let gated = false;
+  let gated = false, nextId = 1;
   const drop = (c, reason) => {
     const e = c.pawn; if (!e) return;
     c.pawn = null; holder.delete(e);
-    if (e.input === c.input.snapshot) e.input = undefined; // the next holder's copy() assigns its own snapshot
-    emit('controller.unpossess', { seat: c.seat, player: c.player, pawn: e.id, reason });
+    const I = e.input;
+    if (I === c.input.snapshot) e.input = undefined; // the next holder's copy() assigns its own snapshot
+    else if (I !== null && typeof I === 'object') for (const k in I) I[k] = typeof I[k] === 'number' ? 0 : false; // a net-made input stops holding the last value
+    emit('controller.unpossess', { controller: c.id, seat: c.seat, player: c.player, pawn: e.id, reason });
   };
+  // [I-4]: a pawn whose e.input the net layer made keeps its shape (only its keys, buttons as down); any other pawn reads the snapshot itself
+  const fill = c => {
+    const e = c.pawn, s = c.input.snapshot, I = e.input;
+    if (I === undefined || I === s) { e.input = s; return; }
+    for (const k in I) if (k in s) { const v = s[k]; I[k] = typeof v === 'number' ? v : v.down; }
+  };
+  const remove = c => { const i = list.indexOf(c); if (i < 0) return; drop(c, 'left'); c.disposed = true; list.splice(i, 1); };
   const isEntity = e => e !== null && typeof e === 'object' && Number.isInteger(e.id);
   const make = ({ seat = null, bot = false, player = 0, input: own } = {}) => {
     const c = {
-      seat, bot, player, input: own ?? createInput(schema), pawn: null,
+      id: nextId++, seat, bot, player, disposed: false, input: own ?? createInput(schema), pawn: null,
       possess(e) {
+        if (c.disposed) throw new Error('controller.possess: controller was disposed');
         if (!isEntity(e)) throw new Error('controller.possess: needs an entity');
         if (e.net !== undefined && world()?.net?.remoteOf?.(e) !== undefined) throw new Error(`controller.possess: entity ${e.id} is simulated by another peer`);
         if (c.pawn === e) return c;
         drop(c, 'unpossess');
         const other = holder.get(e); if (other) drop(other, 'taken');
         c.pawn = e; holder.set(e, c);
-        emit('controller.possess', { seat: c.seat, player: c.player, pawn: e.id });
+        emit('controller.possess', { controller: c.id, seat: c.seat, player: c.player, pawn: e.id });
+        fill(c); // a pawn possessed mid-step has its input at once
         return c;
       },
       unpossess() { drop(c, 'unpossess'); return c; },
-      dispose() { const i = list.indexOf(c); if (i < 0) return; drop(c, 'left'); list.splice(i, 1); },
+      dispose() {
+        if (c.seat !== null) throw new Error('controller.dispose: seats leave with the lh.seat command');
+        remove(c);
+      },
     };
     if (gated) c.input.gate(true);
     // seats in seat order, then bots in creation order
@@ -44,33 +58,38 @@ export function createControllers(schema, { input, emit, world }) {
   const freeNumber = () => { let n = 1; while (list.some(c => c.player === n)) n++; return n; };
   return {
     list, make,
+    of(seat) { for (let i = 0; i < list.length; i++) if (list[i].seat === seat) return list[i]; return undefined; },
+    renumber(from, to) {
+      const c = list.find(x => x.player === from);
+      if (!c) throw new Error(`controllers.renumber: no controller is player ${from}`);
+      if (list.some(x => x !== c && x.player === to)) throw new Error(`controllers.renumber: player ${to} is taken`);
+      c.player = to;
+      emit('controller.renumbered', { controller: c.id, seat: c.seat, from, to });
+    },
     applyInputs() { for (let i = 0; i < list.length; i++) list[i].input.apply(); },
     gate(on) { gated = !!on; for (let i = 0; i < list.length; i++) list[i].input.gate(gated); },
-    // [I-4]: a dead pawn (despawned, or from a World a scene change replaced) is dropped; a pawn whose e.input the net
-    // layer made keeps its shape (only its keys, buttons as down); any other pawn reads the snapshot itself
+    // [I-4]: a dead pawn (despawned, or from a World a scene change replaced) is dropped; see fill()
     copy() {
       const w = world();
       for (let i = 0; i < list.length; i++) {
         const c = list[i], e = c.pawn; if (!e) continue;
         if (w === undefined || w.get(e.id) !== e) { drop(c, 'despawned'); continue; }
-        const s = c.input.snapshot, I = e.input;
-        if (I === undefined || I === s) { e.input = s; continue; }
-        for (const k in I) if (k in s) { const v = s[k]; I[k] = typeof v === 'number' ? v : v.down; }
+        fill(c);
       }
     },
     // the lh.seat command's effect, offline numbering (solo/host: lowest free number); plan 3 asks the host online
     seat(op, seat) {
       if (op !== 'join' && op !== 'leave') throw new Error("lh.seat: op must be 'join' or 'leave'");
       if (!Number.isInteger(seat) || seat < 0 || seat > MAX_SEAT) throw new Error(`lh.seat: seat must be an integer in 0..${MAX_SEAT}`);
-      const c = list.find(x => x.seat === seat);
+      const c = this.of(seat);
       if (op === 'join') {
         if (c) return c;
         const n = make({ seat, player: freeNumber() });
-        emit('controller.joined', { seat, player: n.player });
+        emit('controller.joined', { controller: n.id, seat, player: n.player });
         return n;
       }
       if (!c || seat === 0) return null; // seat 0 is the page's first player and never leaves
-      c.dispose(); emit('controller.left', { seat, player: c.player });
+      remove(c); emit('controller.left', { controller: c.id, seat, player: c.player });
       return null;
     },
   };
