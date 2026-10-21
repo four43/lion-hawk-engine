@@ -23,12 +23,12 @@ export function createHaptics(engine, { seats, target = globalThis, doc, frames 
   const scenes = engine.game.scenes, listeners = [];
   let left = 0, paused = false;
   // hide, blur and pause are page-wide: every connected pad this page knows, seated or not (the ?debug=pads bench
-  // rumbles unpaired ones). lp.pads holds live pads only; seats.unpaired() allocates, but only while a stop runs.
+  // rumbles unpaired ones). lp.pads holds live pads only; forEachUnpaired allocates no list.
+  const unpairedZero = d => zero(seats.gamepad(d)?.vibrationActuator);
   const stopPads = () => {
     const list = seats.list;
     for (let k = 0; k < list.length; k++) { const ps = list[k].pads; for (let i = 0; i < ps.length; i++) zero(ps[i]?.vibrationActuator); }
-    const un = seats.unpaired();
-    for (let i = 0; i < un.length; i++) zero(seats.gamepad(un[i])?.vibrationActuator);
+    seats.forEachUnpaired(unpairedZero);
   };
   const stop = reason => {
     stopPads(); left = frames - 1;
@@ -49,6 +49,8 @@ export function createHaptics(engine, { seats, target = globalThis, doc, frames 
       return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
     },
     get stopping() { return left; },
+    get paused() { return pausing(); },
+    stop,
     // A game's own rumble in the STOP_FRAMES after a pausing overlay opens is cancelled by design (a pause menu's rumble loses its first ~1/3 s).
     // the frame a pausing overlay appears is a trigger (its first round); otherwise run the next round while any are left.
     // The driver does not tick while the page is hidden, so a hide's remaining rounds run once it is back.

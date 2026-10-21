@@ -127,4 +127,6 @@ test('T-24: game.pad(state) is pad 0, pad(index, state) any pad; unplug and hapt
   assert.deepEqual(calls, [[0, { a: true }], [3, { b: true }], [0, null], [2, null], 1, 0]);
   for (const bad of [-1, 16, 1.5, '1']) await assert.rejects(g.unplug(bad), /playwright: pad index must be an integer in 0\.\.15/);
   await assert.rejects(g.pad(16, {}), /pad index must be an integer in 0\.\.15 \(got 16\)/);
+  for (const bad of ['1', true, undefined]) await assert.rejects(g.pad(bad, { a: true }), /playwright: pad index must be an integer in 0\.\.15/);
+  await assert.rejects(g.pad('1'), /playwright: pad index must be an integer/);
 });

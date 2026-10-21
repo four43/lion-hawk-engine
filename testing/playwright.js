@@ -185,7 +185,10 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     // { effects, calls } of that index's actuator ({ op: 'playEffect', type, params } / { op: 'reset' }), or null. Devices
     // read a change on the next frame, so follow with frames() before stepping.
     pad: async (index, state) => {
-      if (typeof index !== 'number') { state = index; index = 0; }
+      if (typeof index !== 'number') {
+        if (index !== null && typeof index !== 'object') padIndex(index); // '1', true, undefined: not a state, not an index
+        state = index; index = 0;
+      }
       return ev(([i, st]) => window.__lhSetPad(i, st), [padIndex(index), state ?? null]);
     },
     unplug: async index => ev(i => window.__lhUnplug(i), padIndex(index)),

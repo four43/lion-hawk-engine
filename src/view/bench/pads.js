@@ -95,8 +95,10 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
   // haptics on the selected pad
   const act = () => current?.vibrationActuator ?? null;
   const hplay = (type, params, label, quiet = false, a = act()) => play(a, type, params, { log: hlog, label, quiet, timer, alive: () => !closed });
+  // zero dual-rumble first, then reset: a tap queued a frame ago can overtake a lone reset (as dispose does)
   const reset = label => {
     const a = act(); if (typeof a?.reset !== 'function') return;
+    try { Promise.resolve(a.playEffect?.('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })).catch(() => {}); } catch { /* no rumble to stop */ }
     try { Promise.resolve(a.reset()).then(r => hlog(`${label}: ${r}`, 'ok'), e => hlog(`${label}: ${e?.name}: ${e?.message}`, 'err')); }
     catch (e) { hlog(`${label}: ${e?.name}: ${e?.message}`, 'err'); }
   };

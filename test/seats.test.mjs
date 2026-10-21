@@ -426,3 +426,11 @@ test('with a custom join, only a pad with the same id regains a lost seat direct
   slots[5] = pad(5, { down: [0] }); frame();
   assert.deepEqual(asked, [WHEEL], 'the same id regains without asking'); assert.equal(lost.lost, false); assert.equal(lost.index, 5);
 });
+
+test('forEachUnpaired visits the devices unpaired() returns, without allocating a list (C-14, final review)', () => {
+  const { seats, slots, frame } = setup(); seats.enable();
+  slots[0] = pad(0); slots[1] = pad(1); frame();
+  const seen = []; seats.forEachUnpaired(d => seen.push(d));
+  assert.ok(seen.length > 0);
+  assert.deepEqual(seen, seats.unpaired());
+});

@@ -65,3 +65,25 @@ test('a steady frame with haptics on, two pads with actuators and an open overla
   const r = await allocRate(step, 2000, { warm: 500, top: 8, within: VIEW });
   assert.ok(r.inside < 128, `${Math.round(r.inside)} bytes per frame in view code:\n${r.top.join('\n')}`);
 });
+
+test('view.haptics.stop(reason) runs the 20-round stop on every pad; paused follows a pausing overlay; null with autoStop false (C-14, final review)', () => {
+  const { app, slots, frame } = start(defineView({ scenes: {} })), a = actuator(), b = actuator();
+  try {
+    const h = app.view.haptics;
+    assert.deepEqual(Object.keys(h).sort(), ['paused', 'stop', 'stopping']);
+    slots[0] = pad(0, { act: a }); slots[1] = pad(1, { act: b }); frame();
+    a.calls.length = 0; b.calls.length = 0;
+    assert.equal(h.stopping, false);
+    h.stop('menu');
+    assert.equal(h.stopping, true);
+    for (let i = 0; i < 30; i++) frame();
+    assert.equal(a.calls.length, 2 * STOP_FRAMES); assert.equal(b.calls.length, 2 * STOP_FRAMES);
+    assert.equal(h.stopping, false);
+    assert.equal(h.paused, false);
+    app.engine.overlay('hud'); assert.equal(h.paused, false);
+    app.engine.overlay('pause'); assert.equal(h.paused, true);
+    app.engine.close('pause'); assert.equal(h.paused, false);
+  } finally { app.dispose(); }
+  const off = start(defineView({ scenes: {}, haptics: { autoStop: false } }));
+  try { assert.equal(off.app.view.haptics, null); } finally { off.app.dispose(); }
+});

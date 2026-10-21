@@ -92,8 +92,8 @@ test('live trigger taps follow the pull: taps last at least 50 ms and are full s
   advance(130); slots[0] = pull(0.96, 0.3); tick();
   assert.equal(a.calls.length, 2);
   slots[0] = pull(0, 0); tick();
-  assert.deepEqual(a.calls[2], ['reset'], 'let go: one reset');
-  tick(); assert.equal(a.calls.length, 3);
+  assert.deepEqual(a.calls.slice(2), [['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }], ['reset']], 'let go: a zero effect, then one reset');
+  tick(); assert.equal(a.calls.length, 4);
 });
 
 test('the bench never changes seats or bindings, whatever is clicked (D-7, review focus)', async () => {
@@ -201,4 +201,11 @@ test('a pattern stays on the pad it started on when another tab is picked (fix r
   const [t0, t1] = el('[data-bench="tabs"]').children; t1.click(); tick();
   timer.run();
   assert.equal(a.calls.length, 6); assert.equal(b.calls.length, 0);
+});
+
+test('Stop all, live off and live idle send a zero dual-rumble then reset, as dispose does (final review)', async () => {
+  const { slots, tick, el } = rig(), a = actuator();
+  slots[0] = pad(0, { act: a }); tick();
+  el('[data-bench="stop"]').click(); await flush();
+  assert.deepEqual(a.calls, [['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }], ['reset']]);
 });

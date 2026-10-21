@@ -343,6 +343,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   };
   // the live Gamepad of a pad device of this page, paired or not; null for a lost pad or another kind ([C-7])
   const gamepad = dev => (dev?.kind === 'pad' ? info.get(dev)?.live ?? null : null);
+  const forEachUnpaired = fn => { for (const d of known) if (!holder.has(d)) fn(d); }; // no list: the haptics stop rounds
   const unpaired = () => { const out = []; for (const d of known) if (!holder.has(d)) out.push(d); return out; };
   // keyboard join: a key of an unpaired scheme offers that scheme's device ('all' takes every key; Task 4 fills schemeKeys)
   const GUARD = 'input, textarea, select, [contenteditable]';
@@ -455,7 +456,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
 
   return {
     list, // view.localPlayers, in seat order
-    on, enable, unpaired, context, kind, gamepad,
+    on, enable, unpaired, forEachUnpaired, context, kind, gamepad,
     update(dt, raw = dt) { sync(); poll(); readKinds(); refresh(); views(); drive(dt, raw); },
     dispose() {
       target.removeEventListener?.('keydown', onKey); offRefused();

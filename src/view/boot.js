@@ -40,10 +40,13 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const haptics = halves.haptics?.autoStop === false ? null : createHaptics(engine, { seats, target, doc });
   // [D-7] ?debug=pads: the pad bench. Only behind the flag: a slot device and a dynamic import (inlined by the build, never
   // evaluated without the flag), so a page without it pays nothing. The bench gets a read-only view of the seats.
+  // view.haptics: the game's handle on the lifecycle (null with autoStop false); it sends no rumble of its own
+  const hapticsView = haptics ? Object.freeze({ stop: reason => haptics.stop(reason), get stopping() { return haptics.stopping > 0; }, get paused() { return haptics.paused; } }) : null;
   const benchOn = flags.debugs?.includes('pads') === true;
   let bench = null;
   const benchSlot = benchOn ? { update() { bench?.update(); }, dispose() { bench?.dispose(); bench = null; } } : null;
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id), // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
+    haptics: hapticsView,
     seats: o => { seats.enable(o); return seats.list; }, context: (name, def) => seats.context(name, def), device: (kind, spec) => seats.kind(kind, spec),
     onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), gamepad: dev => seats.gamepad(dev), get localPlayers() { return seats.list; } };
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
