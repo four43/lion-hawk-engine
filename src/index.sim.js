@@ -7,6 +7,7 @@ export { parseFlags, FLAGS } from './core/flags.js';
 export { createSchedule, STEP_STAGES } from './core/schedule.js';
 export { createLoop } from './core/loop.js';
 export { axis, button, actions, createInput } from './core/actions.js';
+export { createControllers } from './core/controllers.js';
 export { createUi } from './core/ui.js';
 export { pickNeighbour, NAV_DIRS } from './core/navScore.js';
 export { checkNav, topNav, menuOwnsInput } from './core/nav.js';

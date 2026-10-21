@@ -117,3 +117,42 @@ test('seats: join takes the lowest free player number, keeps seat order; leave f
   for (const bad of [-1, 1.5, 16, '1']) assert.throws(() => cs.seat('join', bad), /lh.seat: seat must be an integer in 0..15/);
   assert.throws(() => cs.seat('swap', 1), /lh.seat: op must be 'join' or 'leave'/);
 });
+
+// ---- engine-level (Task 2) ----
+import { defineGame, createEngine } from '../src/index.sim.js';
+
+const game = defineGame({ id: 'ctl', start: 'field', actions: schema, scenes: { field: {}, other: {} } });
+
+test('engine.input is seat 0; lh.possess fills e.input during input.apply (C-1, I-4)', () => {
+  const e = createEngine(game);
+  assert.equal(e.controllers.length, 1); assert.equal(e.input, e.controllers[0].input);
+  const car = e.world.spawn({ tags: ['car'] }); e.controllers[0].possess(car);
+  let seen;
+  e.system('reader', en => { seen = en.world.get(car.id).input?.steer; }, { stage: 'input.apply', after: ['lh.possess'] });
+  e.input.set({ steer: 0.25 }); e.stepN(1);
+  assert.equal(seen, 0.25, 'a game system after lh.possess reads this step\'s input');
+});
+
+test('lh.seat joins and leaves seats through a command; events reach listeners (C-5 sim side)', () => {
+  const e = createEngine(game), got = [];
+  e.events.on(ev => { if (ev.type.startsWith('controller.')) got.push([ev.type, ev.seat, ev.player]); });
+  e.command('lh.seat', { op: 'join', seat: 1 }); e.stepN(1);
+  assert.deepEqual(e.controllers.map(c => c.seat), [0, 1]);
+  e.command('lh.seat', { op: 'leave', seat: 1 }); e.stepN(1);
+  assert.deepEqual(got, [['controller.joined', 1, 2], ['controller.left', 1, 2]]);
+});
+
+test('a scene change drops pawns from the old World (review focus)', () => {
+  const e = createEngine(game), c = e.controllers[0];
+  c.possess(e.world.spawn({})); e.go('other'); e.stepN(1);
+  assert.equal(c.pawn, null);
+});
+
+test('a pausing menu gates every controller, not only seat 0 (U-9)', () => {
+  const g = defineGame({ id: 'ctl-menu', start: 'field', actions: schema,
+    scenes: { field: {}, menu: { pauses: true, nav: { back: 'horn' } } } });
+  const e = createEngine(g), bot = e.controller({ bot: true });
+  e.overlay('menu'); e.stepN(1);
+  assert.equal(e.controllers[0].input.gated, true); assert.equal(bot.input.gated, true);
+  assert.throws(() => e.controller({}), /engine.controller: only bots are made directly/);
+});

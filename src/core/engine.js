@@ -6,6 +6,7 @@ import { createEvents } from './events.js';
 import { createSchedule, STEP_STAGES } from './schedule.js';
 import { createLoop } from './loop.js';
 import { actions as defineActions, createInput } from './actions.js';
+import { createControllers } from './controllers.js';
 import { createUi } from './ui.js';
 import { checkNav, topNav, menuOwnsInput } from './nav.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
@@ -75,6 +76,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   if (record && acks !== 'steps') throw new Error("engine: record needs acks 'steps'"); // [T-9] browser recording is out of scope
   if (timer !== null && typeof timer !== 'function') throw new Error('engine: timer must be a function'); // #106
   const base = rng(seed), schedule = createSchedule(STEP_STAGES), input = createInput(game.actions);
+  // [C-1]: seat 0's controller wraps `input`, so engine.input is unchanged; events and worlds exist later, hence the arrows
+  const controllers = createControllers(game.actions, { input, emit: (t, d) => events.emit(t, d), world: () => worlds?.current });
   const schemas = game.schemas ?? {}; // N-3: declared command schemas (defineGame)
   let wallBase = wall0, wallBaseStep = 0, step = 0, renderFns = [], stepFns = []; // [R-7] additive render slots, copy-on-write (#10); N-4: onStep listeners, the same
   const streams = new Map(), time = { step: 0, sim: 0, frames: 0, wall: wall0 }, sceneView = { name: undefined, id: undefined, args: undefined, state: {}, overlays: [], overlayIds: [] };
@@ -86,7 +89,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     const m = stack[0]?.ctx; sceneView.name = m?.name; sceneView.id = m?.id; sceneView.args = m?.args; sceneView.state = m?.state ?? {};
     sceneView.overlays.length = 0; sceneView.overlayIds.length = 0;
     for (let i = 1; i < stack.length; i++) { sceneView.overlays.push(stack[i].ctx.name); sceneView.overlayIds.push(stack[i].ctx.id); }
-    input.gate(menuOwnsInput(game, sceneView.overlays)); // U-9: a menu with input 'menu' on top gates the devices (only the stack changes it)
+    controllers.gate(menuOwnsInput(game, sceneView.overlays)); // U-9: a menu with input 'menu' on top gates the devices (only the stack changes it)
   };
   const events = createEvents({ now: () => step });
   const stack = []; // stack[0] is the main scene; the rest are overlays, bottom to top
@@ -353,6 +356,11 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   };
   const engine = {
     game, seed: base.seed, events, input, loop, commands, loading, net,
+    controllers: controllers.list, // [C-1] live: seats in seat order, then bots
+    controller({ bot } = {}) {
+      if (bot !== true) throw new Error('engine.controller: only bots are made directly (seats join with the lh.seat command)');
+      return controllers.make({ bot: true });
+    },
     get acks() { return acks; }, get blocked() { return blocks.size; },
     presented() { if (acks !== 'frames') throw new Error("engine: presented() needs acks: 'frames'"); present(); },
     onPresent(fn) {
@@ -424,7 +432,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     },
   };
   schedule.add('lh.ui', (e, dt) => ui.advance(dt, engine), { stage: 'input.apply', before: ['lh.input'] }); // #9: hold progress on engine time
-  schedule.add('lh.input', () => { input.apply(); if (rec) recordInput(); }, { stage: 'input.apply' });
+  schedule.add('lh.input', () => { controllers.applyInputs(); if (rec) recordInput(); }, { stage: 'input.apply' });
   // U-9: Back runs the topmost menu's nav.back (an action pressed next step, or a function); none is a no-op. Open
   // summons an overlay whose nav.open its `when` allows, unless a menu that owns input is already on top.
   engine.builtin('lh.back', e => {
@@ -439,6 +447,8 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     e.overlay(name, undefined, { once: true });
   });
   schedule.add('lh.commands', deliverAll, { stage: 'input.apply', after: ['lh.input'] });
+  schedule.add('lh.possess', () => controllers.copy(), { stage: 'input.apply', after: ['lh.commands'] }); // [I-4]
+  engine.builtin('lh.seat', (e, d) => controllers.seat(d?.op, d?.seat)); // [C-5]: plan 3 routes it through the host online
   schedule.add('lh.scene', (e, dt) => stepScenes(dt, 0), { stage: 'pre' });
   schedule.add('lh.events', () => events.flush(), { stage: 'events.flush' });
   worlds = installWorld(engine, { timer }); // §4.1, §4.4: checks physics.rapier, adds lh.world.swap and lh.physics.*

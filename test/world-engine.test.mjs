@@ -60,7 +60,7 @@ test('state() gains world only while the World has entities; no World key for an
 });
 test('the schedule: lh.world.swap first in input.apply; physics systems in order; kits slot before the step', () => {
   const e = createEngine(physGame()), s = e.schedule();
-  assert.deepEqual(s['input.apply'], ['lh.world.swap', 'lh.ui', 'lh.input', 'lh.commands']);
+  assert.deepEqual(s['input.apply'], ['lh.world.swap', 'lh.ui', 'lh.input', 'lh.commands', 'lh.possess']);
   assert.deepEqual(s['physics.world'], ['lh.physics.step', 'lh.physics.read', 'lh.physics.events']);
   e.system('kit.pre', () => {}, { stage: 'physics.world', before: ['lh.physics.step'] });
   e.system('game.late', () => {}, { stage: 'physics.world' });
