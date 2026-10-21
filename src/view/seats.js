@@ -5,11 +5,12 @@
 // A driver device: polls getGamepads() once per frame, before the game's devices. Nothing here runs in the sim.
 import { bindGamepad } from './gamepad.js';
 import { bindKeyboard } from './keyboard.js';
-import { NONE, checkContext, resolvePad, resolveKeys, resolveTouch, schemeKeysOf } from './contexts.js';
+import { NONE, checkContext, resolvePad, resolveKeys, resolveTouch, schemeKeysOf, mappableOf, inputKind } from './contexts.js';
+import { createProfiles, deviceKey } from './profiles.js';
 export const JOIN_AXIS = 0.5; // an axis this far from its rest value is a press (join, regain, capture, lp.pad)
 const NO = Object.freeze([]);
 
-export function createSeats(engine, { getGamepads, target = globalThis, doc } = {}) {
+export function createSeats(engine, { getGamepads, target = globalThis, doc, storage } = {}) {
   const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? NO);
   doc ??= target.document ?? globalThis.document;
   const list = [], listeners = [];
@@ -23,6 +24,9 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const defs = new Map();         // context name -> checked context
   const stacks = new WeakMap();   // seat -> [{ name, priority, order }], highest priority first
   const binds = new WeakMap();    // seat -> [{ dev, mod }]: the device modules writing its controller's input
+  const profiles = createProfiles({ game: engine.game.id, storage });
+  const saved = new WeakMap();     // seat -> { profile, data }
+  const capturing = new WeakMap(); // seat -> the pending capture's resolve
 
   const emit = (type, seat, device, op) => {
     const e = op === undefined ? { type, seat, device } : { type, seat, device, op };
@@ -62,7 +66,46 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
       }
     }
   };
-  const overridesFor = (lp, dev) => NONE; // Task 5: the seat's saved overrides for this device
+  const overridesFor = (lp, dev) => saved.get(lp)?.data[deviceKey(dev)] ?? NONE; // [C-13] this profile's overrides for this device
+  // [C-12], [C-13] lp.bindings: the seat's player-mappable overrides, saved per profile and per device id
+  const makeBindings = lp => {
+    const st = { profile: `Player ${lp.seat + 1}`, data: null };
+    st.data = profiles.load(st.profile); saved.set(lp, st);
+    const held = dev => { if (holder.get(dev) !== lp) throw new Error(`bindings: seat ${lp.seat} does not hold that device`); };
+    const save = () => { profiles.save(st.profile, st.data); changed(lp); };
+    const b = {
+      get profile() { return st.profile; },
+      set profile(name) {
+        if (typeof name !== 'string' || name === '') throw new Error('bindings.profile: must be a non-empty string');
+        st.profile = name; st.data = profiles.load(name); changed(lp);
+      },
+      get(name, dev) {
+        held(dev);
+        const from = mappableOf(defs, dev, info.get(dev)?.live ?? null, name); if (from === null) return null;
+        const o = st.data[deviceKey(dev)]?.[name];
+        return o !== undefined && inputKind(o) === inputKind(from) ? o : from;
+      },
+      map(name, dev, input) {
+        held(dev);
+        const from = mappableOf(defs, dev, info.get(dev)?.live ?? null, name);
+        if (from === null) throw new Error(`bindings.map: no mappable binding '${name}' for this device`);
+        if (dev.kind === 'keys' && typeof input === 'string') input = input.toLowerCase();
+        if (inputKind(input) !== inputKind(from)) throw new Error(`bindings.map: '${name}' is on ${from}; ${JSON.stringify(input)} is not the same kind of input`);
+        const d = (st.data[deviceKey(dev)] ??= {});
+        if (input === from) delete d[name]; else d[name] = input;
+        save();
+      },
+      reset(name) {
+        for (const k of Object.keys(st.data)) { if (name === undefined) delete st.data[k]; else delete st.data[k][name]; }
+        save();
+      },
+      // the next button or axis edge of this seat's pads, or key on its keyboard schemes, for remap screens
+      capture() { b.cancel(); return new Promise(res => { capturing.set(lp, res); }); },
+      cancel() { const r = capturing.get(lp); capturing.delete(lp); r?.(null); },
+    };
+    return b;
+  };
+  const captured = (lp, dev, s) => { const r = capturing.get(lp); if (r !== undefined) { capturing.delete(lp); r({ device: dev, input: s.kind + ':' + s.at }); } };
   // the buttons held while a pad is paired stay masked from its bindings until let go, so the press that joined,
   // regained or was claimed with is not also a game input (review focus); context changes do not mask. Only buttons
   // are masked, not axes: a stick, pedal or trigger that joins also drives the game for that frame (N1, no rest model).
@@ -74,12 +117,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
 
   const makeSeat = (seat, controller) => {
     const lp = {
-      seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false, contexts: null,
+      seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false, contexts: null, bindings: null,
       claim: dev => { claim(lp, dev); return lp; }, release: dev => { release(lp, dev); return lp; }, leave: () => leave(lp),
     };
     let at = 0; while (at < list.length && list[at].seat < seat) at++;
     list.splice(at, 0, lp);
-    lp.contexts = makeStack(lp); start(lp);
+    lp.bindings = makeBindings(lp); lp.contexts = makeStack(lp); start(lp);
     return lp;
   };
   const makeStack = lp => {
@@ -218,6 +261,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.target?.closest?.(GUARD)) return;
     const k = String(e.key).toLowerCase();
     if (opts !== null) for (const dev of keysBy.values()) if (!holder.has(dev) && inScheme(dev.scheme, k)) offer(dev);
+    for (let n = 0; n < list.length; n++) { // a capturing seat takes the key on its own scheme ('all' only when it has no other)
+      const lp = list[n], r = capturing.get(lp); if (r === undefined) continue;
+      let dev = null;
+      for (const d of lp.devices) if (d.kind === 'keys' && inScheme(d.scheme, k) && (dev === null || dev.scheme === 'all')) dev = d;
+      if (dev !== null) { capturing.delete(lp); r({ device: dev, input: k }); }
+    }
   };
   // the default join: seat 0 while it holds no pad (the keyboard sits there, so a solo pad player is player 1), else a new seat
   const defaultJoin = dev => (dev.kind === 'pad' && !seatOf(0).devices.some(d => d.kind === 'pad') ? 0 : 'new');
@@ -234,13 +283,14 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const leave = lp => {
     if (lp.seat === 0) throw new Error('seats: seat 0 never leaves');
     if (lp.leaving) return;
-    lp.leaving = true; leftAt.set(lp, engine.time.step); changed(lp);
+    lp.leaving = true; leftAt.set(lp, engine.time.step); lp.bindings.cancel(); changed(lp);
     engine.command('lh.seat', { op: 'leave', seat: lp.seat });
   };
   // a seat goes: out of the list first (so changed() binds nothing), its devices back to unpaired, lost ones forgotten
   const drop = lp => {
     list.splice(list.indexOf(lp), 1);
     for (let i = lp.devices.length - 1; i >= 0; i--) { const d = lp.devices[i]; detach(lp, d); if (d.lost) { info.delete(d); known.delete(d); } }
+    const r = capturing.get(lp); if (r !== undefined) { capturing.delete(lp); r(null); }
     emit('seat.left', lp.seat, null);
   };
   // the view follows the sim's controllers: a pending seat binds once its controller exists; a leaving seat goes once
@@ -290,7 +340,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
       const s = info.get(dev); s.live = p; edges(s, p);
       if (!holder.has(dev) && (s.edge || (fresh && opts === null))) dev = offer(dev);
       const lp = holder.get(dev);
-      if (lp !== undefined && s.edge) usedLast.set(lp, dev);
+      if (lp !== undefined && s.edge) { usedLast.set(lp, dev); captured(lp, dev, s); }
     }
   };
 
