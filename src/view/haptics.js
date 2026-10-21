@@ -1,0 +1,66 @@
+// src/view/haptics.js
+// [C-14] (spec §5.5): the haptics lifecycle. Games drive lp.pad.vibrationActuator themselves (after checking `effects`);
+// the engine only stops rumble it would otherwise leave running. From Rally's playtests (games/rally/src/rumbleOut.js,
+// 2026-10-19): Chromium queues each playEffect on a task but runs reset() at once, so a reset alone can be overtaken by an
+// effect sent a frame earlier. A stop is therefore a zero dual-rumble effect (queued behind any late one) plus reset(),
+// sent at once and on each of the next frames, STOP_FRAMES rounds in all. A pad this page sees for the first time gets one
+// full stop round, clearing what the previous page left playing.
+// A driver device after the seats (it reads this frame's lp.pads). It never writes seats, input or the sim.
+export const STOP_FRAMES = 20;
+const ZERO = Object.freeze({ startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 });
+const quiet = () => {}; // a stop's promises resolve 'preempted' or reject on a pad that went away: nothing to handle
+
+const zero = a => {
+  if (typeof a?.playEffect !== 'function') return; // no actuator (Firefox, most of Safari): rumble is never an error
+  try { a.playEffect('dual-rumble', ZERO)?.catch?.(quiet); } catch { /* an actuator that throws is skipped */ }
+  try { a.reset?.()?.catch?.(quiet); } catch { /* as above */ }
+};
+
+export function createHaptics(engine, { seats, target = globalThis, doc, frames = STOP_FRAMES } = {}) {
+  if (!seats) throw new Error('haptics: needs the seats');
+  if (!Number.isInteger(frames) || frames < 1) throw new Error('haptics: frames must be a positive integer');
+  doc ??= target.document ?? globalThis.document;
+  const scenes = engine.game.scenes, listeners = [];
+  let left = 0, paused = false;
+  // hide, blur and pause are page-wide: every connected pad this page knows, seated or not (the ?debug=pads bench
+  // rumbles unpaired ones). lp.pads holds live pads only; seats.unpaired() allocates, but only while a stop runs.
+  const stopPads = () => {
+    const list = seats.list;
+    for (let k = 0; k < list.length; k++) { const ps = list[k].pads; for (let i = 0; i < ps.length; i++) zero(ps[i]?.vibrationActuator); }
+    const un = seats.unpaired();
+    for (let i = 0; i < un.length; i++) zero(seats.gamepad(un[i])?.vibrationActuator);
+  };
+  const stop = reason => {
+    stopPads(); left = frames - 1;
+    const e = { type: 'haptics.stop', reason, frames };
+    for (let i = 0; i < listeners.length; i++) { try { listeners[i](e); } catch { /* a listener (the bench's log) must not stop a stop */ } }
+  };
+  // an open overlay whose scene pauses; engine.scene.overlays is a live array, so this allocates nothing
+  const pausing = () => { const o = engine.scene.overlays; for (let i = 0; i < o.length; i++) if (scenes[o[i]]?.pauses) return true; return false; };
+  const onBlur = () => stop('blur'), onHide = () => stop('pagehide');
+  const onVis = () => { if (doc?.visibilityState === 'hidden') stop('hidden'); };
+  const offSeen = seats.on(e => { if (e.type === 'seat.seen') zero(seats.gamepad(e.device)?.vibrationActuator); });
+  target.addEventListener?.('blur', onBlur); target.addEventListener?.('pagehide', onHide);
+  doc?.addEventListener?.('visibilitychange', onVis);
+  return {
+    on(fn) {
+      if (typeof fn !== 'function') throw new Error('haptics.on: needs a function');
+      listeners.push(fn);
+      return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
+    },
+    get stopping() { return left; },
+    // the frame a pausing overlay appears is a trigger (its first round); otherwise run the next round while any are left.
+    // The driver does not tick while the page is hidden, so a hide's remaining rounds run once it is back.
+    update() {
+      const p = pausing();
+      if (p && !paused) { paused = true; stop('pause'); return; }
+      paused = p;
+      if (left > 0) { left--; stopPads(); }
+    },
+    dispose() {
+      target.removeEventListener?.('blur', onBlur); target.removeEventListener?.('pagehide', onHide);
+      doc?.removeEventListener?.('visibilitychange', onVis);
+      offSeen(); listeners.length = 0; left = 0;
+    },
+  };
+}
