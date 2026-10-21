@@ -19,7 +19,7 @@ const start = halves => {
 };
 
 test('boot stops rumble on blur and when a pausing overlay opens, through the driver; dispose removes it (C-14)', () => {
-  const { app, slots, frame, window } = start(defineView({ scenes: {} })), a = actuator();
+  const { app, slots, frame, window, document } = start(defineView({ scenes: {} })), a = actuator();
   try {
     slots[0] = pad(0, { act: a }); frame();
     assert.deepEqual(a.calls, [ZERO, ['reset']], 'seen for the first time: a full stop (S3)');
@@ -30,7 +30,10 @@ test('boot stops rumble on blur and when a pausing overlay opens, through the dr
     assert.deepEqual(a.calls, [ZERO, ['reset']]);
   } finally { app.dispose(); }
   a.calls.length = 0; window.dispatchEvent(new window.Event('blur'));
-  assert.deepEqual(a.calls, [], 'dispose removed the listeners');
+  window.dispatchEvent(new window.Event('pagehide'));
+  Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+  document.dispatchEvent(new window.Event('visibilitychange'));
+  assert.deepEqual(a.calls, [], 'dispose removed the blur, pagehide and visibilitychange listeners');
 });
 
 test('defineView({ haptics: { autoStop: false } }) installs nothing: no first reset, no stop on blur, hide or pause (C-14, review focus)', () => {
