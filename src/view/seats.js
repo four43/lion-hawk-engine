@@ -16,6 +16,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const usedLast = new WeakMap(); // seat -> the pad device it pressed last ([C-7])
   const known = new Set();       // every device this page has
   let opts = null, losses = 0;
+  const leftAt = new WeakMap(); // leaving seat -> engine.time.step when leave() was called
 
   const emit = (type, seat, device, op) => {
     const e = op === undefined ? { type, seat, device } : { type, seat, device, op };
@@ -31,7 +32,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const paired = dev => {}; // a device was just paired to a seat: Task 4 masks the buttons held right now
 
   const makeSeat = (seat, controller) => {
-    const lp = { seat, controller, pending: controller === null, devices: [], pad: null, pads: [], lost: false };
+    const lp = { seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false, leave: () => leave(lp) };
     let at = 0; while (at < list.length && list[at].seat < seat) at++;
     list.splice(at, 0, lp);
     return lp;
@@ -72,8 +73,57 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     if (lp === undefined) { info.delete(dev); known.delete(dev); return; }
     emit('seat.lost', lp.seat, dev); changed(lp);
   };
-  // an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
-  const offer = dev => { attach(list[0], dev); return dev; };
+  // [C-8] an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
+  const offer = dev => {
+    if (opts === null) { attach(list[0], dev); return dev; }
+    const r = opts.join(dev);
+    if (r === null || r === undefined) return dev;
+    let seat = r;
+    if (r === 'new') { seat = freeSeat(); if (seat < 0) return dev; }
+    else if (!Number.isInteger(r) || r < 0 || r >= opts.max) throw new Error(`seats: join must return a seat number in 0..${opts.max - 1}, 'new' or null`);
+    attach(seatOf(seat) ?? open(seat), dev);
+    return dev;
+  };
+  // the default join: seat 0 while it holds no pad (the keyboard sits there, so a solo pad player is player 1), else a new seat
+  const defaultJoin = dev => (dev.kind === 'pad' && !seatOf(0).devices.some(d => d.kind === 'pad') ? 0 : 'new');
+  const enable = ({ max = 4, join } = {}) => {
+    if (!Number.isInteger(max) || max < 1 || max > 16) throw new Error('seats: max must be an integer in 1..16');
+    if (join !== undefined && typeof join !== 'function') throw new Error('seats: join must be a function');
+    opts = { max, join: join ?? defaultJoin };
+  };
+  const freeSeat = () => { for (let n = 0; n < opts.max; n++) if (seatOf(n) === undefined) return n; return -1; };
+  // [C-5] a seat opens pending: lh.seat runs at the next step (offline; plan 3 asks the host), then sync() finds its controller
+  const open = seat => { const lp = makeSeat(seat, null); engine.command('lh.seat', { op: 'join', seat }); return lp; };
+  const leave = lp => {
+    if (lp.seat === 0) throw new Error('seats: seat 0 never leaves');
+    if (lp.leaving) return;
+    lp.leaving = true; leftAt.set(lp, engine.time.step); changed(lp);
+    engine.command('lh.seat', { op: 'leave', seat: lp.seat });
+  };
+  // a seat goes: out of the list first (so changed() binds nothing), its devices back to unpaired, lost ones forgotten
+  const drop = lp => {
+    list.splice(list.indexOf(lp), 1);
+    for (let i = lp.devices.length - 1; i >= 0; i--) { const d = lp.devices[i]; detach(lp, d); if (d.lost) { info.delete(d); known.delete(d); } }
+    emit('seat.left', lp.seat, null);
+  };
+  // the view follows the sim's controllers: a pending seat binds once its controller exists; a leaving seat goes once
+  // its controller is gone after a step; a seat whose controller vanished goes; a seat the sim opened itself appears.
+  // Steady state (a ready seat whose controller is still listed) only does an includes() check, so the frame allocates nothing.
+  const sync = () => {
+    const cs = engine.controllers;
+    for (let k = list.length - 1; k >= 0; k--) {
+      const lp = list[k];
+      if (!lp.pending && !lp.leaving && cs.includes(lp.controller)) continue;
+      const c = engine.controllerOf(lp.seat);
+      if (lp.leaving) { if (c === undefined && engine.time.step > leftAt.get(lp)) drop(lp); continue; }
+      if (lp.pending) { if (c !== undefined) { lp.controller = c; lp.pending = false; emit('seat.joined', lp.seat, null); changed(lp); } continue; }
+      if (c !== lp.controller) { if (c === undefined) drop(lp); else { lp.controller = c; changed(lp); } }
+    }
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      if (c.seat !== null && seatOf(c.seat) === undefined) { makeSeat(c.seat, c); emit('seat.joined', c.seat, null); }
+    }
+  };
 
   const refresh = () => {
     for (let k = 0; k < list.length; k++) {
@@ -116,8 +166,8 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
 
   return {
     list, // view.localPlayers, in seat order
-    on,
-    update() { poll(); refresh(); },
+    on, enable,
+    update() { sync(); poll(); refresh(); },
     dispose() { listeners.length = 0; },
   };
 }
