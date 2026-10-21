@@ -15,11 +15,11 @@ const base = (net = {}, extra = {}) => defineGame({
 test('defaults, and the built-in kinds after the game\'s (N-19, N-22)', () => {
   const n = base().net;
   assert.deepEqual([n.join, n.maxPlayers, n.maxSeats, n.rejoinSeconds, n.admit], ['engine', 8, 4, 60, undefined]);
-  assert.deepEqual(n.reasons, ['full', 'seats', 'schema', 'admit', 'busy']);
+  assert.deepEqual(n.reasons, ['full', 'seats', 'schema', 'admit', 'busy', 'taken']);
   assert.deepEqual(n.kinds.map(k => [k.name, k.code]), [['box', 1], ['lh.player', 255], ['lh.game', 254]]);
   assert.deepEqual(Object.keys(n.kinds[1].fields), ['seat', 'away', 'active', 'join', 'score'], 'no key field: it never leaves the host (N-18)');
   assert.equal(n.kinds[1].idMax, 8); assert.deepEqual(Object.keys(n.kinds[2].fields), ['round']);
-  assert.deepEqual(base({ reasons: ['locked'] }).net.reasons, ['full', 'seats', 'schema', 'admit', 'busy', 'locked']);
+  assert.deepEqual(base({ reasons: ['locked'] }).net.reasons, ['full', 'seats', 'schema', 'admit', 'busy', 'taken', 'locked']);
   assert.deepEqual(base({ join: 'manual' }).net.kinds.map(k => k.name), ['box'], 'a manual join adds no engine kinds: a game registry reads its frames (B3)');
 });
 

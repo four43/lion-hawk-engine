@@ -21,7 +21,7 @@ import { installNet, RESERVED as NET_RESERVED } from '../sim/net/install.js';
 const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
 const RESERVED_TYPE = { from: 'a string', at: 'a finite number', reliable: 'a boolean' };
 
-export const REASONS = Object.freeze(['full', 'seats', 'schema', 'admit', 'busy']); // [N-19] refusal reasons every game has ('admit': the game's admit failed on a guest's seat; 'busy': seat ops too close together)
+export const REASONS = Object.freeze(['full', 'seats', 'schema', 'admit', 'busy', 'taken']); // [N-19] refusal reasons every game has ('admit': the game's admit failed on a guest's seat; 'busy': seat ops too close together; 'taken': the key's player is another live peer's, N-23)
 export const JOIN_TYPES = Object.freeze(['net.hello', 'net.seat', 'net.welcome', 'net.refused']);
 const KEY = F.list(F.uint(4), 4, 4), SEAT = F.uint(1, 15); // [N-18] a key is a UUID's 128 bits as four words
 
