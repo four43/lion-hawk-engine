@@ -563,7 +563,8 @@ export function installNet(engine) {
       if (confirmed.has(0)) { confirmed.delete(0); refreshLocals(); } // I1: another page took this one's player over; it asks again
       if (d.reason === waitReason) return; // I1: one event per wait, not one per 1 s hello
       waitReason = d.reason;
-    } else if (engine.controllerOf(d.seat)) { seats.controllers.seat('leave', d.seat); confirmed.delete(d.seat); aside.delete(d.seat); refreshLocals(); }
+    } else if (engine.controllerOf(d.seat) || confirmed.has(d.seat)) { seats.controllers.seat('leave', d.seat); confirmed.delete(d.seat); aside.delete(d.seat); refreshLocals(); }
+    else return; // a repeated refusal for a seat already gone: nothing to tell
     engine.emit('player.refused', { seat: d.seat, reason: d.reason, local: true });
   });
 

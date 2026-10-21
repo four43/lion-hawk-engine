@@ -122,3 +122,17 @@ test('player.refused \'taken\' fires once per wait, not on every 1 s hello (N-23
   assert.ok(hellos.length >= 3, `it keeps asking (${hellos.length} hellos)`);
   assert.deepEqual(twin.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'taken']]);
 });
+
+test('a repeated net.refused \'taken\' for a seat above 0 emits player.refused once per seat (N-18, N-23, security minor)', () => {
+  const w = mp(seats, { peers: 3 }); w.seat(1, 'join', 1); w.seconds(1.5);
+  const old = w.guests[0];
+  w.hub.away(old.net.id); w.step(1);
+  const twin = w.addPeer({ key: old.key }); w.seat(twin, 'join', 1); w.seconds(1.5);
+  w.hub.back(old.net.id); w.seconds(0.5);
+  const seen = () => old.h.events.of('player.refused').map(e => [e.seat, e.reason]);
+  assert.deepEqual(seen(), [[0, 'taken'], [1, 'taken']]);
+  w.hub.away(old.net.id); w.step(1); w.hub.back(old.net.id); w.seconds(0.5); // the host tells it again on its peerBack
+  for (let i = 0; i < 2; i++) w.host.net.send(old.net.id, { t: 'net.refused', seat: 1, reason: 'taken' }, true); // and the same refusal twice more
+  w.seconds(0.5);
+  assert.deepEqual(seen(), [[0, 'taken'], [1, 'taken']], 'a refusal for a seat already gone emits nothing');
+});
