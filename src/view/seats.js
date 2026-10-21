@@ -32,7 +32,10 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const paired = dev => {}; // a device was just paired to a seat: Task 4 masks the buttons held right now
 
   const makeSeat = (seat, controller) => {
-    const lp = { seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false, leave: () => leave(lp) };
+    const lp = {
+      seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false,
+      claim: dev => { claim(lp, dev); return lp; }, release: dev => { release(lp, dev); return lp; }, leave: () => leave(lp),
+    };
     let at = 0; while (at < list.length && list[at].seat < seat) at++;
     list.splice(at, 0, lp);
     return lp;
@@ -75,14 +78,58 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   };
   // [C-8] an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
   const offer = dev => {
+    const back = regain(dev); if (back !== null) return back;
     if (opts === null) { attach(list[0], dev); return dev; }
     const r = opts.join(dev);
     if (r === null || r === undefined) return dev;
     let seat = r;
     if (r === 'new') { seat = freeSeat(); if (seat < 0) return dev; }
     else if (!Number.isInteger(r) || r < 0 || r >= opts.max) throw new Error(`seats: join must return a seat number in 0..${opts.max - 1}, 'new' or null`);
-    attach(seatOf(seat) ?? open(seat), dev);
+    const to = seatOf(seat);
+    if (to?.leaving) return dev; // a seat that is leaving takes no device: it stays unpaired until its next press
+    attach(to ?? open(seat), dev);
     return dev;
+  };
+  // [C-9] a seat waiting for a lost device of this kind gets the press first: the same product id, else the device lost
+  // longest ago. The lost device object is reused, so the seat, its saved bindings and a game holding it keep one device.
+  const regain = dev => {
+    let best = null, same = false;
+    for (let k = 0; k < list.length; k++) {
+      const ds = list[k].devices;
+      for (let i = 0; i < ds.length; i++) {
+        const d = ds[i]; if (!d.lost || d.kind !== dev.kind) continue;
+        const m = d.id === dev.id;
+        if (best === null || (m && !same) || (m === same && info.get(d).lostAt < info.get(best).lostAt)) { best = d; same = m; }
+      }
+    }
+    if (best === null) return null;
+    const lp = holder.get(best), s = info.get(dev);
+    info.delete(dev); known.delete(dev); info.set(best, s);
+    best.id = dev.id; best.lost = false; place(best, dev); paired(best);
+    emit('seat.regained', lp.seat, best); changed(lp);
+    return best;
+  };
+  // the regained device takes the new one's place (Task 6 adds game kinds)
+  const place = (best, dev) => { best.index = dev.index; best.mapping = dev.mapping; slots[best.index] = best; };
+  const claim = (lp, dev) => {
+    if (!known.has(dev)) throw new Error('seats: claim needs a device from this page (lp.devices, seats.unpaired() or a seat event)');
+    if (!list.includes(lp)) throw new Error(`seats: seat ${lp.seat} has left`);
+    attach(lp, dev);
+  };
+  const release = (lp, dev) => {
+    if (holder.get(dev) !== lp) throw new Error(`seats: seat ${lp.seat} does not hold that device`);
+    detach(lp, dev);
+    if (dev.lost) { info.delete(dev); known.delete(dev); }
+  };
+  const unpaired = () => { const out = []; for (const d of known) if (!holder.has(d)) out.push(d); return out; };
+  // keyboard join: a key of an unpaired scheme offers that scheme's device ('all' takes every key; Task 4 fills schemeKeys)
+  const GUARD = 'input, textarea, select, [contenteditable]';
+  const schemeKeys = new Map(); // scheme -> Set of the keys its contexts bind
+  const inScheme = (scheme, k) => scheme === 'all' || schemeKeys.get(scheme)?.has(k) === true;
+  const onKey = e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.target?.closest?.(GUARD)) return;
+    const k = String(e.key).toLowerCase();
+    if (opts !== null) for (const dev of keysBy.values()) if (!holder.has(dev) && inScheme(dev.scheme, k)) offer(dev);
   };
   // the default join: seat 0 while it holds no pad (the keyboard sits there, so a solo pad player is player 1), else a new seat
   const defaultJoin = dev => (dev.kind === 'pad' && !seatOf(0).devices.some(d => d.kind === 'pad') ? 0 : 'new');
@@ -163,11 +210,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   known.add(keys); known.add(touch);
   const zero = makeSeat(0, engine.controllerOf(0));
   zero.devices.push(keys, touch); holder.set(keys, zero); holder.set(touch, zero);
+  target.addEventListener?.('keydown', onKey);
 
   return {
     list, // view.localPlayers, in seat order
-    on, enable,
+    on, enable, unpaired,
     update() { sync(); poll(); refresh(); },
-    dispose() { listeners.length = 0; },
+    dispose() { target.removeEventListener?.('keydown', onKey); listeners.length = 0; },
   };
 }

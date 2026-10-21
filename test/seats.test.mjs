@@ -137,3 +137,82 @@ test('a seat the sim opens or closes by itself is followed by the view (C-5)', (
   assert.deepEqual(seats.list.map(s => s.seat), [0]);
   assert.deepEqual(ev, [['seat.joined', 3, null], ['seat.left', 3, null]]);
 });
+
+test('regain: a press goes to the seat that lost a pad with the same id, at any index, before an older loss (C-9)', () => {
+  const { e, seats, slots, ev, frame } = setup(); seats.enable();
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { id: WHEEL, down: [0] }); slots[2] = pad(2, { down: [0] }); frame(); e.stepN(1); frame();
+  const wheel = seats.list[1].devices[0], second = seats.list[2].devices[0];
+  slots[1] = null; frame(); slots[2] = null; frame();
+  assert.deepEqual([wheel.lost, second.lost, seats.list[1].lost, seats.list[2].lost], [true, true, true, true]);
+  slots[1] = pad(1, { down: [0] }); frame(); // an Xbox pad lands on the wheel's old index
+  assert.equal(second.lost, false, 'same id wins over the older loss'); assert.equal(second.index, 1);
+  assert.equal(seats.list[2].pad, slots[1]); assert.equal(wheel.lost, true);
+  assert.deepEqual(ev.at(-1), ['seat.regained', 2, 'pad']);
+  assert.equal(e.controllerOf(2).player, 3, 'the seat kept its player');
+});
+
+test('with no same-id pad, a press fills the seat whose pad was lost first, before join runs (C-9)', () => {
+  let joins = 0;
+  const { e, seats, slots, frame } = setup(); seats.enable({ join: () => { joins++; return 'new'; } });
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+  const a = seats.list[1].devices[0], b = seats.list[2].devices[0];
+  slots[1] = null; frame(); slots[0] = null; frame(); // b (seat 2) lost first
+  slots[5] = pad(5, { id: WHEEL, down: [0] }); frame();
+  assert.equal(b.lost, false); assert.equal(b.id, WHEEL); assert.equal(b.index, 5);
+  assert.equal(a.lost, true); assert.equal(joins, 2);
+});
+
+test("index reuse: another product on a held pad's index is lost-and-new, and pairs only on a press (review focus)", () => {
+  const { seats, slots, frame } = setup(); seats.enable();
+  slots[0] = pad(0, { down: [0] }); frame();
+  const xbox = seats.list[0].devices[2];
+  slots[0] = pad(0, { id: WHEEL }); frame(); // unplug and replug of another pad between two polls
+  assert.equal(xbox.lost, true); assert.equal(seats.list[0].pads.length, 0, 'the wheel is not silently the old pad');
+  slots[0] = pad(0, { id: WHEEL, down: [3] }); frame();
+  assert.equal(xbox.lost, false); assert.equal(xbox.id, WHEEL, 'a press fills the seat with the lost pad');
+});
+
+test('without enable(), a pad that comes back returns to seat 0 as the same device (C-9)', () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  slots[0] = pad(0); frame(); const dev = lp.devices[2];
+  slots[0] = null; frame(); slots[2] = pad(2); frame();
+  assert.equal(dev.lost, false); assert.equal(dev.index, 2); assert.equal(lp.devices.length, 3);
+});
+
+test('claim and release move devices by hand; a released keyboard joins on its next key (C-8)', () => {
+  const { e, seats, slots, ev, frame, key } = setup(); seats.enable();
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { down: [0] }); frame(); e.stepN(1); frame();
+  const [s0, s1] = seats.list, keys = s0.devices[0], p0 = s0.devices[2];
+  s1.claim(p0);
+  assert.deepEqual(s1.devices.map(d => d.index), [1, 0]); assert.equal(s0.devices.includes(p0), false);
+  assert.deepEqual(ev.slice(-2), [['seat.device', 0, 'pad', 'remove'], ['seat.device', 1, 'pad', 'add']]);
+  assert.throws(() => s0.release(p0), /seats: seat 0 does not hold that device/);
+  assert.throws(() => s0.claim({ kind: 'pad', index: 9 }), /seats: claim needs a device from this page/);
+  s0.release(keys);
+  assert.deepEqual(seats.unpaired(), [keys]);
+  key('keydown', 'w');
+  assert.equal(seats.list.at(-1).seat, 2); assert.deepEqual(seats.list.at(-1).devices, [keys]);
+});
+
+test('a pad lost at index i regains by id when the same product reappears at i; another product there is a new device (C-9)', () => {
+  const { seats, slots, frame } = setup(); seats.enable();
+  slots[3] = pad(3, { down: [0] }); frame();
+  const dev = seats.list[0].devices[2];
+  slots[3] = null; frame(); assert.equal(dev.lost, true);
+  slots[3] = pad(3, { down: [0] }); frame();
+  assert.equal(dev.lost, false); assert.equal(dev.index, 3); assert.equal(seats.list[0].devices.length, 3, 'same device, not a fresh one');
+  slots[3] = null; frame();
+  slots[3] = pad(3, { id: WHEEL }); frame(); // different id, no press: a new unpaired device, the lost one waits
+  assert.equal(dev.lost, true); assert.equal(seats.list[0].devices.length, 3);
+  assert.equal(seats.unpaired().length, 1); assert.equal(seats.unpaired()[0].id, WHEEL);
+});
+
+test('a join hook naming a leaving seat attaches nothing: the pad stays unpaired (C-8)', () => {
+  let to = 'new';
+  const { e, seats, slots, frame } = setup(); seats.enable({ join: () => to });
+  slots[0] = pad(0, { down: [0] }); frame(); e.stepN(1); frame();
+  const lp = seats.list[1]; lp.leave();
+  to = 1; slots[1] = pad(1, { down: [0] }); frame();
+  assert.equal(lp.devices.length, 1, 'only its own pad'); assert.equal(seats.unpaired().length, 1);
+  assert.equal(seats.unpaired()[0].index, 1);
+});
