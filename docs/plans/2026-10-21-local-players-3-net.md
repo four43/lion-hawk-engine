@@ -15,9 +15,9 @@
 ## Global Constraints
 
 - Sim code stays pure (spec §1.2): `src/core/players.js` imports only `../defs/fields.js`; nothing under `src/core` or `src/sim` reads `sessionStorage`, `crypto` or a clock. `src/net/key.js` is view/Node code.
-- Plan 1's names are fixed: `engine.controllers`, `engine.controllerOf(seat)`, `engine.controller({ bot: true })`, the internal `controllers.seat(op, seat)`, `controllers.renumber(from, to)` (emits `controller.renumbered { controller, seat, from, to }`), `controllers.of(seat)`, `controllers.copy()`. Seats leave only through `lh.seat` (the internal `controllers.seat('leave', …)` is that command's effect). A seat takes the lowest free number when it joins; only a guest's seats are renumbered, by `net.welcome`.
-- Every 3i net test passes. The two fixtures that bind numbers by hand (`test/net/fixtures/carts.js`, `farmlet.js`) opt out with `net: { join: 'manual' }`. The only 3i assertions that change are the three that read the removed `world.net.players` map (Task 5).
-- The frame format does not change: header, sender byte, groups. A single-seat peer's frames are byte-identical to today's.
+- Plan 1's names are fixed: `engine.controllers`, `engine.controllerOf(seat)`, `engine.controller({ bot: true })`, the internal `controllers.seat(op, seat)`, `controllers.renumber(from, to)` (emits `controller.renumbered { controller, seat, from, to }`), `controllers.of(seat)`, `controllers.copy()`. Seats leave only through `lh.seat` (the internal `controllers.seat('leave', …)` is that command's effect). A seat takes the lowest free number when it joins: solo from the controllers, online from the controllers and the roster together (B1: `engine[SEATS].route` takes every online `lh.seat`, in both join modes). A guest's seats are renumbered by `net.welcome`; a page that hosts has its seat 0 renumbered to 1 (`hostSeat0`, plan-writer ruling).
+- Every 3i net test passes. The two fixtures that bind numbers by hand (`test/net/fixtures/carts.js`, `farmlet.js`) opt out with `net: { join: 'manual' }` from Task 3 on. The only 3i assertions that change are the four that read the removed `world.net.players` map (Task 5): `test/mp-net.test.mjs:15`, `test/net-owner.test.mjs:24`, `test/net-host.test.mjs:18`, `test/net-tractor.test.mjs:69` (B2), plus the decode assertion at `test/replica.test.mjs:59`.
+- The frame format does not change: header, sender byte, groups. A single-seat guest's frames are byte-identical to today's. With `join: 'manual'` every frame is (B3): `lh.player` / `lh.game` exist and replicate only with `join: 'engine'`, so a game's own registry (Tractor's `game/net.js:41,70`) still reads every host frame. A Tractor bump before plan 5 must add `join: 'manual'` to its `netConfig`.
 - Allocation-free per step for the common case (R-8): `test/net-alloc.test.mjs` keeps its 9 KB budget; roster records reuse their pair and record objects like entity records.
 - Error messages follow `'<area>: <what>'` (`net: …`, `net.admit: …`, `players: …`, `defineGame: …`, `port: …`, `mp: …`).
 - Commits: conventional messages, no `Co-Authored-By` trailer (user rule).
@@ -25,11 +25,14 @@
 
 ## Review Focus
 
-- **A guest frame naming a number that is not its own.** Owner ids no longer have to equal the sender byte (one frame carries every seat), so the check moves from `decodeFrame` to the host: a record or a removal for a number bound to another peer must drop the whole frame. Pinned in Task 5 (`a frame may carry every seat of its peer; any number not bound to it drops the frame`).
-- **`net.welcome` renumbering onto a number another of this page's seats still holds** (a guest's seats took 1 and 2 offline, the host says seat 0 is 2). `controllers.renumber` would throw `player 2 is taken` mid-step. The holder must move aside and every seat end on the host's number, with `player.renumbered` reporting the original numbers. Pinned in Task 6 (`a guest that joins with two seats is renumbered without a clash`).
-- **A reload.** Handshake gives the reloaded page a new transport id and the old one may still be bound. Within `rejoinSeconds` the same key and seat must get the same number and record, and the new page's lower clock must not be rejected by a stale relay clock or store entry. Pinned in Task 8 (`back within rejoinSeconds with its key…`, `a reload the server has not dropped yet…`).
+- **A guest frame naming a number that is not its own.** Owner ids no longer have to equal the sender byte (one frame carries every seat), so the check moves from `decodeFrame` to the host: a record of a number not bound to the frame's peer, or a removal of a number bound to another peer, must drop the whole frame. A removal of a free number (a seat that just left, still in its peer's REPEAT diffs) is ignored and not relayed (S2). Pinned in Task 5 (`a frame may carry every seat of its peer; any number not bound to it drops the frame`, `a removal of a number no longer bound … is ignored`).
+- **A second seat online (B1).** A number online never comes from the controllers alone: the host's roster (and, on a guest, the host's replicated one) holds numbers this page's controllers do not, so the offline path would throw `players: player <n> is already in the roster` mid-step. `route()` takes every online `lh.seat`, in both join modes. Pinned in Task 4 (`mp: inputs per seat …`, a manual carts guest, green from Task 5 on) and Task 6.
+- **`net.welcome` renumbering onto a number another of this page's seats still holds** (a guest's seats took 1 and 2 offline, the host says seat 0 is 2). `controllers.renumber` would throw `player 2 is taken` mid-step. The holder must move aside and every seat end on the host's number, with `player.renumbered` reporting the original numbers; a seat that joined after the hello and is not in the welcome is asked for at once (S1). Pinned in Task 6 (`a guest that joins with two seats is renumbered without a clash`, `a seat that joins between the hello and the welcome …`).
+- **A reload.** Handshake gives the reloaded page a new transport id and the old one may still be bound. Within `rejoinSeconds` the same key and seat must get the same number and record, and the new page's lower clock must not be rejected by a stale relay clock or store entry. On a takeover the old object's removals must reach the other guests before the new records (S3: `bind` keeps them, `relay` holds the number's records until they are out). Pinned in Task 8 (`back within rejoinSeconds with its key and a lower clock…`, `a reload the server has not dropped yet…`, both with `wall0: 0`).
+- **A manual join's frames (B3).** With `join: 'manual'` the host sends no `lh.player` / `lh.game` groups, so a game's own registry decodes every frame. Pinned in Task 7 (`a manual join replicates no lh.player or lh.game …`).
 - **Bad seat data throwing mid-step.** `lh.seat` and `net.seat` must be refused at issue or at the port (schemas), never inside a step. Pinned in Task 2 (`lh.seat data is checked at issue, never mid-step`) and Task 3 (the `net.seat` schema).
-- **The key leaking.** It must reach only the host: never a replicated field, the roster or another guest. Pinned in Task 8 (`a key never leaves the host`) and Task 3 (`lh.player` fields).
+- **The key leaking.** It must reach only the host: never a replicated field, the roster or another guest. Pinned in Task 8 (`a key never leaves the host`) and Task 3 (`lh.player` fields). Making it must not throw off a secure context (S4: `crypto.randomUUID` is missing on an http LAN page). Pinned in Task 4.
+- **Cross-plan (N8, for plan 2's reviewer).** `net.refused` and an online seat leave remove a guest's controller in the sim: plan 2's view seats must cope with a controller vanishing.
 
 ---
 
@@ -39,13 +42,13 @@
 |---|---|
 | `src/core/players.js` | **new.** `createRoster`, `zeroOf`, `stateKinds`, `PLAYER_BASE`, `PLAYER_RESERVED`, kind names and codes, the `SEATS` symbol. |
 | `src/core/controllers.js` | `seat(op, seat, n)` takes an explicit number; `copy()` drops a pawn that became remote. |
-| `src/core/engine.js` | `defineGame({ player, gameState })` and the `lh.seat` schema; `engine.players`, `engine.gameState`, `engine[SEATS]`; `lh.seat` with an online route; `netConfig`: built-in kinds, join options, join schemas and wire tags, `net.schema`. |
+| `src/core/engine.js` | `defineGame({ player, gameState })` and the `lh.seat` schema, field names checked against `PLAYER_RESERVED` and the net part's `RESERVED` (N7); `engine.players`, `engine.gameState`, `engine[SEATS]`; `lh.seat` with an online route; `netConfig`: built-in kinds (engine join only, B3), join options, join schemas and wire tags, `net.schema`. |
 | `src/sim/replica.js` | `decodeFrame` no longer ties owner ids to the sender; the store's keyframe sweep follows each object's last writer. |
-| `src/sim/net/install.js` | `bindings`, `locals`, `player(peer, seat, n)`, per-record frame check, relay by owner number, engine join, roster replication, away / inactive / rejoin / expiry. |
-| `src/net/key.js` | **new.** `peerKey({ storage, uuid })`, `keyWords(uuid)`. |
+| `src/sim/net/install.js` | `bindings`, `locals`, `player(peer, seat, n)`, per-record frame check (free-number removals ignored, S2), relay by owner number (held while a number's removals are pending, S3), online `lh.seat` route in both join modes (B1), engine join, roster replication (engine join only, B3), away / inactive / rejoin / expiry. |
+| `src/net/key.js` | **new.** `peerKey({ storage, uuid })`, `keyWords(uuid)`, `uuid4(crypto)` (S4). |
 | `src/net/port.js` | `key` option, sent in `net.open`. |
 | `src/index.net.js` | export `peerKey`, `keyWords`. |
-| `testing/mp.js` | per-seat inputs, `w.seat`, `w.rejoin`, per-peer keys, `diverged` over `net.locals`. |
+| `testing/mp.js` | per-seat inputs, `w.seat`, `w.rejoin(peer, { wall0 })`, per-peer keys, `diverged` over `net.locals`. |
 | `test/players.test.mjs` | **new.** Roster unit tests. |
 | `test/players-engine.test.mjs` | **new.** Offline roster, game state, `lh.seat` checks, `defineGame` checks. |
 | `test/net-config.test.mjs` | **new.** Join options, built-in kinds, schemas, wire tags, schema hash. |
@@ -55,8 +58,8 @@
 | `test/net-state.test.mjs` | **new.** Roster and game state replication. |
 | `test/net-rejoin.test.mjs` | **new.** Away, inactive, rejoin, expiry, takeover. |
 | `test/net/fixtures/seats.js` | **new.** A bodiless engine-join room. |
-| `test/net/fixtures/carts.js`, `farmlet.js` | `join: 'manual'`; carts' `CART.max` 4. |
-| `test/replica.test.mjs`, `test/mp-net.test.mjs`, `test/net-owner.test.mjs`, `test/net-host.test.mjs` | One assertion each (Task 5). |
+| `test/net/fixtures/carts.js`, `farmlet.js` | `join: 'manual'` (Task 3, B3); carts' `CART.max` 4 (Task 5). |
+| `test/replica.test.mjs`, `test/mp-net.test.mjs`, `test/net-owner.test.mjs`, `test/net-host.test.mjs`, `test/net-tractor.test.mjs` | One assertion each (Task 5; `net-tractor` is B2). |
 | `docs/spec.md` | Mark [N-18]–[N-25], [T-22] built; record the rulings (Task 8). |
 
 ---
@@ -264,17 +267,17 @@ git commit -m "feat(players): roster, player and game state records (N-21, N-22)
 ### Task 2: Player and game state in the engine, offline
 
 **Files:**
-- Modify: `src/core/engine.js` (`defineGame` ~line 22; `createEngine` after `const events = …` ~line 94; the engine object ~line 357; the `lh.seat` builtin ~line 462)
+- Modify: `src/core/engine.js` (`defineGame` line 22; `createEngine` after `const events = …` line 94; the engine object line 367; the `lh.seat` builtin line 462; the `install.js` import line 15)
 - Modify: `src/core/controllers.js` (`seat`, `copy`)
 - Test: `test/players-engine.test.mjs`
 
 **Interfaces:**
 - Consumes: Task 1; plan 1's `controllers.seat`, `controllers.of`, `engine.controllerOf`.
 - Produces:
-  - `defineGame({ player: { [field]: F.* }, gameState: { [field]: F.* } })`; the frozen game has `player` and `gameState` (default `{}`).
+  - `defineGame({ player: { [field]: F.* }, gameState: { [field]: F.* } })`; the frozen game has `player` and `gameState` (default `{}`). A field named for an engine player field (`PLAYER_RESERVED`) or an entity part (the net part's `RESERVED`: `id`, `tags`, `model`, `colliders`, `xf`, `sockets`, `net`, `netId`, `netFix`) is refused here, not later at `installNet` (N7).
   - `game.schemas['lh.seat'] = { op: F.oneOf(['join', 'leave']), seat: F.uint(1, 15) }` (checked at issue, N-3); a game may not declare `commands['lh.seat']`.
   - `engine.players` (the live roster list; player 1, seat 0, local, from the start, without an event), `engine.gameState` (the live object).
-  - `engine[SEATS] = { controllers, roster, route: null, changed: null }`: `route(op, seat)` returning true means the net part took the command; `changed()` runs after an offline seat change.
+  - `engine[SEATS] = { controllers, roster, route: null, changed: null }`: `route(op, seat)` returning true means the net part took the command (from Task 5 it takes every online one, in both join modes, so the offline path below runs solo only: B1); `changed()` runs after an offline seat change.
   - `controllers.seat(op, seat, n)`: `n` is the number for a join (default: lowest free); a taken or bad `n` throws `lh.seat: player <n> is taken` / `lh.seat: player number must be an integer in 1..255 (got <n>)`.
   - `controllers.copy()` drops a pawn that another peer now simulates, reason `'remote'`.
 
@@ -328,6 +331,8 @@ test('defineGame checks player and gameState fields (N-22)', () => {
   const g = o => () => defineGame({ id: 'x', start: 's', scenes: { s: {} }, ...o });
   assert.throws(g({ player: { away: F.bool() } }), /defineGame: player\.away is an engine field/);
   assert.throws(g({ player: { number: F.uint(1) } }), /defineGame: player\.number is an engine field/);
+  assert.throws(g({ player: { net: F.uint(1) } }), /defineGame: player\.net is an entity part's name; rename it/, 'N7: not later at installNet');
+  assert.throws(g({ gameState: { tags: F.bool() } }), /defineGame: gameState\.tags is an entity part's name; rename it/);
   assert.throws(g({ player: { pose: F.body() } }), /defineGame: player\.pose: F\.body\(\) and 'input' belong to pawns/);
   assert.throws(g({ gameState: { input: F.bool() } }), /defineGame: gameState\.input: F\.body\(\) and 'input' belong to pawns/);
   assert.throws(g({ player: { n: 3 } }), /defineGame: player\.n is not an F field/);
@@ -386,7 +391,7 @@ In `src/core/controllers.js`:
 
 In `src/core/engine.js`:
 
-1. Imports: `import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS } from './players.js';` and `import { F } from '../defs/fields.js';`.
+1. Imports: `import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS } from './players.js';` and `import { F } from '../defs/fields.js';`; line 15 becomes `import { installNet, RESERVED as NET_RESERVED } from '../sim/net/install.js';` (engine.js has its own `RESERVED`, the [I-7] keys).
 2. In `defineGame`, after the `for (const [k, c] of Object.entries(spec.commands ?? {}))` loop:
 
 ```js
@@ -399,6 +404,7 @@ In `src/core/engine.js`:
   for (const [what, f] of [['player', player], ['gameState', gameState]]) {
     try { checkFields(f, what); } catch (err) { fail(err.message); }
     for (const k in f) if (f[k].body === true || k === 'input') fail(`${what}.${k}: F.body() and 'input' belong to pawns, not ${what}`);
+    for (const k in f) if (NET_RESERVED.includes(k)) fail(`${what}.${k} is an entity part's name; rename it`); // N7: lh.player / lh.game would fail at installNet
   }
   for (const k of PLAYER_RESERVED) if (Object.hasOwn(player, k)) fail(`player.${k} is an engine field`);
   try { F.obj({ ...PLAYER_BASE, ...player }); } catch (err) { fail(`player: ${err.message}`); }
@@ -433,8 +439,8 @@ and add `player, gameState` to the frozen object: `return Object.freeze({ ...spe
 6. Replace the `lh.seat` builtin line with:
 
 ```js
-  engine.builtin('lh.seat', (e, d) => { // [C-5]: checked by its schema at issue; online the net part asks the host ([N-19])
-    if (seats.route?.(d.op, d.seat)) return;
+  engine.builtin('lh.seat', (e, d) => { // [C-5]: checked by its schema at issue; online the net part numbers it ([N-19], B1)
+    if (seats.route?.(d.op, d.seat)) return; // the offline path below numbers from the controllers alone: solo only
     const had = controllers.of(d.seat), c = controllers.seat(d.op, d.seat);
     if (d.op === 'join' && !had) roster.add(c.player, { seat: d.seat, local: true });
     if (d.op === 'leave' && had && d.seat !== 0) roster.remove(had.player);
@@ -459,14 +465,15 @@ git commit -m "feat(engine): engine.players and engine.gameState offline, lh.sea
 ### Task 3: Net config: built-in kinds, join options, join messages, schema hash
 
 **Files:**
-- Modify: `src/core/engine.js` (`netConfig` ~line 50 and its call ~line 46)
+- Modify: `src/core/engine.js` (`netConfig` line 50 and its call line 46)
+- Modify: `test/net/fixtures/carts.js`, `test/net/fixtures/farmlet.js` (`join: 'manual'`, B3)
 - Test: `test/net-config.test.mjs`
 
 **Interfaces:**
 - Consumes: Task 1 `stateKinds`, `PLAYER_CODE`, `GAME_CODE`; `fnv` from `src/core/rng.js`; `ENGINE_VERSION` from `src/version.js`.
 - Produces on `game.net`:
   - `join: 'engine' | 'manual'` (default `'engine'`), `admit` (function or undefined), `maxPlayers` (default `maxSender`, 1..`maxSender`), `maxSeats` (default 4, 1..16), `rejoinSeconds` (default 60, finite ≥ 0), `reasons` (`['full', 'seats', 'schema', ...game's]`).
-  - `kinds`: the game's kinds, then `lh.player` (255) and `lh.game` (254). Codes 254/255 and names starting `lh.` are refused for game kinds.
+  - `kinds`: the game's kinds, then, with `join: 'engine'` only, `lh.player` (255) and `lh.game` (254) (B3: a manual join's kinds, registry, frames and schema hash are the game's alone). Codes 254/255 and names starting `lh.` are refused for game kinds in both modes.
   - `schemas` gains `net.hello { key: F.list(F.uint(4), 4, 4), seats: F.list(F.uint(1, 15), 16, 1), schema: F.uint(4) }`, `net.seat { op, seat }`, `net.welcome { players: F.list(F.obj({ seat, number: F.uint(1, maxSender, 1) }), 16, 1) }`, `net.refused { reason: F.oneOf(reasons), seat }`. A game may not declare them with a schema.
   - `wire.toHost` gains tags `net.hello`, `net.seat`; `wire.toGuest` gains `net.welcome`, `net.refused`, after the game's tags (binary tag indices unchanged). A game wire tag with those names is refused.
   - `schema`: `fnv(ENGINE_VERSION + JSON of every kind's name, code, authority, remote, max, idMin, idMax, fields)` ([N-6]).
@@ -497,6 +504,7 @@ test('defaults, and the built-in kinds after the game\'s (N-19, N-22)', () => {
   assert.deepEqual(Object.keys(n.kinds[1].fields), ['seat', 'away', 'active', 'join', 'score'], 'no key field: it never leaves the host (N-18)');
   assert.equal(n.kinds[1].idMax, 8); assert.deepEqual(Object.keys(n.kinds[2].fields), ['round']);
   assert.deepEqual(base({ reasons: ['locked'] }).net.reasons, ['full', 'seats', 'schema', 'locked']);
+  assert.deepEqual(base({ join: 'manual' }).net.kinds.map(k => k.name), ['box'], 'a manual join adds no engine kinds: a game registry reads its frames (B3)');
 });
 
 test('the join messages are schema\'d commands with wire tags after the game\'s (N-19, N-3)', () => {
@@ -561,7 +569,9 @@ function netConfig(n, schemas, fail, state) {
   if (!Array.isArray(c.kinds)) fail('net.kinds must be an array of kinds');
   if (!Number.isInteger(c.maxSender) || c.maxSender < 1 || c.maxSender > 255) fail('net.maxSender must be an integer in 1..255');
   for (const k of c.kinds) if (k?.code === PLAYER_CODE || k?.code === GAME_CODE || String(k?.name).startsWith('lh.')) fail(`net.kinds: '${k.name}' (code ${k.code}): codes ${GAME_CODE} and ${PLAYER_CODE} and names starting 'lh.' are the engine's (N-22)`);
-  c.kinds = Object.freeze([...c.kinds, ...stateKinds(state, c.maxSender)]);
+  if (c.join !== 'engine' && c.join !== 'manual') fail("net.join must be 'engine' or 'manual'");
+  // B3: the engine's kinds only with the engine join; a manual join's frames stay the game's (Tractor reads them with its own registry)
+  c.kinds = Object.freeze(c.join === 'engine' ? [...c.kinds, ...stateKinds(state, c.maxSender)] : [...c.kinds]);
   try { createRegistry(c.kinds, { maxSender: c.maxSender }); } catch (err) { fail(`net.kinds: ${err.message}`); }
   pos(c.maxJson, 'net.maxJson', true); pos(c.maxFrame, 'net.maxFrame', true);
   if (c.codec !== 'json' && c.codec !== 'binary') fail("net.codec must be 'json' or 'binary'");
@@ -569,7 +579,6 @@ function netConfig(n, schemas, fail, state) {
   if (!Number.isInteger(c.maxPlayers) || c.maxPlayers < 1 || c.maxPlayers > c.maxSender) fail(`net.maxPlayers must be an integer in 1..${c.maxSender}`);
   if (!Number.isInteger(c.maxSeats) || c.maxSeats < 1 || c.maxSeats > 16) fail('net.maxSeats must be an integer in 1..16');
   if (typeof c.rejoinSeconds !== 'number' || !(c.rejoinSeconds >= 0) || !Number.isFinite(c.rejoinSeconds)) fail('net.rejoinSeconds must be a finite number >= 0');
-  if (c.join !== 'engine' && c.join !== 'manual') fail("net.join must be 'engine' or 'manual'");
   if (c.admit !== undefined && typeof c.admit !== 'function') fail('net.admit must be a function');
   if (n.reasons !== undefined && (!Array.isArray(n.reasons) || n.reasons.some(r => typeof r !== 'string' || !r))) fail('net.reasons must be an array of non-empty strings');
   c.reasons = Object.freeze([...new Set([...REASONS, ...(n.reasons ?? [])])]);
@@ -600,15 +609,17 @@ function netConfig(n, schemas, fail, state) {
 }
 ```
 
+5. Fixtures (B3): add `join: 'manual',` to the `net` objects of `test/net/fixtures/carts.js` (`cartsGame`) and `test/net/fixtures/farmlet.js`, with the comment "the game binds numbers itself (#77): the 3i suites keep their hand-made join, and their frames carry no engine kinds (B3)".
+
 - [ ] **Step 4: Run the new tests and every suite that defines a net game**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-config.test.mjs test/schema.test.mjs test/port.test.mjs test/replica.test.mjs test/net-*.test.mjs test/mp*.test.mjs`
-Expected: PASS. The 3i suites still pass: until Task 6 nothing reads `join`, and the built-in kinds have no records yet (their empty groups ride the host's keyframes only).
+Expected: PASS. The 3i suites still pass with byte-identical frames: carts and farmlet are `join: 'manual'`, so their kinds, registry and frames gain nothing (B3); until Task 6 nothing else reads `join`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/engine.js test/net-config.test.mjs
+git add src/core/engine.js test/net-config.test.mjs test/net/fixtures/carts.js test/net/fixtures/farmlet.js
 git commit -m "feat(net): join options, lh.player and lh.game kinds, join messages and the schema hash (N-6, N-19, N-22)"
 ```
 
@@ -625,9 +636,10 @@ git commit -m "feat(net): join options, lh.player and lh.game kinds, join messag
 **Interfaces:**
 - Produces:
   - `keyWords(uuid)` → `[u32, u32, u32, u32]`; a non-UUID throws `net: peer key must be a UUID (got <x>)`.
-  - `peerKey({ storage = globalThis.sessionStorage, uuid = () => globalThis.crypto.randomUUID() } = {})` → words; the UUID is kept under `lh.peerKey`; reads and writes are in try/catch.
+  - `uuid4(crypto = globalThis.crypto)` → `crypto.randomUUID()` when it exists, else a v4 UUID from `crypto.getRandomValues` (S4: `randomUUID` is missing off secure contexts, an http LAN page).
+  - `peerKey({ storage = globalThis.sessionStorage, uuid = () => uuid4() } = {})` → words; the UUID is kept under `lh.peerKey`; reads and writes are in try/catch.
   - `createPort(engine, { …, key = peerKey() })`: `key` is a UUID or four words; `net.open` data gains `key: [4 words]`. A bad key throws `port: key must be a UUID or four uint32 words (N-18)`.
-  - `mp()`: each peer has `p.key` (default `[index + 1, 0, 0, 0]`); `w.addPeer({ wall0, key })`; inputs per peer may be `{ [seat]: snapshot }` (every key a seat number; a bare snapshot is seat 0; an unknown seat throws `mp: <name> has no seat <s>`); `w.seat(peer, op, seat)` issues `lh.seat`; `w.rejoin(peer)` reconnects a dropped guest as a fresh engine on a new transport with the same key (`mp: the host cannot rejoin (its room closed)`, `mp: <name> is not dropped (drop it first)`).
+  - `mp()`: each peer has `p.key` (default `[index + 1, 0, 0, 0]`); `w.addPeer({ wall0, key })`; inputs per peer may be `{ [seat]: snapshot }` (every key a seat number; a bare snapshot is seat 0; an unknown seat throws `mp: <name> has no seat <s>`); `w.seat(peer, op, seat)` issues `lh.seat`; `w.rejoin(peer, { wall0 = hub.now } = {})` reconnects a dropped guest as a fresh engine on a new transport with the same key, its clock starting at `wall0` (a real reload's is lower: S3) (`mp: the host cannot rejoin (its room closed)`, `mp: <name> is not dropped (drop it first)`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -638,6 +650,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { createMemoryHub, createPort, peerKey, keyWords } from '../src/index.net.js';
+import { uuid4 } from '../src/net/key.js';
 import { createEngine } from '../src/index.sim.js';
 import { mp } from '../testing/index.js';
 import relay from './fixtures/relay.js';
@@ -664,6 +677,15 @@ test('peerKey keeps one key per tab in sessionStorage; junk is replaced; a stora
   assert.deepEqual(peerKey({ storage: broken, uuid: () => U }), keyWords(U));
 });
 
+test('with no crypto.randomUUID (an http page off a secure context) the key is a v4 UUID from getRandomValues (N-18, S4)', () => {
+  const plain = { getRandomValues: a => a.fill(0xab) }; // no randomUUID
+  assert.equal(uuid4(plain), 'abababab-abab-4bab-abab-abababababab', 'version nibble 4, variant bits 10');
+  assert.equal(uuid4({ randomUUID: () => U, getRandomValues() { throw new Error('unused'); } }), U, 'randomUUID first when it exists');
+  const store = new Map(), storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  assert.deepEqual(peerKey({ storage, uuid: () => uuid4(plain) }), keyWords('abababab-abab-4bab-abab-abababababab'));
+  assert.equal(uuid4().length, 36, 'Node: the default crypto works');
+});
+
 test('the port puts the key in net.open: the sim gets it as a recorded command (N-18)', () => {
   const hub = createMemoryHub(), H = createEngine(relay, { record: true });
   createPort(H, { transport: hub.host(), role: 'host', clock: () => 0, key: U }); H.stepN(1);
@@ -676,7 +698,7 @@ test('the port puts the key in net.open: the sim gets it as a recorded command (
 
 test('mp: inputs per seat; a bare snapshot is seat 0; w.seat joins a seat by command (T-22)', () => {
   const w = mp(carts, { peers: 2, argsOf }); w.step(2);
-  w.seat(1, 'join', 1); w.step(1);
+  w.seat(1, 'join', 1); w.step(1); // a manual guest's second seat: from Task 5 numbered by route(), never colliding with the roster (B1)
   const g = w.guests[0].engine;
   w.step(1, [{ thr: 1 }, { 0: { thr: 0.5 }, 1: { thr: -1 } }]);
   assert.equal(w.host.engine.input.snapshot.thr, 1);
@@ -689,8 +711,9 @@ test('mp: w.rejoin brings a dropped guest back as a fresh page with its key, on 
   const g = w.guests[0], id0 = g.net.id, e0 = g.engine;
   assert.throws(() => w.rejoin(g), /mp: guest1 is not dropped \(drop it first\)/);
   assert.throws(() => w.rejoin(w.host), /mp: the host cannot rejoin \(its room closed\)/);
-  w.drop(g); w.seconds(0.5); w.rejoin(g); w.step(1);
+  w.drop(g); w.seconds(0.5); w.rejoin(g, { wall0: 0 }); w.step(1);
   assert.equal(g.dropped, false); assert.notEqual(g.engine, e0, 'a reload is a new engine'); assert.notEqual(g.net.id, id0);
+  assert.ok(g.engine.time.wall < w.host.engine.time.wall, 'wall0: the reload\'s clock starts lower (S3)');
   assert.deepEqual(g.key, [2, 0, 0, 0]); assert.deepEqual(openOf(g.h)[2].key, g.key);
   assert.deepEqual(w.addPeer({ key: [9, 9, 9, 9] }).key, [9, 9, 9, 9]);
 });
@@ -716,7 +739,15 @@ export function keyWords(uuid) {
   const h = uuid.replace(/-/g, '');
   return [0, 8, 16, 24].map(i => parseInt(h.slice(i, i + 8), 16) >>> 0);
 }
-export function peerKey({ storage = globalThis.sessionStorage, uuid = () => globalThis.crypto.randomUUID() } = {}) {
+// S4: crypto.randomUUID exists only in secure contexts (https, localhost); an http LAN page (the iPad in dev) has getRandomValues only
+export function uuid4(crypto = globalThis.crypto) {
+  if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; // RFC 9562: version 4, variant 10
+  let h = ''; for (let i = 0; i < 16; i++) h += b[i].toString(16).padStart(2, '0');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+export function peerKey({ storage = globalThis.sessionStorage, uuid = () => uuid4() } = {}) {
   let k = null;
   try { k = storage?.getItem(NAME) ?? null; } catch { k = null; } // private mode, blocked storage
   if (typeof k !== 'string' || !UUID.test(k)) { k = uuid(); try { storage?.setItem(NAME, k); } catch { /* a key for this page load only */ } }
@@ -776,20 +807,20 @@ export function peerKey({ storage = globalThis.sessionStorage, uuid = () => glob
 ```js
     seat(peer, op, seat) { peerOf(peer).engine.command('lh.seat', { op, seat }); return w; }, // [T-22]: recorded like any command
     // [T-22] a dropped guest comes back as a reload does: a fresh engine on a new transport id, with the same key (N-18, N-23)
-    rejoin(peer) {
+    rejoin(peer, { wall0 = hub.now } = {}) { // wall0: a real reload's clock starts lower than the room's (S3)
       const p = peerOf(peer);
       if (p.index === 0) throw new Error('mp: the host cannot rejoin (its room closed)');
       if (!p.dropped) throw new Error(`mp: ${p.name} is not dropped (drop it first)`);
-      connect(p, hub.now); return w;
+      connect(p, wall0); return w;
     },
 ```
 
-Update the header comment's 3i line to add: "plan 3: per-seat inputs, seat(peer, op, seat), rejoin(peer) and per-peer keys (T-22)".
+Update the header comment's 3i line to add: "plan 3: per-seat inputs, seat(peer, op, seat), rejoin(peer, { wall0 }) and per-peer keys (T-22)".
 
 - [ ] **Step 4: Run the tests**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-key.test.mjs test/port.test.mjs test/mp.test.mjs test/mp-net.test.mjs test/net-replay.test.mjs`
-Expected: PASS (5 new tests; the rest unchanged).
+Expected: PASS (6 new tests; the rest unchanged).
 
 - [ ] **Step 5: Commit**
 
@@ -803,21 +834,24 @@ git commit -m "feat(net): peer key in net.open; mp() per-seat inputs, seat and r
 ### Task 5: Several numbers per peer (bindings, locals, per-record frame checks)
 
 **Files:**
-- Modify: `src/sim/replica.js` (`decodeFrame` ~line 101, `createStore` ~line 158)
-- Modify: `src/sim/net/install.js` (state ~line 43, `keepForRelay`, `unbind`, `sendFrame`, `goSolo`, `ctl`, the built-ins, the send loop)
+- Modify: `src/sim/replica.js` (`decodeFrame` line 101, `createStore` line 158)
+- Modify: `src/sim/net/install.js` (state lines 43–44, `keepForRelay` 149, `relay` 158, `unbind` 176, `sendFrame` 183, `goSolo` 188, `ctl` 193, the built-ins 243–261, the send loop 302–316)
 - Modify: `testing/mp.js` (`diverged`)
-- Modify: `test/net/fixtures/carts.js` (`CART` `max: 4`), `test/replica.test.mjs`, `test/mp-net.test.mjs`, `test/net-owner.test.mjs`, `test/net-host.test.mjs` (one assertion each)
+- Modify: `test/net/fixtures/carts.js` (`CART` `max: 4`), `test/replica.test.mjs`, `test/mp-net.test.mjs`, `test/net-owner.test.mjs`, `test/net-host.test.mjs`, `test/net-tractor.test.mjs` (one assertion each)
 - Test: `test/net-locals.test.mjs`
 
 **Interfaces:**
-- Consumes: `engine[SEATS]` (Task 2), `controllers.renumber`, `engine.controllerOf`.
+- Consumes: `engine[SEATS]` (Task 2), `controllers.seat(op, seat, n)`, `controllers.renumber`, `engine.controllerOf`.
 - Produces on `world.net`:
   - `bindings`: host only, `Map<number, { peer, key, seat }>` (replaces `players`). `player(peer, seat, n)` / `player(peer, n)` (seat 0) binds by hand; `n = 0` unbinds that seat, `player(peer, 0)` every seat of the peer. Binding adds a roster entry (`local: false`, `join` counted); unbinding removes it.
-  - `locals`: `Set` of this page's numbers whose seat is the room's (every seat solo or host; a guest's once given its number). `self`: seat 0's number in `locals`, or 0 (the host is 1).
-  - The manual `self = n` setter on a guest renumbers seat 0 to `n` through `controllers.renumber`.
-  - Host frame rule: drop unless `f.sender` and every owner-kind record id and removal in the frame are numbers bound to `d.from`. Relay is per owner number. A guest ignores a frame whose sender is one of its `locals`.
+  - `locals`: `Set` of this page's numbers whose seat is the room's (every seat solo or host; a guest's once given its number). `self`: seat 0's number in `locals`, or 0 (the host is 1; solo it is seat 0's, 1 from the start: N5).
+  - The manual `self = n` setter on a guest renumbers seat 0 to `n` through `controllers.renumber`; solo it is ignored (N5).
+  - Host frame rule: drop unless `f.sender` and every owner-kind record id are numbers bound to `d.from`, and no removal names a number bound to another peer. A removal of a free number (a seat that just left, still in its peer's REPEAT diffs) is ignored: not a drop, not relayed (S2). Relay is per owner number, and a number's records wait while removals of its old object are pending (S3). A guest ignores a frame whose sender is one of its `locals`.
   - `decodeFrame`: owner-kind ids need only be in the kind's range. `createStore`: entries carry `s` (the sender that last wrote them); a keyframe from sender `s` ends the owner objects `s` last wrote.
-  - `engine[SEATS].changed` is set: after an offline seat change, `locals` follows.
+  - `engine[SEATS].changed` is set: after an offline (solo) seat change, `locals` follows.
+  - `engine[SEATS].route` is set (B1): every online `lh.seat` is the net part's, so no number online comes from the controllers alone. A join takes `freeLocal()`, the lowest number free in the controllers and the roster: on the host the seat is the room's at once (a roster entry, `local: true`); on a guest it is not the room's (no roster entry, not in `locals`) until the game names it (manual) or the host does (Task 6). A leave removes the controller (and, on the host, the roster entry). Seat 0 never leaves.
+  - A guest's roster is cleared (silently) on its `net.open` (B1: it restarts from the host's records, Task 7). Going solo keeps this page's entries, drops the others and adds a quiet entry for any seat the room never numbered.
+  - Four 3i assertions change: they read `bindings` instead of the removed `players` map (B2).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -862,6 +896,20 @@ test('a frame may carry every seat of its peer; any number not bound to it drops
   assert.ok(Math.abs(H.find('cart', 3).xf.p.z - 4) < 1, 'guest2\'s cart is untouched');
 });
 
+test('a removal of a number no longer bound (a seat that left, still in its REPEAT diffs) is ignored, not hostile (N-24, S2)', () => {
+  const w = mp(carts, { peers: 3, argsOf }); w.seconds(1);
+  const H = w.host.h.world.net, g = w.guests[0], send = f => g.engine.net.send(g.net.hostId, encodeFrame(f), false);
+  H.player(g.net.id, 1, 4); H.player(g.net.id, 1, 0); w.seconds(0.2); // seat 1 had number 4 and left: 4 is free
+  const d0 = H.stats.dropped;
+  send({ key: false, sender: 2, time: 1e6, groups: [{ kind: CART, records: [[2, rec(5)]], removed: [4] }] });
+  w.seconds(0.2);
+  assert.equal(H.stats.dropped, d0, 'the frame is kept: seat 0\'s record is not lost with it');
+  assert.equal(H.find('cart', 4), undefined);
+  send({ key: false, sender: 2, time: 2e6, groups: [{ kind: CART, records: [[2, rec(5)]], removed: [3] }] });
+  w.seconds(0.2);
+  assert.equal(H.stats.dropped, d0 + 1, 'a removal of a number bound to another peer still drops the frame');
+});
+
 test('net.locals is this page\'s numbers: every seat solo, seat 0 first as net.self (N-24)', () => {
   const h = headless(carts); h.step(1);
   assert.deepEqual([...h.world.net.locals], [1]); assert.equal(h.world.net.self, 1);
@@ -871,6 +919,7 @@ test('net.locals is this page\'s numbers: every seat solo, seat 0 first as net.s
   const G = w.guests[0];
   assert.deepEqual([...G.h.world.net.locals], [2], 'a guest: the number its game set (manual join)');
   assert.equal(G.engine.controllerOf(0).player, 2, 'seat 0 took it');
+  assert.deepEqual(G.engine.players, [], 'a manual guest\'s roster restarted empty at net.open (B1)');
 });
 ```
 
@@ -889,7 +938,7 @@ test('a keyframe ends the owner objects its sender last wrote, whatever their id
 - [ ] **Step 2: Run to verify failure**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-locals.test.mjs test/replica.test.mjs`
-Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (got 1)`; the replica test gets `null` from `decodeFrame`.
+Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (got 1)`; the S2 test's first frame is dropped (`removed: [4]` is not the sender); the replica test gets `null` from `decodeFrame`.
 
 - [ ] **Step 3: Implement**
 
@@ -910,7 +959,7 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
 `src/sim/net/install.js`:
 
 1. Import `import { SEATS } from '../../core/players.js';`.
-2. Replace the `players` / `self` state (line 43–44) with:
+2. Replace the `players` / `self` state (lines 43–44) with:
 
 ```js
   const seats = engine[SEATS]; // { controllers, roster, route, changed } (engine.js): this page's seats and the roster
@@ -927,7 +976,7 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
     seats.roster.relocal(n => locals.has(n));
   }
   const confirmAll = () => { confirmed.clear(); for (const c of seats.controllers.list) if (c.seat !== null) confirmed.add(c.seat); };
-  seats.changed = () => { if (role !== 'guest') confirmAll(); refreshLocals(); }; // an offline lh.seat (engine.js)
+  seats.changed = () => { confirmAll(); refreshLocals(); }; // an offline lh.seat (engine.js): solo only, since route() takes every online one (B1)
 ```
 
    and after `const ctl = { … };` and before the built-ins: `confirmAll(); refreshLocals();`.
@@ -935,21 +984,29 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
 
 ```js
   // ---- the host's relay (N-10, C-3, N-24): each guest's newest owner records, by owner number, passed on with that guest's clock ----
-  let rk = null, rt = 0; // keepOne's kind and time (one callback, made once: R-8)
+  let rk = null, rt = 0, rn = null; // keepOne's kind, time and the sending peer's numbers (one callback, made once: R-8)
   const keepOne = (n, rec) => {
+    if (!rn.has(n)) return; // S2: a removal of a number this peer no longer holds is not passed on (fromPeer let it through)
     let m = W.fwd.get(n); if (!m) W.fwd.set(n, m = new Map());
     const old = m.get(rk.name); if (old && rt <= old.time) return;
     if (old) { old.time = rt; old.rec = rec; old.fresh = true; } else m.set(rk.name, { time: rt, rec, fresh: true });
   };
   const keepRec = (rec, n) => keepOne(n, rec);
-  function keepForRelay(f) { // a peer with several seats sends them in one frame: each record is kept under its own number
-    rt = f.time;
+  function keepForRelay(f, nums) { // a peer with several seats sends them in one frame: each record is kept under its own number
+    rt = f.time; rn = nums;
     for (const k of ownerKinds) { const g = f.groups.get(k.name); if (!g) continue; rk = k; g.records.forEach(keepRec); for (let j = 0; j < g.removed.length; j++) keepOne(g.removed[j], null); }
-    rk = null;
+    rk = null; rn = null;
   }
 ```
 
-4. Replace `unbind(peer)` with:
+4. In `relay(step)`, the first line of the `for (const [n, m] of W.fwd)` loop becomes `if (leaving(n)) continue; // S3: a number given again waits until its old object's removals are out`, with, above `relay`:
+
+```js
+  const leaving = n => { for (let j = 0; j < W.gone.length; j++) if (W.gone[j].n === n) return true; return false; };
+```
+
+   (The `W.gone` loop at the end of `relay` is unchanged: it sends each pending removal REPEAT times, one per call, and `relay` runs every step while `W.gone` is not empty, so a held number waits REPEAT steps.)
+5. Replace `unbind(peer)` with:
 
 ```js
   const numberAt = (peer, seat) => { for (const [n, b] of bindings) if (b.peer === peer && b.seat === seat) return n; return undefined; };
@@ -961,10 +1018,11 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
     bindings.set(n, { peer, key, seat }); let s = peerNums.get(peer); if (!s) peerNums.set(peer, s = new Set()); s.add(n);
     if (!seats.roster.get(n)) seats.roster.add(n, { seat, local: false, join: joins = (joins + 1) % 256 });
     if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
-    if (W && !again) { // a reused number starts fresh: no old relay clock, no pending removals, no store entry
+    if (W && !again) { // a reused number starts fresh: no old relay clock, no store entry
       W.fwd.delete(n);
-      for (let j = W.gone.length - 1; j >= 0; j--) if (W.gone[j].n === n) W.gone.splice(j, 1);
       for (const k of ownerKinds) W.store.forget(k.name, n);
+      // S3: its pending removals stay. relay() sends them before any new record of n (leaving), so every other guest's store drops
+      // the old object and its clock first, and a reload's lower clock is accepted after them
     }
   }
   function unbindNumber(n, { keep = false } = {}) { // its replicas go; keep: the roster entry stays (inactive, N-23)
@@ -977,7 +1035,8 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
     W.gone.push({ n, time: time + 1, left: REPEAT });
   }
   const unbindPeer = peer => { const s = peerNums.get(peer); if (s) for (const n of [...s]) unbindNumber(n); };
-  // N-24: the frame's sender and every owner record and removal in it are numbers bound to `peer` (M-50: a device speaks for itself)
+  // N-24: the frame's sender and every owner record in it are numbers bound to `peer` (M-50: a device speaks for itself), and no
+  // removal names another peer's number. S2: a removal of a free number (a seat that just left, still in REPEAT diffs) is ignored
   let mine = null, ok = true;
   const speakRec = (rec, id) => { if (!mine.has(id)) ok = false; };
   function fromPeer(peer, f) {
@@ -986,26 +1045,52 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
     for (let i = 0; i < ownerKinds.length && ok; i++) {
       const g = f.groups.get(ownerKinds[i].name); if (!g) continue;
       g.records.forEach(speakRec);
-      for (let j = 0; j < g.removed.length; j++) if (!mine.has(g.removed[j])) ok = false;
+      for (let j = 0; j < g.removed.length; j++) { const n = g.removed[j]; if (!mine.has(n) && bindings.has(n)) ok = false; }
     }
     mine = null; return ok;
   }
 ```
 
-5. In `sendFrame`, the host branch becomes `if (role === 'host') { for (const [peer, nums] of peerNums) if (!nums.has(except)) { engine.net.send(peer, buf, key); stats.sent++; } }` (comment: `except: a number whose own peer is skipped (the relay); 0 sends to every peer`).
-6. `goSolo`: replace `players.clear();` with:
+6. Below `fromPeer`, the online `lh.seat` (B1):
+
+```js
+  // B1: a number this page's seat may take: free in the controllers and the roster (the roster holds the room's numbers: on the host
+  // every guest's, on a guest the host's records from Task 7), so a number online never comes from the controllers alone
+  const freeLocal = () => { let n = 1; while (seats.controllers.list.some(x => x.player === n) || seats.roster.get(n)) n++; return n; };
+  // [C-5] lh.seat online, every role but solo (B1). The host's new seat is the room's at once; a guest's is not until the game (manual
+  // join: the self setter, seat 0 only) or the host (Task 6) names it
+  seats.route = (op, seat) => {
+    if (role === 'solo') return false;
+    const c = engine.controllerOf(seat);
+    if (op === 'join') {
+      if (c) return true;
+      const n = freeLocal(); seats.controllers.seat('join', seat, n);
+      if (role === 'host') { seats.roster.add(n, { seat, local: true, join: joins = (joins + 1) % 256 }); confirmed.add(seat); }
+    } else {
+      if (!c || seat === 0) return true; // seat 0 is the page's first player and never leaves
+      const n = c.player; seats.controllers.seat('leave', seat); confirmed.delete(seat);
+      if (role === 'host') seats.roster.remove(n);
+    }
+    refreshLocals(); return true;
+  };
+```
+
+7. In `sendFrame`, the host branch becomes `if (role === 'host') { for (const [peer, nums] of peerNums) if (!nums.has(except)) { engine.net.send(peer, buf, key); stats.sent++; } }` (comment: `except: a number whose own peer is skipped (the relay); 0 sends to every peer`).
+8. `goSolo`: replace `role = 'solo'; hostId = null; players.clear();` with:
 
 ```js
     role = 'solo'; hostId = null; bindings.clear(); peerNums.clear();
-    for (let i = seats.roster.list.length - 1; i >= 0; i--) { const p = seats.roster.list[i]; if (!p.local) seats.roster.remove(p.number); } // N-25: this page's players stay
+    const R = seats.roster;
+    for (let i = R.list.length - 1; i >= 0; i--) { const p = R.list[i]; if (!p.local) R.remove(p.number); } // N-25: this page's players stay
+    for (const c of seats.controllers.list) if (c.seat !== null && !R.get(c.player)) R.add(c.player, { seat: c.seat, local: true, quiet: true }); // a seat the room never numbered (B1)
     confirmAll(); refreshLocals();
 ```
 
-7. In `ctl`: replace the `self` getter/setter, `players` and `player`:
+9. In `ctl`: replace the `self` getter/setter, `players` and `player`:
 
 ```js
     get self() { return self; }, get locals() { return locals; }, get bindings() { return bindings; },
-    set self(n) { // the manual join (#77): the game names this page's number; a guest's seat 0 takes it
+    set self(n) { // the manual join (#77): the game names this page's number; a guest's seat 0 takes it. Solo: seat 0's number, ignored (N5)
       if (!Number.isInteger(n) || n < 0 || n > cfg.maxSender) throw new Error(`net: self must be a player number 0..${cfg.maxSender} (got ${n})`);
       if (role === 'host' && n !== 1) throw new Error('net: the host is player 1');
       if (role === 'guest') {
@@ -1026,38 +1111,40 @@ Expected: FAIL: `H.player(peer, 1, 4)` throws `net: player number must be 2..4 (
     },
 ```
 
-8. The guard's owner line becomes:
+10. The guard's owner line becomes:
 
 ```js
         if (role !== 'solo' && k.authority === 'owner' && !locals.has(d.netId)) throw new Error(`net: ${locals.size > 1 ? `players ${[...locals].join(', ')}` : `player ${self}`} may not spawn '${k.name}' ${d.netId}: only its owner does (E-7)`);
 ```
 
-9. Built-ins: `net.open` becomes
+11. Built-ins: `net.open` becomes
 
 ```js
   engine.builtin('net.open', (e, d) => {
     if (sync()) { for (let i = W.list.length - 1; i >= 0; i--) despawnRemote(W.list[i].e); W = fresh(); }
     role = d.role; hostId = d.hostId; bindings.clear(); peerNums.clear();
-    if (role === 'host') confirmAll(); else confirmed.clear(); // #77, N-25: a guest's numbers are the host's to give
+    // #77, N-25: a guest's numbers are the host's to give; its roster restarts from the host's records (B1: never a stale offline entry)
+    if (role === 'host') confirmAll(); else { confirmed.clear(); seats.roster.clear(); }
     refreshLocals();
   });
 ```
 
-   `net.peer`: `if (d.event === 'peerLeft' && role === 'host') unbindPeer(d.id);`. `net.frame`: the check becomes `if (role === 'host' ? !fromPeer(d.from, f) : d.from !== hostId) { stats.dropped++; return; } // #77, M-50, N-24` and the next line `if (locals.has(f.sender)) return;`.
-10. Send loop: `const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : !locals.has(e.netId)) continue;` and `if (role === 'host' ? !peerNums.size : hostId === null) return;`. Update the loop comment to "its own owner-kind entities (every seat's) everywhere".
+   `net.peer`: `if (d.event === 'peerLeft' && role === 'host') unbindPeer(d.id);`. `net.frame`: the check becomes `if (role === 'host' ? !fromPeer(d.from, f) : d.from !== hostId) { stats.dropped++; return; } // #77, M-50, N-24, S2`, the next line `if (locals.has(f.sender)) return;`, and the relay line `if (role === 'host') keepForRelay(f, peerNums.get(d.from));`.
+12. Send loop: `const k = kinds[ki]; if (k.authority === 'host' ? role !== 'host' : !locals.has(e.netId)) continue;` and `if (role === 'host' ? !peerNums.size : hostId === null) return;`. Update the loop comment to "its own owner-kind entities (every seat's) everywhere".
 
 `testing/mp.js` `diverged`: `if (kd.authority === 'host' ? net.role !== 'host' : !net.locals?.has(e.netId)) continue;`.
 
 Fixtures and old assertions:
 - `test/net/fixtures/carts.js`: `cartKind`'s `max: 1` → `max: 4` (comment: "a peer's seats share one frame, N-24").
-- `test/replica.test.mjs` line 57: `assert.ok(decodeFrame(encodeFrame({ … records: [[3, …]] … }), REG), 'owner ids are the host net part\'s to check (N-24)');`
+- `test/replica.test.mjs` line 59: `assert.ok(decodeFrame(encodeFrame({ … records: [[3, …]] … }), REG), 'owner ids are the host net part\'s to check (N-24)');`
 - `test/mp-net.test.mjs` line 15 and `test/net-owner.test.mjs` line 24: `assert.deepEqual([...<net>.bindings.keys()], [3]);`
-- `test/net-host.test.mjs` line 17: `assert.deepEqual([...h.bindings.keys()], [2, 3]);`
+- `test/net-host.test.mjs` line 18: `assert.deepEqual([...h.bindings.keys()], [2, 3]);`
+- `test/net-tractor.test.mjs` line 69 (B2): `assert.deepEqual([...H.bindings.keys()].sort(), [2, 3]);`
 
 - [ ] **Step 4: Run the tests**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-locals.test.mjs test/replica.test.mjs test/net-*.test.mjs test/mp*.test.mjs test/port.test.mjs test/sync-netfix.test.mjs test/camera-mount.test.mjs`
-Expected: PASS (3 new tests and 1 new replica test; every 3i test unchanged apart from the three `bindings` lines).
+Expected: PASS (4 new tests and 1 new replica test; every 3i test unchanged apart from the four `bindings` lines and the replica decode line; `test/net-key.test.mjs` 'mp: inputs per seat' stays green through `route`: B1).
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --expose-gc --test test/net-alloc.test.mjs`
 Expected: PASS under 9 KB per engine per step.
@@ -1065,8 +1152,8 @@ Expected: PASS under 9 KB per engine per step.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sim/replica.js src/sim/net/install.js testing/mp.js test/net-locals.test.mjs test/replica.test.mjs test/net/fixtures/carts.js test/mp-net.test.mjs test/net-owner.test.mjs test/net-host.test.mjs
-git commit -m "feat(net): several numbers per peer: bindings, locals, per-record frame checks, relay by owner (N-20, N-24)"
+git add src/sim/replica.js src/sim/net/install.js testing/mp.js test/net-locals.test.mjs test/replica.test.mjs test/net/fixtures/carts.js test/mp-net.test.mjs test/net-owner.test.mjs test/net-host.test.mjs test/net-tractor.test.mjs
+git commit -m "feat(net): several numbers per peer: bindings, locals, per-record frame checks, relay by owner, online lh.seat (N-20, N-24)"
 ```
 
 ---
@@ -1076,19 +1163,20 @@ git commit -m "feat(net): several numbers per peer: bindings, locals, per-record
 **Files:**
 - Modify: `src/sim/net/install.js`
 - Create: `test/net/fixtures/seats.js`
-- Modify: `test/net/fixtures/carts.js`, `test/net/fixtures/farmlet.js` (`join: 'manual'`)
 - Test: `test/net-join.test.mjs`
 
+(carts and farmlet are `join: 'manual'` since Task 3.)
+
 **Interfaces:**
-- Consumes: Tasks 3–5; `controllers.seat(op, seat, n)`, `controllers.renumber`.
-- Produces (only with `net.join: 'engine'`):
-  - A guest sends `net.hello { key, seats, schema }` from the step its `net.open` lands, then every 1 s (wall) until seat 0 is welcomed or refused.
-  - Host `net.hello`: `schema` must equal `game.net.schema` (else `net.refused { reason: 'schema', seat: 0 }`); seats in order, seat 0 first; a seat already bound to that peer gets the same number; past `maxSeats` per peer → `'seats'`; else `admit({ key, seat, peer, players })` or the default (lowest number in 2..`maxPlayers` not in the roster) → a number, `null` (`'full'`) or `{ refuse: reason }` (reason must be in `net.reasons`, else throws `net.admit: refuse reason '<r>' is not in net.reasons`). A number outside 2..`maxPlayers` throws `net.admit: must return a number in 2..<max>, null or { refuse } (got <x>)`; a taken one `net.admit: player <n> is taken`. If seat 0 is refused, the rest is too. One `net.welcome { players }` lists the admitted seats.
+- Consumes: Tasks 3–5; `controllers.seat(op, seat, n)`, `controllers.renumber`, `roster.renumber`; Task 5's `freeLocal`, `bind`, `numberAt`, `unbindNumber`, `route`; Task 4's `createPort({ key })`.
+- Produces (only with `net.join: 'engine'`; a manual join keeps Task 5's numbering, B1):
+  - A guest sends `net.hello { key, seats, schema }` from the step its `net.open` lands, then every 1 s (wall) until seat 0 is welcomed or refused. The key is `net.open`'s, held as `peerKeyWords` (N6: the send loop, relay and `sendFrame` have their own `key` booleans).
+  - Host `net.hello`: `schema` must equal `game.net.schema` (else `net.refused { reason: 'schema', seat: 0 }`); a hello whose seats lack 0 is refused whole (`net.refused { reason: 'seats', seat: 0 }`, nothing bound: S5); seats in order, seat 0 first; a seat already bound to that peer gets the same number; past `maxSeats` per peer → `'seats'`; else `admit({ key, seat, peer, players })` or the default (lowest number in 2..`maxPlayers` not in the roster) → a number, `null` (`'full'`) or `{ refuse: reason }` (reason must be in `net.reasons`, else throws `net.admit: refuse reason '<r>' is not in net.reasons`). A number outside 2..`maxPlayers` throws `net.admit: must return a number in 2..<max>, null or { refuse } (got <x>)`; a taken one `net.admit: player <n> is taken`. If seat 0 is refused, the rest is too. One `net.welcome { players }` lists the admitted seats.
   - Host `net.seat { op, seat }` from a bound peer: join as above (answer `net.welcome` or `net.refused`); leave unbinds that number (seat 0 leaves only with its peer).
-  - Guest `net.welcome`: each seat takes its number (a page seat holding that number moves aside first); `player.renumbered { seat, from, to }` per changed seat (from: the number before this welcome); `locals` updated; keyframes go at once. A number for a seat this page no longer has is answered with `net.seat { op: 'leave' }`.
+  - Guest `net.welcome`: each seat takes its number (a page seat holding that number moves aside first); `player.renumbered { seat, from, to }` per changed seat (from: the number before this welcome, or before an earlier welcome moved it aside); `locals` updated; keyframes go at once. A number for a seat this page no longer has is answered with `net.seat { op: 'leave' }`. Every seat of this page still not the room's after a welcome (one that joined after the hello went out) is asked for with `net.seat { op: 'join' }` (S1; a repeated ask gets the same number back).
   - Guest `net.refused { reason, seat }`: seat > 0 leaves (`controllers.seat('leave', seat)`); seat 0 stops the hellos. Event `player.refused { seat, reason, local: true }` on that page.
-  - `lh.seat` online (`engine[SEATS].route`): host join → admit (peer `null`) → `controllers.seat('join', seat, n)` and a roster entry; refusal → `player.refused`. Guest join → the seat takes the lowest number free in its controllers and the roster (not in `locals`) and sends `net.seat` (or waits for the next hello before seat 0 is welcomed). Leave: host removes the roster entry; a guest sends `net.seat { op: 'leave' }` if the seat was the room's.
-  - Host `net.open` makes seat 0 player 1 if it is not (a page that was a guest kept the room's numbers when it went solo), with `player.renumbered`.
+  - `lh.seat` online (`engine[SEATS].route`, replacing Task 5's): host join → admit (peer `null`) → `controllers.seat('join', seat, n)` and a roster entry; refusal → `player.refused`. Guest join → the seat takes `freeLocal()` (not in `locals`) and sends `net.seat` once seat 0 is the room's (before that the next hello or `welcome()` asks: S1). Leave: host removes the roster entry; a guest sends `net.seat { op: 'leave' }` if the seat was the room's. With `join: 'manual'` both roles number as in Task 5 (B1).
+  - Host `net.open` makes seat 0 player 1 if it is not (`hostSeat0`: a page that was a guest kept the room's numbers when it went solo), in the controllers and the roster, with `player.renumbered` (plan-writer ruling; S6 test).
 
 - [ ] **Step 1: Write the fixture and the failing tests**
 
@@ -1132,6 +1220,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mp, replay } from '../testing/index.js';
 import { createRegistry, decodeFrame } from '../src/index.sim.js';
+import { createMemoryHub, createPort } from '../src/index.net.js';
 import seats, { seatsGame } from './net/fixtures/seats.js';
 
 const spy = (p, pick) => { const out = [], send = p.net.send.bind(p.net); p.net.send = (to, d, r) => { const x = pick(d); if (x) out.push(x); return send(to, d, r); }; return out; };
@@ -1166,6 +1255,16 @@ test('a guest that joins with two seats is renumbered without a clash (N-25, rev
   assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [2, 3]);
   assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3]]);
   assert.deepEqual([...g.h.world.net.locals], [2, 3]);
+});
+
+test('a seat that joins between the hello and the welcome is asked for after the welcome (N-19, N-25, S1)', () => {
+  const w = mp(seats, { peers: 2 }); w.step(1); // step 1: the first hello goes out, with seat 0 only
+  w.seat(1, 'join', 1); w.seconds(1); // step 2: seat 1 joins on number 2 (free on this page); step 3: the welcome names seat 0 alone
+  const g = w.guests[0];
+  assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [2, 3]);
+  assert.deepEqual([...g.h.world.net.locals], [2, 3]);
+  assert.deepEqual(w.host.h.world.net.bindings.get(3), { peer: g.net.id, key: [2, 0, 0, 0], seat: 1 });
+  assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3]], 'seat 1 reports its number from before it moved aside');
 });
 
 test('the host\'s own second seat is admitted like a guest\'s (N-19, N-20)', () => {
@@ -1206,6 +1305,27 @@ test('a hello with another schema is refused; a repeated hello gets the same ans
   assert.deepEqual([...w.host.h.world.net.bindings.keys()], [2], 'no second number for the same seat');
 });
 
+test('a hello without seat 0 is refused whole and binds nothing (N-19, S5)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const g = w.guests[0];
+  g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [1, 2], schema: seats.net.schema }, true);
+  w.seconds(0.3);
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'seats']]);
+  assert.deepEqual(w.host.h.events.of('player.joined').map(e => e.number), [2], 'seats 1 and 2 never got numbers');
+  assert.deepEqual([...w.host.h.world.net.bindings].map(([n, b]) => [n, b.seat]), [[2, 0]]);
+});
+
+test('a page that was a guest hosts with seat 0 as player 1, in the controllers and the roster (N-20, S6)', () => {
+  const w = mp(seats, { peers: 2 }); w.seat(1, 'join', 1); w.seconds(1); // the guest's seats are 2 and 3
+  const g = w.guests[0]; w.drop(w.host); w.seconds(0.2);
+  assert.equal(g.h.world.net.role, 'solo'); assert.deepEqual(g.engine.players.map(p => p.number), [2, 3], 'solo keeps the room\'s numbers');
+  const hub = createMemoryHub(); createPort(g.engine, { transport: hub.host(), role: 'host', clock: () => hub.now, key: g.key }); g.h.step(1);
+  assert.deepEqual([g.engine.controllerOf(0).player, g.engine.controllerOf(1).player], [1, 3]);
+  assert.deepEqual(g.h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]), [[0, 1, 2], [1, 2, 3], [0, 2, 1]]);
+  assert.deepEqual(g.engine.players.map(p => [p.number, p.seat, p.local]), [[1, 0, true], [3, 1, true]]);
+  assert.deepEqual([...g.h.world.net.locals], [1, 3]); assert.equal(g.h.world.net.self, 1);
+});
+
 test('a guest seat that leaves is unbound on the host; its dot goes everywhere (N-19)', () => {
   const w = mp(seats, { peers: 3 }); w.seconds(1); w.seat(1, 'join', 1); w.seconds(0.5);
   w.seat(1, 'leave', 1); w.seconds(0.5);
@@ -1227,17 +1347,18 @@ Expected: FAIL: the host has no bindings (nobody sends `net.hello`).
 
 - [ ] **Step 3: Implement in `src/sim/net/install.js`**
 
-1. Below the state block of Task 5:
+1. Below Task 5's online `lh.seat` block (`freeLocal`, `seats.route`):
 
 ```js
   // ---- the engine join (N-19): net.hello / net.welcome / net.refused / net.seat; `join: 'manual'` leaves numbering to the game ----
   const byEngine = cfg.join === 'engine', HELLO_MS = 1000; // a hello is repeated until seat 0 is welcomed (one sent before the channel opened is lost)
-  let key = null, helloAt = -Infinity, refusedAll = false;
+  let peerKeyWords = null, helloAt = -Infinity, refusedAll = false; // N6: peerKeyWords is net.open's key (the send loop has `key` booleans)
+  const aside = new Map(); // a guest's seat -> its number before welcome() moved it aside (player.renumbered reports that one)
   const seatList = () => { const out = []; for (const c of seats.controllers.list) if (c.seat !== null) out.push(c.seat); return out; };
   function hello() {
     helloAt = engine.time.wall;
-    if (!key) return warn('net: no peer key', 'net.open has no key: the engine join needs createPort({ key }) (N-18)');
-    engine.net.send(hostId, { t: 'net.hello', key, seats: seatList(), schema: cfg.schema }, true);
+    if (!peerKeyWords) return warn('net: no peer key', 'net.open has no key: the engine join needs createPort({ key }) (N-18)');
+    engine.net.send(hostId, { t: 'net.hello', key: peerKeyWords, seats: seatList(), schema: cfg.schema }, true);
   }
   const taken = n => seats.roster.get(n) !== undefined || bindings.has(n); // the roster holds this page's, the guests' and the inactive
   const freeNumber = () => { for (let n = 2; n <= cfg.maxPlayers; n++) if (!taken(n)) return n; return null; };
@@ -1248,7 +1369,7 @@ Expected: FAIL: the host has no bindings (nobody sends `net.hello`).
   }
   // host: a number for (peer, seat), or 0 once refused; peer null is the host's own seat (N-19, N-20)
   function admitSeat(peer, k, seat) {
-    if (peer !== null) { const n = numberAt(peer, seat); if (n !== undefined) return n; } // a repeated hello (M-19): the same answer
+    if (peer !== null) { const n = numberAt(peer, seat); if (n !== undefined) return n; } // a repeated hello or ask (M-19, S1): the same answer
     const count = peer === null ? locals.size : peerNums.get(peer)?.size ?? 0;
     if (count >= cfg.maxSeats) return refuse(peer, seat, 'seats');
     const r = cfg.admit ? cfg.admit({ key: k, seat, peer, players: engine.players }) : freeNumber();
@@ -1262,21 +1383,23 @@ Expected: FAIL: the host has no bindings (nobody sends `net.hello`).
     if (peer !== null) bind(r, peer, k, seat);
     return r;
   }
-  // N-25: a guest's seats take the room's numbers; a seat of this page holding one moves aside first (it gets its own number later)
+  // N-25: a guest's seats take the room's numbers; a seat of this page holding one moves aside first (it is asked for below: S1)
   function welcome(list) {
     const R = seats.controllers.renumber, cs = seats.controllers.list, was = new Map();
-    for (const { seat } of list) { const c = engine.controllerOf(seat); if (c) was.set(seat, c.player); }
+    for (const { seat } of list) { const c = engine.controllerOf(seat); if (c) was.set(seat, aside.get(seat) ?? c.player); }
     for (const { seat, number } of list) {
       const c = engine.controllerOf(seat);
       if (!c) { engine.net.send(hostId, { t: 'net.seat', op: 'leave', seat }, true); continue; } // it left while asking
       if (c.player !== number) {
         const holder = cs.find(x => x !== c && x.player === number);
-        if (holder) { let p = 255; while (cs.some(x => x.player === p)) p--; R(holder.player, p); }
+        if (holder) { if (!aside.has(holder.seat)) aside.set(holder.seat, holder.player); let p = 255; while (cs.some(x => x.player === p)) p--; R(holder.player, p); }
         R(c.player, number);
       }
-      confirmed.add(seat);
+      confirmed.add(seat); aside.delete(seat);
       if (was.get(seat) !== number) engine.emit('player.renumbered', { seat, from: was.get(seat), to: number });
     }
+    // S1: a seat that joined after the hello went out (or was moved aside) is not in any welcome yet: ask for it now
+    for (let i = 0; i < cs.length; i++) if (cs[i].seat !== null && !confirmed.has(cs[i].seat)) engine.net.send(hostId, { t: 'net.seat', op: 'join', seat: cs[i].seat }, true);
     refreshLocals(); if (sync()) W.lastKey.fill(-Infinity); // this page's records under the new numbers, at once
   }
   function hostSeat0() { // N-20: the host's seat 0 is 1 (a page that was a guest kept the room's numbers when it went solo)
@@ -1286,47 +1409,57 @@ Expected: FAIL: the host has no bindings (nobody sends `net.hello`).
     R(from, 1); Q(from, 1); engine.emit('player.renumbered', { seat: 0, from, to: 1 });
     if (h) { R(255, from); Q(255, from); engine.emit('player.renumbered', { seat: h.seat, from: 1, to: from }); }
   }
-  const freeLocal = () => { let n = 1; while (seats.controllers.list.some(x => x.player === n) || seats.roster.get(n)) n++; return n; };
-  // [C-5] lh.seat online: the host admits its own seats; a guest asks the host. Solo, or a manual join: the engine's offline path
+```
+
+2. Replace Task 5's `seats.route` with (the manual branches are Task 5's, unchanged):
+
+```js
+  // [C-5] lh.seat online, every role but solo (B1). Engine join: the host admits its own seats, a guest asks the host. Manual join:
+  // freeLocal() on both, a guest's new seat not the room's until the game names it
   seats.route = (op, seat) => {
-    if (role === 'solo' || !byEngine) return false;
+    if (role === 'solo') return false;
     const c = engine.controllerOf(seat);
     if (op === 'join') {
       if (c) return true;
       if (role === 'host') {
-        const n = admitSeat(null, key, seat);
+        const n = byEngine ? admitSeat(null, peerKeyWords, seat) : freeLocal();
         if (n) { seats.controllers.seat('join', seat, n); seats.roster.add(n, { seat, local: true, join: joins = (joins + 1) % 256 }); confirmed.add(seat); }
-      } else { seats.controllers.seat('join', seat, freeLocal()); if (confirmed.has(0)) engine.net.send(hostId, { t: 'net.seat', op, seat }, true); } // before the welcome, the next hello asks
+      } else {
+        seats.controllers.seat('join', seat, freeLocal());
+        if (byEngine && confirmed.has(0)) engine.net.send(hostId, { t: 'net.seat', op, seat }, true); // before seat 0's welcome: the next hello, or welcome() (S1)
+      }
     } else {
       if (!c || seat === 0) return true; // seat 0 is the page's first player and never leaves
       const n = c.player, room = confirmed.has(seat);
-      seats.controllers.seat('leave', seat); confirmed.delete(seat);
-      if (role === 'host') seats.roster.remove(n); else if (room) engine.net.send(hostId, { t: 'net.seat', op, seat }, true);
+      seats.controllers.seat('leave', seat); confirmed.delete(seat); aside.delete(seat);
+      if (role === 'host') seats.roster.remove(n); else if (byEngine && room) engine.net.send(hostId, { t: 'net.seat', op, seat }, true);
     }
     refreshLocals(); return true;
   };
 ```
 
-2. `net.open` gains the key and the host's seat 0:
+3. `net.open` gains the key and the host's seat 0:
 
 ```js
   engine.builtin('net.open', (e, d) => {
     if (sync()) { for (let i = W.list.length - 1; i >= 0; i--) despawnRemote(W.list[i].e); W = fresh(); }
-    role = d.role; hostId = d.hostId; key = Array.isArray(d.key) ? d.key : null; bindings.clear(); peerNums.clear();
-    helloAt = -Infinity; refusedAll = false; // a guest's first hello goes after this step (the send clock below)
-    if (role === 'host') { hostSeat0(); confirmAll(); } else confirmed.clear(); // #77, N-25: a guest's numbers are the host's to give
+    role = d.role; hostId = d.hostId; peerKeyWords = Array.isArray(d.key) ? d.key : null; bindings.clear(); peerNums.clear();
+    helloAt = -Infinity; refusedAll = false; aside.clear(); // a guest's first hello goes after this step (the send clock below)
+    // #77, N-25: a guest's numbers are the host's to give; its roster restarts from the host's records (B1)
+    if (role === 'host') { hostSeat0(); confirmAll(); } else { confirmed.clear(); seats.roster.clear(); }
     refreshLocals();
   });
 ```
 
-   (`goSolo` also sets `refusedAll = false`.)
+   `goSolo` also sets `refusedAll = false; aside.clear();` next to `bindings.clear()`.
 
-3. New built-ins, after `net.frame`:
+4. New built-ins, after `net.frame`:
 
 ```js
   engine.builtin('net.hello', (e, d) => { // host (N-19): only from a port (from: a transport peer id)
     if (role !== 'host' || !byEngine || typeof d.from !== 'string') return;
     if (d.schema !== cfg.schema) { refuse(d.from, 0, 'schema'); return; } // N-6: another engine or other kinds
+    if (!d.seats.includes(0)) { refuse(d.from, 0, 'seats'); return; } // S5: a page joins with its seat 0, or not at all
     const out = [], order = [...new Set(d.seats)].sort((a, b) => a - b);
     for (const seat of order) { const n = admitSeat(d.from, d.key, seat); if (n) out.push({ seat, number: n }); else if (seat === 0) break; } // no seat without seat 0
     if (out.length) engine.net.send(d.from, { t: 'net.welcome', players: out }, true);
@@ -1344,28 +1477,26 @@ Expected: FAIL: the host has no bindings (nobody sends `net.hello`).
   engine.builtin('net.refused', (e, d) => {
     if (role !== 'guest' || !byEngine || d.from !== hostId) return;
     if (d.seat === 0) refusedAll = true; // the room will not take this page: no more hellos
-    else if (engine.controllerOf(d.seat)) { seats.controllers.seat('leave', d.seat); confirmed.delete(d.seat); refreshLocals(); }
+    else if (engine.controllerOf(d.seat)) { seats.controllers.seat('leave', d.seat); confirmed.delete(d.seat); aside.delete(d.seat); refreshLocals(); }
     engine.emit('player.refused', { seat: d.seat, reason: d.reason, local: true });
   });
 ```
 
-4. At the top of the send clock (`engine.onStep`), before its first `return`:
+5. At the top of the send clock (`engine.onStep`), before its first `return`:
 
 ```js
     if (role === 'guest' && byEngine && !refusedAll && !confirmed.has(0) && hostId !== null && engine.time.wall - helloAt >= HELLO_MS) hello();
 ```
 
-Fixtures: add `join: 'manual',` to the `net` objects of `test/net/fixtures/carts.js` and `test/net/fixtures/farmlet.js` (comment: "the game binds numbers itself (#77): the 3i suites keep their hand-made join").
-
 - [ ] **Step 4: Run the tests**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-join.test.mjs test/net-locals.test.mjs test/net-key.test.mjs test/net-*.test.mjs test/mp*.test.mjs test/port.test.mjs`
-Expected: PASS (9 new tests; the 3i suites unchanged).
+Expected: PASS (12 new tests; the 3i suites unchanged).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sim/net/install.js test/net/fixtures/seats.js test/net/fixtures/carts.js test/net/fixtures/farmlet.js test/net-join.test.mjs
+git add src/sim/net/install.js test/net/fixtures/seats.js test/net-join.test.mjs
 git commit -m "feat(net): engine-owned join with admit, limits, renumbering and online lh.seat (N-19, N-20, N-25)"
 ```
 
@@ -1374,14 +1505,14 @@ git commit -m "feat(net): engine-owned join with admit, limits, renumbering and 
 ### Task 7: Replicate the roster and the game state
 
 **Files:**
-- Modify: `src/sim/net/install.js` (guard, send loop, `net.frame`, `net.open`)
+- Modify: `src/sim/net/install.js` (guard, send loop, `net.frame`)
 - Test: `test/net-state.test.mjs`
 
 **Interfaces:**
 - Consumes: Task 1 `roster.apply`, `applyGame`, `relocal`, `clear`; `PLAYER_KIND`, `GAME_KIND`.
-- Produces:
+- Produces (only with `join: 'engine'`: a manual join has no `lh.player` / `lh.game` kinds, so its frames carry none and `engine.players` stays host-local, B3):
   - The host sends one `lh.player` record per roster entry (id = number) and one `lh.game` record (id 0) on the kinds' send clock (10 Hz diffs, a keyframe every 2 s and on every join).
-  - A guest builds `engine.players` from them (`local` from `locals`) and fills `engine.gameState`; a removed record emits `player.expired` (the entry was inactive) or `player.left`. A guest's roster is cleared (silently) on its `net.open`.
+  - A guest builds `engine.players` from them (`local` from `locals`) and fills `engine.gameState`; a removed record emits `player.expired` (the entry was inactive) or `player.left`. (A guest's roster is cleared on its `net.open` since Task 5, B1.)
   - Spawning or adding a `net` part of `lh.player` / `lh.game` throws `net: '<kind>' is the engine's: write engine.players or engine.gameState (N-22)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1391,8 +1522,12 @@ git commit -m "feat(net): engine-owned join with admit, limits, renumbering and 
 // [N-21], [N-22]: the roster and the game state, from the host to every peer (plan 2026-10-21-local-players-3, Task 7).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { mp } from '../testing/index.js';
+import { createRegistry, decodeFrame } from '../src/index.sim.js';
 import seats from './net/fixtures/seats.js';
+import carts, { CART, CRATE, FLAG } from './net/fixtures/carts.js';
+await RAPIER.init();
 
 test('the roster and the game state reach every guest from the host (N-21, N-22)', () => {
   const w = mp(seats, { peers: 3 }); w.seconds(1);
@@ -1429,12 +1564,24 @@ test('going solo keeps this page\'s players and drops the others (N-25)', () => 
   assert.equal(g.h.world.net.role, 'solo'); assert.deepEqual(g.engine.players.map(p => p.number), [2]); assert.equal(g.h.world.net.self, 2);
   assert.deepEqual(g.h.events.of('player.left').map(e => e.number).sort(), [1, 3]);
 });
+
+test('a manual join replicates no lh.player or lh.game: the game\'s own registry reads every host frame (B3, N-22)', () => {
+  const w = mp(carts, { peers: 2, argsOf: i => ({ n: i + 1 }) });
+  const own = createRegistry([CART, CRATE, FLAG], { maxSender: 4 }), frames = [], send = w.host.net.send.bind(w.host.net); // Tractor's way (game/net.js:41)
+  w.host.net.send = (to, d, r) => { if (d instanceof ArrayBuffer) frames.push(decodeFrame(d, own)); return send(to, d, r); };
+  w.seconds(2.5); // past a second keyframe
+  assert.deepEqual(carts.net.kinds.map(k => k.name), ['cart', 'crate', 'flag']);
+  assert.ok(frames.length && frames.every(f => f !== null), 'no frame has a group the game\'s registry does not know');
+  assert.ok(frames.some(f => f.key), 'keyframes included');
+  assert.deepEqual(w.host.engine.players.map(p => p.number), [1, 2], 'the host\'s roster still follows its bindings');
+  assert.deepEqual(w.guests[0].engine.players, [], 'engine.players stays host-local');
+});
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-state.test.mjs`
-Expected: FAIL: a guest's roster holds only its offline player 1.
+Expected: FAIL: a guest's roster is empty (Task 5 clears it at `net.open`; nothing replicates it yet). The B3 test already passes (Task 3 gave a manual join no engine kinds); it pins that Task 7's send loop keeps it so (without the `PK` guard it would index `W.buckets[undefined]`).
 
 - [ ] **Step 3: Implement in `src/sim/net/install.js`**
 
@@ -1442,6 +1589,7 @@ Expected: FAIL: a guest's roster holds only its offline player 1.
 
 ```js
   const PK = reg.byName.get(PLAYER_KIND), GK = reg.byName.get(GAME_KIND), pki = index.get(PLAYER_KIND), gki = index.get(GAME_KIND); // N-22
+  // B3: both are undefined with join: 'manual' (netConfig adds the kinds only for the engine join), and nothing below sends them
 ```
 
 2. In `guard`, right after `if (!k) throw …`: `if (k === PK || k === GK) throw new Error(`net: '${k.name}' is the engine's: write engine.players or engine.gameState (N-22)`);`
@@ -1459,7 +1607,7 @@ Expected: FAIL: a guest's roster holds only its offline player 1.
 4. In the send loop, after the entity loop and before the bucket trim:
 
 ```js
-    if (role === 'host') { // N-22: the roster and the game state are the host's records
+    if (role === 'host' && PK) { // N-22: the roster and the game state are the host's records (engine join only, B3)
       const ps = seats.roster.list;
       for (let i = 0; i < ps.length; i++) W.buckets[pki][W.bucketN[pki]++] = ownState(PK, ps[i], ps[i].number);
       W.buckets[gki][W.bucketN[gki]++] = ownState(GK, seats.roster.game, 0);
@@ -1481,12 +1629,10 @@ Expected: FAIL: a guest's roster holds only its offline player 1.
     }
 ```
 
-6. In `net.open`, the guest branch: `else { confirmed.clear(); seats.roster.clear(); } // the roster restarts from the host's records`.
-
 - [ ] **Step 4: Run the tests and the allocation check**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-state.test.mjs test/net-join.test.mjs test/net-*.test.mjs test/mp*.test.mjs`
-Expected: PASS (5 new tests).
+Expected: PASS (6 new tests).
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --expose-gc --test test/net-alloc.test.mjs test/checks-alloc.test.mjs`
 Expected: PASS within the existing budgets (the roster's records reuse their pair and record; a guest decodes them only on change).
@@ -1508,11 +1654,11 @@ git commit -m "feat(net): replicate engine.players and engine.gameState as lh.pl
 - Test: `test/net-rejoin.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 1 `roster.away`, `roster.activate`, `roster.remove(n, 'expired')`; Task 4 `w.rejoin`, `w.addPeer({ key })`.
+- Consumes: Task 1 `roster.away`, `roster.activate`, `roster.remove(n, 'expired')`; Task 4 `w.rejoin(peer, { wall0 })`, `w.addPeer({ key, wall0 })`; Task 5's `bind` (keeps pending removals) and `relay` (holds a number while they are out: S3).
 - Produces:
   - Host `peerAway` / `peerBack`: `away` set / cleared on that peer's players (`player.away` / `player.back` everywhere).
   - Host `peerLeft` (engine join): each of the peer's numbers is unbound (replicas despawned and removals relayed, as before) and its roster entry becomes inactive (`player.inactive`), held for `rejoinSeconds` of `engine.time.wall`. A manual join removes it as before.
-  - A hello whose key and seat match an inactive player gets that number and entry back (`player.joined { rejoined: true }`; `join` unchanged). A hello whose key and seat match a player bound to another, still connected peer moves that player to the new peer (a reload the server has not dropped yet).
+  - A hello whose key and seat match an inactive player gets that number and entry back (`player.joined { rejoined: true }`; `join` unchanged). A hello whose key and seat match a player bound to another, still connected peer moves that player to the new peer (a reload the server has not dropped yet); the old object's removals reach every other guest before the new page's records, so its lower clock is accepted (S3).
   - On expiry: `player.expired`, the number is free; reusing it starts fresh (relay clock and store entry cleared by `bind`).
   - Going solo clears the inactive list.
 
@@ -1539,14 +1685,15 @@ test('peerAway and peerBack mark a guest\'s players away and back, everything ke
   assert.deepEqual([g2.h.events.of('player.away').map(e => e.number), g2.h.events.of('player.back').map(e => e.number)], [[2], [2]]);
 });
 
-test('a guest that leaves is inactive; back within rejoinSeconds with its key it gets its number and state back (N-23, T-22, review focus)', () => {
+test('a guest that leaves is inactive; back within rejoinSeconds with its key and a lower clock it gets its number and state back (N-23, T-22, review focus)', () => {
   const w = mp(seats, { peers: 3 }); w.seconds(1);
   const H = w.host.engine, g1 = w.guests[0], g2 = w.peers[2];
   at(H, 2).score = 9; w.drop(g1); w.seconds(0.5);
   assert.equal(at(H, 2).active, false); assert.equal(w.host.h.world.net.bindings.has(2), false);
   assert.equal(w.host.h.world.net.find('dot', 2), undefined, 'its pawn went, as before');
   assert.equal(at(g2.engine, 2).active, false); assert.deepEqual(g2.h.events.of('player.inactive').map(e => e.number), [2]);
-  w.rejoin(g1); w.seconds(1);
+  w.rejoin(g1, { wall0: 0 }); w.seconds(1); // a real reload: its clock starts far below the old page's (S3)
+  assert.ok(g1.engine.time.wall < w.host.engine.time.wall, 'the reload\'s clock is lower');
   assert.equal(g1.h.world.net.self, 2); assert.equal(at(g1.engine, 2).score, 9, 'the same record');
   assert.equal(at(H, 2).active, true);
   assert.deepEqual(w.host.h.events.of('player.joined').filter(e => e.number === 2).map(e => e.rejoined), [false, true]);
@@ -1570,10 +1717,13 @@ test('while a player is inactive its number is held: a new page gets another (N-
   assert.equal(late.h.world.net.self, 4);
 });
 
-test('a reload the server has not dropped yet: the same key on a new peer takes its player over (N-18, N-23, review focus)', () => {
-  const w = mp(seats, { peers: 2 }); w.seconds(1);
-  const twin = w.addPeer({ key: w.guests[0].key }); w.seconds(1);
+test('a reload the server has not dropped yet: the same key on a new peer takes its player over, lower clock and all (N-18, N-23, S3, review focus)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1);
+  const old = w.guests[0], g2 = w.peers[2], twin = w.addPeer({ key: old.key, wall0: 0 }); // the old page is still connected
+  w.seconds(1, p => (p === twin ? { x: 0.5 } : null));
   assert.equal(twin.h.world.net.self, 2); assert.equal(w.host.h.world.net.bindings.get(2).peer, twin.net.id);
+  assert.ok(twin.engine.time.wall < old.engine.time.wall, 'the new page\'s clock is 1 s lower');
+  for (const p of [w.host, g2]) assert.ok(Math.abs(p.h.world.net.find('dot', 2).x - 5) < 0.1, `${p.name} follows the new page's dot 2, not the stale one`);
 });
 
 test('a key never leaves the host: no roster entry or record carries it (N-18, review focus)', () => {
@@ -1632,23 +1782,26 @@ Expected: FAIL: player 2 is removed on leave (not inactive); away is never set.
 
 4. At the top of the send clock, after the hello line: `if (role === 'host' && inactive.size) inactive.forEach(expire);`
 5. `goSolo`: `inactive.clear();` with `bindings.clear()`.
+6. Nothing else changes for S3: `left` and the takeover call Task 5's `unbindNumber` (which queues the removals) and `bind` (which keeps them), and `relay` holds the number's new records until they are out.
 
 `docs/spec.md`:
 - The amendment line: "Built in 0.13 (plans 1 and 3): [C-1]–[C-4], [I-4], [T-23], [N-18]–[N-25], [T-22]; the rest is draft."
 - Add "(built, plan 3)" after the bold labels of [N-18]–[N-25] and [T-22].
-- Under §4.6, add a "Rulings (plan 3)" list: the key reaches the sim in `net.open` from `createPort({ key })`, as four uint32 words; `defineGame({ gameState })` (not `state`, which stays [D-4]); `net.join: 'engine' | 'manual'`; `net.reasons` and `net.refused { reason, seat }` with `player.refused`; `lh.player` engine fields `seat, away, active, join`; `maxSeats` applies with a custom `admit` and to the host's seats; the same key on another live peer takes the player over; `net.schema` is the [N-6] hash, carried in `net.hello`; `world.net.players` is replaced by `world.net.bindings`.
+- Under §4.6, add a "Rulings (plan 3)" list: the key reaches the sim in `net.open` from `createPort({ key })`, as four uint32 words, made by `crypto.randomUUID` or, off a secure context, `getRandomValues` (S4); `defineGame({ gameState })` (not `state`, which stays [D-4]), and player / game state field names may not be entity parts (N7); `net.join: 'engine' | 'manual'`, and `lh.player` / `lh.game` exist and replicate only with `'engine'` (a manual join's frames are the game's alone and `engine.players` is host-local, B3); every online `lh.seat` is numbered by the net part from the controllers and the roster together (B1); `net.reasons` and `net.refused { reason, seat }` with `player.refused`; a hello without seat 0 is refused `'seats'` (S5); a seat that joins after the hello is asked for after the welcome (S1); a removal of a free number in a guest frame is ignored (S2); a number given to a new peer is relayed only after its old object's removals (S3); `lh.player` engine fields `seat, away, active, join`; `maxSeats` applies with a custom `admit` and to the host's seats; the same key on another live peer takes the player over; `net.schema` is the [N-6] hash, carried in `net.hello`; `world.net.players` is replaced by `world.net.bindings`; solo, `net.self` is seat 0's number (1 at start, was 0) and its setter is ignored (N5); relay is per owner number, so host-to-guest frames scale with seats (N3, accepted: batch later if rates bite); `net.admit: player <n> is taken` throws mid-step by design (N9).
+- [N-20]: "only a guest's seats are renumbered" becomes "a guest's seats are renumbered by `net.welcome`, and a page that hosts has its seat 0 renumbered to 1 (a former guest kept the room's numbers when it went solo)".
+- [C-2]: add `'remote'` to the `controller.unpossess` reasons (a pawn another peer simulates now: Task 2's `copy()`, N4).
 - [T-11]: "still to come: `w.drop(peer)`…" becomes a sentence listing `w.drop`, `w.rejoin`, `w.seat` and per-seat inputs.
 
 - [ ] **Step 4: Run every net suite, the allocation checks and the whole headless suite**
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test test/net-rejoin.test.mjs test/net-state.test.mjs test/net-join.test.mjs test/net-locals.test.mjs test/net-key.test.mjs test/net-config.test.mjs test/players.test.mjs test/players-engine.test.mjs`
-Expected: PASS (6 new tests here, 46 across the plan).
+Expected: PASS (6 new tests here, 52 across the plan).
 
 Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --expose-gc --test test/net-alloc.test.mjs test/checks-alloc.test.mjs test/alloc-rate.test.mjs`
 Expected: PASS.
 
 Run: `systemd-run --user --scope -q -p MemoryMax=3G node --max-old-space-size=2560 --test --test-concurrency=4 test/*.test.mjs`
-Expected: PASS with the base count plus 46 (record the base count first on the commit before Task 1). Browser suites need the shared browser; run them one at a time, and if they cannot start, say which were skipped.
+Expected: PASS with the base count plus 52 (record the base count first on the commit before Task 1). Browser suites need the shared browser; run them one at a time, and if they cannot start, say which were skipped.
 
 - [ ] **Step 5: Commit**
 
@@ -1662,3 +1815,29 @@ git commit -m "feat(net): away, inactive rejoin by key and expiry; spec marks N-
 ## After this plan
 
 Plan 5 migrates Tractor onto this API (its `hello`/`welcome` `you` becomes `net.welcome`'s number, `byPeer` becomes `world.net.bindings`, `freeNumber` becomes the default `admit` with `maxPlayers: 4`, `away` and the join counter come from `engine.players`, the `PLAYER` kind's `coat`, `trim` and `barn` become `defineGame({ player })` fields, the game-specific `seed`/`farm`/`next` stay a game message) and writes the [T-25] state-home tests per game.
+
+Until then (B3): Tractor pins lion-hawk 0.12.0. A bump to this plan's engine before plan 5 must add `join: 'manual'` to `netConfig` in `games/tractor-pickup/src/game/net.js` (lines 28–32): without it the engine join runs beside Tractor's own hello and the host's frames carry `lh.player` / `lh.game` groups that its `frameFromJson(d.frame, createRegistry(KINDS))` (line 70) throws on. Its `bindPort` (`src/net/bind.js:20`) makes a port without a key, so the default `peerKey()` runs: with S4 that works on an http LAN page too. Relay per owner number (N3) is accepted for plan 3; if guests' rate windows bite, batch a peer's numbers into one relay frame later.
+
+## Rulings carried
+
+Pre-flight scan of `.superpowers/sdd/2026-10-21-local-players-3-net/progress.md` (all accepted) and the ledger's plan-writer rulings.
+
+- **B1** (offline numbering collides online) → Task 5 (`freeLocal`, `seats.route` for every online role, guest `roster.clear()` on `net.open` moved here from Task 7, `goSolo` adds unnumbered seats), Task 6 (`route` rewritten with the manual branches kept), Task 2 (comments), Task 4 (test comment), Task 7 (step removed).
+- **B2** (`test/net-tractor.test.mjs:69`) → Task 5 (fourth `bindings` assertion, Files, commit).
+- **B3** (lh groups in manual-join frames) → Task 3 (kinds appended only for `'engine'`, manual assertion, carts and farmlet `join: 'manual'` moved here from Task 6), Task 7 (`PK` guard, manual-join frame test), Global Constraints, After this plan.
+- **S1** (seat joined between hello and welcome) → Task 6 (`welcome()` asks for unconfirmed seats, `aside` keeps the original number, new test).
+- **S2** (removal diffs of a freed number) → Task 5 (`fromPeer` rule, `keepForRelay` filter, new test).
+- **S3** (takeover removals spliced; lower clock untested) → Task 5 (`bind` keeps removals, `relay` holds via `leaving`), Task 4 (`w.rejoin(peer, { wall0 })`, test), Task 8 (rejoin and takeover tests with `wall0: 0`, takeover test with an observer guest).
+- **S4** (`crypto.randomUUID` off secure contexts) → Task 4 (`uuid4`, new test).
+- **S5** (hello without seat 0) → Task 6 (`net.hello` refuses `'seats'`, new test).
+- **S6** (`hostSeat0` untested) → Task 6 (new test).
+- **N1** (line refs) → Task 2 Files, Task 3 Files, Task 5 Files and fixture list.
+- **N2** (byte-identical wording) → Global Constraints.
+- **N3** (relay scales with seats) → accepted; After this plan, Task 8 spec rulings.
+- **N4** ([C-2] `'remote'`) → Task 8 spec edits.
+- **N5** (solo `self` 0 → 1, setter ignored) → Task 5 Interfaces and setter comment, Task 8 spec rulings.
+- **N6** (`key` shadowing) → Task 6 (`peerKeyWords`).
+- **N7** (reserved names checked late) → Task 2 (`NET_RESERVED` check, two assertions).
+- **N8** (view seats must cope with a vanishing controller) → Review Focus (cross-plan note for plan 2's reviewer).
+- **N9** (`net.admit: player <n> is taken` mid-step) → accepted, no change; Task 8 spec rulings.
+- **Plan-writer rulings** (key via `createPort({ key })` into `net.open`; four uint32 words; `defineGame({ gameState })`; `net.schema` in `net.hello`; `join: 'manual'` keeps 3i fixtures; `bindings` replaces `players`; reasons list and `net.reasons`, per seat; same key from a new live peer takes over; host seat 0 forced to 1) → already in Tasks 3–8; `join: 'manual'` now lands in Task 3 (B3), the [N-20] host-seat-0 spec text in Task 8, Global Constraints reworded.
