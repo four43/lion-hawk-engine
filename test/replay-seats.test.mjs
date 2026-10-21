@@ -33,7 +33,7 @@ test('a tape with seat input but no seat join throws a readable error', () => {
   assert.throws(() => replay(game, bad), /replay: seat 2 has input but no controller at step 0/);
 });
 
-test('a seat that leaves and rejoins replays step for step (fix round 1)', () => {
+test('a seat that leaves and rejoins replays step for step (T-23)', () => {
   trace.length = 0;
   const e = createEngine(game, { record: true });
   e.command('lh.seat', { op: 'join', seat: 1 }); e.stepN(1);
