@@ -1,0 +1,123 @@
+// src/view/seats.js
+// [C-5]–[C-9] (spec §5.5): seats, Unreal's ULocalPlayer. A seat holds devices and drives the controller of its seat
+// number ([C-1]). The view never writes the sim: a seat opens and closes through the lh.seat command and follows
+// engine.controllerOf(seat). Without enable() the page has one seat holding every device, today's behaviour.
+// A driver device: polls getGamepads() once per frame, before the game's devices. Nothing here runs in the sim.
+export const JOIN_AXIS = 0.5; // an axis this far from its rest value is a press (join, regain, capture, lp.pad)
+const NO = Object.freeze([]);
+
+export function createSeats(engine, { getGamepads, target = globalThis, doc } = {}) {
+  const get = getGamepads ?? (() => globalThis.navigator?.getGamepads?.() ?? NO);
+  doc ??= target.document ?? globalThis.document;
+  const list = [], listeners = [];
+  const slots = [];              // slots[index]: the connected pad device at that Gamepad index
+  const info = new Map();        // device -> internal state (pads: this frame's Gamepad, edges)
+  const holder = new Map();      // device -> the seat holding it
+  const usedLast = new WeakMap(); // seat -> the pad device it pressed last ([C-7])
+  const known = new Set();       // every device this page has
+  let opts = null, losses = 0;
+
+  const emit = (type, seat, device, op) => {
+    const e = op === undefined ? { type, seat, device } : { type, seat, device, op };
+    for (let i = 0; i < listeners.length; i++) listeners[i](e);
+  };
+  const on = fn => {
+    if (typeof fn !== 'function') throw new Error('seats.on: needs a function');
+    listeners.push(fn);
+    return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
+  };
+  const seatOf = n => { for (let i = 0; i < list.length; i++) if (list[i].seat === n) return list[i]; return undefined; };
+  const changed = lp => {}; // a seat's devices or contexts changed: Task 4 rebuilds its bindings here
+  const paired = dev => {}; // a device was just paired to a seat: Task 4 masks the buttons held right now
+
+  const makeSeat = (seat, controller) => {
+    const lp = { seat, controller, pending: controller === null, devices: [], pad: null, pads: [], lost: false };
+    let at = 0; while (at < list.length && list[at].seat < seat) at++;
+    list.splice(at, 0, lp);
+    return lp;
+  };
+
+  const newPad = (p, index) => {
+    const dev = { kind: 'pad', index, id: String(p.id ?? ''), mapping: String(p.mapping ?? ''), lost: false };
+    info.set(dev, { live: p, btn: [], hot: [], rest: null, edge: false, kind: null, at: -1, lostAt: 0 });
+    known.add(dev);
+    return dev;
+  };
+  // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its rest value, this frame; s.kind / s.at name the first such input
+  const edges = (s, p) => {
+    s.edge = false;
+    const b = p.buttons ?? NO, a = p.axes ?? NO;
+    if (s.rest === null) s.rest = Array.from(a, v => v ?? 0); // the first reading is the rest value: pedals at +-1, triggers at -1 are not presses
+    for (let i = 0; i < b.length; i++) { const d = b[i]?.pressed === true; if (d && !s.btn[i] && !s.edge) { s.edge = true; s.kind = 'button'; s.at = i; } s.btn[i] = d; }
+    for (let i = 0; i < a.length; i++) { const h = Math.abs((a[i] ?? 0) - (s.rest[i] ?? 0)) > JOIN_AXIS; if (h && !s.hot[i] && !s.edge) { s.edge = true; s.kind = 'axis'; s.at = i; } s.hot[i] = h; }
+  };
+
+  const attach = (lp, dev) => {
+    const from = holder.get(dev); if (from === lp) return;
+    if (from !== undefined) detach(from, dev);
+    holder.set(dev, lp); lp.devices.push(dev); paired(dev);
+    emit('seat.device', lp.seat, dev, 'add'); changed(lp);
+  };
+  const detach = (lp, dev) => {
+    const i = lp.devices.indexOf(dev); if (i >= 0) lp.devices.splice(i, 1);
+    holder.delete(dev); if (usedLast.get(lp) === dev) usedLast.delete(lp);
+    emit('seat.device', lp.seat, dev, 'remove'); changed(lp);
+  };
+  // [C-9] a pad gone from its slot (or replaced there by another product) is lost: its seat keeps it, marked, and keeps
+  // its controller and player; an unpaired lost pad is forgotten
+  const lose = dev => {
+    if (slots[dev.index] === dev) slots[dev.index] = undefined;
+    const s = info.get(dev); s.live = null; s.lostAt = ++losses; dev.lost = true;
+    const lp = holder.get(dev);
+    if (lp === undefined) { info.delete(dev); known.delete(dev); return; }
+    emit('seat.lost', lp.seat, dev); changed(lp);
+  };
+  // an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
+  const offer = dev => { attach(list[0], dev); return dev; };
+
+  const refresh = () => {
+    for (let k = 0; k < list.length; k++) {
+      const lp = list[k], ds = lp.devices; let n = 0, lost = false;
+      for (let i = 0; i < ds.length; i++) {
+        const d = ds[i]; if (d.lost) { lost = true; continue; }
+        if (d.kind === 'pad') lp.pads[n++] = info.get(d).live;
+      }
+      if (lp.pads.length !== n) lp.pads.length = n;
+      lp.lost = lost;
+      let last = usedLast.get(lp);
+      if (last === undefined || last.lost) { last = undefined; for (let i = 0; i < ds.length; i++) if (ds[i].kind === 'pad' && !ds[i].lost) { last = ds[i]; break; } }
+      lp.pad = last === undefined ? null : info.get(last).live;
+    }
+  };
+  const poll = () => {
+    const pads = get() ?? NO;
+    for (let i = 0; i < slots.length; i++) {
+      const dev = slots[i]; if (dev === undefined) continue;
+      const p = pads[i];
+      if (!p || p.connected === false || String(p.id ?? '') !== dev.id) lose(dev);
+    }
+    for (let i = 0; i < pads.length; i++) {
+      const p = pads[i]; if (!p || p.connected === false) continue;
+      let dev = slots[i], fresh = false;
+      if (dev === undefined) { dev = slots[i] = newPad(p, i); fresh = true; }
+      const s = info.get(dev); s.live = p; edges(s, p);
+      if (!holder.has(dev) && (s.edge || (fresh && opts === null))) dev = offer(dev);
+      const lp = holder.get(dev);
+      if (lp !== undefined && s.edge) usedLast.set(lp, dev);
+    }
+  };
+
+  // seat 0 (keep this block last, before return): [C-8] the keyboard and touch start here
+  const keys = { kind: 'keys', scheme: 'all' }, touch = { kind: 'touch' };
+  const keysBy = new Map([['all', keys]]); // scheme -> keyboard device
+  known.add(keys); known.add(touch);
+  const zero = makeSeat(0, engine.controllerOf(0));
+  zero.devices.push(keys, touch); holder.set(keys, zero); holder.set(touch, zero);
+
+  return {
+    list, // view.localPlayers, in seat order
+    on,
+    update() { poll(); refresh(); },
+    dispose() { listeners.length = 0; },
+  };
+}
