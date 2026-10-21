@@ -374,7 +374,10 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   };
   const freeSeat = () => { for (let n = 0; n < opts.max; n++) if (seatOf(n) === undefined) return n; return -1; };
   // [C-5] a seat opens pending: lh.seat runs at the next step (offline; plan 3 asks the host), then sync() finds its controller
-  const open = seat => { const lp = makeSeat(seat, null); engine.command('lh.seat', { op: 'join', seat }); return lp; };
+  const open = seat => { const lp = makeSeat(seat, null); refused.delete(seat); engine.command('lh.seat', { op: 'join', seat }); return lp; };
+  // M4: online the room may refuse a seat (player.refused, [N-19]); a pending seat then has no controller to wait for, so sync() drops it
+  const refused = new Set(); // seat numbers this page's room refused since they last opened
+  const offRefused = engine.events.on(e => { if (e.type === 'player.refused' && e.local) refused.add(e.seat); });
   const leave = lp => {
     if (lp.seat === 0) throw new Error('seats: seat 0 never leaves');
     if (lp.leaving) return;
@@ -398,6 +401,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
       if (!lp.pending && !lp.leaving && cs.includes(lp.controller)) continue;
       const c = engine.controllerOf(lp.seat);
       if (lp.leaving) { if (c === undefined && engine.time.step > leftAt.get(lp)) drop(lp); continue; }
+      if (lp.pending && c === undefined && refused.has(lp.seat)) { refused.delete(lp.seat); drop(lp); continue; }
       if (lp.pending) { if (c !== undefined) { lp.controller = c; lp.pending = false; emit('seat.joined', lp.seat, null); changed(lp); } continue; }
       if (c !== lp.controller) { if (c === undefined) drop(lp); else { lp.controller = c; changed(lp); } }
     }
@@ -452,7 +456,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     on, enable, unpaired, context, kind, gamepad,
     update(dt, raw = dt) { sync(); poll(); readKinds(); refresh(); views(); drive(dt, raw); },
     dispose() {
-      target.removeEventListener?.('keydown', onKey);
+      target.removeEventListener?.('keydown', onKey); offRefused();
       for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.dispose?.(); binds.delete(list[k]); }
       listeners.length = 0;
     },
