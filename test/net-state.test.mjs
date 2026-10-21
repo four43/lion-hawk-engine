@@ -140,8 +140,9 @@ test('two guests joining a seat at once: the welcome renumbers the seat, never a
 });
 
 test('one hello whose seat the game admit throws on gets one \'admit\' refusal, not one per seat (DoS)', () => {
-  const w = mp(seatsGame({ admit: ({ seat }) => { if (seat >= 1) throw new Error('boom'); return 2; } }), { peers: 2 }); w.seconds(1);
-  const g = w.guests[0], H = w.host, out = [], send = H.net.send.bind(H.net);
+  const w = mp(seatsGame({ admit: ({ seat }) => { if (seat >= 1) throw new Error('boom'); return 2; } }), { peers: 1 }); w.step(1);
+  const g = w.addPeer(), H = w.host, out = [], send = H.net.send.bind(H.net); // a page not yet welcomed (M1: a welcomed page's hello binds nothing)
+  g.net.send = (gs => (to, d, r) => d?.t === 'net.hello' && d.seats.length < 4 ? undefined : gs(to, d, r))(g.net.send.bind(g.net)); // its own hellos are lost
   H.net.send = (to, d, r) => { if (d?.t) out.push(d); return send(to, d, r); };
   const cw = console.warn; console.warn = () => {};
   try {

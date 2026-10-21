@@ -22,3 +22,23 @@ export function peerKey({ storage = globalThis.window?.sessionStorage, uuid = ()
   if (typeof k !== 'string' || !UUID.test(k)) { k = uuid(); try { storage?.setItem(NAME, k); } catch { /* a key for this page load only */ } }
   return keyWords(k);
 }
+// [N-18] Chrome's "Duplicate tab" and target=_blank copy sessionStorage, so two live tabs could share one key. claimPeerKey()
+// holds the Web Lock `lh.peer.<key hex>` for the page's life (its callback's promise never resolves); a key another live tab holds
+// is replaced by a fresh one, stored, then claimed. Without navigator.locks (Node, old browsers) it is peerKey(). Games await it
+// and pass the key to createPort({ key }).
+const hex = words => { let h = ''; for (const w of words) h += w.toString(16).padStart(8, '0'); return h; };
+const claim = (locks, words) => new Promise(resolve => {
+  let p;
+  try { p = locks.request(`lh.peer.${hex(words)}`, { ifAvailable: true }, lock => { resolve(!!lock); return lock ? new Promise(() => {}) : undefined; }); }
+  catch { resolve(true); return; } // a locks API that throws (a sandboxed frame): keep the key, as without locks
+  p?.catch?.(() => resolve(true));
+});
+export async function claimPeerKey({ storage = globalThis.window?.sessionStorage, locks = globalThis.navigator?.locks, uuid = () => uuid4() } = {}) {
+  let words = peerKey({ storage, uuid });
+  if (!locks || typeof locks.request !== 'function') return words;
+  for (let i = 0; i < 3 && !(await claim(locks, words)); i++) { // a fresh random key is free at once; the bound only stops a broken locks API looping
+    const k = uuid(); try { storage?.setItem(NAME, k); } catch { /* a key for this page load only */ }
+    words = keyWords(k);
+  }
+  return words;
+}

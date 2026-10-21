@@ -93,3 +93,32 @@ test('a key never leaves the host: no roster entry or record carries it (N-18, r
   assert.deepEqual(w.host.h.world.net.bindings.get(2).key, [2, 0, 0, 0], 'the host has it');
   assert.equal(w.guests[0].h.world.net.bindings.size, 0, 'a guest binds nothing');
 });
+
+const spy = (p, pick) => { const out = [], send = p.net.send.bind(p.net); p.net.send = (to, d, r) => { const x = pick(to, d); if (x) out.push(x); return send(to, d, r); }; return out; };
+
+test('a takeover tells the old page net.refused { seat, reason: \'taken\' } for each seat taken: back, it drops them (N-18, N-23, final review I1)', () => {
+  const w = mp(seats, { peers: 3 }); w.seat(1, 'join', 1); w.seconds(1.5);
+  const old = w.guests[0], H = w.host.h.world.net;
+  assert.deepEqual([old.engine.controllerOf(0).player, old.engine.controllerOf(1).player], [2, 3]);
+  const told = spy(w.host, (to, d) => to === old.net.id && d?.t === 'net.refused' && [d.seat, d.reason]);
+  w.hub.away(old.net.id); w.step(1);
+  const twin = w.addPeer({ key: old.key }); w.seat(twin, 'join', 1); w.seconds(1.5); // a page with the same key and both seats
+  assert.deepEqual([twin.engine.controllerOf(0).player, twin.engine.controllerOf(1).player], [2, 3]);
+  assert.deepEqual([H.bindings.get(2).peer, H.bindings.get(3).peer], [twin.net.id, twin.net.id]);
+  assert.deepEqual(told, [[0, 'taken'], [1, 'taken']], 'one refusal per seat taken, sent at the takeover');
+  w.hub.back(old.net.id); w.seconds(0.5); // a network blip, not a reload: the old page comes back and hears it
+  assert.deepEqual(old.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'taken'], [1, 'taken']]);
+  assert.equal(old.engine.controllerOf(1), undefined, 'the taken seat 1 left, as a refused seat does');
+  assert.equal(old.h.world.net.self, 0, 'seat 0 is no longer the room\'s'); assert.deepEqual([...old.h.world.net.locals], []);
+  const d2 = old.h.world.net.find('dot', 2); assert.ok(!d2 || old.h.world.net.remoteOf(d2), 'the old page owns no dot 2');
+  assert.deepEqual([H.bindings.get(2).peer, H.bindings.get(3).peer], [twin.net.id, twin.net.id], 'the new page keeps both');
+});
+
+test('player.refused \'taken\' fires once per wait, not on every 1 s hello (N-23, final review I1)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const twin = w.addPeer({ key: w.guests[0].key });
+  const hellos = spy(twin, (to, d) => d?.t === 'net.hello' && d);
+  w.seconds(3.5);
+  assert.ok(hellos.length >= 3, `it keeps asking (${hellos.length} hellos)`);
+  assert.deepEqual(twin.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[0, 'taken']]);
+});

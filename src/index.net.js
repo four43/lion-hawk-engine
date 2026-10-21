@@ -2,4 +2,4 @@
 export { emitter, createMemoryHub, parseLag, withLag, roomLink } from './net/transport.js';
 export { createPort } from './net/port.js';
 export { bridgeTransport } from './net/bridge.js';
-export { peerKey, keyWords } from './net/key.js';
+export { peerKey, claimPeerKey, keyWords } from './net/key.js';

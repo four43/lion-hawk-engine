@@ -111,8 +111,9 @@ function netConfig(n, schemas, fail, state) {
     try { wireCodec(table, { codec: c.codec }); } catch (err) { fail(`net.wire.${dir}: ${err.message}`); }
   }
   c.wire = Object.freeze(wire);
-  // [N-6] a join needs the same engine and the same kinds: a field change is caught without a manual version bump
-  c.schema = fnv(ENGINE_VERSION + JSON.stringify(c.kinds.map(k => [k.name, k.code, k.authority, k.remote, k.max, k.idMin, k.idMax, k.fields])));
+  // [N-6] a join needs the same engine, the same kinds and the same refusal reasons (net.refused's wire enum, M2): a field change
+  // is caught without a manual version bump
+  c.schema = fnv(ENGINE_VERSION + JSON.stringify(c.kinds.map(k => [k.name, k.code, k.authority, k.remote, k.max, k.idMin, k.idMax, k.fields])) + JSON.stringify(c.reasons));
   return Object.freeze(c);
 }
 

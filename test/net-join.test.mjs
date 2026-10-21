@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mp, replay } from '../testing/index.js';
-import { createRegistry, decodeFrame } from '../src/index.sim.js';
+import { createRegistry, decodeFrame, kind, F } from '../src/index.sim.js';
 import { createMemoryHub, createPort } from '../src/index.net.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import seats, { seatsGame, pawnsGame } from './net/fixtures/seats.js';
@@ -83,7 +83,8 @@ test('a game\'s admit decides; a taken number refuses a guest\'s seat \'admit\' 
   try { w.seat(1, 'join', 1); w.seconds(0.5); } finally { console.warn = cw; } // a guest's request: the host keeps stepping
   assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[1, 'admit']]);
   assert.equal(g.engine.controllerOf(1), undefined, 'the refused seat left');
-  assert.ok(warned.some(([k, err]) => /admit refused a seat of/.test(k) && /player 7 is taken/.test(err.message)), 'warned once');
+  const admitWarns = warned.filter(([k]) => /admit refused a seat of/.test(k));
+  assert.equal(admitWarns.length, 1, 'warned once'); assert.match(admitWarns[0][1].message, /player 7 is taken/);
   assert.deepEqual([...w.host.h.world.net.bindings.keys()], [7]);
   w.seat(0, 'join', 1); // the host's own seat: a game bug, thrown
   assert.throws(() => w.step(1), /net\.admit: player 7 is taken/);
@@ -98,8 +99,9 @@ test('a game admit that throws on a guest\'s seat refuses it; the host keeps ste
 });
 
 test('one hello asking past maxSeats gets one \'seats\' refusal, not one per seat (DoS)', () => {
-  const w = mp(seats, { peers: 2 }); w.seconds(1);
-  const g = w.guests[0], H = w.host, out = spy(H, d => d?.t && d);
+  const w = mp(seats, { peers: 1 }); w.step(1);
+  const g = w.addPeer(), H = w.host, out = spy(H, d => d?.t && d);
+  g.net.send = (send => (to, d, r) => d?.t === 'net.hello' && d.seats.length < 16 ? undefined : send(to, d, r))(g.net.send.bind(g.net)); // its own hellos are lost
   g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [...Array(16).keys()], schema: seats.net.schema }, true);
   w.step(3);
   assert.deepEqual(out.filter(m => m.t === 'net.refused').map(m => [m.seat, m.reason]), [[4, 'seats']]);
@@ -213,4 +215,70 @@ test('a refused seat is visible to the view: player.refused on the host for its 
   w.seconds(0.3);
   assert.equal(g.engine.controllerOf(1), undefined, 'refused: the controller is gone');
   assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason, e.local]), [[1, 'seats', true]]);
+});
+
+// ---- the final review's fixes (plan 3) ----
+
+test('a welcomed peer\'s hello answers only its numbers: new seats must use net.seat and its cooldown (final review M1, DoS)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const g = w.guests[0], out = spy(w.host, d => d?.t && d);
+  for (let i = 0; i < 3; i++) g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [0, 1, 2, 3], schema: seats.net.schema }, true);
+  w.step(3);
+  assert.deepEqual([...w.host.h.world.net.bindings].map(([n, b]) => [n, b.seat]), [[2, 0]], 'no new seat bound by a hello');
+  assert.deepEqual(out.filter(m => m.t === 'net.welcome').map(m => m.players.map(p => [p.seat, p.number])), [[[0, 2]], [[0, 2]], [[0, 2]]]);
+  assert.deepEqual(out.filter(m => m.t === 'net.refused'), [], 'and no refusal');
+});
+
+test('net.reasons joins the schema hash: two configs that differ only in reasons do not join (final review M2, N-6)', () => {
+  assert.notEqual(seatsGame({ reasons: ['locked'] }).net.schema, seats.net.schema);
+  assert.notEqual(seatsGame({ reasons: ['locked'] }).net.schema, seatsGame({ reasons: ['banned'] }).net.schema);
+  assert.equal(seatsGame({ reasons: ['locked'] }).net.schema, seatsGame({ reasons: ['locked'] }).net.schema);
+});
+
+test('a second net.open on the host leaves no ghost roster entry of the old room\'s guests (final review M3)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const H = w.host;
+  assert.deepEqual(H.engine.players.map(p => p.number), [1, 2]);
+  const hub = createMemoryHub(); createPort(H.engine, { transport: hub.host(), role: 'host', clock: () => hub.now, key: H.key }); H.h.step(1); // no closed in between
+  assert.deepEqual(H.engine.players.map(p => [p.number, p.local]), [[1, true]], 'the old guest\'s entry is gone');
+  assert.deepEqual([...H.h.world.net.locals], [1]);
+});
+
+test('a number given again is relayed only after its old object\'s removals: the first relayed frame of the new owner is taken and no stale entry stays (S3, relay leaving)', () => {
+  // dots sent every step, so the new owner's first record reaches the host while the old object's REPEAT removals are still going out
+  const DOT60 = kind({ name: 'dot', code: 1, authority: 'owner', remote: 'view', max: 8, idMin: 1, idMax: 8, send: { hz: 60 }, fields: { x: F.fixed(-10, 10, 1 / 64) } });
+  const game = seatsGame({ kinds: [DOT60] }), reg = createRegistry(game.net.kinds, { maxSender: 8 });
+  const w = mp(game, { peers: 3 }); let k = 0, twin = null;
+  const old = w.guests[0], g2 = w.peers[2];
+  const drive = p => (p === twin ? { x: 0.5 } : p === old ? { x: -0.5 - 0.1 * (k++ % 2) } : null); // old's dot changes every step (S3)
+  w.seconds(3, drive);
+  const stale = g2.h.world.net.find('dot', 2);
+  let step = 0; const sent = []; // the host's frames of number 2 to the watching guest: [step, records, removed]
+  const send = w.host.net.send.bind(w.host.net);
+  w.host.net.send = (to, d, r) => {
+    if (to === g2.net.id && d instanceof ArrayBuffer) { const f = decodeFrame(d, reg), g = f?.groups.get('dot'); if (f?.sender === 2 && g) sent.push([step, g.records.size, g.removed.length]); }
+    return send(to, d, r);
+  };
+  w.hub.away(old.net.id); w.step(1, drive);
+  twin = w.addPeer({ key: old.key, wall0: 0 }); // the same key, a far lower clock: it takes player 2 over
+  const xs = [];
+  for (step = 1; step <= 12; step++) { w.step(1, drive); const d = g2.h.world.net.find('dot', 2); xs.push(d ? d.x : null); }
+  const firstRec = sent.findIndex(x => x[1] > 0 && x[0] > 1), lastRem = sent.findLastIndex(x => x[2] > 0);
+  assert.ok(lastRem >= 0 && firstRec > lastRem, `no record of 2 relayed before its old removals are out (${JSON.stringify(sent)})`);
+  assert.equal(xs[sent[firstRec][0]], 5, `the first relayed record is taken at once (sent at step ${sent[firstRec][0]}; seen ${xs.join()})`);
+  assert.ok(xs.slice(sent[firstRec][0]).every(x => x === 5), `nothing stale after it (${xs.join()})`);
+  assert.notEqual(g2.h.world.net.find('dot', 2), stale, 'a new replica');
+  assert.equal(g2.h.world.with('net').filter(e => e.net === 'dot' && e.netId === 2).length, 1, 'one dot 2');
+});
+
+test('world.net.numbersOf(peer): a peer\'s numbers, frozen, reused until they change; empty for an unknown peer (plan 5)', () => {
+  const w = mp(seats, { peers: 3 }); w.seat(1, 'join', 1); w.seconds(1.5);
+  const H = w.host.h.world.net, [a, b] = w.guests;
+  const na = H.numbersOf(a.net.id);
+  assert.deepEqual([...na], [2, 3]); assert.ok(Object.isFrozen(na)); assert.equal(H.numbersOf(a.net.id), na, 'the same array until a change');
+  assert.deepEqual([...H.numbersOf(b.net.id)], [4]);
+  assert.deepEqual([...H.numbersOf('nobody')], []); assert.ok(Object.isFrozen(H.numbersOf('nobody')));
+  w.seat(a, 'leave', 1); w.seconds(0.7);
+  assert.deepEqual([...H.numbersOf(a.net.id)], [2], 'seat 1 left');
+  assert.deepEqual([...w.guests[0].h.world.net.numbersOf(a.net.id)], [], 'a guest binds nothing');
 });

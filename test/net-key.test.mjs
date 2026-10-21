@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { createMemoryHub, createPort, peerKey, keyWords } from '../src/index.net.js';
+import { createMemoryHub, createPort, peerKey, claimPeerKey, keyWords } from '../src/index.net.js';
 import { uuid4 } from '../src/net/key.js';
 import { createEngine } from '../src/index.sim.js';
 import { mp } from '../testing/index.js';
@@ -29,6 +29,41 @@ test('peerKey keeps one key per tab in sessionStorage; junk is replaced; a stora
   store.set('lh.peerKey', 'junk'); assert.deepEqual(peerKey({ storage, uuid }), keyWords(U2));
   const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
   assert.deepEqual(peerKey({ storage: broken, uuid: () => U }), keyWords(U));
+});
+
+// a navigator.locks stand-in: request(name, { ifAvailable }, cb) gives cb a lock, or null while another holder has the name
+const fakeLocks = (held = new Set()) => {
+  const asked = [];
+  return { held, asked, request(name, opts, cb) {
+    asked.push([name, opts]);
+    if (held.has(name)) return Promise.resolve(cb(null));
+    held.add(name); const p = cb({ name, mode: 'exclusive' }); // a held callback's promise never resolves: the lock lasts the page's life
+    p?.then?.(() => held.delete(name)); return p;
+  } };
+};
+const memStore = () => { const store = new Map(); return { store, storage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) } }; };
+
+test('claimPeerKey keeps a free key and holds its lock for the page\'s life (N-18, duplicate tab)', async () => {
+  const { store, storage } = memStore(); store.set('lh.peerKey', U);
+  const locks = fakeLocks();
+  assert.deepEqual(await claimPeerKey({ storage, locks }), keyWords(U));
+  assert.deepEqual(locks.asked, [['lh.peer.0123abcd456789ef0123456789abcdef', { ifAvailable: true }]]);
+  await new Promise(r => setTimeout(r, 5));
+  assert.ok(locks.held.has('lh.peer.0123abcd456789ef0123456789abcdef'), 'still held: the callback\'s promise never resolves');
+  assert.equal(store.get('lh.peerKey'), U);
+});
+
+test('claimPeerKey: a key another live tab holds (a duplicated tab copied sessionStorage) gets a fresh key, stored (N-18)', async () => {
+  const { store, storage } = memStore(); store.set('lh.peerKey', U);
+  const locks = fakeLocks(new Set(['lh.peer.0123abcd456789ef0123456789abcdef']));
+  assert.deepEqual(await claimPeerKey({ storage, locks, uuid: () => U2 }), keyWords(U2));
+  assert.equal(store.get('lh.peerKey'), U2, 'a reload of this tab keeps the fresh key');
+  assert.ok(locks.held.has('lh.peer.11111111222233334444555555555555'), 'the fresh key is claimed');
+});
+
+test('claimPeerKey without navigator.locks is the plain peerKey (N-18)', async () => {
+  const { store, storage } = memStore(); store.set('lh.peerKey', U);
+  assert.deepEqual(await claimPeerKey({ storage, locks: null }), keyWords(U));
 });
 
 test('with no crypto.randomUUID (an http page off a secure context) the key is a v4 UUID from getRandomValues (N-18, S4)', () => {
