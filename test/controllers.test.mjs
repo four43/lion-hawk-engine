@@ -1,0 +1,109 @@
+// [C-1]–[C-4], [I-4]: controllers, possession, the per-step copy, bots and seats (plan 2026-10-21-local-players-1).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { actions, axis, button, createInput } from '../src/core/actions.js';
+import { createControllers } from '../src/core/controllers.js';
+
+const schema = actions({ steer: axis(), throttle: axis(), horn: button() });
+const fakeWorld = () => {
+  const byId = new Map(); let next = 1;
+  return { get: id => byId.get(id), spawn: (d = {}) => { const e = { id: next++, ...d }; byId.set(e.id, e); return e; }, despawn: e => byId.delete(e.id) };
+};
+const setup = () => {
+  const ev = [], w = { current: fakeWorld() };
+  const cs = createControllers(schema, { emit: (type, data) => ev.push({ type, ...data }), world: () => w.current });
+  return { cs, ev, w };
+};
+
+test('seat 0 exists from the start as player 1 and can wrap an existing input (C-1)', () => {
+  const input = createInput(schema);
+  const cs = createControllers(schema, { input, emit() {}, world: () => undefined });
+  assert.equal(cs.list.length, 1);
+  const c = cs.list[0];
+  assert.equal(c.seat, 0); assert.equal(c.player, 1); assert.equal(c.bot, false); assert.equal(c.pawn, null);
+  assert.equal(c.input, input, 'seat 0 uses the input it was given');
+});
+
+test('possess copies the snapshot into e.input every step; buttons keep the snapshot shape (C-2, C-3)', () => {
+  const { cs, ev, w } = setup(), c = cs.list[0], car = w.current.spawn({ tags: ['car'] });
+  c.possess(car);
+  assert.equal(c.pawn, car);
+  assert.deepEqual(ev.at(-1), { type: 'controller.possess', seat: 0, player: 1, pawn: car.id });
+  c.input.set({ steer: 0.5, horn: true }); cs.applyInputs(); cs.copy();
+  assert.equal(car.input, c.input.snapshot, 'a pawn without its own input object gets the snapshot itself');
+  assert.equal(car.input.steer, 0.5); assert.equal(car.input.horn.pressed, true);
+});
+
+test('a pawn with a net-made input object keeps its shape: only its keys, buttons as down (C-3, review focus)', () => {
+  const { cs, w } = setup(), c = cs.list[0];
+  const train = w.current.spawn({ net: 'train', input: { steer: 0, horn: false } }); // what install.js zeroActions makes
+  c.possess(train);
+  c.input.set({ steer: -1, throttle: 1, horn: true }); cs.applyInputs(); cs.copy();
+  assert.deepEqual(train.input, { steer: -1, horn: true }, 'throttle is not in the kind, so it is not added');
+});
+
+test('one controller per pawn: possessing a held pawn takes it (C-2)', () => {
+  const { cs, ev, w } = setup(), a = cs.list[0], bot = cs.make({ bot: true }), car = w.current.spawn({});
+  a.possess(car); bot.possess(car);
+  assert.equal(a.pawn, null); assert.equal(bot.pawn, car);
+  assert.deepEqual(ev.slice(-2).map(e => [e.type, e.seat, e.reason]), [['controller.unpossess', 0, 'taken'], ['controller.possess', null, undefined]]);
+});
+
+test('possessing a new pawn releases the old one; unpossess clears it (C-2)', () => {
+  const { cs, ev, w } = setup(), c = cs.list[0], a = w.current.spawn({}), b = w.current.spawn({});
+  c.possess(a); c.possess(b);
+  assert.equal(c.pawn, b);
+  assert.deepEqual(ev.slice(-2).map(e => [e.type, e.pawn]), [['controller.unpossess', a.id], ['controller.possess', b.id]]);
+  c.unpossess(); assert.equal(c.pawn, null); assert.equal(ev.at(-1).reason, 'unpossess');
+  c.unpossess(); assert.equal(ev.at(-1).reason, 'unpossess', 'a second unpossess is a no-op (no new event)');
+  assert.equal(ev.filter(e => e.type === 'controller.unpossess').length, 2);
+});
+
+test('a despawned pawn or a swapped World drops the pawn on the next copy (review focus)', () => {
+  const { cs, ev, w } = setup(), c = cs.list[0], car = w.current.spawn({});
+  c.possess(car); w.current.despawn(car); cs.copy();
+  assert.equal(c.pawn, null); assert.equal(ev.at(-1).reason, 'despawned');
+  const car2 = w.current.spawn({}); c.possess(car2); w.current = fakeWorld(); cs.copy();
+  assert.equal(c.pawn, null, 'a scene change gave a new World');
+});
+
+test('possess rejects non-entities and replicas another peer simulates (review focus)', () => {
+  const { cs, w } = setup(), c = cs.list[0];
+  assert.throws(() => c.possess(null), /controller.possess: needs an entity/);
+  assert.throws(() => c.possess({ id: 'x' }), /controller.possess: needs an entity/);
+  const remote = w.current.spawn({ net: 'train' });
+  w.current.net = { remoteOf: e => (e === remote ? {} : undefined) };
+  assert.throws(() => c.possess(remote), /controller.possess: entity \d+ is simulated by another peer/);
+});
+
+test('bots have no seat or player and are driven by set/hold; dispose removes them (C-4)', () => {
+  const { cs, ev, w } = setup(), bot = cs.make({ bot: true }), car = w.current.spawn({});
+  assert.equal(bot.seat, null); assert.equal(bot.player, 0); assert.equal(bot.bot, true);
+  assert.equal(cs.list.length, 2);
+  bot.possess(car); bot.input.hold({ throttle: 1 }); cs.applyInputs(); cs.copy();
+  assert.equal(car.input.throttle, 1);
+  bot.dispose();
+  assert.equal(cs.list.length, 1); assert.equal(car.input, bot.input.snapshot, 'the pawn keeps its last input');
+  assert.equal(ev.at(-1).reason, 'left');
+});
+
+test('gate applies to every controller (U-9 for all seats)', () => {
+  const { cs } = setup(), b = cs.make({ bot: true });
+  cs.gate(true);
+  assert.equal(cs.list[0].input.gated, true); assert.equal(b.input.gated, true);
+  const late = cs.make({ bot: true }); assert.equal(late.input.gated, true, 'a controller made while gated starts gated');
+  cs.gate(false); assert.equal(late.input.gated, false);
+});
+
+test('seats: join takes the lowest free player number, keeps seat order; leave frees it (C-1, C-5 sim side)', () => {
+  const { cs, ev } = setup();
+  cs.seat('join', 2); cs.seat('join', 1);
+  assert.deepEqual(cs.list.map(c => [c.seat, c.player]), [[0, 1], [1, 3], [2, 2]]);
+  assert.deepEqual(ev.filter(e => e.type === 'controller.joined').map(e => [e.seat, e.player]), [[2, 2], [1, 3]]);
+  cs.seat('join', 1); assert.equal(cs.list.length, 3, 'joining an open seat is a no-op');
+  cs.seat('leave', 2); assert.deepEqual(cs.list.map(c => c.seat), [0, 1]);
+  cs.seat('join', 3); assert.equal(cs.list.find(c => c.seat === 3).player, 2, 'number 2 was freed');
+  cs.seat('leave', 0); assert.equal(cs.list[0].seat, 0, 'seat 0 never leaves');
+  for (const bad of [-1, 1.5, 16, '1']) assert.throws(() => cs.seat('join', bad), /lh.seat: seat must be an integer in 0..15/);
+  assert.throws(() => cs.seat('swap', 1), /lh.seat: op must be 'join' or 'leave'/);
+});
