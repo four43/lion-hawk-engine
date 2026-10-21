@@ -1,13 +1,14 @@
 // The engine core (spec §5): scenes with sim halves (S-1…S-5), the step pipeline over named stages (R-6), input
 // applied once per step (I-4), the UI registry (U-1), events, seeded rng streams and the fixed-step loop (R-1…R-7).
 // Sim-pure: the browser driver, devices and DOM rendering live in the view half (phase 2b).
-import { rng } from './rng.js';
+import { rng, fnv } from './rng.js';
+import { ENGINE_VERSION } from '../version.js';
 import { createEvents } from './events.js';
 import { createSchedule, STEP_STAGES } from './schedule.js';
 import { createLoop } from './loop.js';
 import { actions as defineActions, createInput } from './actions.js';
 import { createControllers } from './controllers.js';
-import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS } from './players.js';
+import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS, stateKinds, PLAYER_CODE, GAME_CODE } from './players.js';
 import { F } from '../defs/fields.js';
 import { createUi } from './ui.js';
 import { checkNav, topNav, menuOwnsInput } from './nav.js';
@@ -19,6 +20,10 @@ import { installNet, RESERVED as NET_RESERVED } from '../sim/net/install.js';
 // [I-7] reserved keys a port sets on any command's data (#77); a schema may not declare them
 const RESERVED = { from: v => typeof v === 'string', at: Number.isFinite, reliable: v => typeof v === 'boolean' };
 const RESERVED_TYPE = { from: 'a string', at: 'a finite number', reliable: 'a boolean' };
+
+export const REASONS = Object.freeze(['full', 'seats', 'schema']); // [N-19] refusal reasons every game has
+export const JOIN_TYPES = Object.freeze(['net.hello', 'net.seat', 'net.welcome', 'net.refused']);
+const KEY = F.list(F.uint(4), 4, 4), SEAT = F.uint(1, 15); // [N-18] a key is a UUID's 128 bits as four words
 
 const HOOKS = ['enter', 'exit', 'step', 'ui'];
 export function defineGame(spec) {
@@ -56,32 +61,58 @@ export function defineGame(spec) {
     checkNav(name, s.nav, fail); // U-9
     if (typeof s.nav?.back === 'string' && !(s.nav.back in (spec.actions ?? {}))) fail(`scene '${name}'.nav.back: no action '${s.nav.back}'`);
   }
+  for (const t of JOIN_TYPES) if (Object.hasOwn(schemas, t)) fail(`commands.${t} is the engine's (N-19): handle it with a plain function, which runs after the engine's`);
+  const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail, { player, gameState });
   if (spec.physics !== undefined) checkPhysics(spec.physics, fail); // §4.1: gravity, params and groups checked at definition
   const sim = { hz: 60, maxCatchUp: 3, maxFrame: 0.25, ...spec.sim };
   for (const k of ['hz', 'maxCatchUp']) if (typeof sim[k] !== 'number' || !(sim[k] > 0) || !Number.isFinite(sim[k])) fail(`sim.${k} must be a positive number`);
-  const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail);
   return Object.freeze({ ...spec, sim, actions: spec.actions ?? defineActions({}), policies: spec.policies ?? {}, commands, schemas, net, player, gameState });
 }
-// the game net config (N-3): every limit a port applies, and every wire tag naming a schema'd command (built once to check it)
-function netConfig(n, schemas, fail) {
+// the game net config (N-3): every limit a port applies, and every wire tag naming a schema'd command (built once to check it);
+// N-19..N-23: the engine join's options and messages; N-22: the built-in kinds; N-6: the schema hash
+function netConfig(n, schemas, fail, state) {
   if (n === null || typeof n !== 'object') fail('net must be an object');
-  const c = { maxJson: 2048, maxFrame: 16384, codec: 'json', ...n };
+  const c = { maxJson: 2048, maxFrame: 16384, codec: 'json', join: 'engine', maxSeats: 4, rejoinSeconds: 60, ...n };
   const pos = (v, p, int) => { if (typeof v !== 'number' || !(v > 0) || !Number.isFinite(v) || (int && !Number.isInteger(v))) fail(`${p} must be a positive ${int ? 'integer' : 'number'}`); };
   if (!Array.isArray(c.kinds)) fail('net.kinds must be an array of kinds');
   if (!Number.isInteger(c.maxSender) || c.maxSender < 1 || c.maxSender > 255) fail('net.maxSender must be an integer in 1..255');
+  for (const k of c.kinds) if (k?.code === PLAYER_CODE || k?.code === GAME_CODE || String(k?.name).startsWith('lh.')) fail(`net.kinds: '${k.name}' (code ${k.code}): codes ${GAME_CODE} and ${PLAYER_CODE} and names starting 'lh.' are the engine's (N-22)`);
+  if (c.join !== 'engine' && c.join !== 'manual') fail("net.join must be 'engine' or 'manual'");
+  // B3: the engine's kinds only with the engine join; a manual join's frames stay the game's (Tractor reads them with its own registry)
+  c.kinds = Object.freeze(c.join === 'engine' ? [...c.kinds, ...stateKinds(state, c.maxSender)] : [...c.kinds]);
   try { createRegistry(c.kinds, { maxSender: c.maxSender }); } catch (err) { fail(`net.kinds: ${err.message}`); }
   pos(c.maxJson, 'net.maxJson', true); pos(c.maxFrame, 'net.maxFrame', true);
   if (c.codec !== 'json' && c.codec !== 'binary') fail("net.codec must be 'json' or 'binary'");
+  c.maxPlayers ??= c.maxSender;
+  if (!Number.isInteger(c.maxPlayers) || c.maxPlayers < 1 || c.maxPlayers > c.maxSender) fail(`net.maxPlayers must be an integer in 1..${c.maxSender}`);
+  if (!Number.isInteger(c.maxSeats) || c.maxSeats < 1 || c.maxSeats > 16) fail('net.maxSeats must be an integer in 1..16');
+  if (typeof c.rejoinSeconds !== 'number' || !(c.rejoinSeconds >= 0) || !Number.isFinite(c.rejoinSeconds)) fail('net.rejoinSeconds must be a finite number >= 0');
+  if (c.admit !== undefined && typeof c.admit !== 'function') fail('net.admit must be a function');
+  if (n.reasons !== undefined && (!Array.isArray(n.reasons) || n.reasons.some(r => typeof r !== 'string' || !r))) fail('net.reasons must be an array of non-empty strings');
+  c.reasons = Object.freeze([...new Set([...REASONS, ...(n.reasons ?? [])])]);
   for (const [role, keys] of [['host', ['reliable', 'fast', 'reliableFrames']], ['guest', ['reliable', 'fast']]]) {
     const r = c.rates?.[role]; if (r === null || typeof r !== 'object') fail(`net.rates.${role} must be an object`);
     for (const k of keys) if (k !== 'reliableFrames' || r[k] !== undefined) pos(r[k], `net.rates.${role}.${k}`);
   }
-  for (const dir of ['toHost', 'toGuest']) {
+  // [N-19] the engine's join messages: schema'd commands whose wire tags are their names, after the game's tags
+  Object.assign(schemas, {
+    'net.hello': { key: KEY, seats: F.list(SEAT, 16, 1), schema: F.uint(4) },
+    'net.seat': { op: F.oneOf(['join', 'leave']), seat: SEAT },
+    'net.welcome': { players: F.list(F.obj({ seat: SEAT, number: F.uint(1, c.maxSender, 1) }), 16, 1) },
+    'net.refused': { reason: F.oneOf(c.reasons), seat: SEAT },
+  });
+  const wire = {};
+  for (const [dir, mine] of [['toHost', ['net.hello', 'net.seat']], ['toGuest', ['net.welcome', 'net.refused']]]) {
     const w = c.wire?.[dir]; if (w === null || typeof w !== 'object') fail(`net.wire.${dir} must be an object`);
+    for (const tag of Object.keys(w)) if (JOIN_TYPES.includes(tag)) fail(`net.wire.${dir}.${tag}: the tag is the engine's (N-19)`);
+    wire[dir] = { ...w }; for (const t of mine) wire[dir][t] = t;
     const table = {};
-    for (const [tag, type] of Object.entries(w)) { if (!Object.hasOwn(schemas, type)) fail(`net.wire.${dir}.${tag}: '${type}' is not a command with a schema`); table[tag] = schemas[type]; }
+    for (const [tag, type] of Object.entries(wire[dir])) { if (!Object.hasOwn(schemas, type)) fail(`net.wire.${dir}.${tag}: '${type}' is not a command with a schema`); table[tag] = schemas[type]; }
     try { wireCodec(table, { codec: c.codec }); } catch (err) { fail(`net.wire.${dir}: ${err.message}`); }
   }
+  c.wire = Object.freeze(wire);
+  // [N-6] a join needs the same engine and the same kinds: a field change is caught without a manual version bump
+  c.schema = fnv(ENGINE_VERSION + JSON.stringify(c.kinds.map(k => [k.name, k.code, k.authority, k.remote, k.max, k.idMin, k.idMax, k.fields])));
   return Object.freeze(c);
 }
 

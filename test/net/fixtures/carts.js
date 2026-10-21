@@ -22,7 +22,8 @@ const N = { n: F.uint(2) }, IMP = { x: 0, y: 0, z: 0 };
 export const cartsGame = ({ cartSend } = {}) => defineGame({
   id: 'carts', start: 'arena', actions: ACTIONS,
   physics: { rapier: RAPIER, gravity: [0, -9.81, 0] },
-  net: { kinds: [cartSend ? cartKind(cartSend) : CART, CRATE, FLAG], world: true, maxSender: 4, codec: 'json',
+  // the game binds numbers itself (#77): the 3i suites keep their hand-made join, and their frames carry no engine kinds (B3)
+  net: { join: 'manual', kinds: [cartSend ? cartKind(cartSend) : CART, CRATE, FLAG], world: true, maxSender: 4, codec: 'json',
     rates: { host: { reliable: 60, fast: 60, reliableFrames: 8 }, guest: { reliable: 60, fast: 240 } },
     wire: { toHost: { hi: 'host.hi' }, toGuest: { hi: 'guest.hi' } } },
   setup(engine) {
