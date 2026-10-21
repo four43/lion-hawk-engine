@@ -4,6 +4,7 @@ Version 0.1 (2026-10-11). Status: draft for review.
 Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
+Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Draft, not yet built.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
 
@@ -258,6 +259,19 @@ Every block is optional.
 
 Lockstep, rollback, re-simulating the whole world, guest-side prediction of host entities, dedicated servers, and more than 8 peers.
 
+### 4.6 Players and identity (draft 2026-10-21)
+
+A peer is a page; a player is a person. A peer carries one or more players, one per local seat ([C-5]). Unreal equivalents: peer = `UNetConnection`, player = `APlayerState`, the roster = `PlayerArray`.
+
+- **[N-18] Peer key.** The view makes a random key once per tab (`crypto.randomUUID()`), kept in `sessionStorage` (a reload keeps it; another tab is another peer), and sends it only to the host. It never enters the roster or a replicated field. A transport peer id may change across a reload; the key does not.
+- **[N-19] Join.** The engine owns the join with reserved commands: a guest sends `net.hello { key, seats: [seat, ...] }`; the host answers `net.welcome { players: [{ seat, number }] }` or `net.refused { reason }`; a seat joining or leaving later sends `net.seat { op: 'join' | 'leave', seat }`, answered by `net.welcome` or `net.refused`. The host hook `defineGame({ net: { admit({ key, seat, peer, players }) } })` returns a number, `null` (refuse, reason `full`) or `{ refuse: reason }`; the default takes the lowest free number in 2..`maxPlayers` and refuses past `maxPlayers` (default `maxSender`) or past `maxSeats` seats per peer (default 4).
+- **[N-20] Numbers.** A player number (1..`maxSender`) is the player's identity on the wire and in owner kinds. The host's seat 0 is 1; solo and host seats are numbered in seat order. The host keeps `number → { peer, key, seat }` privately as `world.net.bindings` (replacing the peer-to-number `world.net.players` map). `world.net.player(peer, seat, n)` binds by hand (`player(peer, n)` is seat 0).
+- **[N-21] Roster.** `engine.players` is the roster on every peer: one entry per active or inactive number, `{ number, seat, local, away, active, ...state }`, where `state` is the `lh.player` record ([N-22]) and `local` is true for this page's seats. Events: `player.joined`, `player.left`, `player.away`, `player.back`, `player.inactive`, `player.expired`, `player.renumbered { from, to }`.
+- **[N-22] Player and game state.** Two built-in host-authority kinds: `lh.player` (one record per number; Unreal `APlayerState`) and `lh.game` (one record; Unreal `AGameState`). A game extends them with `defineGame({ player: { [field]: F.* }, state: { [field]: F.* } })`. The host writes them; every peer reads them through `engine.players` and `engine.gameState` (`engine.state` stays the [D-4] debug state). Their fields join the `schema` hash ([N-6]). Offline, the same records exist locally, so a game reads player and game state the same way solo or online. What goes where is §5.5's state table.
+- **[N-23] Away, leave and rejoin.** `peerAway`/`peerBack` set and clear `away` on the peer's players and keep everything. `peerLeft` despawns the peer's owner entities (as before) and moves its players to an inactive list for `rejoinSeconds` (`defineGame({ net: { rejoinSeconds } })`, default 60). A `net.hello` whose key and seat match an inactive player gets the same number and `lh.player` record back (Unreal `FindInactivePlayer` + `OverridePlayerState`). On expiry the number is freed; reusing it starts fresh (relay clock and store entry cleared).
+- **[N-24] Several numbers per peer.** `net.locals` is the set of this page's numbers (`net.self` stays as its first, or 0). The spawn guard accepts an owner entity whose `netId` is in `net.locals`. The host accepts a guest frame only if every owner record in it belongs to a number bound to the frame's `from`. A peer sends one frame per send tick carrying every local seat's records; rate windows stay per peer ([N-3]). The host relays and clocks each record by its owner number.
+- **[N-25] Going online.** When a page joins as a guest, its seats are renumbered by `net.welcome`, each controller's `player` changes, and `player.renumbered` fires per seat so the game can rekey or respawn pawns. On `closed` (going solo), local seats keep their numbers.
+
 ---
 
 ## 5. Loop, scenes, input and UI
@@ -318,7 +332,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
     - `pointercancel` and `lostpointercapture` count as a release.
     - The root has `touch-action: none`.
 - **[I-3]** On `blur` and `visibilitychange`, every held action is released.
-- **[I-4]** Once per step (`input.apply`), the local snapshot is copied into the local player's actor as `e.input`. Systems read only `e.input`.
+- **[I-4]** Once per step (`input.apply`), each controller's snapshot is copied into the pawn it possesses as `e.input` ([C-3]). Systems read only `e.input`. (Rewritten 2026-10-21: the single "local player's actor" became per-controller possession.)
 - **[I-5]** Game-specific interpretation (for example Tractor Pickup's point-to-go stick) is a system in `input.apply` that the game registers.
 - **[I-6]** `engine.input.set(snapshot)`, `hold(snapshot)` and `release()` override device input for tests and bots.
 - **[I-8] Pad edges.** `createPadEdges({ getGamepads })` (view) reads every pad on the standard mapping (`PAD_BUTTONS`) once per `update()`, without allocating: `dir` is one direction per push of the D-pad or of the left stick (a push crosses 0.5 on its main axis; the stick re-arms when both axes are under 0.3), `pressed`/`released`/`down` per button, `active` when something was pressed or pushed, and `family` of the pad in use (`familyOf`: Sony `054c` → `ps`, Valve `28de` → `deck`, Microsoft or a standard mapping → `xbox`, else `generic`).
@@ -367,6 +381,44 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - `open: { button, key, seconds = 0, when }`: how the menu is summoned from gameplay ([U-7]); `button` is a standard-mapping name (`NAV_OPEN_BUTTONS`), `key` a key name, `when(engine)` a gate. The built-in `lh.open { name }` handler opens it (`{ once: true }`) when it has `nav.open`, `when` allows it, and no menu that owns input is open.
   - `lh.back` and `lh.open` are ordinary commands: recorded and replayable ([T-9]), and they run behind a pausing overlay (built-ins always run).
 - **[U-10] Glyphs.** `lion-hawk/kits/glyphs/view`: `glyphFor(role, family)` returns an SVG data URI or `null`; roles `confirm`, `back`, `menu`, `move`, `prev`, `next`; families `xbox`, `ps`, `deck`, `generic`, `keys`, `pointer`, `touch` (pointer and touch have only `confirm`; keys have no `prev`/`next`). `bindGlyphs(engine, { doc })` is a view device that keeps every `[data-lh-glyph="<role>"]` element on the family of `<html data-lh-input>`/`data-lh-pad` (`familyFor`): an `<img>` gets `src`, any other element the CSS variable `--lh-glyph: url(…)`; a role the family lacks hides the element. Icons are Kenney Input Prompts 1.5A (CC0), regenerated by `tools/glyphs/build.mjs`.
+
+---
+
+### 5.5 Players, controllers and seats (draft 2026-10-21)
+
+Follows Unreal's player model (docs/research-players.md §6): a **seat** (local player, view, `ULocalPlayer`) holds devices and drives a **controller** (sim, owning page only, `APlayerController`), which possesses a **pawn** (`APawn`); the person is a **player** ([N-20]–[N-22], `APlayerState`). Native browser objects are exposed as they are.
+
+Where state goes:
+
+| Home | Unreal | Who has it | Examples |
+|---|---|---|---|
+| game rules | `AGameMode` | host only, never replicated | `admit`, spawning, scoring rules |
+| game state, `lh.game` | `AGameState` | every peer, from the host | phase, clocks, round, shared world progress |
+| player state, `lh.player` | `APlayerState` | every peer, from the host | name, colour, score, ready, lap times |
+| controller and seat | `APlayerController`, `ULocalPlayer`, save data | owning page only | input, devices, bindings, camera, haptics |
+| pawn | `APawn` | every peer | pose, speed, damage: lost with the pawn |
+
+**Controllers (sim).**
+- **[C-1] Controllers.** `engine.controllers` lists this page's controllers: one per seat, in seat order, plus bots. A controller is `{ seat, player, input, pawn, bot, possess(e), unpossess() }`; `input` has the full `engine.input` surface (`snapshot`, `set`, `hold`, `release`, `device`, `clearDevice`, `gate`) over the game's one action schema. `engine.input` is seat 0's controller's input, so single-seat games are unchanged.
+- **[C-2] Possession.** `possess(e)` makes `e` the controller's pawn; a pawn has at most one controller, so possessing a held pawn takes it from the other (events `controller.possess` and `controller.unpossess` with `{ seat, pawn }`). A removed pawn clears `pawn` and fires `controller.unpossess`. Possession happens in the sim (a system, a command handler, a scene's enter).
+- **[C-3] Input copy.** In `input.apply` each controller copies its snapshot into its pawn's `e.input` ([I-4]); a controller with no pawn copies nothing. An owner pawn's `e.input` is what [N-13] sends.
+- **[C-4] Bots.** `engine.controller({ bot: true })` makes a controller with no seat or devices (Unreal `AAIController`), driven by `set`/`hold` ([I-6]) or a policy writing its input each step. A bot has no player number unless the game assigns one. Menu gating ([U-9]) applies to every controller.
+
+**Seats and devices (view).**
+- **[C-5] Seats.** `view.seats({ max = 4, join })` turns on seat management; without it the page has one seat holding every device (today's behaviour). `view.localPlayers` lists the seats: `{ seat, controller, devices, pad, pads, lost, contexts, bindings }`. Joining or leaving a seat is the sim command `lh.seat { op: 'join' | 'leave', seat }` (recorded, [T-9]); online it waits for the host's number ([N-19]).
+- **[C-6] Devices.** A device is `{ kind: 'pad', index, id, mapping }`, `{ kind: 'keys', scheme }`, `{ kind: 'touch' }` or a game's own kind registered with `view.device(kind, { read })` (for WebHID and the like). Each device is its own input source on its seat; sources merge as [I-1] describes.
+- **[C-7] Native pads.** `lp.pads` is every pad the seat holds and `lp.pad` the one it used last, each the live `Gamepad` from `getGamepads()[index]`, refreshed every frame (Chromium returns snapshots), or `null` while lost.
+- **[C-8] Pairing.** `join(dev)` runs on a device's first press and returns a seat number (add to it), `'new'` (open a seat) or `null` (ignore); the default is `'new'` until `max`, then `null`. Keyboard and touch start on seat 0. `lp.claim(dev)` and `lp.release(dev)` move devices by hand.
+- **[C-9] Loss and regain.** On `gamepaddisconnected` the device is marked lost and the seat keeps its controller and player. The next unpaired pad with the same `id` that presses a button returns to that seat; otherwise a press fills the oldest seat with a lost device before `join` runs. Events: `seat.joined`, `seat.left`, `seat.device`, `seat.lost`, `seat.regained`, each `{ seat, device }`.
+
+**Bindings (view, Unreal Enhanced Input).**
+- **[C-10] Mapping contexts.** `context(name, { pads: [{ match(pad), bindings }], keys: { [scheme]: bindings }, touch })` declares default bindings per device in the view half; `pads` entries are tried in order, so a game lists its rigs by `id` before the standard mapping. A pad no entry matches is ignored (the bench shows its raw channels). Binding shapes are today's `bindGamepad` and `bindKeyboard` shapes, including `map` ([I-2]).
+- **[C-11] Context stack.** Each seat has its own stack: `lp.contexts.add(name, priority = 0)` and `remove(name)`. A higher priority context's binding wins for the same device input.
+- **[C-12] Player-mappable bindings.** A binding marked `mappable: 'Brake'` can be changed by a player; the name is its save key (Unreal Player Mappable Key Settings).
+- **[C-13] Profiles.** `lp.bindings` is the seat's overrides (Unreal Enhanced Input User Settings): `profile` (a name, default "Player N"), `map(name, device, input)`, `reset(name?)`, `capture()` (resolves with the next button or axis this seat's devices produce, for remap screens). Overrides are stored per profile and per device `id` in `localStorage` (`lh.bindings.<game>.<profile>`), read and written in try/catch. Bindings are view-only: no commands, not in tapes.
+
+**Haptics (view).**
+- **[C-14] Haptics.** Games call `lp.pad.vibrationActuator.playEffect(...)` and `reset()` themselves, after checking `effects`. The engine only stops rumble it would otherwise leave running: on page hide, blur or a pausing overlay, each affected seat's pads get a zero `dual-rumble` effect plus `reset()` every frame for 20 frames; a pad seen for the first time gets one reset. `defineView({ haptics: { autoStop: false } })` turns this off. Rumble for a remote player is the game's own command to that player's page.
 
 ---
 
@@ -470,6 +522,7 @@ Lockstep, rollback, re-simulating the whole world, guest-side prediction of host
   - no scene transition is running.
 
   `?lh-test` turns off CSS transitions and starts in manual mode.
+- **[D-7] Pad bench (draft 2026-10-21).** `?debug=pads` opens an overlay showing each seat (player number, profile, devices with `id`, `mapping` and lost state, active contexts), each pad's live buttons and axes with peaks and press counts, stick range and drift, update rate and `effects`, haptics tests (trigger and body effects, patterns, live trigger-pull taps, a self-test that reports a `playEffect` that never settles) and a log of seat events and haptics calls. It reads view state only and never changes seats or bindings.
 
 ### 7.4 Headless helpers: `lion-hawk/test`
 
@@ -546,6 +599,13 @@ These run under `node:test`.
   - if a page fails to open, the pages already open are closed before the error is rethrown; `bridgeEnd(net)` (exported for tests) is the Node end of one page's bridge, applying its calls in sequence order;
   - a page must not reload or navigate: `info.sent` restarts at 0 while Node's sequence counter does not, so that page's bridge stalls.
 - **[T-21]** Real-iPad audio and touch checks remain a manual checklist in each game's docs.
+
+Local players (draft 2026-10-21):
+
+- **[T-22] Seats in `mp()`.** Inputs per peer take a per-seat form `{ [peer]: { [seat]: snapshot } }`; a bare snapshot is seat 0. `w.seat(peer, op, seat)` joins or leaves a seat; `w.drop(peer)` and `w.rejoin(peer)` leave and come back with the same key, to test [N-23] inside and past `rejoinSeconds`.
+- **[T-23] Tapes per seat.** Tapes record input changes per seat and the `lh.seat` commands; a tape without seats replays as seat 0.
+- **[T-24] Fake pads.** The Playwright fake pads ([T-20]'s `pads: 'fake'`) hold any number of pads: `game.pad(index, state)` plugs or updates one (with optional `id` and `mapping`), `game.unplug(index)` removes it and fires `gamepaddisconnected`. Each fake pad has a `vibrationActuator` with a settable `effects` list that records every `playEffect` and `reset` call, read with `game.haptics(index)`.
+- **[T-25] State homes.** Each migrated game has headless tests that player state survives a respawn and a rejoin, and that game state reaches a late joiner.
 
 ### 7.6 Deferred
 
