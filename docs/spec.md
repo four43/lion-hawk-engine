@@ -4,7 +4,7 @@ Version 0.1 (2026-10-11). Status: draft for review.
 Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
-Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Draft, not yet built.
+Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; the rest is draft.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
 
@@ -399,10 +399,10 @@ Where state goes:
 | pawn | `APawn` | every peer | pose, speed, damage: lost with the pawn |
 
 **Controllers (sim).**
-- **[C-1] Controllers.** `engine.controllers` lists this page's controllers: one per seat, in seat order, plus bots. A controller is `{ seat, player, input, pawn, bot, possess(e), unpossess() }`; `input` has the full `engine.input` surface (`snapshot`, `set`, `hold`, `release`, `device`, `clearDevice`, `gate`) over the game's one action schema. `engine.input` is seat 0's controller's input, so single-seat games are unchanged.
-- **[C-2] Possession.** `possess(e)` makes `e` the controller's pawn; a pawn has at most one controller, so possessing a held pawn takes it from the other (events `controller.possess` and `controller.unpossess` with `{ seat, pawn }`). A removed pawn clears `pawn` and fires `controller.unpossess`. Possession happens in the sim (a system, a command handler, a scene's enter).
-- **[C-3] Input copy.** In `input.apply` each controller copies its snapshot into its pawn's `e.input` ([I-4]); a controller with no pawn copies nothing. An owner pawn's `e.input` is what [N-13] sends.
-- **[C-4] Bots.** `engine.controller({ bot: true })` makes a controller with no seat or devices (Unreal `AAIController`), driven by `set`/`hold` ([I-6]) or a policy writing its input each step. A bot has no player number unless the game assigns one. Menu gating ([U-9]) applies to every controller.
+- **[C-1] Controllers.** (built, plan 1) `engine.controllers` lists this page's controllers: one per seat, in seat order, plus bots. A controller is `{ seat, player, input, pawn, bot, possess(e), unpossess() }`; `input` has the full `engine.input` surface (`snapshot`, `set`, `hold`, `release`, `device`, `clearDevice`, `gate`) over the game's one action schema. `engine.input` is seat 0's controller's input, so single-seat games are unchanged.
+- **[C-2] Possession.** (built, plan 1) `possess(e)` makes `e` the controller's pawn; a pawn has at most one controller, so possessing a held pawn takes it from the other (events `controller.possess` and `controller.unpossess` with `{ seat, pawn }`). A removed pawn clears `pawn` and fires `controller.unpossess`. Possession happens in the sim (a system, a command handler, a scene's enter).
+- **[C-3] Input copy.** (built, plan 1) In `input.apply` each controller copies its snapshot into its pawn's `e.input` ([I-4]); a controller with no pawn copies nothing. An owner pawn's `e.input` is what [N-13] sends.
+- **[C-4] Bots.** (built, plan 1) `engine.controller({ bot: true })` makes a controller with no seat or devices (Unreal `AAIController`), driven by `set`/`hold` ([I-6]) or a policy writing its input each step. A bot has no player number unless the game assigns one. Menu gating ([U-9]) applies to every controller.
 
 **Seats and devices (view).**
 - **[C-5] Seats.** `view.seats({ max = 4, join })` turns on seat management; without it the page has one seat holding every device (today's behaviour). `view.localPlayers` lists the seats: `{ seat, controller, devices, pad, pads, lost, contexts, bindings }`. Joining or leaving a seat is the sim command `lh.seat { op: 'join' | 'leave', seat }` (recorded, [T-9]); online it waits for the host's number ([N-19]).
@@ -603,7 +603,7 @@ These run under `node:test`.
 Local players (draft 2026-10-21):
 
 - **[T-22] Seats in `mp()`.** Inputs per peer take a per-seat form `{ [peer]: { [seat]: snapshot } }`; a bare snapshot is seat 0. `w.seat(peer, op, seat)` joins or leaves a seat; `w.drop(peer)` and `w.rejoin(peer)` leave and come back with the same key, to test [N-23] inside and past `rejoinSeconds`.
-- **[T-23] Tapes per seat.** Tapes record input changes per seat and the `lh.seat` commands; a tape without seats replays as seat 0.
+- **[T-23] Tapes per seat.** (built, plan 1) Tapes record input changes per seat and the `lh.seat` commands; a tape without seats replays as seat 0.
 - **[T-24] Fake pads.** The Playwright fake pads ([T-20]'s `pads: 'fake'`) hold any number of pads: `game.pad(index, state)` plugs or updates one (with optional `id` and `mapping`), `game.unplug(index)` removes it and fires `gamepaddisconnected`. Each fake pad has a `vibrationActuator` with a settable `effects` list that records every `playEffect` and `reset` call, read with `game.haptics(index)`.
 - **[T-25] State homes.** Each migrated game has headless tests that player state survives a respawn and a rejoin, and that game state reaches a late joiner.
 
