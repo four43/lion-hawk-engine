@@ -9,10 +9,9 @@ export const game = defineGame({ id: 'seats', start: 'field', actions: schema, s
 export const XBOX = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)';
 export const DUALSENSE = 'DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)';
 export const WHEEL = 'G29 Driving Force Racing Wheel (Vendor: 046d Product: c24f)';
-// a fresh Gamepad snapshot every call, as Chromium hands out (research §5). Real sticks drift a little off 0; an axis at
-// exactly 0 models one the browser has not reported yet (Firefox), whose first non-zero reading is its rest.
-export const DRIFT = [0.004, -0.004, 0.004, -0.004];
-export const pad = (index, { id = XBOX, mapping = id === WHEEL ? '' : 'standard', down = [], axes = DRIFT } = {}) => ({
+// a fresh Gamepad snapshot every call, as Chromium hands out (research §5). Axes default to exactly 0: a d-pad on axes, or
+// an axis the browser has not reported yet (Firefox), anchors there, so its first push is a press (plan 4 Task 1).
+export const pad = (index, { id = XBOX, mapping = id === WHEEL ? '' : 'standard', down = [], axes = [0, 0, 0, 0] } = {}) => ({
   index, id, mapping, connected: true, axes: axes.slice(),
   buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: down.includes(i), value: down.includes(i) ? 1 : 0 })),
 });

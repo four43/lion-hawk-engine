@@ -222,7 +222,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const newPad = (p, index) => {
     const dev = { kind: 'pad', index, id: String(p.id ?? ''), mapping: String(p.mapping ?? ''), lost: false };
     const view = { id: dev.id, index, mapping: dev.mapping, axes: NO, buttons: [] }; // what this pad's bindings read
-    info.set(dev, { live: p, btn: [], hot: [], anchor: [], prev: [], still: [], zero: [], edge: false, kind: null, at: -1, lostAt: 0, mask: [], view, one: [view] });
+    info.set(dev, { live: p, btn: [], hot: [], anchor: [], prev: [], still: [], edge: false, kind: null, at: -1, lostAt: 0, mask: [], view, one: [view] });
     known.add(dev);
     const k = index + '|' + dev.id; if (!seenPads.has(k)) { seenPads.add(k); emit('seat.seen', null, dev); } // view-only, e.g. a one-time haptics reset
     return dev;
@@ -244,22 +244,24 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.update?.(dt, raw); }
   };
 
-  // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its anchor, this frame; s.kind / s.at name the
-  // first such input. An axis anchors at its first reading (a pedal at +-1 or a trigger at -1 is not a press), again at its
-  // first non-zero reading if it read exactly 0 until then (Firefox reports 0 until an axis is first touched), and again
-  // wherever it has sat still for STILL_POLLS polls, so a pedal that rests somewhere new presses from there. Per-axis state
-  // lives in arrays that only grow when the pad reports more axes (R-8).
+  // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its anchor and not back toward centre, this
+  // frame; s.kind / s.at name the first such input. An axis anchors at its first reading (a pedal at +-1 or a trigger at
+  // -1 is not a press) and again wherever it has sat still for STILL_POLLS polls, so a pedal that rests somewhere new
+  // presses from there. An axis that reads exactly 0 until first touched (a d-pad on axes, Firefox) anchors at 0, so its
+  // first touch is an edge. A move back toward centre (the same side of 0 as the anchor, and closer to 0) is never an
+  // edge: letting a held axis go is not a press. Per-axis state lives in arrays that only grow when the pad reports more
+  // axes (R-8).
   const edges = (s, p) => {
     s.edge = false;
     const b = p.buttons ?? NO, a = p.axes ?? NO;
     for (let i = 0; i < b.length; i++) { const d = b[i]?.pressed === true; if (d && !s.btn[i] && !s.edge) { s.edge = true; s.kind = 'button'; s.at = i; } s.btn[i] = d; }
     for (let i = 0; i < a.length; i++) {
       const v = a[i] ?? 0;
-      if (i >= s.anchor.length) { s.anchor[i] = s.prev[i] = v; s.still[i] = 0; s.zero[i] = v === 0; s.hot[i] = false; continue; }
-      if (s.zero[i] && v !== 0) { s.zero[i] = false; s.anchor[i] = s.prev[i] = v; s.still[i] = 0; s.hot[i] = false; continue; }
+      if (i >= s.anchor.length) { s.anchor[i] = s.prev[i] = v; s.still[i] = 0; s.hot[i] = false; continue; }
       s.still[i] = Math.abs(v - s.prev[i]) < STILL ? s.still[i] + 1 : 0; s.prev[i] = v;
       if (s.still[i] >= STILL_POLLS) { s.anchor[i] = v; s.still[i] = 0; }
-      const h = Math.abs(v - s.anchor[i]) > JOIN_AXIS;
+      const o = s.anchor[i];
+      const h = Math.abs(v - o) > JOIN_AXIS && !(v * o >= 0 && Math.abs(v) < Math.abs(o));
       if (h && !s.hot[i] && !s.edge) { s.edge = true; s.kind = 'axis'; s.at = i; }
       s.hot[i] = h;
     }

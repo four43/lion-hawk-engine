@@ -285,18 +285,55 @@ test('a failing kind read() clears its held unit each frame without losing it, a
 // final review fixes (plan 2): axis anchors, late enable, seats.gamepad, seat.seen, leaving claims, custom-join regain
 const hold = (frame, n, set) => { for (let i = 0; i < n; i++) { set(); frame(); } };
 
-test('a pedal that reads 0 until touched and then rests at -1 re-anchors: a press to +1 is an edge for capture and lp.pad (final review 1a)', async () => {
+test('a pedal that rests at -1 for 10 still polls re-anchors there: a press to +1 is an edge for capture and lp.pad (final review 1a, plan 4 Task 1)', async () => {
   const { seats, slots, frame } = setup(), lp = seats.list[0];
   const wheel = axes => pad(1, { id: WHEEL, axes });
-  slots[0] = pad(0); slots[1] = wheel([0.01, 0, 0, 0]); frame(); // the pedal (axis 2) is not reported yet: exactly 0
-  slots[0] = pad(0, { down: [0] }); slots[1] = wheel([0.01, 0, 0, 0]); frame();
+  slots[0] = pad(0); slots[1] = wheel([0, 0, 0, 0]); frame();
+  hold(frame, 11, () => { slots[0] = pad(0); slots[1] = wheel([0, 0, -1, 0]); }); // the move to -1, then 10 still polls
+  slots[0] = pad(0, { down: [0] }); slots[1] = wheel([0, 0, -1, 0]); frame();
   assert.equal(lp.pad, slots[0]);
-  hold(frame, 10, () => { slots[0] = pad(0); slots[1] = wheel([0.01, 0, -1, 0]); });
-  assert.equal(lp.pad, slots[0], 'the first reading of an unreported axis is its rest, not a press');
-  let got; const p = lp.bindings.capture(); p.then(v => { got = v; });
-  slots[0] = pad(0); slots[1] = wheel([0.01, 0, 1, 0]); frame();
+  const p = lp.bindings.capture();
+  slots[0] = pad(0); slots[1] = wheel([0, 0, 1, 0]); frame();
   assert.equal(lp.pad, slots[1], 'lp.pad follows the pedal');
-  assert.deepEqual(await p, { device: lp.devices[3], input: 'axis:2' }); assert.ok(got);
+  assert.deepEqual(await p, { device: lp.devices[3], input: 'axis:2' });
+});
+
+test('an exact-0 axis (a d-pad on axes, or one Firefox has not reported) presses on its first push; its release is no press (plan 4 Task 1, review focus)', async () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  slots[0] = pad(0); slots[1] = pad(1, { id: WHEEL }); frame(); // every axis reads exactly 0
+  slots[0] = pad(0, { down: [0] }); slots[1] = pad(1, { id: WHEEL }); frame();
+  assert.equal(lp.pad, slots[0]);
+  const p = lp.bindings.capture();
+  slots[0] = pad(0); slots[1] = pad(1, { id: WHEEL, axes: [0, 0, 0, 1] }); frame(); // the hat's first push
+  assert.equal(lp.pad, slots[1], 'the first push is use');
+  assert.deepEqual(await p, { device: lp.devices[3], input: 'axis:3' });
+  let got; lp.bindings.capture().then(v => { got = v; });
+  slots[1] = pad(1, { id: WHEEL }); frame(); await null;
+  assert.equal(got, undefined, 'letting the hat go is not a press');
+  lp.bindings.cancel(); await null;
+  assert.equal(got, null);
+});
+
+test("a pedal's first touch from an unreported 0 is a press (plan 4 Task 1)", async () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  const wheel = axes => pad(1, { id: WHEEL, axes });
+  slots[0] = pad(0); slots[1] = wheel([0, 0, 0, 0]); frame();
+  slots[0] = pad(0, { down: [0] }); slots[1] = wheel([0, 0, 0, 0]); frame();
+  const p = lp.bindings.capture();
+  slots[0] = pad(0); slots[1] = wheel([0, 0, 0.8, 0]); frame();
+  assert.equal(lp.pad, slots[1]);
+  assert.deepEqual(await p, { device: lp.devices[3], input: 'axis:2' });
+});
+
+test('an axis held 12 polls and then released leaves a pending capture() unresolved (plan 4 Task 1, review focus)', async () => {
+  const { seats, slots, frame } = setup(), lp = seats.list[0];
+  slots[0] = pad(0); frame();
+  hold(frame, 12, () => { slots[0] = pad(0, { axes: [1, 0, 0, 0] }); }); // pushed, then held still: re-anchored at +1
+  let got; lp.bindings.capture().then(v => { got = v; });
+  slots[0] = pad(0); frame(); await null;
+  assert.equal(got, undefined, 'the release toward centre is not an edge');
+  slots[0] = pad(0, { axes: [-1, 0, 0, 0] }); frame(); await null;
+  assert.deepEqual(got, { device: lp.devices[2], input: 'axis:0' }, 'a push past centre to the other side is');
 });
 
 test('a trigger held at +1 on first sight, released to -1 and left there re-anchors, so a later press is an edge (final review 1b)', () => {
