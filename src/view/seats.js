@@ -3,6 +3,9 @@
 // number ([C-1]). The view never writes the sim: a seat opens and closes through the lh.seat command and follows
 // engine.controllerOf(seat). Without enable() the page has one seat holding every device, today's behaviour.
 // A driver device: polls getGamepads() once per frame, before the game's devices. Nothing here runs in the sim.
+import { bindGamepad } from './gamepad.js';
+import { bindKeyboard } from './keyboard.js';
+import { NONE, checkContext, resolvePad, resolveKeys, resolveTouch, schemeKeysOf } from './contexts.js';
 export const JOIN_AXIS = 0.5; // an axis this far from its rest value is a press (join, regain, capture, lp.pad)
 const NO = Object.freeze([]);
 
@@ -17,6 +20,9 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const known = new Set();       // every device this page has
   let opts = null, losses = 0;
   const leftAt = new WeakMap(); // leaving seat -> engine.time.step when leave() was called
+  const defs = new Map();         // context name -> checked context
+  const stacks = new WeakMap();   // seat -> [{ name, priority, order }], highest priority first
+  const binds = new WeakMap();    // seat -> [{ dev, mod }]: the device modules writing its controller's input
 
   const emit = (type, seat, device, op) => {
     const e = op === undefined ? { type, seat, device } : { type, seat, device, op };
@@ -28,25 +34,106 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
   };
   const seatOf = n => { for (let i = 0; i < list.length; i++) if (list[i].seat === n) return list[i]; return undefined; };
-  const changed = lp => {}; // a seat's devices or contexts changed: Task 4 rebuilds its bindings here
-  const paired = dev => {}; // a device was just paired to a seat: Task 4 masks the buttons held right now
+  // [C-10], [C-11] rebuild a seat's bindings: one device module per (device, context) its stack binds, given the seat's
+  // controller input as its engine, under source 'pad:<index>:<context>' or 'keys:<scheme>:<context>' (touch modules keep
+  // their own). changed(lp, dev) rebuilds only that device's modules, so a pad joining, lost or regained leaves held keys,
+  // ramps and a touch stick mid-drag alone; changed(lp) (a context or the seat itself changed) rebuilds all of them. A
+  // module's dispose clears its input source, so a device that left the seat leaves no held button or axis behind.
+  // Nothing binds while the seat is pending, leaving or gone.
+  const changed = (lp, only) => {
+    let out = binds.get(lp);
+    const stack = stacks.get(lp);
+    if (!list.includes(lp) || lp.pending || lp.leaving || !lp.controller || stack === undefined || stack.length === 0) {
+      if (out !== undefined) { for (let i = 0; i < out.length; i++) out[i].mod.dispose?.(); binds.delete(lp); }
+      return;
+    }
+    if (out === undefined) binds.set(lp, out = []);
+    else for (let i = out.length - 1; i >= 0; i--) if (only === undefined || out[i].dev === only) { out[i].mod.dispose?.(); out.splice(i, 1); }
+    const to = { input: lp.controller.input };
+    for (let i = 0; i < lp.devices.length; i++) {
+      const dev = lp.devices[i]; if (dev.lost || (only !== undefined && dev !== only)) continue;
+      if (dev.kind === 'pad') {
+        const s = info.get(dev);
+        for (const r of resolvePad(stack, defs, s.live, overridesFor(lp, dev))) out.push({ dev, mod: bindGamepad(to, r.bindings, { getGamepads: () => s.one, source: `pad:${dev.index}:${r.context}`, map: r.map }) });
+      } else if (dev.kind === 'keys') {
+        for (const r of resolveKeys(stack, defs, dev.scheme, overridesFor(lp, dev))) out.push({ dev, mod: bindKeyboard(to, r.bindings, { target, doc, source: `keys:${dev.scheme}:${r.context}`, ramps: r.ramps, map: r.map }) });
+      } else if (dev.kind === 'touch') {
+        for (const r of resolveTouch(stack, defs)) { const made = r.make(to); for (const d of Array.isArray(made) ? made : [made]) if (d) out.push({ dev, mod: d }); }
+      }
+    }
+  };
+  const overridesFor = (lp, dev) => NONE; // Task 5: the seat's saved overrides for this device
+  // the buttons held while a pad is paired stay masked from its bindings until let go, so the press that joined,
+  // regained or was claimed with is not also a game input (review focus); context changes do not mask. Only buttons
+  // are masked, not axes: a stick, pedal or trigger that joins also drives the game for that frame (N1, no rest model).
+  const paired = dev => {
+    if (dev.kind !== 'pad') return;
+    const s = info.get(dev); if (s === undefined) return;
+    for (let i = 0; i < s.btn.length; i++) s.mask[i] = s.btn[i];
+  };
 
   const makeSeat = (seat, controller) => {
     const lp = {
-      seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false,
+      seat, controller, pending: controller === null, leaving: false, devices: [], pad: null, pads: [], lost: false, contexts: null,
       claim: dev => { claim(lp, dev); return lp; }, release: dev => { release(lp, dev); return lp; }, leave: () => leave(lp),
     };
     let at = 0; while (at < list.length && list[at].seat < seat) at++;
     list.splice(at, 0, lp);
+    lp.contexts = makeStack(lp); start(lp);
     return lp;
+  };
+  const makeStack = lp => {
+    const stack = []; let order = 0;
+    stacks.set(lp, stack);
+    const api = {
+      add(name, priority = 0) {
+        if (!defs.has(name)) throw new Error(`seats: unknown context '${name}' (declare it with view.context first)`);
+        if (!Number.isFinite(priority)) throw new Error('seats: context priority must be a finite number');
+        const i = stack.findIndex(x => x.name === name); if (i >= 0) stack.splice(i, 1);
+        stack.push({ name, priority, order: ++order });
+        stack.sort((a, b) => b.priority - a.priority || b.order - a.order);
+        changed(lp); return api;
+      },
+      remove(name) { const i = stack.findIndex(x => x.name === name); if (i >= 0) { stack.splice(i, 1); changed(lp); } return api; },
+      has: name => stack.some(x => x.name === name),
+      get list() { return stack.map(x => x.name); },
+    };
+    return api;
+  };
+  // enable({ contexts }): every seat starts with them (names or [name, priority])
+  const start = lp => { if (opts !== null) for (const c of opts.contexts) { if (Array.isArray(c)) lp.contexts.add(c[0], c[1]); else lp.contexts.add(c); } };
+  // [C-10] declare (or replace) a context; each new keyboard scheme it names is a device on seat 0 ([C-8])
+  const context = (name, def) => {
+    defs.set(name, checkContext(name, def));
+    for (const s of Object.keys(defs.get(name).keys)) if (!keysBy.has(s)) { const d = { kind: 'keys', scheme: s }; keysBy.set(s, d); known.add(d); attach(list[0], d); }
+    schemeKeys.clear(); for (const [s, ks] of schemeKeysOf(defs)) schemeKeys.set(s, ks);
+    for (let k = 0; k < list.length; k++) if (list[k].contexts.has(name)) changed(list[k]);
   };
 
   const newPad = (p, index) => {
     const dev = { kind: 'pad', index, id: String(p.id ?? ''), mapping: String(p.mapping ?? ''), lost: false };
-    info.set(dev, { live: p, btn: [], hot: [], rest: null, edge: false, kind: null, at: -1, lostAt: 0 });
+    const view = { id: dev.id, index, mapping: dev.mapping, axes: NO, buttons: [] }; // what this pad's bindings read
+    info.set(dev, { live: p, btn: [], hot: [], rest: null, edge: false, kind: null, at: -1, lostAt: 0, mask: [], view, one: [view] });
     known.add(dev);
     return dev;
   };
+  // this frame's Gamepad as the bindings see it: its axes, and its buttons with masked ones up (reused objects, R-8)
+  const viewOf = s => {
+    const p = s.live, v = s.view, b = p.buttons ?? NO;
+    v.id = p.id; v.index = p.index; v.mapping = p.mapping; v.axes = p.axes ?? NO;
+    for (let i = 0; i < b.length; i++) {
+      const src = b[i], d = src?.pressed === true;
+      if (s.mask[i] && !d) s.mask[i] = false;
+      let o = v.buttons[i]; if (o === undefined) o = v.buttons[i] = { pressed: false, value: 0 };
+      if (s.mask[i]) { o.pressed = false; o.value = 0; } else { o.pressed = d; o.value = src?.value ?? (d ? 1 : 0); }
+    }
+    if (v.buttons.length !== b.length) v.buttons.length = b.length;
+  };
+  const views = () => { for (let i = 0; i < slots.length; i++) { const d = slots[i]; if (d !== undefined) viewOf(info.get(d)); } };
+  const drive = (dt, raw) => {
+    for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.update?.(dt, raw); }
+  };
+
   // s.edge: a button went down, or an axis moved more than JOIN_AXIS from its rest value, this frame; s.kind / s.at name the first such input
   const edges = (s, p) => {
     s.edge = false;
@@ -60,12 +147,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     const from = holder.get(dev); if (from === lp) return;
     if (from !== undefined) detach(from, dev);
     holder.set(dev, lp); lp.devices.push(dev); paired(dev);
-    emit('seat.device', lp.seat, dev, 'add'); changed(lp);
+    emit('seat.device', lp.seat, dev, 'add'); changed(lp, dev);
   };
   const detach = (lp, dev) => {
     const i = lp.devices.indexOf(dev); if (i >= 0) lp.devices.splice(i, 1);
     holder.delete(dev); if (usedLast.get(lp) === dev) usedLast.delete(lp);
-    emit('seat.device', lp.seat, dev, 'remove'); changed(lp);
+    emit('seat.device', lp.seat, dev, 'remove'); changed(lp, dev);
   };
   // [C-9] a pad gone from its slot (or replaced there by another product) is lost: its seat keeps it, marked, and keeps
   // its controller and player; an unpaired lost pad is forgotten
@@ -74,7 +161,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     const s = info.get(dev); s.live = null; s.lostAt = ++losses; dev.lost = true;
     const lp = holder.get(dev);
     if (lp === undefined) { info.delete(dev); known.delete(dev); return; }
-    emit('seat.lost', lp.seat, dev); changed(lp);
+    emit('seat.lost', lp.seat, dev); changed(lp, dev);
   };
   // [C-8] an unpaired device pressed (or, with one seat for everything, first seen): returns the device that now stands for it
   const offer = dev => {
@@ -95,6 +182,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   const regain = dev => {
     let best = null, same = false;
     for (let k = 0; k < list.length; k++) {
+      if (list[k].leaving) continue; // a seat that is leaving takes nothing back
       const ds = list[k].devices;
       for (let i = 0; i < ds.length; i++) {
         const d = ds[i]; if (!d.lost || d.kind !== dev.kind) continue;
@@ -106,7 +194,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
     const lp = holder.get(best), s = info.get(dev);
     info.delete(dev); known.delete(dev); info.set(best, s);
     best.id = dev.id; best.lost = false; place(best, dev); paired(best);
-    emit('seat.regained', lp.seat, best); changed(lp);
+    emit('seat.regained', lp.seat, best); changed(lp, best);
     return best;
   };
   // the regained device takes the new one's place (Task 6 adds game kinds)
@@ -133,10 +221,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
   };
   // the default join: seat 0 while it holds no pad (the keyboard sits there, so a solo pad player is player 1), else a new seat
   const defaultJoin = dev => (dev.kind === 'pad' && !seatOf(0).devices.some(d => d.kind === 'pad') ? 0 : 'new');
-  const enable = ({ max = 4, join } = {}) => {
+  const enable = ({ max = 4, join, contexts = [] } = {}) => {
     if (!Number.isInteger(max) || max < 1 || max > 16) throw new Error('seats: max must be an integer in 1..16');
     if (join !== undefined && typeof join !== 'function') throw new Error('seats: join must be a function');
-    opts = { max, join: join ?? defaultJoin };
+    if (!Array.isArray(contexts)) throw new Error('seats: contexts must be a list of names or [name, priority]');
+    opts = { max, join: join ?? defaultJoin, contexts };
+    for (let k = 0; k < list.length; k++) start(list[k]);
   };
   const freeSeat = () => { for (let n = 0; n < opts.max; n++) if (seatOf(n) === undefined) return n; return -1; };
   // [C-5] a seat opens pending: lh.seat runs at the next step (offline; plan 3 asks the host), then sync() finds its controller
@@ -214,8 +304,12 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc } = 
 
   return {
     list, // view.localPlayers, in seat order
-    on, enable, unpaired,
-    update() { sync(); poll(); refresh(); },
-    dispose() { target.removeEventListener?.('keydown', onKey); listeners.length = 0; },
+    on, enable, unpaired, context,
+    update(dt, raw = dt) { sync(); poll(); refresh(); views(); drive(dt, raw); },
+    dispose() {
+      target.removeEventListener?.('keydown', onKey);
+      for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.dispose?.(); binds.delete(list[k]); }
+      listeners.length = 0;
+    },
   };
 }
