@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mp, headless } from '../testing/index.js';
-import { encodeFrame } from '../src/index.sim.js';
+import { encodeFrame, decodeFrame, isFrame, createRegistry } from '../src/index.sim.js';
 import carts, { CART } from './net/fixtures/carts.js';
 await RAPIER.init();
 const argsOf = i => ({ n: i + 1 });
@@ -62,4 +62,52 @@ test('net.locals is this page\'s numbers: every seat solo, seat 0 first as net.s
   assert.deepEqual([...G.h.world.net.locals], [2], 'a guest: the number its game set (manual join)');
   assert.equal(G.engine.controllerOf(0).player, 2, 'seat 0 took it');
   assert.deepEqual(G.engine.players, [], 'a manual guest\'s roster restarted empty at net.open (B1)');
+});
+
+const nums = h => [0, 1].map(s => h.engine.controllerOf(s)?.player);
+const renumbered = h => h.events.of('player.renumbered').map(e => [e.seat, e.from, e.to]);
+test('a manual guest that played solo with two seats takes its number: the seat holding it moves aside (I1)', () => {
+  const h = headless(carts, { args: { n: 2 } }); h.step(1);
+  h.command('lh.seat', { op: 'join', seat: 1 }); h.step(1);
+  assert.deepEqual(nums(h), [1, 2], 'solo: seats 1 and 2');
+  h.command('net.open', { role: 'guest', id: 'g1', hostId: 'h0', at: 0, key: [2, 0, 0, 0] });
+  assert.doesNotThrow(() => h.step(1), 'the game\'s self = 2 does not hit "player 2 is taken"');
+  assert.deepEqual(nums(h), [2, 3], 'seat 0 is 2; seat 1 moved aside to a free number');
+  assert.deepEqual([...h.world.net.locals], [2]); assert.equal(h.world.net.self, 2);
+  assert.deepEqual(renumbered(h), [[1, 2, 3], [0, 1, 2]]);
+});
+test('a guest seat that joined online before the setter moves aside the same way (I1)', () => {
+  const h = headless(carts, { args: { n: 1 } }); h.step(1);
+  h.command('net.open', { role: 'guest', id: 'g1', hostId: 'h0', at: 0, key: [2, 0, 0, 0] }); h.step(1);
+  h.command('lh.seat', { op: 'join', seat: 1 }); h.step(1);
+  assert.deepEqual(nums(h), [1, 2], 'freeLocal gave seat 1 the number 2');
+  assert.doesNotThrow(() => { h.world.net.self = 2; }); h.step(1);
+  assert.deepEqual(nums(h), [2, 3]); assert.deepEqual([...h.world.net.locals], [2]);
+  assert.deepEqual(renumbered(h), [[1, 2, 3], [0, 1, 2]]);
+});
+test('a guest keyframe that leaves out one of its numbers ends it in the relay too (M1)', () => {
+  const w = mp(carts, { peers: 3, argsOf }); w.seconds(1);
+  const H = w.host.h.world.net, g = w.guests[0], G2 = w.peers[2], send = f => g.engine.net.send(g.net.hostId, encodeFrame(f), false);
+  const reg = createRegistry(carts.net.kinds, { maxSender: carts.net.maxSender });
+  H.player(g.net.id, 1, 4);
+  send({ key: false, sender: 2, time: 1e6, groups: [{ kind: CART, records: [[2, rec(5)], [4, rec(7)]], removed: [] }] });
+  w.seconds(0.3); assert.ok(G2.h.world.net.find('cart', 4), 'guest2 has seat 1\'s cart');
+  const keys = [], prev = w.hub.drop;
+  w.hub.drop = (from, to, data, reliable) => {
+    if (to === G2.net.id && isFrame(data)) { const f = decodeFrame(data, reg); if (f?.key && f.groups.has('cart')) keys.push(f); }
+    return prev ? prev(from, to, data, reliable) : false;
+  };
+  send({ key: true, sender: 2, time: 2e6, groups: [{ kind: CART, records: [[2, rec(5)]], removed: [] }] }); // 4's removal diffs were lost
+  w.seconds(3);
+  const relayed = keys.filter(f => f.sender === 4);
+  assert.ok(relayed.length, 'the host relays keyframes for number 4');
+  assert.ok(relayed.every(f => !f.groups.get('cart').records.has(4)), 'no relay keyframe to guest2 carries 4 again');
+  assert.equal(G2.h.world.net.find('cart', 4), undefined, 'and guest2 ends the ghost');
+});
+test('the host cannot bind one of its own seats\' numbers to a guest (M3)', () => {
+  const w = mp(carts, { peers: 2, argsOf }); w.step(2);
+  w.seat(0, 'join', 1); w.step(1);
+  const H = w.host.h.world.net, n = w.host.engine.controllerOf(1).player;
+  assert.ok(H.locals.has(n));
+  assert.throws(() => H.player(w.guests[0].net.id, 1, n), new RegExp(`net: player ${n} is this page's`));
 });

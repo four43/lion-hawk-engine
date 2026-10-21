@@ -168,9 +168,17 @@ export function installNet(engine) {
     if (old) { old.time = rt; old.rec = rec; old.fresh = true; } else m.set(rk.name, { time: rt, rec, fresh: true });
   };
   const keepRec = (rec, n) => keepOne(n, rec);
+  let rg = null; // keyOmit's group
+  // M1: a keyframe ends what it leaves out (createStore). A number of this peer that the keyframe omits (its seat's object went and
+  // the REPEAT removal diffs were lost) is relayed as a removal, so the other guests end it too instead of being sent the old record
+  const keyOmit = n => { if (rg.records.has(n)) return; const x = W.fwd.get(n)?.get(rk.name); if (x && x.rec) keepOne(n, null); };
   function keepForRelay(f, nums) { // a peer with several seats sends them in one frame: each record is kept under its own number
     rt = f.time; rn = nums;
-    for (const k of ownerKinds) { const g = f.groups.get(k.name); if (!g) continue; rk = k; g.records.forEach(keepRec); for (let j = 0; j < g.removed.length; j++) keepOne(g.removed[j], null); }
+    for (const k of ownerKinds) {
+      const g = f.groups.get(k.name); if (!g) continue; rk = k; g.records.forEach(keepRec);
+      for (let j = 0; j < g.removed.length; j++) keepOne(g.removed[j], null);
+      if (f.key) { rg = g; nums.forEach(keyOmit); rg = null; }
+    }
     rk = null; rn = null;
   }
   const leaving = n => { for (let j = 0; j < W.gone.length; j++) if (W.gone[j].n === n) return true; return false; };
@@ -197,6 +205,7 @@ export function installNet(engine) {
   function bind(n, peer, key, seat) { // host: player n is this peer's seat (N-20)
     const old = bindings.get(n);
     if (old && old.peer !== peer) throw new Error(`net: player ${n} is already bound to ${old.peer}`);
+    if (locals.has(n) || seats.controllers.list.some(x => x.player === n)) throw new Error(`net: player ${n} is this page's`);
     const again = old !== undefined && old.seat === seat, prev = numberAt(peer, seat);
     if (prev !== undefined && prev !== n) unbindNumber(prev); // the seat had another number
     bindings.set(n, { peer, key, seat }); let s = peerNums.get(peer); if (!s) peerNums.set(peer, s = new Set()); s.add(n);
@@ -235,7 +244,20 @@ export function installNet(engine) {
   }
   // B1: a number this page's seat may take: free in the controllers and the roster (the roster holds the room's numbers: on the host
   // every guest's, on a guest the host's records from Task 7), so a number online never comes from the controllers alone
-  const freeLocal = () => { let n = 1; while (seats.controllers.list.some(x => x.player === n) || seats.roster.get(n)) n++; return n; };
+  const freeLocal = () => { let n = 1; while (seats.controllers.list.some(x => x.player === n) || seats.roster.get(n) || bindings.has(n)) n++; return n; };
+  // I1: this page's controller c takes number `to`. Another of this page's seats holding `to` (it played solo, or joined online before
+  // the number came) moves aside first to a free number. The roster follows, and player.renumbered fires per move
+  function moveSeat(c, to) {
+    const from = c.player; seats.controllers.renumber(from, to);
+    if (seats.roster.get(from)) seats.roster.renumber(from, to);
+    engine.emit('player.renumbered', { seat: c.seat, from, to });
+  }
+  function renumberSeat(c, to) {
+    if (c.player === to) return;
+    const other = seats.controllers.list.find(x => x !== c && x.player === to);
+    if (other) moveSeat(other, freeLocal());
+    moveSeat(c, to);
+  }
   // [C-5] lh.seat online, every role but solo (B1). The host's new seat is the room's at once; a guest's is not until the game (manual
   // join: the self setter, seat 0 only) or the host (Task 6) names it
   seats.route = (op, seat) => {
@@ -275,7 +297,7 @@ export function installNet(engine) {
       if (role === 'host' && n !== 1) throw new Error('net: the host is player 1');
       if (role === 'guest') {
         if (n === 0) confirmed.delete(0);
-        else { const c = engine.controllerOf(0); if (c.player !== n) seats.controllers.renumber(c.player, n); confirmed.add(0); }
+        else { renumberSeat(engine.controllerOf(0), n); confirmed.add(0); }
       }
       refreshLocals(); if (sync()) W.lastKey.fill(-Infinity);
     },
