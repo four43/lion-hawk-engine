@@ -111,3 +111,30 @@ test('a seat that leaves while a capture is pending resolves it null (N7)', asyn
   s1.leave();
   assert.equal(await p, null);
 });
+
+test('a key that opened the remap menu does not answer the capture it started (review fix)', async () => {
+  const t = setup(), { seats, key, document } = t; const lp = seats.list[0]; let p;
+  document.body.addEventListener('keydown', () => { p ??= lp.bindings.capture(); }); // the game's listener, ahead of the seats one on window
+  key('keydown', 'w');
+  let got = 'pending'; p.then(v => { got = v; }); await Promise.resolve();
+  assert.equal(got, 'pending', 'the same keydown does not answer');
+  key('keydown', 'e');
+  assert.deepEqual(await p, { device: lp.devices[0], input: 'e' });
+});
+
+test('stored __proto__ keys are ignored and the good entry applies (review fix)', () => {
+  const store = memory(); store.setItem(KEY, `{"__proto__":{"x":1},"pad:${XBOX}":{"__proto__":{"y":1},"Brake":"button:7"}}`);
+  const t = ready(store);
+  assert.equal(t.lp.bindings.get('Brake', t.dev), 'button:7');
+  assert.equal({}.x, undefined); assert.equal({}.y, undefined);
+});
+
+test('two seats on one profile name keep each other\'s mappings (review fix)', () => {
+  const store = memory(), t = ready(store), { seats, slots, frame, e, lp: s0, dev } = t;
+  seats.enable();
+  slots[1] = pad(1, { id: DUALSENSE, down: [0] }); frame(); e.stepN(1); frame();
+  const s1 = seats.list[1], d1 = s1.devices.find(d => d.kind === 'pad');
+  s0.bindings.profile = 'Sam'; s1.bindings.profile = 'Sam';
+  s0.bindings.map('Brake', dev, 'button:4'); s1.bindings.map('Gas', d1, 'button:5');
+  assert.deepEqual(JSON.parse(store.m.get('lh.bindings.seats.Sam')), { [`pad:${XBOX}`]: { Brake: 'button:4' }, [`pad:${DUALSENSE}`]: { Gas: 'button:5' } });
+});

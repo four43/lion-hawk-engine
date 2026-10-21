@@ -8,11 +8,11 @@
 export const deviceKey = dev => (dev.kind === 'pad' ? 'pad:' + dev.id : dev.kind === 'keys' ? 'keys:' + dev.scheme : null);
 const isObj = o => o !== null && typeof o === 'object' && !Array.isArray(o);
 const clean = raw => {
-  const out = {};
+  const out = Object.create(null);
   if (!isObj(raw)) return out;
   for (const d of Object.keys(raw)) {
     const m = raw[d]; if (!isObj(m)) continue;
-    const o = {}; for (const n of Object.keys(m)) if (typeof m[n] === 'string' && m[n] !== '') o[n] = m[n];
+    const o = Object.create(null); for (const n of Object.keys(m)) if (typeof m[n] === 'string' && m[n] !== '') o[n] = m[n];
     out[d] = o;
   }
   return out;

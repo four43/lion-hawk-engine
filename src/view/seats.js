@@ -27,6 +27,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const profiles = createProfiles({ game: engine.game.id, storage });
   const saved = new WeakMap();     // seat -> { profile, data }
   const capturing = new WeakMap(); // seat -> the pending capture's resolve
+  const since = new WeakMap();     // seat -> performance.now() when its capture began; keys made before that (the one that opened the menu) do not answer
 
   const emit = (type, seat, device, op) => {
     const e = op === undefined ? { type, seat, device } : { type, seat, device, op };
@@ -72,7 +73,8 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     const st = { profile: `Player ${lp.seat + 1}`, data: null };
     st.data = profiles.load(st.profile); saved.set(lp, st);
     const held = dev => { if (holder.get(dev) !== lp) throw new Error(`bindings: seat ${lp.seat} does not hold that device`); };
-    const save = () => { profiles.save(st.profile, st.data); changed(lp); };
+    // re-read the stored profile, apply this seat's change to it and save: two seats on one profile name keep each other's mappings
+    const save = apply => { st.data = profiles.load(st.profile); apply(st.data); profiles.save(st.profile, st.data); changed(lp); };
     const b = {
       get profile() { return st.profile; },
       set profile(name) {
@@ -91,16 +93,13 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
         if (from === null) throw new Error(`bindings.map: no mappable binding '${name}' for this device`);
         if (dev.kind === 'keys' && typeof input === 'string') input = input.toLowerCase();
         if (inputKind(input) !== inputKind(from)) throw new Error(`bindings.map: '${name}' is on ${from}; ${JSON.stringify(input)} is not the same kind of input`);
-        const d = (st.data[deviceKey(dev)] ??= {});
-        if (input === from) delete d[name]; else d[name] = input;
-        save();
+        save(data => { const d = (data[deviceKey(dev)] ??= {}); if (input === from) delete d[name]; else d[name] = input; });
       },
       reset(name) {
-        for (const k of Object.keys(st.data)) { if (name === undefined) delete st.data[k]; else delete st.data[k][name]; }
-        save();
+        save(data => { for (const k of Object.keys(data)) { if (name === undefined) delete data[k]; else delete data[k][name]; } });
       },
       // the next button or axis edge of this seat's pads, or key on its keyboard schemes, for remap screens
-      capture() { b.cancel(); return new Promise(res => { capturing.set(lp, res); }); },
+      capture() { b.cancel(); since.set(lp, performance.now()); return new Promise(res => { capturing.set(lp, res); }); },
       cancel() { const r = capturing.get(lp); capturing.delete(lp); r?.(null); },
     };
     return b;
@@ -262,7 +261,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     const k = String(e.key).toLowerCase();
     if (opts !== null) for (const dev of keysBy.values()) if (!holder.has(dev) && inScheme(dev.scheme, k)) offer(dev);
     for (let n = 0; n < list.length; n++) { // a capturing seat takes the key on its own scheme ('all' only when it has no other)
-      const lp = list[n], r = capturing.get(lp); if (r === undefined) continue;
+      const lp = list[n], r = capturing.get(lp); if (r === undefined || !(e.timeStamp > since.get(lp))) continue;
       let dev = null;
       for (const d of lp.devices) if (d.kind === 'keys' && inScheme(d.scheme, k) && (dev === null || dev.scheme === 'all')) dev = d;
       if (dev !== null) { capturing.delete(lp); r({ device: dev, input: k }); }
