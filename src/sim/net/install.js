@@ -89,7 +89,7 @@ export function installNet(engine) {
   }
   function newRemote(k, e, rec) {
     const links = k.bodies.map(b => bodyEntity(e, b));
-    return { kind: k, e, id: e.netId, links, last: rec, interp: createInterp(), s: { a: null, b: null, k: 0, at: 0 }, applied: null, pose: newPose(),
+    return { kind: k, e, id: e.netId, links, last: rec, interp: createInterp(), s: { a: null, b: null, k: 0, at: 0 }, applied: null, bad: null, pose: newPose(),
       fc: k.follow === 'forecast' && k.remote !== 'driven' ? createForecast(links.length) : null,
       queue: k.remote === 'driven' ? createInputQueue(k.input, every[index.get(k.name)]) : null, corr: k.remote === 'driven' ? links.map(newTarget) : null };
   }
@@ -103,9 +103,12 @@ export function installNet(engine) {
     W.byKey.clear(); W.remotes.clear();
     for (let j = 0; j < W.list.length; j++) {
       const r = W.list[j], k = r.kind;
-      if (role === 'host') { // a guest's record never halts the host: a replica its hooks cannot rebuild is dropped (security)
-        try { r.e = build(k, r.id, r.last); } catch (err) { dropped(k, r.id, err); W.list.splice(j--, 1); continue; }
-      } else r.e = build(k, r.id, r.last); r.links = k.bodies.map(b => bodyEntity(r.e, b)); r.applied = null;
+      if (guarded(k, r.id)) { // another peer's record never halts this one: a replica its hooks cannot rebuild is dropped (security)
+        try { r.e = build(k, r.id, r.last); } catch (err) { dropped(k, r.id, err); unrelay(k, r.id); W.list.splice(j--, 1); continue; }
+      } else {
+        r.e = build(k, r.id, r.last);
+      }
+      r.links = k.bodies.map(b => bodyEntity(r.e, b)); r.applied = null;
       if (r.corr) for (let i = 0; i < r.corr.length; i++) r.corr[i].left = 0;
       W.byKey.set(keyOf(k, r.id), r.e); W.remotes.set(r.e, r); stats.respawned++;
       if (k.remote === 'driven' || r.fc) apply(r, r.last, null); // interp kinds are applied by the next lh.net.recv (applied = null)
@@ -140,9 +143,16 @@ export function installNet(engine) {
     try { for (let i = 0; i < r.links.length; i++) if (r.links[i] !== e) world.despawn(r.links[i]); world.despawn(e); } finally { replicating--; }
     stats.despawned++;
   }
-  // host: a game hook (spawn, spawned, apply) or a kind contract threw on a guest's record. A guest's data never halts the host: the
-  // record is dropped, the rest of the frame applies, and the game hears it once per peer and kind (security, Task 6 ruling)
+  // a game hook (spawn, spawned, apply) or a kind contract threw on a guarded record (a guest's, on the host or relayed). A guest's
+  // data never halts a peer: the record is dropped, the rest of the frame applies, and the game hears it once per sender and kind
   const dropped = (k, id, err) => warn(`net: '${k.name}' record of ${bindings.get(id)?.peer ?? `player ${id}`} dropped`, err);
+  // guarded: records the host does not vouch for. On the host every replica is a guest's; on a guest, owner-kind records of a
+  // number other than 1 are another guest's, relayed. The host's own records (host kinds, player 1's) stay loud on a guest
+  const guarded = (k, id) => role === 'host' || (k.authority === 'owner' && id !== 1);
+  const unrelay = (k, id) => { if (role === 'host') { W.fwd.get(id)?.delete(k.name); rejected.add(keyOf(k, id)); } }; // a dropped record is not passed on
+  // host: keyOf(kind, id) of a guest's objects whose newest record the change loop dropped. The relay skips them (a keyframe resends
+  // an unchanged record, which the store does not report again) until a newer record of theirs applies here
+  const rejected = new Set();
   const apply = (r, rec, s) => { if (r.kind.apply) r.kind.apply(r.e, rec, world, s); else applyFields(r.kind, r.e, rec); };
   const SNAP_AT = [0, 0, 0], SNAP_Q = [0, 0, 0, 1], WHERE = { at: SNAP_AT }, HOW = { q: SNAP_Q, keep: true }, OLD = newPose();
   function correct(r, rec) { // N-14: on a body snapshot, per body: project by the latency, then nudge or snap
@@ -179,6 +189,7 @@ export function installNet(engine) {
   // ---- the host's relay (N-10, C-3, N-24): each guest's newest owner records, by owner number, passed on with that guest's clock ----
   let rk = null, rt = 0, rn = null; // keepOne's kind, time and the sending peer's numbers (one callback, made once: R-8)
   const keepOne = (n, rec) => {
+    if (rejected.size && rejected.has(keyOf(rk, n))) return; // its hooks threw here: never relayed to the other guests (security)
     if (!rn.has(n)) return; // S2: a removal of a number this peer no longer holds is not passed on (fromPeer let it through)
     let m = W.fwd.get(n); if (!m) W.fwd.set(n, m = new Map());
     const old = m.get(rk.name); if (old && rt <= old.time) return;
@@ -230,7 +241,7 @@ export function installNet(engine) {
     if (sync()) W.lastKey.fill(-Infinity); // M-23: a joiner gets every keyframe at once
     if (W && !again) { // a reused number starts fresh: no old relay clock, no store entry
       W.fwd.delete(n);
-      for (const k of ownerKinds) W.store.forget(k.name, n);
+      for (const k of ownerKinds) { W.store.forget(k.name, n); rejected.delete(keyOf(k, n)); }
       // S3: its pending removals stay. relay() sends them before any new record of n (leaving), so every other guest's store drops
       // the old object and its clock first, and a reload's lower clock is accepted after them
     }
@@ -241,7 +252,7 @@ export function installNet(engine) {
     if (!keep) seats.roster.remove(n);
     if (!sync()) return;
     let time = 0; const m = W.fwd.get(n); if (m) for (const x of m.values()) if (x.time > time) time = x.time; W.fwd.delete(n);
-    for (const k of ownerKinds) { const e = W.byKey.get(keyOf(k, n)); if (e) despawnRemote(e); W.store.forget(k.name, n); }
+    for (const k of ownerKinds) { const e = W.byKey.get(keyOf(k, n)); if (e) despawnRemote(e); W.store.forget(k.name, n); rejected.delete(keyOf(k, n)); }
     W.gone.push({ n, time: time + 1, left: REPEAT });
   }
   const unbindPeer = peer => { const s = peerNums.get(peer); if (s) for (const n of [...s]) unbindNumber(n); };
@@ -267,7 +278,8 @@ export function installNet(engine) {
   // quiet: no event (welcome() reports each seat once, from its number before the welcome or before an earlier one moved it aside)
   function moveSeat(c, to, quiet) {
     const from = c.player; seats.controllers.renumber(from, to);
-    if (seats.roster.get(from)) seats.roster.renumber(from, to);
+    // a guest's roster is the host's records (N-21): its entry under `from` may be another peer's by now, so only the host moves it
+    if (role !== 'guest' && seats.roster.get(from)) seats.roster.renumber(from, to);
     if (!quiet) engine.emit('player.renumbered', { seat: c.seat, from, to });
   }
   function renumberSeat(c, to, quiet = false) {
@@ -374,7 +386,7 @@ export function installNet(engine) {
   }
   function goSolo() { // M-41: the room closed. Other players' entities go; host-kind replicas stay as plain local entities
     if (sync()) for (let i = W.list.length - 1; i >= 0; i--) { const r = W.list[i]; if (r.kind.authority === 'owner') despawnRemote(r.e); else forgetRemote(r); }
-    role = 'solo'; hostId = null; bindings.clear(); peerNums.clear(); refusedAll = false; aside.clear(); seatOpAt.clear(); retryMask = 0;
+    role = 'solo'; hostId = null; bindings.clear(); peerNums.clear(); rejected.clear(); refusedAll = false; aside.clear(); seatOpAt.clear(); retryMask = 0;
     const R = seats.roster;
     for (let i = R.list.length - 1; i >= 0; i--) { const p = R.list[i]; if (!p.local) R.remove(p.number); } // N-25: this page's players stay
     for (const c of seats.controllers.list) if (c.seat !== null && !R.get(c.player)) R.add(c.player, { seat: c.seat, local: true, quiet: true }); // a seat the room never numbered (B1)
@@ -434,7 +446,7 @@ export function installNet(engine) {
   // ---- built-in handlers (3c seam): before the game's handler for the same type ----
   engine.builtin('net.open', (e, d) => {
     if (sync()) { for (let i = W.list.length - 1; i >= 0; i--) despawnRemote(W.list[i].e); W = fresh(); }
-    role = d.role; hostId = d.hostId; peerKeyWords = Array.isArray(d.key) ? d.key : null; bindings.clear(); peerNums.clear();
+    role = d.role; hostId = d.hostId; peerKeyWords = Array.isArray(d.key) ? d.key : null; bindings.clear(); peerNums.clear(); rejected.clear();
     helloAt = -Infinity; refusedAll = false; aside.clear(); seatOpAt.clear(); retryMask = 0; // a guest's first hello goes after this step (the send clock below)
     // #77, N-25: a guest's numbers are the host's to give; its roster restarts from the host's records (B1: never a stale offline entry)
     if (role === 'host') { hostSeat0(); confirmAll(); } else { confirmed.clear(); seats.roster.clear(); }
@@ -450,7 +462,6 @@ export function installNet(engine) {
     if (role === 'host' ? !fromPeer(d.from, f) : d.from !== hostId) { stats.dropped++; return; } // #77, M-50, N-24, S2
     if (locals.has(f.sender)) return;
     stats.frames++;
-    if (role === 'host') keepForRelay(f, peerNums.get(d.from));
     const ch = W.store.apply(f);
     for (let i = 0; i < ch.length; i++) {
       const c = ch[i], k = reg.byName.get(c.kind);
@@ -460,9 +471,13 @@ export function installNet(engine) {
         continue;
       }
       if (k === GK) { if (c.rec) seats.roster.applyGame(c.rec); continue; }
-      if (role !== 'host') { if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); continue; } // host data is trusted
-      try { if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); } catch (err) { dropped(k, c.id, err); } // this record only
+      if (!guarded(k, f.sender)) { if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id); continue; } // the host's: trusted
+      try { // this record only
+        if (c.rec) receive(k, c.id, c.rec, f.time, d.at); else removed(k, c.id);
+        if (rejected.size) rejected.delete(keyOf(k, c.id));
+      } catch (err) { dropped(k, c.id, err); if (role === 'host') rejected.add(keyOf(k, c.id)); }
     }
+    if (role === 'host') keepForRelay(f, peerNums.get(d.from)); // after the change loop: what it dropped stays here
     forgetRemoved(f);
   });
   engine.builtin('net.hello', (e, d) => { // host (N-19): only from a port (from: a transport peer id)
@@ -530,8 +545,9 @@ export function installNet(engine) {
       if (!r.interp.sampleInto(now, r.s)) continue;
       const s = r.s;
       for (let i = 0; i < r.links.length; i++) { const name = k.bodies[i]; lerpPose(s.a[name], s.b[name], s.k, r.pose); writeLink(r.links[i], r.pose); }
-      if (role !== 'host') { sampled(r, k, s); continue; } // a guest: the host's records are trusted (a game bug stays loud)
-      try { sampled(r, k, s); } catch (err) { r.applied = s.b; dropped(k, r.id, err); }
+      if (!guarded(k, r.id)) { sampled(r, k, s); continue; } // the host's records are trusted (a game bug stays loud)
+      if (r.bad === s.b) continue; // its apply threw on this record: skipped until a newer one is sampled
+      try { sampled(r, k, s); } catch (err) { r.applied = r.bad = s.b; dropped(k, r.id, err); unrelay(k, r.id); }
     }
   }, { stage: 'pre', before: ['lh.scene'] });
 

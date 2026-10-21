@@ -81,13 +81,62 @@ for (const [hook, extra] of Object.entries(hooks)) {
   });
 }
 
-test('a record from the host that makes a hook throw stays loud on a guest: host data is trusted (security)', () => {
-  // the host relays guest 1's bad dot; guest 2 builds it from the host's frame and throws (a game bug there stays visible)
-  const D = kind({ name: 'dot', code: 1, authority: 'owner', remote: 'view', max: 8, idMin: 1, idMax: 8, fields: DOT.fields, ...hooks.spawn });
-  const w = mp(seatsGame({ kinds: [D] }), { peers: 3 }); w.seconds(1);
+const onGuest = f => (rec, ...rest) => { const w = rest.find(x => x?.net); if (w?.net.role === 'guest') bad(rec); return f?.(rec, ...rest); };
+const dotKind = extra => kind({ name: 'dot', code: 1, authority: 'owner', remote: 'view', max: 8, idMin: 1, idMax: 8, fields: DOT.fields, ...extra });
+const quiet = (fn, warned = []) => { const cw = console.warn; console.warn = (...a) => warned.push(a); try { fn(); } finally { console.warn = cw; } return warned; };
+
+test('a guest record the host dropped is not relayed: the other guests never see it (security)', () => {
+  const w = mp(seatsGame({ kinds: [dotKind(hooks.spawn)] }), { peers: 3 }); w.seconds(1);
   w.seat(1, 'join', 1); w.step(1);
-  const cw = console.warn; console.warn = () => {};
-  try { assert.throws(() => w.seconds(1, [null, { 0: { x: 0 }, 1: { x: 1 } }]), /bad dot/); } finally { console.warn = cw; }
+  const warned = [];
+  quiet(() => w.seconds(3, [null, { 0: { x: 0.2 }, 1: { x: 1 } }]), warned);
+  const g2 = w.peers[2].h.world;
+  assert.equal(g2.net.find('dot', 4), undefined, 'guest 2 has no bad dot (guest 1\'s seat 1 is player 4)');
+  assert.equal(g2.net.find('dot', 2)?.x, 2, 'guest 1\'s good dot is relayed');
+  assert.equal(warned.filter(([k]) => /'dot' record of player 4 dropped/.test(k)).length, 0, 'guest 2 never had to drop it');
+  assert.equal(warned.filter(([k]) => /'dot' record of .* dropped/.test(k)).length, 1, 'the host warned');
+});
+
+for (const [hook, extra] of Object.entries({ spawn: { spawn: onGuest(() => ({})) }, apply: { apply: (e, rec, w) => { if (w.net.role === 'guest' && rec.x > 5) { calls++; bad(rec); } e.x = rec.x; } } })) {
+  test(`another guest's relayed record that makes a ${hook} hook throw on a guest is dropped and warned once (security)`, () => {
+    calls = 0;
+    const w = mp(seatsGame({ kinds: [dotKind(extra)] }), { peers: 3 }); w.seconds(1);
+    w.seat(1, 'join', 1); w.step(1);
+    const warned = quiet(() => w.seconds(3, [null, { 0: { x: 0.2 }, 1: { x: 1 } }])); // guest 2 keeps stepping
+    const g2 = w.peers[2].h.world;
+    assert.equal(warned.filter(([k]) => /'dot' record of player 4 dropped/.test(k)).length, 1, 'one warning');
+    assert.equal(g2.net.find('dot', 2)?.x, 2, 'the good record applied');
+    if (hook === 'spawn') assert.equal(g2.with('net').filter(e => e.net === 'dot' && e.netId === 4).length, 0, 'no bad dot');
+    else assert.ok(calls <= 6, `a throwing apply is skipped until a newer record (${calls} throws in 3 s)`);
+    w.step(1);
+  });
+}
+let calls = 0;
+
+test('the host\'s own records that make a hook throw stay loud on a guest: host data is trusted (security)', () => {
+  const w = mp(seatsGame({ kinds: [dotKind({ spawn: onGuest(() => ({})) })] }), { peers: 2 });
+  quiet(() => assert.throws(() => w.seconds(1, [{ 0: { x: 1 } }]), /bad dot/)); // player 1's dot (sender 1), x 10 from its first record
+  const BEACON = kind({ name: 'beacon', code: 3, authority: 'host', remote: 'view', max: 1, idMin: 1, idMax: 1, fields: { x: F.fixed(-10, 10, 1 / 64) }, spawn: onGuest(() => ({})) });
+  const v = mp(seatsGame({ kinds: [DOT, BEACON] }, { commands: { 'net.open': (e, d, ctx) => { if (d.role === 'host') ctx.world.spawn({ net: 'beacon', netId: 1, x: 9 }); } } }), { peers: 2 });
+  quiet(() => assert.throws(() => v.seconds(1), /bad dot/)); // a host kind
+});
+
+test('two guests joining a seat at once: the welcome renumbers the seat, never another peer\'s roster entry (N-21, N-25)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1);
+  const H = w.host, send = H.net.send.bind(H.net), held = []; let hold = true;
+  H.net.send = (to, d, r) => { if (hold && d?.t === 'net.welcome') { held.push([to, d, r]); return; } return send(to, d, r); };
+  w.seat(1, 'join', 1); w.seat(2, 'join', 1); // both take 4 locally; the host gives 4 and 5
+  w.seconds(0.5); // the lh.player records for 4 and 5 arrive before the welcomes
+  hold = false; for (const m of held) send(...m);
+  w.seconds(0.5);
+  for (const g of w.peers) {
+    assert.deepEqual(g.engine.players.map(p => [p.number, p.seat]), [[1, 0], [2, 0], [3, 0], [4, 1], [5, 1]], g.name);
+  }
+  for (const g of w.guests) {
+    const mine = [g.engine.controllerOf(0).player, g.engine.controllerOf(1).player];
+    assert.deepEqual(g.engine.players.filter(p => p.local).map(p => p.number), mine, g.name);
+  }
+  assert.deepEqual([w.guests[0].engine.controllerOf(1).player, w.guests[1].engine.controllerOf(1).player].sort(), [4, 5]);
 });
 
 test('one hello whose seat the game admit throws on gets one \'admit\' refusal, not one per seat (DoS)', () => {
