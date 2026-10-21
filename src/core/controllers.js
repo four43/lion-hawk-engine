@@ -12,6 +12,7 @@ export function createControllers(schema, { input, emit, world }) {
   const drop = (c, reason) => {
     const e = c.pawn; if (!e) return;
     c.pawn = null; holder.delete(e);
+    if (e.input === c.input.snapshot) e.input = undefined; // the next holder's copy() assigns its own snapshot
     emit('controller.unpossess', { seat: c.seat, player: c.player, pawn: e.id, reason });
   };
   const isEntity = e => e !== null && typeof e === 'object' && Number.isInteger(e.id);

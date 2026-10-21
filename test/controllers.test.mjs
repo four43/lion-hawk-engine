@@ -83,8 +83,18 @@ test('bots have no seat or player and are driven by set/hold; dispose removes th
   bot.possess(car); bot.input.hold({ throttle: 1 }); cs.applyInputs(); cs.copy();
   assert.equal(car.input.throttle, 1);
   bot.dispose();
-  assert.equal(cs.list.length, 1); assert.equal(car.input, bot.input.snapshot, 'the pawn keeps its last input');
+  assert.equal(cs.list.length, 1); assert.equal(car.input, undefined, 'a released pawn no longer points at the old controller\'s input');
   assert.equal(ev.at(-1).reason, 'left');
+});
+
+test('handoff: a pawn taken by another controller does not corrupt the old snapshot', () => {
+  const { cs, w } = setup(), c = cs.list[0], bot = cs.make({ bot: true }), car = w.current.spawn({});
+  c.possess(car); cs.copy();
+  assert.equal(car.input, c.input.snapshot);
+  bot.possess(car); bot.input.hold({ throttle: 1 }); cs.applyInputs(); cs.copy();
+  assert.equal(car.input, bot.input.snapshot);
+  assert.equal(car.input.throttle, 1);
+  assert.equal(typeof cs.list[0].input.snapshot.horn, 'object');
 });
 
 test('gate applies to every controller (U-9 for all seats)', () => {
