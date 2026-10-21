@@ -104,6 +104,54 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     };
     return b;
   };
+  // [C-6] game device kinds (WebHID and the like): read() lists the kind's units each frame; key must be a string
+  const kindList = []; // { kind, read, devs, byKey }
+  let frameNo = 0;
+  const kind = (name, spec) => {
+    if (typeof name !== 'string' || name === '' || name === 'pad' || name === 'keys' || name === 'touch') throw new Error("seats.device: kind must be a new name ('pad', 'keys' and 'touch' are built in)");
+    for (let i = 0; i < kindList.length; i++) if (kindList[i].kind === name) throw new Error(`seats.device: kind '${name}' is already registered`);
+    if (typeof spec?.read !== 'function') throw new Error(`seats.device: kind '${name}' needs read()`);
+    kindList.push({ kind: name, read: spec.read, devs: [], byKey: new Map() });
+  };
+  const readKinds = () => {
+    if (kindList.length === 0) return;
+    frameNo++;
+    for (let n = 0; n < kindList.length; n++) {
+      const K = kindList[n], units = K.read() ?? NO;
+      for (let i = 0; i < units.length; i++) {
+        const u = units[i], key = typeof u.key === 'string' ? u.key : String(u.key);
+        let dev = K.byKey.get(key), fresh = false;
+        if (dev === undefined) {
+          dev = { kind: K.kind, key, id: String(u.id ?? ''), lost: false };
+          K.byKey.set(key, dev); K.devs.push(dev); known.add(dev); fresh = true;
+          info.set(dev, { live: u, seen: 0, act: false, edge: false, lostAt: 0, source: K.kind + ':' + key, checked: null });
+        }
+        const s = info.get(dev), a = u.active === true;
+        s.seen = frameNo; s.live = u; s.edge = a && !s.act; s.act = a;
+        if (!holder.has(dev) && (s.edge || (fresh && opts === null))) dev = offer(dev);
+        const lp = holder.get(dev);
+        if (lp !== undefined && !lp.pending && !lp.leaving && lp.controller && u.values) {
+          const st = info.get(dev);
+          if (st.checked !== lp.controller) { // once per unit and seat: an unknown action would otherwise throw every frame
+            st.checked = lp.controller; st.bad = false;
+            for (const act in u.values) if (!(act in lp.controller.input.kinds)) { st.bad = true; throw new Error(`seats.device: kind '${K.kind}' wrote unknown action '${act}'`); }
+          }
+          if (st.bad !== true) lp.controller.input.device(u.values, st.source); // a unit with an unknown action writes nothing after the one report
+        }
+      }
+      for (let i = K.devs.length - 1; i >= 0; i--) {
+        const dev = K.devs[i];
+        if (info.get(dev).seen !== frameNo) { K.devs.splice(i, 1); K.byKey.delete(dev.key); loseUnit(dev); }
+      }
+    }
+  };
+  const loseUnit = dev => {
+    const s = info.get(dev); s.live = null; s.lostAt = ++losses; dev.lost = true;
+    const lp = holder.get(dev);
+    if (lp === undefined) { info.delete(dev); known.delete(dev); return; }
+    lp.controller?.input.clearDevice(s.source);
+    emit('seat.lost', lp.seat, dev); changed(lp, dev);
+  };
   const captured = (lp, dev, s) => { const r = capturing.get(lp); if (r !== undefined) { capturing.delete(lp); r({ device: dev, input: s.kind + ':' + s.at }); } };
   // the buttons held while a pad is paired stay masked from its bindings until let go, so the press that joined,
   // regained or was claimed with is not also a game input (review focus); context changes do not mask. Only buttons
@@ -194,6 +242,7 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
   const detach = (lp, dev) => {
     const i = lp.devices.indexOf(dev); if (i >= 0) lp.devices.splice(i, 1);
     holder.delete(dev); if (usedLast.get(lp) === dev) usedLast.delete(lp);
+    const src = info.get(dev)?.source; if (src !== undefined) lp.controller?.input.clearDevice(src); // a game kind writes values directly
     emit('seat.device', lp.seat, dev, 'remove'); changed(lp, dev);
   };
   // [C-9] a pad gone from its slot (or replaced there by another product) is lost: its seat keeps it, marked, and keeps
@@ -239,8 +288,13 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
     emit('seat.regained', lp.seat, best); changed(lp, best);
     return best;
   };
-  // the regained device takes the new one's place (Task 6 adds game kinds)
-  const place = (best, dev) => { best.index = dev.index; best.mapping = dev.mapping; slots[best.index] = best; };
+  // the regained device takes the new one's place: a pad's slot, or a game kind's unit key
+  const place = (best, dev) => {
+    if (dev.kind === 'pad') { best.index = dev.index; best.mapping = dev.mapping; slots[best.index] = best; return; }
+    const K = kindList.find(k => k.kind === dev.kind);
+    best.key = dev.key; K.byKey.set(best.key, best); K.devs[K.devs.indexOf(dev)] = best;
+    info.get(best).source = best.kind + ':' + best.key;
+  };
   const claim = (lp, dev) => {
     if (!known.has(dev)) throw new Error('seats: claim needs a device from this page (lp.devices, seats.unpaired() or a seat event)');
     if (!list.includes(lp)) throw new Error(`seats: seat ${lp.seat} has left`);
@@ -353,8 +407,8 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
 
   return {
     list, // view.localPlayers, in seat order
-    on, enable, unpaired, context,
-    update(dt, raw = dt) { sync(); poll(); refresh(); views(); drive(dt, raw); },
+    on, enable, unpaired, context, kind,
+    update(dt, raw = dt) { sync(); poll(); readKinds(); refresh(); views(); drive(dt, raw); },
     dispose() {
       target.removeEventListener?.('keydown', onKey);
       for (let k = 0; k < list.length; k++) { const b = binds.get(list[k]); if (b !== undefined) for (let i = 0; i < b.length; i++) b[i].mod.dispose?.(); binds.delete(list[k]); }

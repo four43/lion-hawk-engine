@@ -216,3 +216,35 @@ test('a join hook naming a leaving seat attaches nothing: the pad stays unpaired
   assert.equal(lp.devices.length, 1, 'only its own pad'); assert.equal(seats.unpaired().length, 1);
   assert.equal(seats.unpaired()[0].index, 1);
 });
+
+test('a game device kind: units pair on a press, write their values on their seat, are lost when gone and come back by id (C-6, C-9)', () => {
+  const { e, seats, frame } = setup(); seats.enable({ join: () => 0 });
+  let units = [];
+  seats.kind('pedals', { read: () => units });
+  units = [{ key: 'hid-1', id: 'Fanatec CSL', active: false, values: { gas: 0.3 } }]; frame();
+  assert.deepEqual(seats.unpaired().map(d => [d.kind, d.key]), [['pedals', 'hid-1']], 'listed but not pressed: unpaired');
+  units = [{ key: 'hid-1', id: 'Fanatec CSL', active: true, values: { gas: 0.6 } }]; frame(); e.stepN(1);
+  const dev = seats.list[0].devices.find(d => d.kind === 'pedals');
+  assert.equal(e.input.snapshot.gas, 0.6);
+  units = []; frame(); e.stepN(1);
+  assert.equal(dev.lost, true); assert.equal(seats.list[0].lost, true); assert.equal(e.input.snapshot.gas, 0, 'its source is cleared');
+  units = [{ key: 'hid-7', id: 'Fanatec CSL', active: true, values: { gas: 1 } }]; frame(); e.stepN(1);
+  assert.equal(dev.lost, false); assert.equal(dev.key, 'hid-7'); assert.equal(e.input.snapshot.gas, 1);
+  assert.throws(() => seats.kind('pad', { read() {} }), /seats.device: kind must be a new name \('pad', 'keys' and 'touch' are built in\)/);
+  assert.throws(() => seats.kind('pedals', { read() {} }), /seats.device: kind 'pedals' is already registered/);
+  assert.throws(() => seats.kind('wheel', {}), /seats.device: kind 'wheel' needs read\(\)/);
+});
+
+test('a game device kind: releasing a held unit clears its source, and an unknown action throws once (C-6)', () => {
+  const { e, seats, frame } = setup(); seats.enable({ join: () => 0 });
+  let units = [{ key: 'h', id: 'X', active: true, values: { gas: 0.5 } }];
+  seats.kind('pedals', { read: () => units });
+  frame(); e.stepN(1);
+  const dev = seats.list[0].devices.find(d => d.kind === 'pedals');
+  assert.equal(e.input.snapshot.gas, 0.5);
+  seats.list[0].release(dev); frame(); e.stepN(1);
+  assert.equal(e.input.snapshot.gas, 0, 'a unit that left its seat writes nothing');
+  units = [{ key: 'g', id: 'Y', active: true, values: { nope: 1 } }];
+  assert.throws(() => frame(), /seats.device: kind 'pedals' wrote unknown action 'nope'/);
+  assert.doesNotThrow(() => frame(), 'reported once, not every frame');
+});
