@@ -23,20 +23,28 @@ export function peerKey({ storage = globalThis.window?.sessionStorage, uuid = ()
   return keyWords(k);
 }
 // [N-18] Chrome's "Duplicate tab" and target=_blank copy sessionStorage, so two live tabs could share one key. claimPeerKey()
-// holds the Web Lock `lh.peer.<key hex>` for the page's life (its callback's promise never resolves); a key another live tab holds
-// is replaced by a fresh one, stored, then claimed. Without navigator.locks (Node, old browsers) it is peerKey(). Games await it
-// and pass the key to createPort({ key }).
+// holds a Web Lock for the page's life (its callback's promise never resolves); a key another live tab holds is replaced by a
+// fresh one, stored, then claimed. navigator.locks.query() lists held lock names to every same-origin page (all games share an
+// origin), so the lock is named by a hash of the key, never the key: a reader of lock names learns nothing usable. Without
+// navigator.locks or crypto.subtle (Node, old browsers, an http page) it is peerKey(). Games await it and pass the key to createPort({ key }).
 const hex = words => { let h = ''; for (const w of words) h += w.toString(16).padStart(8, '0'); return h; };
-const claim = (locks, words) => new Promise(resolve => {
+const bytesHex = b => { let h = ''; for (const x of b) h += x.toString(16).padStart(2, '0'); return h; };
+const lockName = async (subtle, words) => {
+  const d = await subtle.digest('SHA-256', new TextEncoder().encode('lion-hawk peer lock\0' + hex(words)));
+  return 'lh.peer.' + bytesHex(new Uint8Array(d).subarray(0, 16));
+};
+const claim = (locks, name) => new Promise(resolve => {
   let p;
-  try { p = locks.request(`lh.peer.${hex(words)}`, { ifAvailable: true }, lock => { resolve(!!lock); return lock ? new Promise(() => {}) : undefined; }); }
+  try { p = locks.request(name, { ifAvailable: true }, lock => { resolve(!!lock); return lock ? new Promise(() => {}) : undefined; }); }
   catch { resolve(true); return; } // a locks API that throws (a sandboxed frame): keep the key, as without locks
   p?.catch?.(() => resolve(true));
 });
-export async function claimPeerKey({ storage = globalThis.window?.sessionStorage, locks = globalThis.navigator?.locks, uuid = () => uuid4() } = {}) {
+export async function claimPeerKey({ storage = globalThis.window?.sessionStorage, locks = globalThis.navigator?.locks, subtle = globalThis.crypto?.subtle, uuid = () => uuid4() } = {}) {
   let words = peerKey({ storage, uuid });
-  if (!locks || typeof locks.request !== 'function') return words;
-  for (let i = 0; i < 3 && !(await claim(locks, words)); i++) { // a fresh random key is free at once; the bound only stops a broken locks API looping
+  if (!locks || typeof locks.request !== 'function' || typeof subtle?.digest !== 'function') return words;
+  for (let i = 0; i < 3; i++) { // a fresh random key is free at once; the bound only stops a broken locks API looping
+    let name; try { name = await lockName(subtle, words); } catch { return words; } // no usable digest: unclaimed, never a raw-key name
+    if (await claim(locks, name)) break;
     const k = uuid(); try { storage?.setItem(NAME, k); } catch { /* a key for this page load only */ }
     words = keyWords(k);
   }
