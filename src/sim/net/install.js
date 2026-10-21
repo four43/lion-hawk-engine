@@ -261,7 +261,11 @@ export function installNet(engine) {
   }
   // ---- the engine join (N-19): net.hello / net.welcome / net.refused / net.seat; `join: 'manual'` leaves numbering to the game ----
   const byEngine = cfg.join === 'engine', HELLO_MS = 1000; // a hello is repeated until seat 0 is welcomed (one sent before the channel opened is lost)
+  // DoS: a peer's net.seat ops are COOLDOWN steps apart (0.5 s); one sooner is refused 'busy' and does nothing, so join/leave churn
+  // cannot make the host send keyframes and removals to every peer. A guest asks again after RETRY_MS (wall), one seat at a time
+  const COOLDOWN = Math.round(0.5 * hz), RETRY_MS = 600, seatOpAt = new Map(); // seatOpAt: host, transport peer id -> step of its last seat op
   let peerKeyWords = null, helloAt = -Infinity, refusedAll = false; // N6: peerKeyWords is net.open's key (the send loop has `key` booleans)
+  let retryMask = 0, retryAt = 0, lastReason = null; // guest: seats whose op the host found busy (bit per seat); host: the last refusal's reason
   const aside = new Map(); // a guest's seat -> its number before welcome() moved it aside (player.renumbered reports that one)
   const seatList = () => { const out = []; for (const c of seats.controllers.list) if (c.seat !== null) out.push(c.seat); return out; };
   function hello() {
@@ -272,12 +276,19 @@ export function installNet(engine) {
   const taken = n => seats.roster.get(n) !== undefined || bindings.has(n); // the roster holds this page's, the guests' and the inactive
   const freeNumber = () => { for (let n = 2; n <= cfg.maxPlayers; n++) if (!taken(n)) return n; return null; };
   function refuse(peer, seat, reason) { // M4: the host's own seat hears it as an event, a guest's page as net.refused (then the event)
+    lastReason = reason;
     if (peer === null) engine.emit('player.refused', { seat, reason, local: true });
     else engine.net.send(peer, { t: 'net.refused', reason, seat }, true);
     return 0;
   }
-  // host: a number for (peer, seat), or 0 once refused; peer null is the host's own seat (N-19, N-20)
+  // host: a number for (peer, seat), or 0 once refused; peer null is the host's own seat (N-19, N-20). A guest's request never throws
+  // out of the step: a throwing game admit or a broken admit contract (a taken number: a reload with a key the old peer still holds)
+  // refuses that seat 'admit' and warns once per peer; the host's own seat still throws, so a game bug is loud locally (N9)
   function admitSeat(peer, k, seat) {
+    if (peer === null) return admitRule(null, k, seat);
+    try { return admitRule(peer, k, seat); } catch (err) { warn(`net: admit refused a seat of ${peer}`, err); return refuse(peer, seat, 'admit'); }
+  }
+  function admitRule(peer, k, seat) {
     if (peer !== null) { const n = numberAt(peer, seat); if (n !== undefined) return n; } // a repeated hello or ask (M-19, S1): the same answer
     const count = peer === null ? locals.size : peerNums.get(peer)?.size ?? 0;
     if (count >= cfg.maxSeats) return refuse(peer, seat, 'seats');
@@ -307,6 +318,11 @@ export function installNet(engine) {
     // S1: a seat that joined after the hello went out (or was moved aside) is not in any welcome yet: ask for it now
     for (let i = 0; i < cs.length; i++) if (cs[i].seat !== null && !confirmed.has(cs[i].seat)) engine.net.send(hostId, { t: 'net.seat', op: 'join', seat: cs[i].seat }, true);
     refreshLocals(); if (sync()) W.lastKey.fill(-Infinity); // this page's records under the new numbers, at once
+  }
+  function retrySeat() { // guest: the lowest busy seat asks again for what it is now (joined and not the room's, or gone)
+    const s = 31 - Math.clz32(retryMask & -retryMask), c = engine.controllerOf(s); retryMask &= ~(1 << s); retryAt = engine.time.wall + RETRY_MS;
+    if (!c) engine.net.send(hostId, { t: 'net.seat', op: 'leave', seat: s }, true);
+    else if (!confirmed.has(s)) engine.net.send(hostId, { t: 'net.seat', op: 'join', seat: s }, true);
   }
   function hostSeat0() { // N-20: the host's seat 0 is 1 (a page that was a guest kept the room's numbers when it went solo)
     const c = engine.controllerOf(0); if (c && c.player !== 1) renumberSeat(c, 1); // I1: a seat holding 1 moves aside first
@@ -341,7 +357,7 @@ export function installNet(engine) {
   }
   function goSolo() { // M-41: the room closed. Other players' entities go; host-kind replicas stay as plain local entities
     if (sync()) for (let i = W.list.length - 1; i >= 0; i--) { const r = W.list[i]; if (r.kind.authority === 'owner') despawnRemote(r.e); else forgetRemote(r); }
-    role = 'solo'; hostId = null; bindings.clear(); peerNums.clear(); refusedAll = false; aside.clear();
+    role = 'solo'; hostId = null; bindings.clear(); peerNums.clear(); refusedAll = false; aside.clear(); seatOpAt.clear(); retryMask = 0;
     const R = seats.roster;
     for (let i = R.list.length - 1; i >= 0; i--) { const p = R.list[i]; if (!p.local) R.remove(p.number); } // N-25: this page's players stay
     for (const c of seats.controllers.list) if (c.seat !== null && !R.get(c.player)) R.add(c.player, { seat: c.seat, local: true, quiet: true }); // a seat the room never numbered (B1)
@@ -401,13 +417,13 @@ export function installNet(engine) {
   engine.builtin('net.open', (e, d) => {
     if (sync()) { for (let i = W.list.length - 1; i >= 0; i--) despawnRemote(W.list[i].e); W = fresh(); }
     role = d.role; hostId = d.hostId; peerKeyWords = Array.isArray(d.key) ? d.key : null; bindings.clear(); peerNums.clear();
-    helloAt = -Infinity; refusedAll = false; aside.clear(); // a guest's first hello goes after this step (the send clock below)
+    helloAt = -Infinity; refusedAll = false; aside.clear(); seatOpAt.clear(); retryMask = 0; // a guest's first hello goes after this step (the send clock below)
     // #77, N-25: a guest's numbers are the host's to give; its roster restarts from the host's records (B1: never a stale offline entry)
     if (role === 'host') { hostSeat0(); confirmAll(); } else { confirmed.clear(); seats.roster.clear(); }
     refreshLocals();
   });
   engine.builtin('net.peer', (e, d) => {
-    if (d.event === 'peerLeft' && role === 'host') unbindPeer(d.id);
+    if (d.event === 'peerLeft' && role === 'host') { unbindPeer(d.id); seatOpAt.delete(d.id); }
     if (d.event === 'closed') goSolo();
   });
   engine.builtin('net.frame', (e, d) => {
@@ -426,11 +442,16 @@ export function installNet(engine) {
     if (d.schema !== cfg.schema) { refuse(d.from, 0, 'schema'); return; } // N-6: another engine or other kinds
     if (!d.seats.includes(0)) { refuse(d.from, 0, 'seats'); return; } // S5: a page joins with its seat 0, or not at all
     const out = [], order = [...new Set(d.seats)].sort((a, b) => a - b);
-    for (const seat of order) { const n = admitSeat(d.from, d.key, seat); if (n) out.push({ seat, number: n }); else if (seat === 0) break; } // no seat without seat 0
+    for (const seat of order) { // no seat without seat 0; past maxSeats (or a full room) one refusal ends the answer (DoS: not one per seat)
+      const n = admitSeat(d.from, d.key, seat); if (n) out.push({ seat, number: n }); else if (seat === 0 || lastReason === 'seats' || lastReason === 'full') break;
+    }
     if (out.length) engine.net.send(d.from, { t: 'net.welcome', players: out }, true);
   });
   engine.builtin('net.seat', (e, d) => { // host: a welcomed peer's seat joins or leaves
     if (role !== 'host' || !byEngine || !peerNums.has(d.from)) return;
+    const last = seatOpAt.get(d.from);
+    if (last !== undefined && engine.time.step - last < COOLDOWN) { refuse(d.from, d.seat, 'busy'); return; }
+    seatOpAt.set(d.from, engine.time.step);
     if (d.op === 'join') {
       const n = admitSeat(d.from, bindings.get(numberAt(d.from, 0))?.key ?? null, d.seat);
       if (n) engine.net.send(d.from, { t: 'net.welcome', players: [{ seat: d.seat, number: n }] }, true);
@@ -441,6 +462,7 @@ export function installNet(engine) {
   engine.builtin('net.welcome', (e, d) => { if (role === 'guest' && byEngine && d.from === hostId) welcome(d.players); });
   engine.builtin('net.refused', (e, d) => { // M4: the refused seat leaves, so the view's seat (src/view/seats.js) goes with its controller
     if (role !== 'guest' || !byEngine || d.from !== hostId) return;
+    if (d.reason === 'busy') { if (!retryMask) retryAt = engine.time.wall + RETRY_MS; retryMask |= 1 << d.seat; return; } // not a refusal of the seat: ask again
     if (d.seat === 0) refusedAll = true; // the room will not take this page: no more hellos
     else if (engine.controllerOf(d.seat)) { seats.controllers.seat('leave', d.seat); confirmed.delete(d.seat); aside.delete(d.seat); refreshLocals(); }
     engine.emit('player.refused', { seat: d.seat, reason: d.reason, local: true });
@@ -486,6 +508,7 @@ export function installNet(engine) {
   // ---- after every step: the send clock (N-11) ----
   engine.onStep(() => {
     if (role === 'guest' && byEngine && !refusedAll && !confirmed.has(0) && hostId !== null && engine.time.wall - helloAt >= HELLO_MS) hello();
+    if (retryMask && role === 'guest' && engine.time.wall >= retryAt) retrySeat();
     if (role === 'solo' || !self || !sync()) return;
     const step = engine.time.step, list = world.with('net');
     // R-8: buckets, pairs and the group lists are refilled by index and trimmed only when their count changes (length = 0 then

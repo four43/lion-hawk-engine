@@ -74,12 +74,54 @@ test('maxPlayers and maxSeats refuse with a reason; a refused page stops asking 
   assert.deepEqual(g1.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[1, 'seats']]);
 });
 
-test('a game\'s admit decides; a taken number is loud (N-19)', () => {
+test('a game\'s admit decides; a taken number refuses a guest\'s seat \'admit\' and is loud only for the host\'s own (N-19, N9)', () => {
   const w = mp(seatsGame({ reasons: ['locked'], admit: ({ key }) => key[0] === 3 ? { refuse: 'locked' } : 7 }), { peers: 3 }); w.seconds(1);
-  assert.equal(w.guests[0].h.world.net.self, 7);
+  const g = w.guests[0];
+  assert.equal(g.h.world.net.self, 7);
   assert.deepEqual(w.guests[1].h.events.of('player.refused').map(e => e.reason), ['locked']);
-  w.seat(1, 'join', 1);
-  assert.throws(() => w.seconds(0.5), /net\.admit: player 7 is taken/);
+  const warned = [], cw = console.warn; console.warn = (...a) => warned.push(a);
+  try { w.seat(1, 'join', 1); w.seconds(0.5); } finally { console.warn = cw; } // a guest's request: the host keeps stepping
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[1, 'admit']]);
+  assert.equal(g.engine.controllerOf(1), undefined, 'the refused seat left');
+  assert.ok(warned.some(([k, err]) => /admit refused a seat of/.test(k) && /player 7 is taken/.test(err.message)), 'warned once');
+  assert.deepEqual([...w.host.h.world.net.bindings.keys()], [7]);
+  w.seat(0, 'join', 1); // the host's own seat: a game bug, thrown
+  assert.throws(() => w.step(1), /net\.admit: player 7 is taken/);
+});
+
+test('a game admit that throws on a guest\'s seat refuses it; the host keeps stepping (N-19)', () => {
+  const w = mp(seatsGame({ admit: ({ seat }) => { if (seat === 1) throw new Error('boom'); return 2; } }), { peers: 2 }); w.seconds(1);
+  const g = w.guests[0], cw = console.warn; console.warn = () => {};
+  try { w.seat(1, 'join', 1); w.seconds(0.5); } finally { console.warn = cw; }
+  assert.deepEqual(g.h.events.of('player.refused').map(e => [e.seat, e.reason]), [[1, 'admit']]);
+  assert.equal(w.host.h.world.net.bindings.size, 1);
+});
+
+test('one hello asking past maxSeats gets one \'seats\' refusal, not one per seat (DoS)', () => {
+  const w = mp(seats, { peers: 2 }); w.seconds(1);
+  const g = w.guests[0], H = w.host, out = spy(H, d => d?.t && d);
+  g.engine.net.send(g.net.hostId, { t: 'net.hello', key: [2, 0, 0, 0], seats: [...Array(16).keys()], schema: seats.net.schema }, true);
+  w.step(3);
+  assert.deepEqual(out.filter(m => m.t === 'net.refused').map(m => [m.seat, m.reason]), [[4, 'seats']]);
+  assert.deepEqual(out.filter(m => m.t === 'net.welcome').map(m => m.players.map(p => p.seat)), [[0, 1, 2, 3]], 'maxSeats 4');
+});
+
+test('net.seat ops closer than 0.5 s are refused \'busy\' and do nothing; the guest asks again (DoS)', () => {
+  const w = mp(seats, { peers: 3 }); w.seconds(1);
+  const g = w.guests[0], reg = createRegistry(seats.net.kinds, { maxSender: 8 }), H = w.host.h.world.net;
+  const keys = spy(w.host, d => d instanceof ArrayBuffer && decodeFrame(d, reg)?.key && decodeFrame(d, reg).sender === 1);
+  const refused = spy(w.host, d => d?.t === 'net.refused' && d);
+  w.seat(1, 'join', 1); for (let i = 0; i < 20 && !g.h.world.net.locals.has(4); i++) w.step(1); // welcomed
+  assert.equal(g.h.world.net.locals.has(4), true);
+  w.seat(1, 'leave', 1); w.step(1); w.seat(1, 'join', 1); w.step(5); // churn inside the cooldown
+  assert.deepEqual(refused.map(m => [m.seat, m.reason]), [[1, 'busy'], [1, 'busy']]);
+  assert.equal(keys.length / 2, 1, 'one keyframe burst (to each of the two guests), not two');
+  assert.equal(H.bindings.get(4)?.seat, 1, 'the busy leave did nothing');
+  assert.equal(g.h.events.of('player.refused').length, 0, 'busy is not a refusal of the seat');
+  w.seconds(1.5); // the retry: seat 1 has rejoined, so it asks for its number again and gets the same one
+  assert.equal(g.engine.controllerOf(1).player, 4); assert.deepEqual([...g.h.world.net.locals], [2, 4]);
+  w.seat(1, 'leave', 1); w.seconds(1.5);
+  assert.equal(H.bindings.has(4), false, 'a leave after the cooldown unbinds');
 });
 
 test('a hello with another schema is refused; a repeated hello gets the same answer (N-6, N-19, M-19)', () => {
