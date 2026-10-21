@@ -150,7 +150,9 @@ export function createSeats(engine, { getGamepads, target = globalThis, doc, sto
         K.failed = false;
       } catch (err) {
         if (!K.failed) { K.failed = true; warn(K, 'failed', err); }
-        continue; // treated as no units this frame, but no loss pass: a transient error drops nobody
+        // treated as no units this frame, but no loss pass (a transient error drops nobody); a held value must not stick, so each paired unit's source is cleared
+        for (let i = 0; i < K.devs.length; i++) { const d = K.devs[i], h = holder.get(d); if (h !== undefined) h.controller?.input.clearDevice(info.get(d).source); }
+        continue;
       }
       for (let i = K.devs.length - 1; i >= 0; i--) {
         const dev = K.devs[i];

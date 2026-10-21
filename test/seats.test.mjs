@@ -270,3 +270,15 @@ test('a game device kind: a bad kind does not stop the other seats; bad units ar
   assert.deepEqual(errs, ["seats.device: kind 'broken' failed: boom", "seats.device: kind 'nonarray' failed: read() must return an array"], 'each reported once');
   assert.equal(seats.list[0].pad !== null, true, 'the pad seat is still served');
 });
+
+test('a failing kind read() clears its held unit each frame without losing it, and recovers (C-6, Task 6 carry)', () => {
+  const { e, seats, frame } = setup({ onError: () => {} }); seats.enable({ join: () => 0 });
+  let fail = false;
+  seats.kind('pedals', { read: () => { if (fail) throw new Error('boom'); return [{ key: 'h', id: 'X', active: true, values: { gas: 1 } }]; } });
+  frame(); e.stepN(1); assert.equal(e.controllerOf(0).input.snapshot.gas, 1);
+  const dev = seats.list[0].devices.find(d => d.kind === 'pedals');
+  fail = true; frame(); e.stepN(1);
+  assert.equal(e.controllerOf(0).input.snapshot.gas, 0, 'no stuck throttle'); assert.equal(dev.lost, false); assert.equal(seats.list[0].lost, false);
+  fail = false; frame(); e.stepN(1);
+  assert.equal(e.controllerOf(0).input.snapshot.gas, 1, 'the unit drives again'); assert.equal(dev.lost, false);
+});
