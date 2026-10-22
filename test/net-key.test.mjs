@@ -18,7 +18,10 @@ const openOf = h => h.tape().log.flatMap(x => x.ops ?? []).find(o => o[0] === 'c
 
 test('keyWords: a UUID is four uint32 words (N-18)', () => {
   assert.deepEqual(keyWords(U), [0x0123abcd, 0x456789ef, 0x01234567, 0x89abcdef]);
-  assert.throws(() => keyWords('nope'), /net: peer key must be a UUID \(got nope\)/);
+  assert.throws(() => keyWords('nope'), /net: peer key must be a UUID \(got string\)/);
+  assert.throws(() => keyWords(42), /\(got number\)/); assert.throws(() => keyWords(null), /\(got object\)/);
+  // plan 3 final review (parked to plan 5): a near-valid key must never land in an error log
+  assert.throws(() => keyWords('0123abcd-4567-89ef-0123-456789abcdeX'), e => !/0123abcd/.test(e.message));
 });
 
 test('peerKey keeps one key per tab in sessionStorage; junk is replaced; a storage that throws still gives a key (N-18)', () => {

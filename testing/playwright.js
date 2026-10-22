@@ -181,12 +181,13 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     // [T-24] fake pads (open's default pads: 'fake'). pad(index, state) plugs or updates pad `index`; pad(state) is pad 0,
     // as before. state: the standard buttons down ({ a: true, lt: true, ... }), axes, and optional id, mapping and effects
     // (the actuator's list; effects: null gives this state no vibrationActuator). pad(null) and pad(index, null) unplug, as
-    // unplug(index) does (gamepaddisconnected fires; plugging an empty slot fires gamepadconnected). haptics(index) is
+    // unplug(index) does; a bare pad() or pad(undefined) is pad(null), as in 0.12 (gamepaddisconnected fires; plugging an empty slot fires gamepadconnected). haptics(index) is
     // { effects, calls } of that index's actuator ({ op: 'playEffect', type, params } / { op: 'reset' }), or null. Devices
     // read a change on the next frame, so follow with frames() before stepping.
     pad: async (index, state) => {
+      if (index === undefined && state === undefined) index = null; // pad() / pad(undefined): unplug pad 0, as in 0.12 (plan 4 residual, plan 5)
       if (typeof index !== 'number') {
-        if (index !== null && typeof index !== 'object') padIndex(index); // '1', true, undefined: not a state, not an index
+        if (index !== null && typeof index !== 'object') padIndex(index); // '1', true, undefined with a state: not a state, not an index
         state = index; index = 0;
       }
       return ev(([i, st]) => window.__lhSetPad(i, st), [padIndex(index), state ?? null]);

@@ -4,7 +4,7 @@
 const NAME = 'lh.peerKey', UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // a UUID -> its 128 bits as four uint32 words (the wire form, F.list(F.uint(4), 4, 4): no string field type needed)
 export function keyWords(uuid) {
-  if (typeof uuid !== 'string' || !UUID.test(uuid)) throw new Error(`net: peer key must be a UUID (got ${uuid})`);
+  if (typeof uuid !== 'string' || !UUID.test(uuid)) throw new Error(`net: peer key must be a UUID (got ${typeof uuid})`); // never the value: a near-valid key is a secret
   const h = uuid.replace(/-/g, '');
   return [0, 8, 16, 24].map(i => parseInt(h.slice(i, i + 8), 16) >>> 0);
 }

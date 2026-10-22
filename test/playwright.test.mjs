@@ -130,3 +130,13 @@ test('T-24: game.pad(state) is pad 0, pad(index, state) any pad; unplug and hapt
   for (const bad of ['1', true, undefined]) await assert.rejects(g.pad(bad, { a: true }), /playwright: pad index must be an integer in 0\.\.15/);
   await assert.rejects(g.pad('1'), /playwright: pad index must be an integer/);
 });
+
+test('game.pad() and pad(undefined) unplug pad 0, as in 0.12; pad(\'1\'), pad(true) and pad(NaN) still throw (plan 4 residual, carried to plan 5)', async () => {
+  const calls = [];
+  const g = fake(async (fn, a) => { calls.push(a); return null; });
+  await g.pad(); await g.pad(undefined);
+  assert.deepEqual(calls, [[0, null], [0, null]], 'both are pad(null): pad 0 unplugged');
+  for (const bad of ['1', true, NaN]) await assert.rejects(g.pad(bad), /playwright: pad index must be an integer in 0\.\.15/);
+  await assert.rejects(g.pad(undefined, { a: true }), /playwright: pad index must be an integer in 0\.\.15/, 'undefined with a state is still a bad index');
+  assert.equal(calls.length, 2, 'a refused call reaches no page');
+});

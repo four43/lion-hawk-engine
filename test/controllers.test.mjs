@@ -228,3 +228,11 @@ test('createControllers is not a public export', async () => {
   const idx = await import('../src/index.sim.js');
   assert.equal('createControllers' in idx, false);
 });
+
+test('seat() and of() work destructured; renumber checks the number range (plan 1 final review, parked to plan 5)', () => {
+  const { cs } = setup(), { seat, of } = cs;
+  const c = seat('join', 1); assert.equal(of(1), c); assert.equal(c.player, 2);
+  assert.throws(() => cs.renumber(2, 0), /controllers\.renumber: player number must be an integer in 1\.\.255 \(got 0\)/);
+  assert.throws(() => cs.renumber(2, 256), /\(got 256\)/); assert.throws(() => cs.renumber(2, 1.5), /\(got 1\.5\)/);
+  assert.equal(c.player, 2, 'a refused renumber changes nothing');
+});

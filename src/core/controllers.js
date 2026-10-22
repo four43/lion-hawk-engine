@@ -56,10 +56,12 @@ export function createControllers(schema, { input, emit, world }) {
   make({ seat: 0, player: 1, input });
 
   const freeNumber = () => { let n = 1; while (list.some(c => c.player === n)) n++; return n; };
+  const of = seat => { for (let i = 0; i < list.length; i++) if (list[i].seat === seat) return list[i]; return undefined; }; // a closure: seat() and destructured callers need no this
   return {
     list, make,
-    of(seat) { for (let i = 0; i < list.length; i++) if (list[i].seat === seat) return list[i]; return undefined; },
+    of,
     renumber(from, to) {
+      if (!Number.isInteger(to) || to < 1 || to > 255) throw new Error(`controllers.renumber: player number must be an integer in 1..255 (got ${to})`);
       const c = list.find(x => x.player === from);
       if (!c) throw new Error(`controllers.renumber: no controller is player ${from}`);
       if (list.some(x => x !== c && x.player === to)) throw new Error(`controllers.renumber: player ${to} is taken`);
@@ -82,7 +84,7 @@ export function createControllers(schema, { input, emit, world }) {
     seat(op, seat, n) {
       if (op !== 'join' && op !== 'leave') throw new Error("lh.seat: op must be 'join' or 'leave'");
       if (!Number.isInteger(seat) || seat < 0 || seat > MAX_SEAT) throw new Error(`lh.seat: seat must be an integer in 0..${MAX_SEAT}`);
-      const c = this.of(seat);
+      const c = of(seat);
       if (op === 'join') {
         if (c) return c;
         const p = n ?? freeNumber();
