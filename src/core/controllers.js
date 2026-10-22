@@ -46,6 +46,7 @@ export function createControllers(schema, { input, emit, world }) {
         remove(c);
       },
     };
+    Object.defineProperty(c, Symbol.for('nodejs.util.inspect.custom'), { value: () => `Controller#${c.id} seat ${c.seat} player ${c.player} pawn ${c.pawn ? 'Entity#' + c.pawn.id : 'none'}` }); // a failing assert prints a line, not the entity graph
     if (gated) c.input.gate(true);
     // seats in seat order, then bots in creation order
     let at = list.length;

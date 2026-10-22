@@ -17,7 +17,7 @@ test('ids count from 1 in spawn order; tags are a Set; game fields copied, World
   assert.deepEqual({ ...a.xf.p }, { x: 1, y: 2, z: 3 });
   assert.equal(b.xf, undefined, 'no pool slot unless xf: true or a body');
   assert.equal(w.get(2), b); assert.equal(w.get(99), undefined);
-  assert.deepEqual(Object.getOwnPropertySymbols(a).length, 1);
+  assert.deepEqual(Object.getOwnPropertySymbols(a).length, 2);
   assert.equal(JSON.stringify(Object.keys(a)), JSON.stringify(['id', 'tags', 'pig', 'net', 'netId', 'xf']), 'World internals are not enumerable');
   assert.throws(() => w.spawn({ tags: ['x'], id: 5 }), /world: 'x' may not set 'id' \(the World does\)/);
   assert.throws(() => w.spawn({ tags: ['x'], heightfield: { nx: 2 } }), /world: 'x' may not set 'heightfield' \(the World does\)/);

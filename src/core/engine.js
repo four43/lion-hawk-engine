@@ -534,5 +534,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
     enter(scene, args);
   } catch (err) { queue.length = 0; throw err; } finally { booting = false; }
   drain();
+  for (const k of ['game', 'world']) { const d = Object.getOwnPropertyDescriptor(engine, k); d.enumerable = false; Object.defineProperty(engine, k, d); } // game.physics.rapier and the World's Rapier graph stay out of a failing assert's message
+  Object.defineProperty(engine, Symbol.for('nodejs.util.inspect.custom'), { value: () => `Engine ${game.id} step ${step}` });
   return engine;
 }

@@ -13,6 +13,9 @@ import { defineMaterials } from '../../defs/materials.js';
 import { validateCollider } from '../../defs/sidecar.js';
 import { qFromYaw, qnorm } from '../../core/math.js';
 
+const INSPECT = Symbol.for('nodejs.util.inspect.custom'); // a plain JS symbol (Node reads it): a failing assert prints a line, not the Rapier graph
+// Rapier handles (and the World's own references to Rapier) are non-enumerable: a failing assert's util.inspect (customInspect off, getters on) would otherwise walk colliderSet -> every collider and WebAssembly memory
+const hide = (o, k, v) => Object.defineProperty(o, k, { value: v, writable: true, configurable: true, enumerable: false });
 let SERIAL = 0; // process-wide: a new World never reuses an old World's serial (the view keys on it, S-3)
 const DESC_KEYS = new Set(['model', 'colliders', 'body', 'groups', 'at', 'yaw', 'q', 'tags', 'xf', 'contacts', 'sensor', 'partXf']);
 const WORLD_KEYS = ['id', 'sockets', 'heightfield'];
@@ -70,6 +73,7 @@ export function createWorld(engine, opts = {}) {
 
   function register(e, r) {
     Object.defineProperty(e, INTERNAL, { value: r });
+    Object.defineProperty(e, INSPECT, { value: () => `Entity#${e.id} [${[...e.tags].join(', ')}${e.net !== undefined ? `${e.tags.size ? ', ' : ''}net:${e.net}${e.netId !== undefined ? '#' + e.netId : ''}` : ''}]` });
     list.push(e); byId.set(e.id, e); // ids only grow, so a push keeps id order
     if (r.slot >= 0) slots.push(r.slot);
     if (r.kind === DYNAMIC || r.kind === KINEMATIC) bodied.push(e);
@@ -185,7 +189,7 @@ export function createWorld(engine, opts = {}) {
         if (mp !== undefined) bd.setAdditionalMassProperties(mp.mass, { x: mp.com[0], y: mp.com[1], z: mp.com[2] }, { x: mp.inertia[0], y: mp.inertia[1], z: mp.inertia[2] }, IDENTITY);
       }
       const body = ph.world.createRigidBody(bd);
-      e.body = body; e.colliders = [];
+      hide(e, 'body', body); hide(e, 'colliders', []);
       for (const m of made) {
         const c = ph.world.createCollider(m.d, body);
         e.colliders.push({ collider: c, part: m.part, material: m.id });
@@ -449,7 +453,8 @@ export function createWorld(engine, opts = {}) {
     try { d = heightfieldDesc(ph.R, { nx, nz, cell, x0, z0, heights, fixInternalEdges }); } catch (err) { fail(err.message); }
     applyMaterial(ph.R, d, registry.collider(material), 0).setCollisionGroups(mask);
     const c = ph.world.createCollider(d);
-    const e = { id: nextId++, tags: new Set(tags), heightfield: Object.freeze({ nx, nz, cell, x0, z0 }), colliders: [{ collider: c, part: 'ground', material }] };
+    const e = { id: nextId++, tags: new Set(tags), heightfield: Object.freeze({ nx, nz, cell, x0, z0 }), };
+    hide(e, 'colliders', [{ collider: c, part: 'ground', material }]);
     handles.set(c.handle, { e, material }); nColliders++;
     register(e, record(BODILESS, true));
     return e;
@@ -477,6 +482,7 @@ export function createWorld(engine, opts = {}) {
     xf: Object.freeze({ get pool() { return pool.buf; }, stride: STRIDE }),
     get rapier() { return ph ? ph.world : null; },
     get disposed() { return disposed; },
+    [INSPECT]: () => `World serial ${api.serial}, ${list.length} entities`,
     spawn, despawn, with: withParts, get: id => byId.get(id), add, remove, clear, dispose, own, joint, setMaterial,
     place: (e, target, o) => { live(); return placer.place(e, target, o); },
     socket: (e, name, out) => placer.socket(e, name, out),
@@ -496,6 +502,7 @@ export function createWorld(engine, opts = {}) {
     onSpawn(fn) { spawnFns = [...spawnFns, fn]; return () => { spawnFns = spawnFns.filter(f => f !== fn); }; },
     onDespawn(fn) { despawnFns = [...despawnFns, fn]; return () => { despawnFns = despawnFns.filter(f => f !== fn); }; },
   };
+  for (const k of ['R', 'rapier', 'engine', 'xf']) { const d = Object.getOwnPropertyDescriptor(api, k); d.enumerable = false; Object.defineProperty(api, k, d); }
   placer = createPlacer(pool, () => (ph ? ph.world : null), api);
   drainEvents = createEventDrain({ emit: engine.events?.adopt ? (type, data) => engine.events.adopt(type, data) : (type, data) => engine.emit(type, data), hz, entityOf: api.entityOf, materialOf: api.materialOf }); // each payload is fresh: adopted, not copied (an engine stand-in without events.adopt: emit)
   return api;
