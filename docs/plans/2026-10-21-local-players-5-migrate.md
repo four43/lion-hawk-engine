@@ -4,17 +4,23 @@
 
 **Goal:** All three games run on the local-players engine. Tractor uses the engine join. Its player state is `lh.player` fields, its farm is game state, its paint is a guest→host message that the host writes into player fields, and its train is seat 0's pawn. Rally's rumble reads the seat's pads and uses the engine's stop. Rally's and Pig Pens' devices become mapping contexts. Each game has [T-25] state-home tests. The engine folds in the parked review minors and ships as 0.13.0. All three games pin `#v0.13.0`, are re-baked and built, and are deployed. Every outward step (tag, push, deploy) stops and asks the user first.
 
-**Architecture:** Engine changes are small: `keyWords` hardening, two `controllers.js` minors, spec notes, the version and the CHANGELOG. Until the tag exists, the games run against a copy of the committed engine. That copy is unpacked into `games/node_modules/lion-hawk` with `git archive` (Task 3). Game work, in this order:
+**Architecture:** Engine changes are small: `keyWords` hardening, two `controllers.js` minors, spec notes, the version and the CHANGELOG. Until the tag exists, the games run against a copy of the committed engine. That copy is unpacked into the game worktree's `games/node_modules/lion-hawk` with `git archive` (Task 3). All game work from Task 3 on happens in the worktree `/home/smiller/projects/four43/four43-local-players` (branch `feat/local-players`), never in the user's checkout. Game work, in this order:
 - Rally: `rumbleOut.js` sends to `lp.pads` and calls `view.haptics.stop(reason)`. Devices become a `drive` context. Lap times and phase get state homes.
 - Pig Pens: a `farm` context, plus state homes.
 - Tractor, in three tasks: possession; the engine join with player and game state; `claimPeerKey` with the [T-25] tests.
-- Release: engine 0.13.0, then re-pin, re-bake, build and the gh-pages commit.
+- Release: engine 0.13.0, then re-pin, re-bake, build, and deploy by pushing `feat/local-players` to `gh-pages` (ASK USER).
 
 **Tech Stack:** plain ES modules, `node:test`, `playwright-core` (already used by every game's browser suite), npm 12 workspaces. No new dependencies.
 
 **Spec:** `docs/plans/2026-10-21-local-players-spec.md` §9 row 5 and §2.2 (state homes, with worked examples per game); `docs/spec.md` [T-25], [C-5]–[C-14] (plan 4's final `view.haptics` surface), [N-18]–[N-25]. Inputs: the "Final" sections of `.superpowers/sdd/2026-10-21-local-players-{1,2,3}-*/progress.md` (parked minors, plan 3's I2 ruling: seed in gameState, paint as a guest→host command, `numbersOf(peer)`, `join` set explicitly, `await claimPeerKey()`); user memory `tractor-*.md` (playtest decisions, below).
 
-**Depends on:** plan 4 complete and committed on `local-players`. That includes its final-review surface: `view.haptics = { stop(reason), get stopping, get paused }`, which is `null` with `defineView({ haptics: { autoStop: false } })`. `stop(reason)` takes `'menu' | 'finish' | 'exit'` and runs the engine's 20-round zero+reset stop. `paused` is true while a pausing overlay is open, and a game must not send rumble then. Plan 4 also adds `seats.forEachUnpaired(fn)`, and `game.pad` throws on a first argument that is neither a number nor an object. Task 2 Step 1 checks that the engine tree is clean.
+**Depends on:** plan 4 complete and committed on `local-players`. That includes its final-review surface: `view.haptics = { stop(reason), get stopping, get paused }`, which is `null` with `defineView({ haptics: { autoStop: false } })`. `stop(reason)` takes `'menu' | 'finish' | 'exit'` and runs the engine's 20-round zero+reset stop. `paused` is true while a pausing overlay is open, and a game must not send rumble then. Plan 4 also adds `seats.forEachUnpaired(fn)`, and `game.pad` throws on a first argument that is neither a number nor an object (that includes a bare `game.pad()`; Task 2 restores it as "unplug pad 0", S2). Task 2 Step 1 checks that the engine tree is clean.
+
+**Status (2026-10-21, controller):**
+- Task 1 is **done**: commit `857740e` on `gh-pages` in `/home/smiller/projects/four43/four43`, exactly the 15 R7 files, local only; the user's WIP is untouched.
+- The game worktree exists: `/home/smiller/projects/four43/four43-local-players`, branch `feat/local-players`, created from `857740e`. Its `games/` deps were installed with `npm ci --prefer-offline --allow-git=all`. npm's `allowScripts` blocked esbuild's postinstall, so Task 3 Step 1 checks that esbuild still runs before the first build.
+- The pre-flight scan's rulings (ledger `.superpowers/sdd/2026-10-21-local-players-5-migrate/progress.md`) are carried into the tasks below; see "Rulings carried" at the end.
+- This revision is uncommitted in the engine repo. Commit it on its own before Task 2: Task 2 Step 1 and Task 3 Step 1 need a clean engine tree.
 
 ## Decisions (plan-writer rulings)
 
@@ -33,20 +39,31 @@
 | Pig Pens state homes (spec example says "score and pens") | Player 1's `eggs` (the basket). Game state: `night` and `pens` (pig head count per region, 8) | Pig Pens has no score. The basket is what this person gathered, and the pens are shared farm facts. |
 | Tractor devices | Unchanged (out of scope) | Scope names contexts for Rally and Pig Pens only. |
 | Versions | Engine 0.13.0; Tractor 1.11.0 (NET_VERSION 5); Rally 0.6.0; Pig Pens 2.3.0 | Minor bumps: new behaviour, no save-format change. |
+| Where the game work happens (ledger ruling, B2) | The worktree `/home/smiller/projects/four43/four43-local-players` on `feat/local-players` (from `857740e`). Every game-side path, command and commit from Task 3 on uses it | It keeps the user's WIP checkout and branch untouched, as the earlier `feat/lion-hawk` work did. The cost is one extra `npm ci` (done). |
+| Deploy (B3) | In the worktree: rebase `feat/local-players` onto `origin/gh-pages` (clean tree, no stash), **ASK USER**, then `git push origin feat/local-players:gh-pages`. A second **ASK USER** comes before fast-forwarding the user's own `gh-pages` checkout | Memory: deploy = push branch:gh-pages. A push from the user's checkout would ship only R7, and `--autostash` would stash their WIP. |
+| The `?rumble` lab (B1) | `rumbleLab.js` passes `pads: () => [...getPads()].filter(Boolean)`; `rumbleOut` keeps `kill()` (one zero effect + reset on each pad, no engine stop) for the lab's `pagehide` | The lab runs no engine, so nothing else stops its pads. It is the user's tuning tool. |
+| `game.pad()` with no argument (S2) | Unplugs pad 0 again; `pad('1')`, `pad(true)`, `pad(NaN)` and `pad(undefined, state)` still throw | The plan 4 residual the ledger carries into Task 2. |
 
 ## Global Constraints
 
-- **Repos.** Engine: `/home/smiller/projects/four43/lion-hawk-engine`, branch `local-players`. Games: `/home/smiller/projects/four43/four43` (branch `gh-pages`), workspace `games/` (`pig-pens`, `tractor-pickup`, `rally`).
-- **The four43 checkout has unrelated uncommitted work.** It is in `site/` (outside `site/exp/`), `content/`, `.playwright-mcp/` directories, `games/rally/docs/reference/`, `games/rally/rally-sim-src.zip` and `games/tractor-pickup/audio/voice/sound-effects.mp3`. Rules:
-  - never `git add -A`, `git add .`, `git commit -a`, `git stash`, `git checkout -- <path>` or `git restore` on paths this plan does not own;
+- **Repos.**
+  - Engine: `/home/smiller/projects/four43/lion-hawk-engine`, branch `local-players`. It stays on `local-players` throughout (Task 11 moves `main` without a checkout).
+  - Games: the worktree **ROOT = `/home/smiller/projects/four43/four43-local-players`**, branch `feat/local-players`, workspace `ROOT/games/` (`pig-pens`, `tractor-pickup`, `rally`). Every game-side path, command and commit from Task 3 on uses ROOT. Commands below spell ROOT out in full, because an agent's shell cwd resets between calls.
+  - The user's checkout `/home/smiller/projects/four43/four43` (branch `gh-pages`) is touched only by Task 1 (done) and by Task 12 Step 8's fast-forward (its own ASK USER). Never stash, rebase, reset or check out anything in it.
+- **The user's checkout has unrelated uncommitted work.** It is in `site/` (outside `site/exp/`), `content/`, `.playwright-mcp/` directories, `games/rally/docs/reference/`, `games/rally/rally-sim-src.zip` and `games/tractor-pickup/audio/voice/sound-effects.mp3`. The worktree has none of it. Rules, in both trees:
+  - never `git add -A`, `git add .`, `git commit -a`, `git stash`, `git pull --autostash`, `git checkout -- <path>` or `git restore` on paths this plan does not own;
+  - every git command names its repo with `git -C <repo>` (ROOT, or the engine path);
   - every `git add` names explicit paths;
   - before every commit, run `git diff --cached --name-only` and check that it prints exactly the commit step's list.
-- **Stop points.** Every step marked **ASK USER** stops and asks the user, then runs only after a yes. They are: the Rally R7 commit (Task 1); the engine merge and tag (Task 11); every push (Tasks 11 and 12).
-- **Tests run under the memory cap** (user rule, memory `test-memory-cap.md`):
-  - unit files: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 <files>`;
+- **Stop points.** Every step marked **ASK USER** stops and asks the user, then runs only after a yes. They are: the Rally R7 commit (Task 1, done); the engine merge and tag (Task 11); every push (Tasks 11 and 12); the fast-forward of the user's own `gh-pages` checkout (Task 12).
+- **Tests run under the memory cap** (user rule, memory `test-memory-cap.md`; values as `games/test/gate.test.mjs` pins them). Each node gets a heap limit well below the cap, so a runaway test dies inside node and the kernel never OOM-kills the scope (that pops a KDE low-memory notice):
+  - unit files: `systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 <files>`;
   - engine net files (`test/net*.test.mjs`, `test/mp*.test.mjs`): the same with `--test-concurrency=1`;
-  - browser suites: one file at a time, `systemd-run --user --scope -q -p MemoryMax=3G node --max-old-space-size=1536 --test <one file>`;
-  - a game's whole `npm test` (its own script, read from its `package.json`): `systemd-run --user --scope -q -p MemoryMax=2G env NODE_OPTIONS=--max-old-space-size=1536 npm test`, from the game directory.
+  - browser suites: one file at a time, never two at once, `systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test <one file>`. A browser script that is not a `node --test` file (Rally's `test/mobile.mjs`) runs the same way without `--test`;
+  - a game's whole `npm test` (its own script, read from its `package.json`): `systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 env NODE_OPTIONS=--max-old-space-size=512 npm test`, from the game directory under `ROOT/games/`;
+  - the workspace's own tests (`ROOT/games/test/`): `systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/`, from `ROOT/games`. Run them only in Task 12: `test/workspace.test.mjs` checks the installed engine version against each pin, so it is red against Task 3's archive copy.
+  - bakes and builds (Task 12): `systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env NODE_OPTIONS=--max-old-space-size=2048 npx lion-hawk <bake|build> …`, one at a time, from the game directory.
+  - Never run a test, bake or build uncapped.
 - **Game test scripts** (from each `package.json`):
   - Tractor: `npm test` = `node --test --test-concurrency=4 test/`; browser: `test/e2e.browser.mjs`, `test/net.peers.browser.mjs`.
   - Rally: `npm test` = `test/*.test.mjs` plus the `gen-*`, `physics`, `snow`, `markers`, `verge`, `track`, `wild` and `game` scripts; browser: `test/e2e.browser.mjs`, `test/render.browser.mjs`, `test/built.browser.mjs`, `test/offline.browser.mjs`.
@@ -71,6 +88,10 @@
 - **Devices bound twice, or not at all, after the context move.** A boot device left beside the context gives a second keyboard module with its own ramps. A context that never binds leaves the keys dead. A default `join` puts a second pad on seat 1. Pinned by:
   - Rally (Task 5): the unit test `device setup is the drive context …` and the e2e `the drive context: W drives, and two pads are one player`;
   - Pig Pens (Task 7): the unit test `device setup is the farm context …` and the existing e2e tests `… holding the tractor drives, W moves it …` and `… drive with the thumb pad …`.
+- **The `?rumble` lab goes silent or throws.** The lab is a second `rumbleOut` caller with no engine, so no seat and no `view.haptics`. If it still passes `getGamepads`, it sends nothing. If `kill()` is gone, its `pagehide` throws and leaves the pad running. Pinned in Task 4 by the `kill()` assertion in `rumbleOut: one engine stop per transition …` (one zero effect plus reset, no engine stop) and by the lab passing `pads` (Step 4).
+- **The pause e2e passes or fails by timing.** With render `'auto'`, frames between reading the call count and pressing Escape still rumble. Task 4's e2e takes its count only after the pause shows and a few frames pass, and checks the reset from the Escape onward.
+- **A new farm while the host is away.** The farm now rides `lh.game` in frames only. While the server says the host is away (frames still flow), a new farm must build and stay paused. While the host's frames are all lost, no farm may build from JSON. Pinned in Task 9 by `a new farm while the host is away keeps boops paused; with no host frames there is no new farm (M-19, M-40)`.
+- **The user's checkout changes under them.** Game work, builds and deploy happen in ROOT. Only Task 12 Step 8's fast-forward (ASK USER) touches the user's checkout, and git refuses it rather than overwrite a modified file. Checked in Task 12 Step 8 by `git status --short` before and after.
 
 ---
 
@@ -84,15 +105,19 @@
 | `src/core/controllers.js` | `of` is a closure (seat() no longer uses `this`); `renumber` checks 1..255. |
 | `src/version.js`, `package.json` | 0.13.0. |
 | `CHANGELOG.md` | 0.13.0 entry. |
-| `docs/spec.md` | [N-18] and [C-9] notes; [T-25] built with the offline ruling; amendment line. |
-| `test/net-key.test.mjs`, `test/controllers.test.mjs` | One assertion changed, one test each added. |
+| `testing/playwright.js` | `game.pad()` / `pad(undefined)` unplug pad 0 again (S2). |
+| `docs/spec.md` | [N-18], [C-9] and [T-24] notes; [T-25] built with the offline ruling; amendment line. |
+| `test/net-key.test.mjs`, `test/controllers.test.mjs`, `test/playwright.test.mjs` | One assertion changed, one test each added. |
+
+All game paths below are under the worktree ROOT `/home/smiller/projects/four43/four43-local-players`.
 
 **Rally (`games/rally`)**
 
 | File | Change |
 |---|---|
-| (Task 1) the 15 R7 files | Committed as they are (ASK USER). |
-| `src/rumbleOut.js` | Seat pads, `view.haptics.stop`, `paused` gate; own stop/kill and first-sight reset gone. |
+| (Task 1, done: `857740e`) the 15 R7 files | Committed as they were, in the user's checkout. |
+| `src/rumbleOut.js` | Seat pads, `view.haptics.stop`, `paused` gate; own repeated stop and first-sight reset gone; `kill()` kept as one zero + reset (for the lab). |
+| `src/rumbleLab.js` | Passes `pads` (every connected pad) instead of `getGamepads`; its `pagehide` still calls `kill()` (B1). |
 | `src/game.view.js` | Passes `seat0.pads` and `view.haptics`; hide/pagehide/beforeunload kill gone; `__rallyView.seats`. |
 | `src/devices.js` | `driveContext(doc)`, `useSeats(view, doc)`; `devices(doc)` keeps the glyphs only. |
 | `src/main.js` | `useSeats(view, document)` after boot. |
@@ -133,15 +158,18 @@
 | `src/game/net.js` | `join` (`'manual'` in Task 8, `'engine'` in Task 9), `maxPlayers`, `maxSeats`; registry from the engine's kinds; `engine` to the syncs. |
 | `src/game.sim.js` | `player: PLAYER_FIELDS, gameState: GAME_FIELDS`. |
 | `test/possess.test.mjs`, `test/join.test.mjs`, `test/state-homes.test.mjs` | **new.** |
-| `test/pilot.test.mjs`, `test/golden.test.mjs`, `test/mp.harness.mjs`, `test/mp.engine.harness.mjs`, `test/net.kinds.test.mjs`, `test/protocol.test.mjs`, `test/mp.repair.test.mjs`, `test/mp.engine.test.mjs`, `test/session.test.mjs`, `test/bind.test.mjs` | Updated (exact edits in their tasks). |
+| `test/pilot.test.mjs`, `test/golden.test.mjs`, `test/mp.harness.mjs`, `test/mp.engine.harness.mjs`, `test/net.kinds.test.mjs`, `test/protocol.test.mjs`, `test/mp.repair.test.mjs`, `test/mp.engine.test.mjs`, `test/session.test.mjs`, `test/bind.test.mjs` | Updated (exact edits in their tasks). In Task 9 `mp.harness.mjs` also builds `quiet()`'s registry from the engine's kinds (N5). |
+| `test/mp.test.mjs` | Task 9: 'a new farm while the host is silent …' becomes host-away by the server signal, plus a no-frames check (B4). |
 | `docs/tractor-pickup-spec.md` | M-19, M-22, M-24, M-27 rows; new M-80; version lines (Task 12). |
 | `package.json` | 1.11.0, pin (Task 12). |
 
-**Root:** `games/package-lock.json` (Task 12), `site/exp/{tractor-pickup,rally,piggie-game}/` (Task 12).
+**Root (ROOT):** `games/package-lock.json` (Task 12), `site/exp/{tractor-pickup,rally,piggie-game}/` (Task 12). The deploy pushes `feat/local-players` to `origin/gh-pages` (Task 12).
 
 ---
 
-### Task 1: Commit Rally's R7 rumble work as it stands (ASK USER)
+### Task 1: Commit Rally's R7 rumble work as it stands (ASK USER) — DONE
+
+> **Done (2026-10-21, controller, user-approved):** commit `857740e` on `gh-pages` in `/home/smiller/projects/four43/four43`, holding exactly the 15 files below; local only, not pushed. Its message as committed: `feat(rally): R7 rumble — mixer, patterns, ?rumble lab, brake-limit warning, ABS lock-up pulses, suspension impacts and jump landings`. The user's WIP is untouched. Steps 1–4 below are kept as history; do not run them again. Step 5 (the worktree) is done too.
 
 **Files (exactly these 15, all under `games/rally/`):**
 - Modified:
@@ -165,19 +193,19 @@
 
 **Interfaces:** none (the user's work, unchanged; the engine is still the installed 0.12.0).
 
-- [ ] **Step 1: Check the tree matches this list**
+- [x] **Step 1: Check the tree matches this list**
 
 Run: `cd /home/smiller/projects/four43/four43 && git diff --cached --name-only && git status --short games/rally`
 Expected: the first command prints nothing. The second prints ` M` for the 9 modified files, and `??` for the 6 new files plus `games/rally/docs/reference/` and `games/rally/rally-sim-src.zip`. If anything else under `games/rally` shows, stop and ask the user.
 
-- [ ] **Step 2: Run Rally's unit suite on the R7 tree**
+- [x] **Step 2: Run Rally's unit suite on the R7 tree**
 
 Run: `cd /home/smiller/projects/four43/four43/games/rally && systemd-run --user --scope -q -p MemoryMax=2G env NODE_OPTIONS=--max-old-space-size=1536 npm test`
 Expected: PASS. If it fails, report the failure to the user with the ASK in Step 3. Do not fix the user's work unasked.
 
-- [ ] **Step 3: ASK USER** — "Commit Rally's R7 rumble work now, as its own commit, with exactly these 15 files: (list above)? `docs/reference/` and `rally-sim-src.zip` stay untracked." Wait for a yes.
+- [x] **Step 3: ASK USER** — "Commit Rally's R7 rumble work now, as its own commit, with exactly these 15 files: (list above)? `docs/reference/` and `rally-sim-src.zip` stay untracked." Wait for a yes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (done as `857740e`, with the message quoted above)
 
 ```bash
 cd /home/smiller/projects/four43/four43
@@ -189,25 +217,35 @@ git diff --cached --name-only   # exactly the 15 paths
 git commit -m "feat(rally): controller rumble - surface, slides, wheelspin, lock-up and impacts; ?rumble lab and Rumble setting (R7)"
 ```
 
+- [x] **Step 5: Make the game worktree** (B2; done by the controller)
+
+```bash
+git -C /home/smiller/projects/four43/four43 worktree add /home/smiller/projects/four43/four43-local-players -b feat/local-players gh-pages
+cd /home/smiller/projects/four43/four43-local-players/games && npm ci --prefer-offline --allow-git=all   # the lock is unchanged: lion-hawk v0.12.0
+git -C /home/smiller/projects/four43/four43-local-players status --short   # must print nothing
+```
+Result: the worktree is on `feat/local-players` at `857740e`; `npm ci` succeeded, but npm's `allowScripts` blocked esbuild's postinstall (Task 3 Step 1 checks that esbuild still runs). From here on, ROOT is this worktree.
+
 ---
 
-### Task 2: Engine follow-ups: keyWords hardening and the parked plan 1 minors
+### Task 2: Engine follow-ups: keyWords hardening, the parked plan 1 minors, bare `game.pad()`
 
 **Files:**
-- Modify: `src/net/key.js`, `src/core/controllers.js`, `docs/spec.md`
-- Test: `test/net-key.test.mjs`, `test/controllers.test.mjs`
+- Modify: `src/net/key.js`, `src/core/controllers.js`, `testing/playwright.js`, `docs/spec.md`
+- Test: `test/net-key.test.mjs`, `test/controllers.test.mjs`, `test/playwright.test.mjs`
 
 **Interfaces:**
 - Produces:
   - `keyWords(x)` throws `net: peer key must be a UUID (got <typeof x>)`;
   - `controllers.seat` and `controllers.of` work when destructured;
-  - `controllers.renumber(from, to)` throws `controllers.renumber: player number must be an integer in 1..255 (got <to>)`.
+  - `controllers.renumber(from, to)` throws `controllers.renumber: player number must be an integer in 1..255 (got <to>)`;
+  - `game.pad()` and `game.pad(undefined)` unplug pad 0 (as `game.pad(null)` does), as in 0.12 (S2). `game.pad('1')`, `pad(true)`, `pad(NaN)` and `pad(undefined, state)` still throw `playwright: pad index must be an integer in 0..15`.
 - Not folded (parked as "none" by plan 1's final review): plan 1's history doc still names the `createControllers` export.
 
 - [ ] **Step 1: Check plan 4 is done**
 
 Run: `cd /home/smiller/projects/four43/lion-hawk-engine && git status --short && git log --oneline -1 && grep -n "haptics" src/view/boot.js | head -3`
-Expected: an empty status, plan 4's last commit at HEAD, and boot wiring `view.haptics`. If the status is not empty, stop: plan 4 is still running.
+Expected: an empty status, plan 4's last commit or this plan's own docs commit at HEAD, and boot wiring `view.haptics`. If the status is not empty, stop. This revised plan file is itself tracked: the controller commits it (`docs/plans/2026-10-21-local-players-5-migrate.md` alone) before Task 2, or this check and Task 3's clean-tree check stop.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -238,13 +276,33 @@ test('seat() and of() work destructured; renumber checks the number range (plan 
 });
 ```
 
+Append to `test/playwright.test.mjs` (after the `T-24: game.pad(state) is pad 0 …` test; it uses that file's `fake` helper):
+
+```js
+test('game.pad() and pad(undefined) unplug pad 0, as in 0.12; pad(\'1\'), pad(true) and pad(NaN) still throw (plan 4 residual, carried to plan 5)', async () => {
+  const calls = [];
+  const g = fake(async (fn, a) => { calls.push(a); return null; });
+  await g.pad(); await g.pad(undefined);
+  assert.deepEqual(calls, [[0, null], [0, null]], 'both are pad(null): pad 0 unplugged');
+  for (const bad of ['1', true, NaN]) await assert.rejects(g.pad(bad), /playwright: pad index must be an integer in 0\.\.15/);
+  await assert.rejects(g.pad(undefined, { a: true }), /playwright: pad index must be an integer in 0\.\.15/, 'undefined with a state is still a bad index');
+  assert.equal(calls.length, 2, 'a refused call reaches no page');
+});
+```
+
 - [ ] **Step 3: Run to verify failure**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=1 test/net-key.test.mjs test/controllers.test.mjs`
+Run:
+```bash
+cd /home/smiller/projects/four43/lion-hawk-engine && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=1 test/net-key.test.mjs test/controllers.test.mjs
+cd /home/smiller/projects/four43/lion-hawk-engine && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test test/playwright.test.mjs
+```
+(`test/playwright.test.mjs` imports `lion-hawk/playwright`, so Step 5 counts it as a browser file; it drives a fake page and launches no browser.)
 Expected: FAIL:
 - `got nope` does not match `got string`;
 - `TypeError: Cannot read properties of undefined (reading 'of')`;
-- `renumber(2, 0)` does not throw.
+- `renumber(2, 0)` does not throw;
+- `g.pad()` rejects with `pad index must be an integer in 0..15 (got undefined)` instead of unplugging pad 0.
 
 - [ ] **Step 4: Implement**
 
@@ -269,6 +327,23 @@ Expected: FAIL:
       if (!Number.isInteger(to) || to < 1 || to > 255) throw new Error(`controllers.renumber: player number must be an integer in 1..255 (got ${to})`);
 ```
 
+`testing/playwright.js`, in `gameDriver`:
+1. In the `[T-24] fake pads` comment, after `pad(null) and pad(index, null) unplug, as unplug(index) does`, add `; a bare pad() or pad(undefined) is pad(null), as in 0.12`.
+2. Replace the `pad` method with:
+
+```js
+    pad: async (index, state) => {
+      if (index === undefined && state === undefined) index = null; // pad() / pad(undefined): unplug pad 0, as in 0.12 (plan 4 residual, plan 5)
+      if (typeof index !== 'number') {
+        if (index !== null && typeof index !== 'object') padIndex(index); // '1', true, undefined with a state: not a state, not an index
+        state = index; index = 0;
+      }
+      return ev(([i, st]) => window.__lhSetPad(i, st), [padIndex(index), state ?? null]);
+    },
+```
+
+`pad(NaN)` still throws: `typeof NaN` is `'number'`, and `padIndex(NaN)` rejects it.
+
 `docs/spec.md`. Plan 4 edited this file too, so re-read the lines before editing them.
 - After the [N-18] "*Note (plan 3 final review, I1)*" bullet, add:
 
@@ -282,80 +357,99 @@ Expected: FAIL:
   - *Note (plan 2 final review, parked):* `seat.seen` is once per pad index and `id` for the page's life, so a pad that comes back to a lost seat emits `seat.regained`, not `seat.seen`; a game that wants a reset on every replug listens to `seat.regained` too.
 ```
 
+- After the [T-24] bullet, add:
+
+```markdown
+  - *Note (plan 5):* a bare `game.pad()` or `game.pad(undefined)` is `game.pad(null)` (pad 0 unplugged), as in 0.12; `'1'`, `true`, `NaN`, and `undefined` with a state, still throw.
+```
+
 - [ ] **Step 5: Run the tests, then every engine suite**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=1 test/net-key.test.mjs test/controllers.test.mjs`
+Run the two Step 3 commands again.
 Expected: PASS.
 
-Run:
+Run every engine suite. The lists come from `find`, so the 14 `test/kits/*.test.mjs` files are in UNIT (S5; none of them is a browser or net file). Run the block with bash: zsh does not split an unquoted `$UNIT`.
+
 ```bash
-cd /home/smiller/projects/four43/lion-hawk-engine
-NET=$(ls test/net*.test.mjs test/mp*.test.mjs); BROWSER=$(grep -l "testing/playwright\|lion-hawk/playwright" test/*.test.mjs)
-UNIT=$(ls test/*.test.mjs | grep -vxF -f <(printf '%s\n' $NET $BROWSER))
-systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 $UNIT
-systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=1 $NET
-for f in $BROWSER; do systemd-run --user --scope -q -p MemoryMax=3G node --max-old-space-size=1536 --test "$f"; done
+bash <<'SH'
+cd /home/smiller/projects/four43/lion-hawk-engine || exit 1   # no set -e: all three runs go, each reports its own failures
+ALL=$(find test -name '*.test.mjs' | sort)
+NET=$(printf '%s\n' $ALL | grep -E '^test/(net|mp)[^/]*\.test\.mjs$')
+BROWSER=$(grep -l "testing/playwright\|lion-hawk/playwright" $ALL)
+UNIT=$(printf '%s\n' $ALL | grep -vxF -f <(printf '%s\n' $NET $BROWSER))
+echo "unit $(echo $UNIT | wc -w), net $(echo $NET | wc -w), browser $(echo $BROWSER | wc -w)"   # 191 files in all
+systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 $UNIT
+systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=1 $NET
+for f in $BROWSER; do systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test "$f"; done
+SH
 ```
-Expected: PASS. Record the three pass counts; Task 11 repeats this run. If a browser suite cannot start (no Chromium), say which ones were skipped.
+Expected: PASS. Record the three file counts and the three pass counts; Task 11 repeats this run. If a browser suite cannot start (no Chromium), say which ones were skipped.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/net/key.js src/core/controllers.js docs/spec.md test/net-key.test.mjs test/controllers.test.mjs
-git diff --cached --name-only
-git commit -m "fix(engine): keyWords errors name the type only; controllers.of is a closure and renumber checks 1..255 (plan 5 carry-overs)"
+git -C /home/smiller/projects/four43/lion-hawk-engine add src/net/key.js src/core/controllers.js testing/playwright.js docs/spec.md \
+  test/net-key.test.mjs test/controllers.test.mjs test/playwright.test.mjs
+git -C /home/smiller/projects/four43/lion-hawk-engine diff --cached --name-only
+git -C /home/smiller/projects/four43/lion-hawk-engine commit -m "fix(engine): keyWords errors name the type only; controllers.of is a closure and renumber checks 1..255; a bare game.pad() unplugs pad 0 again (plan 5 carry-overs)"
 ```
 
 ---
 
 ### Task 3: Point the games at the local engine (no commit)
 
-**Files:** none tracked. It replaces the installed `games/node_modules/lion-hawk` (v0.12.0) with the committed `local-players` tree.
+**Files:** none tracked. It replaces the worktree's installed `/home/smiller/projects/four43/four43-local-players/games/node_modules/lion-hawk` (v0.12.0) with the committed `local-players` tree. The user's checkout keeps its own installed v0.12.0.
 
 **Interfaces:**
-- Produces: `lion-hawk` resolves to `local-players` HEAD for every game.
-- Re-run Step 1 after every later engine commit.
-- Reversal: `cd games && rm -rf node_modules/lion-hawk && npm install --allow-git=all` (npm reinstalls the locked v0.12.0). Task 12 replaces it in any case.
+- Produces: `lion-hawk` resolves to `local-players` HEAD for every game in ROOT.
+- Re-run Step 1 after every later engine commit (Task 11's too).
+- Reversal: `cd /home/smiller/projects/four43/four43-local-players/games && rm -rf node_modules/lion-hawk && npm ci --prefer-offline --allow-git=all` (npm reinstalls the locked v0.12.0; then check esbuild as in Step 1). Task 12 replaces it in any case.
+- Do not run `ROOT/games/test/` here: `workspace.test.mjs` compares each installed engine version with its pin, so it is red against this copy (N13). It runs in Task 12.
 
-- [ ] **Step 1: Unpack the engine**
+- [ ] **Step 1: Check esbuild, then unpack the engine**
 
 ```bash
-cd /home/smiller/projects/four43/four43/games
+cd /home/smiller/projects/four43/four43-local-players/games
+npx --no-install esbuild --version || { echo 'esbuild does not run (its postinstall was blocked): stop before any build'; exit 1; }
 test -z "$(git -C /home/smiller/projects/four43/lion-hawk-engine status --short)" || { echo 'engine tree not clean'; exit 1; }
 rm -rf node_modules/lion-hawk && mkdir node_modules/lion-hawk
 git -C /home/smiller/projects/four43/lion-hawk-engine archive local-players | tar -x -C node_modules/lion-hawk
 ls -d */node_modules/lion-hawk 2>/dev/null; grep -c "claimPeerKey" node_modules/lion-hawk/src/net/key.js; grep -c "haptics" node_modules/lion-hawk/src/view/boot.js
-git -C /home/smiller/projects/four43/four43 status --short games/package-lock.json games/*/package.json
+git -C /home/smiller/projects/four43/four43-local-players status --short   # the whole worktree
 ```
 Expected:
+- esbuild prints a version (0.28.2 when this plan was revised). Rally's browser tests bundle with esbuild (`test/serve.mjs`), and so does `lion-hawk build`. If it fails, stop and tell the user: the fix is to let esbuild's install script run (for example `npm rebuild esbuild` with its script allowed), and that is their call;
 - no nested `lion-hawk` under a workspace member;
 - both counts are ≥ 1;
-- an empty status for the lock and the package files.
+- an empty worktree status (`node_modules` is ignored).
 
 - [ ] **Step 2: Baselines on the local engine**
 
-Run Rally's and Pig Pens' whole `npm test`, each from its own directory, with the cap command from Global Constraints.
+Run Rally's and Pig Pens' whole `npm test`, each from its own directory (`/home/smiller/projects/four43/four43-local-players/games/rally`, `/home/smiller/projects/four43/four43-local-players/games/pig-pens`), with the `npm test` cap command from Global Constraints.
 Expected: PASS for both.
 
-Run Tractor's `npm test` the same way.
-Expected: these files FAIL: `mp*.test.mjs`, `net.*.test.mjs`, `tape.test.mjs`, `trains.trust.test.mjs`, `session.bind.test.mjs` and `split.test.mjs`. That is plan 3's B3 note: `net.join` now defaults to `'engine'`, and Tractor's registry throws on `lh.*` groups. Every other file PASSES. Record the failing file list. Task 8 Step 1 makes it green.
+Run Tractor's `npm test` the same way, from `/home/smiller/projects/four43/four43-local-players/games/tractor-pickup`.
+Expected (advisory: the plan writer's guess, not a run, N7): these files FAIL: `mp*.test.mjs`, `net.*.test.mjs`, `tape.test.mjs`, `trains.trust.test.mjs`, `session.bind.test.mjs` and `split.test.mjs`. That is plan 3's B3 note: `net.join` now defaults to `'engine'`, and Tractor's registry throws on `lh.*` groups. Every other file PASSES. Record the real failing file list in the ledger, whatever it is. Task 8 Step 1 makes it green.
 
 ---
 
 ### Task 4: Rally rumble on the seat's pads and the engine's stop
 
 **Files:**
-- Modify: `games/rally/src/rumbleOut.js`, `games/rally/src/game.view.js`
+- Modify: `games/rally/src/rumbleOut.js`, `games/rally/src/game.view.js`, `games/rally/src/rumbleLab.js` (B1)
 - Test: `games/rally/test/rumble.test.mjs`, `games/rally/test/e2e.browser.mjs`
+- All under ROOT `/home/smiller/projects/four43/four43-local-players`.
 
 **Interfaces:**
 - Consumes:
   - `view.localPlayers[0].pads` ([C-7]);
   - `view.haptics` (plan 4 final: `stop(reason)`, `paused`; `null` with `autoStop: false`).
 - Produces:
-  - `rumbleOut({ pads = () => [], haptics = () => null })` → `{ send(m), stop(reason) }`;
+  - `rumbleOut({ pads = () => [], haptics = () => null })` → `{ send(m), stop(reason), kill() }`;
   - `stop(reason)` calls `haptics().stop(reason)` once per transition, meaning only when something was sent since the last stop (`'exit'` always);
-  - `send` sends nothing while `haptics().paused`.
+  - `send` sends nothing while `haptics().paused`;
+  - `kill()` sends one zero effect plus `reset()` to each pad in `pads()` and tells the engine nothing. Its only caller is the `?rumble` lab's `pagehide` (B1): the lab runs no engine, so there is no `view.haptics` to stop its pads.
+- The `?rumble` lab (`rumbleLab.js`, R7) is `rumbleOut`'s second caller. It passes `pads: () => [...getPads()].filter(Boolean)` (every connected pad, no seat) and no `haptics`.
 
 - [ ] **Step 1: Write the failing unit tests**
 
@@ -384,6 +478,9 @@ test('rumbleOut: one engine stop per transition, exit always; nothing is sent wh
   calls.length = 0; h.paused = true; out.send({ strong: 1, weak: 1 });
   assert.deepEqual(calls, [], 'paused: no effect is sent (spec C-14)');
   h.paused = false; out.send({ strong: 1, weak: 1 }); assert.equal(calls.length, 1, 'sends again after the pause');
+  calls.length = 0; out.kill();
+  assert.deepEqual(calls, [['zero'], ['reset']], "kill (the ?rumble lab's pagehide, no engine there): one zero effect + reset on each pad with an actuator (B1)");
+  assert.deepEqual(stops, ['menu', 'exit'], 'kill is not an engine stop');
   assert.doesNotThrow(() => rumbleOut({ pads: () => [] }).send({ strong: 1, weak: 1 }));
   assert.doesNotThrow(() => { const o = rumbleOut({ pads: () => undefined }); o.send({ strong: 1, weak: 1 }); o.stop('exit'); }, 'no seat yet, no haptics (autoStop off)');
 });
@@ -404,8 +501,8 @@ test('rumbleOut: silent gaps between pulses (ABS) never reset, so a queued pulse
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd /home/smiller/projects/four43/four43/games/rally && systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/rumble.test.mjs`
-Expected: FAIL. The old `rumbleOut` ignores `pads`/`haptics` and reads `navigator.getGamepads` (undefined in Node), so no `play` call is recorded.
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/rumble.test.mjs`
+Expected: FAIL. The old `rumbleOut` ignores `pads`/`haptics` and reads `navigator.getGamepads` (undefined in Node), so no `play` call is recorded (`calls[0]` is undefined).
 
 - [ ] **Step 3: Rewrite `src/rumbleOut.js`**
 
@@ -421,6 +518,7 @@ Expected: FAIL. The old `rumbleOut` ignores `pads`/`haptics` and reads `navigato
 // a task but runs reset() at once, so a reset can cancel an effect sent a frame earlier. A gap while driving (both levels ~0,
 // e.g. between ABS pulses) is a zero-magnitude effect only, queued behind the last pulse (playtest 2026-10-19); a gap longer
 // than GAP_FRAMES ends with one zero effect plus reset (not a menu, finish or exit, so not the engine's).
+// kill() is the ?rumble lab's (rumbleLab.js): the lab runs no engine, so on pagehide it zeroes its pads itself, once.
 const ON = 0.005, DURATION = 120; // ms: about 7 frames at 60 Hz, so a hitch doesn't leave a gap
 const GAP_FRAMES = 15;            // ~1/4 s of driving quiet before it ends
 const NO = Object.freeze([]);
@@ -451,7 +549,8 @@ export function rumbleOut({ pads = () => NO, haptics = () => null } = {}) {
     if (gap === 1) each(zeroEffect); // the gap's first frame: end the pulse, queued behind it
     else if (gap > GAP_FRAMES) { each(zero); live = false; gap = 0; }
   }
-  return { send, stop };
+  function kill() { each(zero); live = false; gap = 0; } // the lab's pagehide (B1): one zero effect + reset per pad, no engine stop
+  return { send, stop, kill };
 }
 ```
 
@@ -515,7 +614,24 @@ with:
       if (driving) pads.send(rumble.update(s.sim.car, Math.min(0.1, view.dt), STRENGTH[st.rumble] ?? 1)); else pads.stop(s.phase === 'finished' ? 'finish' : 'menu');
 ```
 
-Then check that `doc` is still used in `frame` (for the classes). If the frame's `doc` binding is now unused, remove only that binding.
+Then check that `doc` is still used in `frame` (for the classes). If the frame's `doc` binding is now unused, remove only that binding. After these edits `grep -n "kill" src/game.view.js` prints nothing.
+
+`src/rumbleLab.js` (B1). Replace:
+
+```js
+  const mix = createRumble(picks), pads = rumbleOut({ getGamepads });
+  const getPads = getGamepads ?? (() => win.navigator.getGamepads?.() ?? []);
+```
+
+with:
+
+```js
+  const getPads = getGamepads ?? (() => win.navigator.getGamepads?.() ?? []);
+  // the lab runs no engine (no seat, no view.haptics): it sends to every connected pad, and its pagehide kill() zeroes them (rally-spec R8-2)
+  const mix = createRumble(picks), pads = rumbleOut({ pads: () => [...getPads()].filter(Boolean) });
+```
+
+Keep `win.addEventListener('pagehide', () => pads.kill());` and `pads.send(m);` as they are. Then `grep -n "pads\." src/rumbleLab.js` prints only `pads.send(m)` and `pads.kill()`.
 
 - [ ] **Step 5: Add the browser check**
 
@@ -529,32 +645,35 @@ test('desktop: rumble reaches seat 0\'s pads while driving; a pause stops them (
     await game.tap('title.drive'); await game.until(s => s.phase === 'running', { maxSteps: 2000 });
     await game.pad(0, { x: true }); await game.frames(); await game.pad(0, {}); await game.frames(); // a press pairs the pad to seat 0
     await game.seconds(2, { throttle: 1 }); await game.frames();
-    const n = (await game.haptics(0)).calls.length;
-    assert.ok((await game.haptics(0)).calls.some(c => c.op === 'playEffect' && c.params.strongMagnitude + c.params.weakMagnitude > 0), 'the stage rumbles the pad');
+    const on = c => c.op === 'playEffect' && c.params.strongMagnitude + c.params.weakMagnitude > 0;
+    assert.ok((await game.haptics(0)).calls.some(on), 'the stage rumbles the pad');
+    // render is 'auto': frames between a count and the key press may still rumble, so the counts are taken around the pause, not before it
+    const m = (await game.haptics(0)).calls.length; // up to here: driving
     await game.page.keyboard.press('Escape'); await game.frames(); await game.step(1); await game.frames(); await game.frames();
     assert.deepEqual((await game.scene()).overlays, ['pause']);
-    const after = (await game.haptics(0)).calls.slice(n);
-    assert.ok(after.some(c => c.op === 'reset'), 'the pause stops it');
-    assert.ok(!after.some(c => c.op === 'playEffect' && c.params.strongMagnitude + c.params.weakMagnitude > 0), 'nothing is sent while paused');
+    await game.frames(3); // the pause is on: the engine's stop has started, and Rally sends nothing more
+    const n = (await game.haptics(0)).calls.length;
+    assert.ok((await game.haptics(0)).calls.slice(m).some(c => c.op === 'reset'), 'the pause stops it (a reset since Escape)');
+    await game.frames(5);
+    assert.ok(!(await game.haptics(0)).calls.slice(n).some(on), 'nothing is sent while paused');
   } finally { await game.close(); }
 });
 ```
 
 - [ ] **Step 6: Run**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/rumble.test.mjs test/jolt.test.mjs`
-Expected: PASS.
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/rumble.test.mjs test/jolt.test.mjs`
+Expected: PASS. `rumble.test.mjs` also imports `fakeCar` from `rumbleLab.js`, so it loads the edited lab.
 
-Run: `systemd-run --user --scope -q -p MemoryMax=3G node --max-old-space-size=1536 --test test/e2e.browser.mjs`
-Expected: PASS (the old tests plus the new one).
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test test/e2e.browser.mjs`
+Expected: PASS (the old tests plus the new one). Run the new test three times (`--test-name-pattern "rumble reaches"`); it must pass every time.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/rally/src/rumbleOut.js games/rally/src/game.view.js games/rally/test/rumble.test.mjs games/rally/test/e2e.browser.mjs
-git diff --cached --name-only
-git commit -m "refactor(rally): rumble goes to seat 0's pads and the engine stops it (lion-hawk C-14): no own hide, unload or first-sight stops"
+git -C /home/smiller/projects/four43/four43-local-players add games/rally/src/rumbleOut.js games/rally/src/game.view.js games/rally/src/rumbleLab.js games/rally/test/rumble.test.mjs games/rally/test/e2e.browser.mjs
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "refactor(rally): rumble goes to seat 0's pads and the engine stops it (lion-hawk C-14): no own hide, unload or first-sight stops; the ?rumble lab keeps kill()"
 ```
 
 ---
@@ -564,6 +683,7 @@ git commit -m "refactor(rally): rumble goes to seat 0's pads and the engine stop
 **Files:**
 - Modify: `games/rally/src/devices.js`, `games/rally/src/main.js`
 - Test: `games/rally/test/devices.test.mjs`, `games/rally/test/e2e.browser.mjs`
+- All under ROOT `/home/smiller/projects/four43/four43-local-players`.
 
 **Interfaces:**
 - Consumes: `view.context(name, def)`, `view.seats({ max, join, contexts })` ([C-5], [C-10]).
@@ -611,7 +731,7 @@ test('desktop: the drive context: W drives, and two pads are one player (lion-ha
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/devices.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/devices.test.mjs`
 Expected: FAIL with `does not provide an export named 'driveContext'`.
 
 - [ ] **Step 3: Implement `src/devices.js`**
@@ -651,19 +771,28 @@ Change the import to `import { bindStick, bindHold } from 'lion-hawk/view';`. Up
 
 - [ ] **Step 4: Run**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/devices.test.mjs test/purity.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/devices.test.mjs test/purity.test.mjs`
 Expected: PASS.
 
-Run, one file at a time under `MemoryMax=3G`: `test/e2e.browser.mjs`, `test/render.browser.mjs`, `test/built.browser.mjs`.
-Expected: PASS. That includes `a gamepad walks the title … drives, pauses with Start …` and the new test. Then run `test/mobile.mjs` (it needs the dev server: `npm run dev` in another shell).
+Run each of `test/e2e.browser.mjs`, `test/render.browser.mjs`, `test/built.browser.mjs` alone, one after another:
+```bash
+cd /home/smiller/projects/four43/four43-local-players/games/rally && for f in test/e2e.browser.mjs test/render.browser.mjs test/built.browser.mjs; do
+  systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test "$f"; done
+```
+Expected: PASS. That includes `a gamepad walks the title … drives, pauses with Start …` and the new test.
+
+Then run `test/mobile.mjs` alone, under the browser cap (S4). It needs no dev server: it bundles and serves the page itself (`serveRally` from `test/serve.mjs`, `mobile.mjs:41`), so do not start `npm run dev`:
+```bash
+cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 test/mobile.mjs
+```
 Expected: its own pass count, no failures.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add games/rally/src/devices.js games/rally/src/main.js games/rally/test/devices.test.mjs games/rally/test/e2e.browser.mjs
-git diff --cached --name-only
-git commit -m "feat(rally): keyboard, pads and touch are the drive mapping context on one seat (lion-hawk C-5, C-10)"
+git -C /home/smiller/projects/four43/four43-local-players add games/rally/src/devices.js games/rally/src/main.js games/rally/test/devices.test.mjs games/rally/test/e2e.browser.mjs
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(rally): keyboard, pads and touch are the drive mapping context on one seat (lion-hawk C-5, C-10)"
 ```
 
 ---
@@ -673,6 +802,7 @@ git commit -m "feat(rally): keyboard, pads and touch are the drive mapping conte
 **Files:**
 - Modify: `games/rally/src/game.sim.js`, `games/rally/src/game/stage.js`, `games/rally/docs/spec/rally-spec.md`
 - Create: `games/rally/test/state-homes.test.mjs`
+- All under ROOT `/home/smiller/projects/four43/four43-local-players`.
 
 **Interfaces:**
 - Consumes: `defineGame({ player, gameState })`, `engine.players`, `engine.gameState` ([N-21], [N-22], offline records).
@@ -723,7 +853,7 @@ test('T-25: a stage finish time is player 1\'s state', () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd /home/smiller/projects/four43/four43/games/rally && systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/state-homes.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/state-homes.test.mjs`
 Expected: FAIL: `gameState.phase` is `undefined` and `lastLap` is `undefined`.
 
 - [ ] **Step 3: Implement**
@@ -767,25 +897,27 @@ const MS_MAX = 0xffffffff, ms = t => Math.max(0, Math.min(MS_MAX, Math.round(t *
   `'menu'` (title, settings, results, pause), `'finish'` and `'exit'` (the stage exits), once per transition. Nothing is sent
   while `view.haptics.paused`. The engine stops the pads on page hide, blur and `pagehide` and resets a pad the first time it
   sees it (lion-hawk C-14), so Rally no longer does. A quarter second of quiet while driving still ends with one zero effect
-  plus reset (R7's gap rule).
+  plus reset (R7's gap rule). The `?rumble` lab runs no engine: it sends to every connected pad and zeroes them on `pagehide`
+  (`rumbleOut`'s `kill()`).
 - **R8-3 State homes** (lion-hawk §2.2, [T-25]): the last lap, this session's best lap and the stage finish time (ms) are
   player 1's player state (`engine.players[0]`: `lastLap`, `bestLap`, `finish`); the run's phase is game state
   (`engine.gameState.phase`). The stage writes them where it changes them; `s.phase` stays the HUD's copy.
+  Deferred (lion-hawk §2.2's worked example for Rally, partly built): the splits, the countdown and the track seed stay in the
+  stage state for now; they move to player or game state when Rally has a second player or a net part.
 - Follow-up after this round: the "almost slip" brake warning in the left trigger (`trigger-rumble`).
 ```
 
 - [ ] **Step 4: Run Rally's whole suite**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G env NODE_OPTIONS=--max-old-space-size=1536 npm test`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 env NODE_OPTIONS=--max-old-space-size=512 npm test`
 Expected: PASS, including `lh-alloc.test.mjs` (the writes allocate nothing), `golden*.test.mjs` and `flow.test.mjs`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/rally/src/game.sim.js games/rally/src/game/stage.js games/rally/docs/spec/rally-spec.md games/rally/test/state-homes.test.mjs
-git diff --cached --name-only
-git commit -m "feat(rally): lap times in player state and the run's phase in game state (lion-hawk T-25); spec round 8"
+git -C /home/smiller/projects/four43/four43-local-players add games/rally/src/game.sim.js games/rally/src/game/stage.js games/rally/docs/spec/rally-spec.md games/rally/test/state-homes.test.mjs
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(rally): lap times in player state and the run's phase in game state (lion-hawk T-25); spec round 8"
 ```
 
 ---
@@ -795,6 +927,7 @@ git commit -m "feat(rally): lap times in player state and the run's phase in gam
 **Files:**
 - Modify: `games/pig-pens/src/devices.js`, `games/pig-pens/src/main.js`, `games/pig-pens/src/game.sim.js`, `games/pig-pens/src/game/farm.js`
 - Create: `games/pig-pens/test/devices.test.mjs`, `games/pig-pens/test/state-homes.test.mjs`
+- All under ROOT `/home/smiller/projects/four43/four43-local-players`.
 
 **Interfaces:**
 - Produces:
@@ -852,7 +985,7 @@ test('T-25: the basket is player 1\'s state and survives driving the tractor; ni
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd /home/smiller/projects/four43/four43/games/pig-pens && systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/devices.test.mjs test/state-homes.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/pig-pens && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/devices.test.mjs test/state-homes.test.mjs`
 Expected: FAIL with `does not provide an export named 'farmContext'`; `gameState.pens` is `undefined`.
 
 - [ ] **Step 3: Implement**
@@ -895,7 +1028,7 @@ Remove `bindKeyboard` from its `lion-hawk/view` import.
 
 `src/game.sim.js`:
 - change the import to `import { defineGame, actions, axis, button, F } from 'lion-hawk/sim';`;
-- in `defineGame({ … })`, after `actions: ACTIONS, start: 'farm',`, add:
+- in `defineGame({ … })`, on a new line after the line that ends `actions: ACTIONS, start: 'farm',` (line 46; it has no trailing comment), add:
 
 ```js
     // [T-25] state homes (lion-hawk §2.2): the basket is player 1's; day or night and the pigs in each of the 8 regions are the farm's
@@ -911,20 +1044,19 @@ Remove `bindKeyboard` from its `lion-hawk/view` import.
 
 - [ ] **Step 4: Run**
 
-Run Pig Pens' whole `npm test` with the cap command.
+Run Pig Pens' whole `npm test` with the cap command, from `/home/smiller/projects/four43/four43-local-players/games/pig-pens`.
 Expected: PASS, including `golden*.test.mjs`, `invariants.test.mjs` and `purity.test.mjs`.
 
-Run `test/e2e.browser.mjs` under `MemoryMax=3G`.
+Run `cd /home/smiller/projects/four43/four43-local-players/games/pig-pens && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test test/e2e.browser.mjs`.
 Expected: PASS, including `… holding the tractor drives, W moves it, Escape gets out` and `iPhone landscape: hold the tractor, drive with the thumb pad, honk …`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/pig-pens/src/devices.js games/pig-pens/src/main.js games/pig-pens/src/game.sim.js games/pig-pens/src/game/farm.js \
+git -C /home/smiller/projects/four43/four43-local-players add games/pig-pens/src/devices.js games/pig-pens/src/main.js games/pig-pens/src/game.sim.js games/pig-pens/src/game/farm.js \
   games/pig-pens/test/devices.test.mjs games/pig-pens/test/state-homes.test.mjs
-git diff --cached --name-only
-git commit -m "feat(pig-pens): keys, drive pad and horn are the farm mapping context; basket in player state, night and pens in game state (lion-hawk C-10, T-25)"
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(pig-pens): keys, drive pad and horn are the farm mapping context; basket in player state, night and pens in game state (lion-hawk C-10, T-25)"
 ```
 
 ---
@@ -941,6 +1073,7 @@ git commit -m "feat(pig-pens): keys, drive pad and horn are the farm mapping con
   - `test/possess.test.mjs` (new), `test/pilot.test.mjs`, `test/golden.test.mjs`
   - `test/mp.harness.mjs`, `test/mp.engine.harness.mjs`
   - `test/net.kinds.test.mjs`, `test/protocol.test.mjs`
+- All under ROOT `/home/smiller/projects/four43/four43-local-players` (`games/tractor-pickup/`).
 
 **Interfaces:**
 - Consumes: `engine.controllerOf(0).possess(e)`, [C-3] copy (a net-made `e.input` keeps its keys, buttons as `down`).
@@ -954,7 +1087,7 @@ git commit -m "feat(pig-pens): keys, drive pad and horn are the farm mapping con
 
 In `src/game/net.js` `netConfig`, after `kinds, world: true,`, add `join: 'manual', // plan 3 B3 stopgap until the engine join (plan 5 Task 9)`.
 
-Run Tractor's whole `npm test` with the cap command.
+Run Tractor's whole `npm test` with the cap command, from `/home/smiller/projects/four43/four43-local-players/games/tractor-pickup`.
 Expected: PASS. Task 3's failing files now pass.
 
 - [ ] **Step 2: Write the failing tests**
@@ -1023,7 +1156,7 @@ In `test/net.kinds.test.mjs`, change the first test's title to `'NET_VERSION 5 a
 
 - [ ] **Step 3: Run to verify failure**
 
-Run: `cd /home/smiller/projects/four43/four43/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/pilot.test.mjs test/possess.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/pilot.test.mjs test/possess.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs`
 Expected: FAIL:
 - `stickOf` is not exported;
 - `pawn` is `undefined`;
@@ -1120,22 +1253,21 @@ and add to its header comment: "An input with goX is a stick for seat 0's contro
 
 - [ ] **Step 5: Run**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/pilot.test.mjs test/possess.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs test/golden.test.mjs test/net.driven.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/pilot.test.mjs test/possess.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs test/golden.test.mjs test/net.driven.test.mjs`
 Expected: PASS. The goldens are unchanged. Do not re-bless: a golden diff here is a bug.
 
-Run Tractor's whole `npm test` with the cap command.
+Run Tractor's whole `npm test` with the cap command, from `/home/smiller/projects/four43/four43-local-players/games/tractor-pickup`.
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/tractor-pickup/src/game/net.js games/tractor-pickup/src/sim/pilot.js games/tractor-pickup/src/sim/actions.js games/tractor-pickup/src/sim/game.js \
+git -C /home/smiller/projects/four43/four43-local-players add games/tractor-pickup/src/game/net.js games/tractor-pickup/src/sim/pilot.js games/tractor-pickup/src/sim/actions.js games/tractor-pickup/src/sim/game.js \
   games/tractor-pickup/src/sim/trains.js games/tractor-pickup/src/game/farm.js games/tractor-pickup/src/net/kinds.js games/tractor-pickup/src/net/entities.js \
   games/tractor-pickup/src/net/protocol.js games/tractor-pickup/test/possess.test.mjs games/tractor-pickup/test/pilot.test.mjs games/tractor-pickup/test/golden.test.mjs \
   games/tractor-pickup/test/mp.harness.mjs games/tractor-pickup/test/mp.engine.harness.mjs games/tractor-pickup/test/net.kinds.test.mjs games/tractor-pickup/test/protocol.test.mjs
-git diff --cached --name-only
-git commit -m "feat(tractor): the train is seat 0's pawn and replicates the stick; peers drive it through the pilot (lion-hawk C-2, I-4; NET_VERSION 5)"
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(tractor): the train is seat 0's pawn and replicates the stick; peers drive it through the pilot (lion-hawk C-2, I-4; NET_VERSION 5)"
 ```
 
 ---
@@ -1149,9 +1281,11 @@ git commit -m "feat(tractor): the train is seat 0's pawn and replicates the stic
   - `src/net/players.js`, `src/net/session.js`
   - `src/game/net.js`, `src/game.sim.js`
 - Test:
-  - `test/join.test.mjs` (new), `test/mp.engine.harness.mjs`
+  - `test/join.test.mjs` (new), `test/mp.engine.harness.mjs`, `test/mp.harness.mjs` (N5)
   - `test/net.kinds.test.mjs`, `test/protocol.test.mjs`
   - `test/mp.repair.test.mjs`, `test/mp.engine.test.mjs`, `test/session.test.mjs`
+  - `test/mp.test.mjs` (B4: one test re-expressed)
+- All under ROOT `/home/smiller/projects/four43/four43-local-players` (`games/tractor-pickup/`).
 
 **Interfaces:**
 - Consumes:
@@ -1165,6 +1299,7 @@ git commit -m "feat(tractor): the train is seat 0's pawn and replicates the stic
   - `entryOf(list, n)`;
   - `createSession` requires `bind`.
 - Retired: the `hello` and `welcome` messages, `freeNumber`, `byPeer`, the `PLAYER` kind, `SEND`, the guest's hello retry, and the host's repeated welcome.
+- Kept: the guest's `hostAway` / `hostBack` listeners (M-40, `guest.js:91-92`). A test raises them as the port does, with `g.engine.command('net.peer', { event: 'hostAway', at: w.now })` (`port.js:53` issues exactly this command), so host frames keep flowing while the server says the host is away.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1258,13 +1393,37 @@ const setup = (fh, extra = {}) => { let changes = 0; const made = [];
 - in `'join: no welcome 10 s after joining …'`, replace the `peer.emit('message', { t: 'welcome', … }, { reliable: true });` line with `t.made.at(-1).you = 2; // the engine's net.welcome numbered this page (N-19)`;
 - in `'host: when the host sync cannot be made …'`, change `setup(fh, { getGame: () => { throw new Error('no game'); } })` to `setup(fh, { bind: () => { throw new Error('no game'); } })`.
 
+Edit `test/mp.test.mjs` (B4). The new farm now comes only in `lh.game` frames, so the old test, which silenced the host's frames and still expected the new farm from the JSON welcome, fails by design. Replace the whole test `'a new farm while the host is silent keeps boops paused (M-19, M-40)'` (`mp.test.mjs:493-499`) with:
+
+```js
+test('a new farm while the host is away keeps boops paused; with no host frames there is no new farm (M-19, M-40)', async () => {
+  const w = await mpWorld({ seed: 80 }); w.seconds(1);
+  // the server's host_away / host_back, raised on the guest as its port does (net.peer): the host's frames keep flowing
+  const g = w.guests[0], server = event => g.engine.command('net.peer', { event, at: w.now });
+  server('hostAway'); w.seconds(0.1); assert.equal(g.game.boopsPaused, true);
+  hostFarm(w, 81); w.seconds(3); // lh.game rides the host's frames (M-19: within 2 s), and the farm builds through ctx.load
+  assert.equal(g.game.farm.seed, 81); assert.equal(g.game.boopsPaused, true, 'the new game is paused too'); assert.equal(g.sync.players.map.get(1).away, true);
+  server('hostBack'); w.seconds(0.3); assert.equal(g.game.boopsPaused, false);
+  const talk = quiet(w, w.host, { json: true }); hostFarm(w, 82); w.seconds(3);
+  assert.equal(g.game.farm.seed, 81, 'M-19: no frame from the host, no new farm (its JSON messages carry none)');
+  talk(); w.seconds(3); assert.equal(g.game.farm.seed, 82, 'the next frames bring it');
+});
+```
+
+Edit `test/mp.harness.mjs` (N5): `quiet()`'s registry is built from Tractor's own `KINDS`, which has no `lh.*` kinds, so with `{ ahead: true }` a host frame that carries `lh.player` or `lh.game` decodes to `null`. It is then dropped, which is what the tests want, but only by accident. Build it from the engine's kinds, so the decode knows every kind on the wire (behaviour is unchanged):
+- add `import { tractorGame } from '../src/game.sim.js';` after the `../src/net/protocol.js` import;
+- drop `KINDS` from the `../src/net/kinds.js` import (nothing else in the file uses it);
+- replace `const REG = createRegistry(KINDS, { maxSender: MAX_PLAYERS });` with `let REG = null; // the engine's kinds (with lh.player and lh.game), made at the first ahead check`;
+- in `quiet`, replace `try { return !(decodeFrame(d.slice(0), REG)?.time > w.now); }` with `try { REG ??= createRegistry(tractorGame().net.kinds, { maxSender: MAX_PLAYERS }); return !(decodeFrame(d.slice(0), REG)?.time > w.now); }`.
+
 - [ ] **Step 2: Run to verify failure**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/join.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/join.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs test/mp.test.mjs`
 Expected: FAIL:
 - with the manual join, the host has no roster entries 2..4 and `lh.game` is missing;
 - the kinds still include `player`;
-- `checkFromHost` still passes a welcome.
+- `checkFromHost` still passes a welcome;
+- in `mp.test.mjs`, only the new test fails: the JSON welcome still brings farm 82 while the host's frames are dropped, so `farm.seed` is 82, not 81.
 
 - [ ] **Step 3: Protocol, kinds, entities, players, config**
 
@@ -1312,7 +1471,7 @@ export const GAME_FIELDS = { seed: F.uint(4), farm: F.uint(4), next: F.uint(2, M
 
 `src/game.sim.js`:
 - import `PLAYER_FIELDS, GAME_FIELDS` from `'./net/protocol.js'`;
-- in `defineGame({ … })`, after `actions: ACTIONS, start: 'farm',`, add `player: PLAYER_FIELDS, gameState: GAME_FIELDS, // [N-22] lh.player and lh.game (plan 5)`.
+- in `defineGame({ … })`, the line `id: 'tractor-pickup', …, actions: ACTIONS, start: 'farm', // hz: the physics step (DT)` ends in a comment (N12). Add a new line after it, before `defs:`: `    player: PLAYER_FIELDS, gameState: GAME_FIELDS, // [N-22] lh.player and lh.game (plan 5)`.
 
 `src/net/session.js`:
 1. Delete the `createHostSync` and `createGuestSync` imports.
@@ -1322,7 +1481,7 @@ export const GAME_FIELDS = { seed: F.uint(4), farm: F.uint(4), next: F.uint(2, M
 
 - [ ] **Step 4: Write `src/net/host.js`**
 
-Keep, unchanged, the constants block from `export const CLAIM_RANGE` to `export const BARN_HOLD_MS` and its two-clocks comment, plus `follow`, `tractorOf`, `grantBarn`, `stepBarn`, `hostGate`, `repair`, `rides`, `silent`, `freeUp`, `owned`, `guestAt` and `startTrust`. Replace the header comment, the imports, `createHostSync`'s first lines, the handlers, the peer listeners and the sync object, so that the file reads:
+Keep, unchanged, the constants block from `export const CLAIM_RANGE` to `export const BARN_HOLD_MS` and its two-clocks comment, plus `follow`, `tractorOf`, `grantBarn`, `stepBarn`, `hostGate`, `repair`, `rides`, `silent`, `freeUp`, `owned`, `guestAt` and `startTrust`. `silent` (today `host.js:93`, beside the old peer listeners) moves up with the other kept helpers, before `writeState`, which uses it (N4). Replace the header comment, the imports, `createHostSync`'s first lines, the handlers, the peer listeners and the sync object, so that the file reads:
 
 ```js
 // src/net/host.js
@@ -1360,7 +1519,7 @@ export function createHostSync({ engine, game, world, net, paint, clock }) {
   const barn = { holder: 0, since: 0, holdMs: BARN_HOLD_MS, hostWait: null }; // M-70
   const owned = n => game.herd.animals.filter(a => a.state === 'carried' && a.owner === n); // only when a player leaves
   const herdSize = () => { game.herd.setPlayers(1 + players.map.size); game.herd.respawn(); }; // M-62: a joiner brings more animals; one who leaves takes none
-  // … freeUp, guestAt, startTrust, follow, tractorOf, grantBarn, stepBarn, hostGate: unchanged …
+  // … freeUp, guestAt, startTrust, follow, tractorOf, grantBarn, stepBarn, hostGate, silent: unchanged …
   const dropPlayer = n => { for (const a of owned(n)) { a.state = 'gone'; a.epoch++; missing.delete(a.id); } players.drop(n, out); }; // M-39: its train poofs, its animals go with it
   // [N-21] the engine's roster decides who is in the room. Each step: one row per active guest player (a new row for a number given
   // again: its join changed, M-39), following its transport peer (a takeover moves it, N-23), its away and its paint; the row of a
@@ -1505,14 +1664,14 @@ The `// …` lines in this block mean "copy that code from the current file as i
 12. In `frame(from, f)`, replace `if (from !== hostPeer || alone || !you) return; lastFast = clock();` with `if (from !== hostPeer || alone) return; if (f.groups.has('lh.game')) hostGame = true; if (!you) return; lastFast = clock();`. Also change `if (f.groups.has('player')) applyRoster();` to `if (f.groups.has('lh.player')) applyRoster();`.
 13. Replace `barnHolder` with `const barnHolder = () => { const list = engine.players; for (let i = 0; i < list.length; i++) if (list[i].barn && list[i].active) return list[i].number; return 0; }; // M-71: the host's player state says whose show has the barn`.
 14. In `before(now)`, replace `nowMs = now; if (!you) { if (hostPeer && clock() - helloAt >= HELLO_MS) hello(); return out.splice(0); }` with `nowMs = now; if (!alone) pollWelcome(); if (!you) return out.splice(0);`.
-15. Delete the line `try { world.net.self = you; } catch (err) { warn('net self', err); } // #77: …` (the engine sets `net.self`, N-24).
+15. ~~Delete the line `try { world.net.self = you; } …`~~ Skip (N8): that line is in the old `applyWelcome`, which item 9 already replaced. Check with `grep -n "net.self = you" src/net/guest.js`, which must print nothing.
 
 - [ ] **Step 6: Run**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/join.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs test/mp.engine.test.mjs test/mp.repair.test.mjs test/session.test.mjs test/session.bind.test.mjs test/possess.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/join.test.mjs test/net.kinds.test.mjs test/protocol.test.mjs test/mp.engine.test.mjs test/mp.repair.test.mjs test/session.test.mjs test/session.bind.test.mjs test/possess.test.mjs test/mp.test.mjs`
 Expected: PASS.
 
-Run Tractor's whole `npm test` with the cap command.
+Run Tractor's whole `npm test` with the cap command, from `/home/smiller/projects/four43/four43-local-players/games/tractor-pickup`.
 Expected: PASS. If any other file still fails, fix it the way these rulings say, and do not change the game's behaviour. The cases are:
 - a test that sent or dropped `hello`/`welcome` JSON now uses the engine join, or `blackout` of `lh.game`;
 - a test that read `store.get('player', n)` now reads `engine.players`;
@@ -1520,19 +1679,23 @@ Expected: PASS. If any other file still fails, fix it the way these rulings say,
 
 Add every file you touch this way to the Step 7 `git add` list and to the commit message body.
 
-Run `test/net.peers.browser.mjs`, then `test/e2e.browser.mjs`, one at a time under `MemoryMax=3G`.
+Run `test/net.peers.browser.mjs`, then `test/e2e.browser.mjs`, one at a time:
+```bash
+cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && for f in test/net.peers.browser.mjs test/e2e.browser.mjs; do
+  systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 node --max-old-space-size=1024 --test "$f"; done
+```
 Expected: PASS (or only the known iPad show-tap failure).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/tractor-pickup/src/net/protocol.js games/tractor-pickup/src/net/kinds.js games/tractor-pickup/src/net/entities.js games/tractor-pickup/src/net/host.js \
+git -C /home/smiller/projects/four43/four43-local-players add games/tractor-pickup/src/net/protocol.js games/tractor-pickup/src/net/kinds.js games/tractor-pickup/src/net/entities.js games/tractor-pickup/src/net/host.js \
   games/tractor-pickup/src/net/guest.js games/tractor-pickup/src/net/players.js games/tractor-pickup/src/net/session.js games/tractor-pickup/src/game/net.js \
   games/tractor-pickup/src/game.sim.js games/tractor-pickup/test/join.test.mjs games/tractor-pickup/test/mp.engine.harness.mjs games/tractor-pickup/test/net.kinds.test.mjs \
-  games/tractor-pickup/test/protocol.test.mjs games/tractor-pickup/test/mp.repair.test.mjs games/tractor-pickup/test/mp.engine.test.mjs games/tractor-pickup/test/session.test.mjs
-git diff --cached --name-only
-git commit -m "feat(tractor): the engine join; paints, barn and quiet in player state, the farm in game state; host handlers by numbersOf (lion-hawk N-19..N-25)"
+  games/tractor-pickup/test/protocol.test.mjs games/tractor-pickup/test/mp.repair.test.mjs games/tractor-pickup/test/mp.engine.test.mjs games/tractor-pickup/test/session.test.mjs \
+  games/tractor-pickup/test/mp.test.mjs games/tractor-pickup/test/mp.harness.mjs
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(tractor): the engine join; paints, barn and quiet in player state, the farm in game state; host handlers by numbersOf (lion-hawk N-19..N-25)"
 ```
 
 ---
@@ -1542,6 +1705,7 @@ git commit -m "feat(tractor): the engine join; paints, barn and quiet in player 
 **Files:**
 - Modify: `games/tractor-pickup/src/net/bind.js`, `src/main.js`, `docs/tractor-pickup-spec.md`, `test/mp.engine.harness.mjs`
 - Test: `test/bind.test.mjs`, `test/state-homes.test.mjs` (new)
+- All under ROOT `/home/smiller/projects/four43/four43-local-players` (`games/tractor-pickup/`).
 
 **Interfaces:**
 - Consumes: `claimPeerKey()` (`lion-hawk/net`), `createPort({ key })`, `mp().drop`, `mp().rejoin`.
@@ -1593,8 +1757,11 @@ test('T-25: player state survives a respawn: after a new farm the paint stays an
 });
 
 test('T-25: player state survives a rejoin: the reloaded guest gets number 2 and its lh.player record back (N-23, review focus)', async () => {
-  const w = await engineWorld({ seed: 21, guests: 1 }); w.seconds(1);
-  const g = w.guests[0]; g.sync.setPaint(PAINTS[2]); w.seconds(1);
+  // the guest's paint is its page's own (progress, saved on the device): argsOf gives guest 1 PAINTS[1], and a reload sends the same
+  // paint again, as a real reloaded tab does. So the record must be the same at the rejoin (kept, not re-sent) and after it (what persists).
+  const w = await engineWorld({ seed: 21, guests: 1 }), paint = PAINTS[1]; w.seconds(2);
+  const g = w.guests[0];
+  assert.deepEqual([entry(w.host, 2).coat, entry(w.host, 2).trim], [paint.body, paint.trim], 'the host wrote the page\'s paint');
   const join = entry(w.host, 2).join;
   w.drop(g); w.seconds(1);
   assert.equal(entry(w.host, 2).active, false, 'inactive, held for rejoinSeconds');
@@ -1602,7 +1769,8 @@ test('T-25: player state survives a rejoin: the reloaded guest gets number 2 and
   let back = null;
   w.host.engine.events.on(e => { if (e.type === 'player.joined' && e.rejoined) back = { number: e.number, coat: entry(w.host, e.number).coat, join: entry(w.host, e.number).join }; });
   w.rejoin(g); w.seconds(3);
-  assert.deepEqual(back, { number: 2, coat: PAINTS[2].body, join }, 'the same number, paint and joining come back');
+  assert.deepEqual(back, { number: 2, coat: paint.body, join }, 'at the rejoin, before the new page says anything: the same number, paint and joining (the engine zero is red)');
+  for (const d of w.devs) assert.deepEqual([entry(d, 2).coat, entry(d, 2).trim], [paint.body, paint.trim], `${d.name}: the paint persists 3 s after the rejoin (M-80)`);
   assert.equal(g.sync.you, 2); assert.equal(g.game.farm.seed, 21, 'on the host\'s farm again');
   assert.ok(w.host.sync.players.map.has(2), 'a new row on the host (M-10)');
 });
@@ -1620,8 +1788,8 @@ test('T-25: game state reaches a late joiner: the farm seed, number and herd siz
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cd /home/smiller/projects/four43/four43/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/bind.test.mjs test/state-homes.test.mjs`
-Expected: FAIL. The bind test's key is the default random one (`bindPort` drops `key`). The state-home tests may already pass, because Task 9 built the behaviour: that is acceptable. Record which tests passed before the implementation step. The bind test must fail.
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/bind.test.mjs test/state-homes.test.mjs`
+Expected: FAIL. The bind test's key is the default random one (`bindPort` drops `key`). The state-home tests may already pass, because Task 9 built the behaviour: that is acceptable. Record in the ledger which of the three T-25 tests passed before Step 3 (S8). The bind test must fail.
 
 - [ ] **Step 3: Implement**
 
@@ -1639,7 +1807,7 @@ Expected: FAIL. The bind test's key is the default random one (`bindPort` drops 
 
 ```markdown
 | M-19 | New farm | When the host makes a new farm (P-8), each guest makes the same new farm. A guest in its show makes it after the show. A guest cannot make a new farm while it is in a room. The farm (seed, farm number, herd size) is game state (lion-hawk `lh.game`): the host sends it in each keyframe, so a guest that lost it gets it again within 2 s. A guest uses it only after a frame from its host has it. |
-| M-22 | Replicated objects | All shared state is replicated objects. The kinds are: animal (authority: host; fields: type, golden, home (route or yard), state, owner, ownership number, position, rotation, animation, hidden, chick line), tree (authority: host; field: state), player (the engine's player state, lion-hawk `lh.player`, one record for each player number; authority: host; the engine's fields seat, away, active and join (which joining of that player number; a number given again is a new player), and this game's fields coat and trim (the paints), barn (this player's show has the barn, M-71) and quiet (the host gets no frames from that device, M-39)) and train (authority: the player; fields: the tractor, trailer and wagon positions and rotations, the input (the stick as a direction on the farm; each device turns it into throttle and steering with the pilot, C-1), mode (drive, show, held, or wait: in the barn and waiting for it, M-71), full, and the animals in its slots or in flight to it, by id and slot). Game state (lion-hawk `lh.game`) holds the farm (M-19). Game code registers its objects; it does not make network messages. A new kind of shared object in a later version is a new kind, not a new message. |
+| M-22 | Replicated objects | All shared state is replicated objects. The kinds are: animal (authority: host; fields: type, golden, home (route or yard), state, owner, ownership number, position, rotation, animation, hidden, chick line), tree (authority: host; field: state), player (the engine's player state, lion-hawk `lh.player`, one record for each player number; authority: host; the engine's fields seat, away, active and join (which joining of that player number; a number given again is a new player), and this game's fields coat and trim (the paints), barn (this player's show has the barn, M-71) and quiet (the host gets no frames from that device, M-39)) and train (authority: the player; fields: the tractor, trailer and wagon positions and rotations, the input (the stick as a direction on the farm; each device turns it into throttle and steering with the pilot, C-1), mode (drive, show, held, or wait: in the barn and waiting for it, M-71), full, and the animals in its slots or in flight to it, by id and slot). Game state (lion-hawk `lh.game`) holds the farm (M-19); the delivery tally is not game state yet (lion-hawk §2.2's example, deferred). Game code registers its objects; it does not make network messages. A new kind of shared object in a later version is a new kind, not a new message. |
 | M-24 | Event messages | On the reliable channel, JSON. They are requests and one-time effects, not state: claim, delivery, tree break, trees regrow, horn, paint, help request and answer, new farm. The result of a request comes back as replicated state. The engine makes the join (lion-hawk `net.hello`, `net.welcome`): it gives each guest a player number (2 to 4) and says hello again until the welcome comes. After its welcome, a guest sends its paint; the host writes it into that player's state. At each host keyframe, a guest sends delivery and paint again until the replicated state shows them. |
 | M-27 | Game version | The game has a network version number (5 since game version 1.11.0). It increases when the network messages change. A device with a different number cannot join (Handshake refuses it). The join prompt (M-32) then says "Update the game on both devices". The engine's join also refuses a device with a different engine or different replicated kinds. |
 ```
@@ -1652,20 +1820,19 @@ After the `| M-41 |` row, add:
 
 - [ ] **Step 4: Run**
 
-Run: `systemd-run --user --scope -q -p MemoryMax=2G node --max-old-space-size=1536 --test --test-concurrency=4 test/bind.test.mjs test/state-homes.test.mjs test/join.test.mjs`
+Run: `cd /home/smiller/projects/four43/four43-local-players/games/tractor-pickup && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/bind.test.mjs test/state-homes.test.mjs test/join.test.mjs`
 Expected: PASS.
 
-Run Tractor's whole `npm test`, then `test/net.peers.browser.mjs` and `test/e2e.browser.mjs` one at a time.
+Run Tractor's whole `npm test` with the cap command from `/home/smiller/projects/four43/four43-local-players/games/tractor-pickup`, then `test/net.peers.browser.mjs` and `test/e2e.browser.mjs` one at a time with the browser cap (the Task 9 Step 6 loop).
 Expected: PASS, except the known iPad show-tap failure. This is the real-Chromium check of `claimPeerKey` with `navigator.locks` across two browser contexts.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git add games/tractor-pickup/src/net/bind.js games/tractor-pickup/src/main.js games/tractor-pickup/docs/tractor-pickup-spec.md \
+git -C /home/smiller/projects/four43/four43-local-players add games/tractor-pickup/src/net/bind.js games/tractor-pickup/src/main.js games/tractor-pickup/docs/tractor-pickup-spec.md \
   games/tractor-pickup/test/mp.engine.harness.mjs games/tractor-pickup/test/bind.test.mjs games/tractor-pickup/test/state-homes.test.mjs
-git diff --cached --name-only
-git commit -m "feat(tractor): the claimed peer key reaches the port; state-home tests for respawn, rejoin and a late joiner (lion-hawk N-18, T-25); spec M-19..M-27, M-80"
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "feat(tractor): the claimed peer key reaches the port; state-home tests for respawn, rejoin and a late joiner (lion-hawk N-18, T-25); spec M-19..M-27, M-80"
 ```
 
 ---
@@ -1701,32 +1868,35 @@ Local players (design: `docs/plans/2026-10-21-local-players-spec.md`; spec §4.6
 - Network identity (plan 3): a peer key per tab (`peerKey`, `claimPeerKey`, `createPort({ key })`); the engine join (`net.hello`, `net.welcome`, `net.refused`, `net.seat`; `defineGame({ net: { join, admit, maxPlayers, maxSeats, rejoinSeconds, reasons } })`); the roster `engine.players` and `engine.gameState`, replicated as `lh.player` / `lh.game` and extended with `defineGame({ player, gameState })`; away, inactive players kept `rejoinSeconds` (60) and given back to the same key; several numbers per peer (`net.locals`, `world.net.bindings`, `world.net.numbersOf(peer)`); `mp()` per-seat inputs, `w.seat`, `w.rejoin`. **Behaviour changes:** `world.net.players` is gone (`bindings`); `net.join` defaults to `'engine'` (a game with its own join sets `'manual'`); solo, `net.self` is 1.
 - Haptics, fake pads and the pad bench (plan 4): the engine stops rumble it would leave running (page hide, blur, a pausing overlay: a zero `dual-rumble` plus `reset()` for 20 frames) and resets a pad the first time it sees it; games tell it about their own moments with `view.haptics.stop('menu' | 'finish' | 'exit')` and send nothing while `view.haptics.paused`; `defineView({ haptics: { autoStop: false } })` turns it off (`view.haptics` is then `null`). Axis edges: an axis that reads exactly 0 presses on its first push, and a release toward centre is never a press. Playwright fake pads: `game.pad(index, state)`, `game.unplug(index)`, `game.haptics(index)`. `?debug=pads` opens the Gamepad Bench (`flags.debugs`).
 - Games (plan 5): Tractor Pickup 1.11.0 on the engine join (NET_VERSION 5; its train is seat 0's pawn), Rally 0.6.0 and Pig Pens 2.3.0 on mapping contexts; [T-25] state-home tests in all three.
-- Fixes: `keyWords` errors name the input's type and never echo it; `controllers.seat` and `of` work destructured; `controllers.renumber` checks 1..255.
+- Fixes: `keyWords` errors name the input's type and never echo it; `controllers.seat` and `of` work destructured; `controllers.renumber` checks 1..255; a bare `game.pad()` / `game.pad(undefined)` unplugs pad 0 again, as in 0.12 (`'1'`, `true` and `NaN` still throw).
 ```
 
-- [ ] **Step 3: Run every engine suite** (the three commands of Task 2 Step 5)
-Expected: PASS, with the same counts as Task 2 plus nothing new.
+- [ ] **Step 3: Run every engine suite** (the `bash <<'SH'` block of Task 2 Step 5: lists from `find`, so `test/kits/*` is in UNIT, S5)
+Expected: PASS, with the same file and pass counts as Task 2 plus nothing new.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /home/smiller/projects/four43/lion-hawk-engine
-git add src/version.js package.json CHANGELOG.md docs/spec.md
-git diff --cached --name-only
-git commit -m "chore(release): lion-hawk 0.13.0 - local players, controllers, player and game state"
+git -C /home/smiller/projects/four43/lion-hawk-engine add src/version.js package.json CHANGELOG.md docs/spec.md
+git -C /home/smiller/projects/four43/lion-hawk-engine diff --cached --name-only
+git -C /home/smiller/projects/four43/lion-hawk-engine commit -m "chore(release): lion-hawk 0.13.0 - local players, controllers, player and game state"
 ```
 
-- [ ] **Step 5: ASK USER** — "Merge `local-players` into `main` (fast-forward) and tag `v0.13.0` locally?" After a yes:
+Then re-run Task 3 Step 1, so ROOT's archive copy is the release commit.
+
+- [ ] **Step 5: ASK USER** — "Fast-forward `main` to `local-players` and tag `v0.13.0` locally?" After a yes (S7: no checkout, so the engine stays on `local-players`):
 
 ```bash
-git checkout main && git merge --ff-only local-players && git tag -a v0.13.0 -m "lion-hawk 0.13.0: local players" && git log --oneline -1 --decorate
+git -C /home/smiller/projects/four43/lion-hawk-engine fetch . local-players:main
+git -C /home/smiller/projects/four43/lion-hawk-engine tag -a v0.13.0 local-players -m "lion-hawk 0.13.0: local players"
+git -C /home/smiller/projects/four43/lion-hawk-engine log --oneline -1 --decorate local-players; git -C /home/smiller/projects/four43/lion-hawk-engine branch --show-current
 ```
-Expected: `main` and `local-players` at the release commit, tagged `v0.13.0`. If `--ff-only` refuses, stop and tell the user: `main` has moved.
+Expected: `main`, `local-players` and `v0.13.0` on the release commit; the current branch is still `local-players`. `git fetch . local-players:main` updates `main` only as a fast-forward: if it refuses (`non-fast-forward`, so `main` has moved), stop and tell the user, and do not tag.
 
 - [ ] **Step 6: ASK USER** — "Push `main`, `local-players` and the tag `v0.13.0` to github.com/four43/lion-hawk-engine? The games' re-pin (Task 12) installs from that tag." After a yes:
 
 ```bash
-git push origin main local-players v0.13.0
+git -C /home/smiller/projects/four43/lion-hawk-engine push origin main local-players v0.13.0
 ```
 
 ---
@@ -1737,10 +1907,11 @@ git push origin main local-players v0.13.0
 - Modify:
   - `games/{tractor-pickup,rally,pig-pens}/package.json`, `games/package-lock.json`
   - `games/*/baked/`
-  - `games/tractor-pickup/docs/tractor-pickup-spec.md` (version lines)
+  - `games/tractor-pickup/docs/tractor-pickup-spec.md` (version lines), `games/rally/docs/spec/rally-spec.md` (Round 8 heading)
 - Generated: `site/exp/{tractor-pickup,rally,piggie-game}/`.
+- All in ROOT `/home/smiller/projects/four43/four43-local-players`. The user's checkout is touched only by Step 8's second ASK USER.
 
-**Interfaces:** Every game pins `github:four43/lion-hawk-engine#v0.13.0`. npm 12 `allow-git=root` needs every game on the same tag.
+**Interfaces:** Every game pins `github:four43/lion-hawk-engine#v0.13.0`. npm 12 `allow-git=root` needs every game on the same tag. The deploy pushes `feat/local-players` to `origin/gh-pages`.
 
 - [ ] **Step 1: Pins and versions**
   - Each of the three `package.json` files: `"lion-hawk": "github:four43/lion-hawk-engine#v0.13.0"`.
@@ -1754,54 +1925,60 @@ git push origin main local-players v0.13.0
 - [ ] **Step 2: Install from the tag** (needs Task 11 Step 6 done)
 
 ```bash
-cd /home/smiller/projects/four43/four43/games
+cd /home/smiller/projects/four43/four43-local-players/games
 rm -rf node_modules/lion-hawk
 npm install --allow-git=all && npm dedupe --allow-git=all
 npm ls lion-hawk
+npx --no-install esbuild --version
 ```
-Expected: one hoisted `lion-hawk@0.13.0` (`github:four43/lion-hawk-engine#…`), no nested copies, no `invalid`.
+Expected: one hoisted `lion-hawk@0.13.0` (`github:four43/lion-hawk-engine#…`), no nested copies, no `invalid`; esbuild still prints its version (as in Task 3 Step 1; if not, stop and tell the user). Only ROOT's lock changes; the user's checkout keeps its own.
 
 - [ ] **Step 3: Re-bake**
 
-For each of `tractor-pickup`, `rally` and `pig-pens`, from its directory: `npx lion-hawk bake --check`, then `npx lion-hawk bake`, then `npx lion-hawk bake --check`.
+For each of `tractor-pickup`, `rally` and `pig-pens`, from `/home/smiller/projects/four43/four43-local-players/games/<g>`, with the bake cap from Global Constraints: `npx lion-hawk bake --check`, then `npx lion-hawk bake`, then `npx lion-hawk bake --check`. For example:
+```bash
+cd /home/smiller/projects/four43/four43-local-players/games/rally && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env NODE_OPTIONS=--max-old-space-size=2048 npx lion-hawk bake --check
+```
 Expected:
 - the first check reports the engine major.minor change (stale);
 - the bake succeeds;
 - the second check is clean;
-- `git diff --stat games/<g>/baked` shows only manifest and option-hash changes, plus any optimiser byte changes; `phys.json` is unchanged.
+- `git -C /home/smiller/projects/four43/four43-local-players diff --stat games/<g>/baked` shows only manifest and option-hash changes, plus any optimiser byte changes; `phys.json` is unchanged.
 
 - [ ] **Step 4: Full tests on the tag**
 
-For each game: its whole `npm test` with the cap command, then each browser file one at a time under `MemoryMax=3G`:
+For each game, from `/home/smiller/projects/four43/four43-local-players/games/<g>`: its whole `npm test` with the cap command, then each browser file alone with the browser cap:
 - Tractor: `test/e2e.browser.mjs`, `test/net.peers.browser.mjs`;
-- Rally: `test/e2e.browser.mjs`, `test/render.browser.mjs`, `test/built.browser.mjs`, `test/offline.browser.mjs`;
+- Rally: `test/e2e.browser.mjs`, `test/render.browser.mjs`, `test/built.browser.mjs`, `test/offline.browser.mjs`, then `test/mobile.mjs` (without `--test`, as in Task 5 Step 4);
 - Pig Pens: `test/e2e.browser.mjs`.
 
-Also run `node --test --test-concurrency=4 test/` from `games/` (the workspace's own tests, if any).
+Also run the workspace's own tests under the unit cap (S4). They include `workspace.test.mjs`, which is green only now that every installed engine matches its pin (N13):
+```bash
+cd /home/smiller/projects/four43/four43-local-players/games && systemd-run --user --scope -q -p MemoryMax=2G -p MemorySwapMax=0 -p RuntimeMaxSec=600 node --max-old-space-size=512 --test --test-concurrency=4 test/
+```
 Expected: PASS, except the known Tractor iPad show-tap failure.
 
 - [ ] **Step 5: Commit the pins and bakes**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git status --short games/*/baked games/package-lock.json games/*/package.json   # only these games' files
-git add games/package-lock.json games/tractor-pickup/package.json games/rally/package.json games/pig-pens/package.json \
+git -C /home/smiller/projects/four43/four43-local-players status --short   # only these games' files
+git -C /home/smiller/projects/four43/four43-local-players add games/package-lock.json games/tractor-pickup/package.json games/rally/package.json games/pig-pens/package.json \
   games/tractor-pickup/baked games/rally/baked games/pig-pens/baked games/tractor-pickup/docs/tractor-pickup-spec.md games/rally/docs/spec/rally-spec.md
-git diff --cached --name-only
-git commit -m "build(games): lion-hawk 0.13.0 for all three games; re-bake; Tractor 1.11.0, Rally 0.6.0, Pig Pens 2.3.0"
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only
+git -C /home/smiller/projects/four43/four43-local-players commit -m "build(games): lion-hawk 0.13.0 for all three games; re-bake; Tractor 1.11.0, Rally 0.6.0, Pig Pens 2.3.0"
 ```
 
 - [ ] **Step 6: Build the site**
 
 ```bash
-cd /home/smiller/projects/four43/four43
-git status --short site/exp   # must be empty before the build
-for g in tractor-pickup rally pig-pens; do (cd games/$g && npx lion-hawk build --site) || exit 1; done
-git status --short site/exp   # only site/exp/tractor-pickup, site/exp/rally, site/exp/piggie-game
+git -C /home/smiller/projects/four43/four43-local-players status --short site/exp   # must be empty before the build
+unset TRACTOR_OUT RALLY_OUT PIGPENS_OUT   # N9: an *_OUT variable would send a build elsewhere (each game.config.js outEnv)
+for g in tractor-pickup rally pig-pens; do (cd /home/smiller/projects/four43/four43-local-players/games/$g && systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 -p RuntimeMaxSec=900 env NODE_OPTIONS=--max-old-space-size=2048 npx lion-hawk build --site) || exit 1; done
+git -C /home/smiller/projects/four43/four43-local-players status --short site/exp   # only site/exp/tractor-pickup, site/exp/rally, site/exp/piggie-game
 ```
-Expected: each build logs its output directory. Only the three published directories change.
+Expected: each build logs its output directory, which is under `/home/smiller/projects/four43/four43-local-players/site/exp/` (`--site` resolves `../../site/exp` from the game directory). Only the three published directories change.
 
-Open each built page once from `site/` with the local server (`cd site && python3 -m http.server 8765`; visit `/exp/tractor-pickup/`, `/exp/rally/`, `/exp/piggie-game/`). Check that each loads with no console error. Tell the user that the iPad checks are theirs to do:
+Open each built page once from ROOT's `site/` with a local server, started in the background and stopped after (`cd /home/smiller/projects/four43/four43-local-players/site && python3 -m http.server 8765`; visit `/exp/tractor-pickup/`, `/exp/rally/`, `/exp/piggie-game/`). Check that each loads with no console error. Tell the user that the iPad checks are theirs to do:
 - Tractor host and guest on two devices (rejoin by reload);
 - Rally rumble on a real pad;
 - Pig Pens' thumb pad.
@@ -1809,19 +1986,43 @@ Open each built page once from `site/` with the local server (`cd site && python
 - [ ] **Step 7: Commit the site**
 
 ```bash
-git add site/exp/tractor-pickup site/exp/rally site/exp/piggie-game
-git diff --cached --name-only   # only paths under those three directories
-git commit -m "build(site): Tractor 1.11.0, Rally 0.6.0 and Pig Pens 2.3.0 on lion-hawk 0.13.0 - engine join, mapping contexts, state homes"
+git -C /home/smiller/projects/four43/four43-local-players add site/exp/tractor-pickup site/exp/rally site/exp/piggie-game
+git -C /home/smiller/projects/four43/four43-local-players diff --cached --name-only   # only paths under those three directories
+git -C /home/smiller/projects/four43/four43-local-players commit -m "build(site): Tractor 1.11.0, Rally 0.6.0 and Pig Pens 2.3.0 on lion-hawk 0.13.0 - engine join, mapping contexts, state homes"
 ```
 
-- [ ] **Step 8: ASK USER** — "Deploy: push `gh-pages` (the R7, game and site commits of this plan) to origin? If origin has moved, I will rebase with `git pull --rebase --autostash origin gh-pages` first. Your uncommitted `site/`, `content/` and rally reference files are stashed and restored around it by `--autostash`." After a yes:
+- [ ] **Step 8: Deploy from the worktree (ASK USER), then bring the user's checkout up (a second ASK USER)** (B3)
+
+1. Bring `feat/local-players` up to origin, in ROOT only (its tree is clean, so no stash):
 
 ```bash
-git fetch origin gh-pages && git status -sb
-# only if behind: git pull --rebase --autostash origin gh-pages   (stop and ask on any conflict or a failed autostash pop)
-git push origin gh-pages
+test -z "$(git -C /home/smiller/projects/four43/four43-local-players status --short)" || { echo 'worktree not clean'; exit 1; }
+git -C /home/smiller/projects/four43/four43-local-players fetch origin gh-pages
+git -C /home/smiller/projects/four43/four43-local-players log --oneline feat/local-players..origin/gh-pages   # empty: origin has nothing this branch lacks
+# only if that printed commits:
+git -C /home/smiller/projects/four43/four43-local-players rebase origin/gh-pages   # on any conflict: git -C /home/smiller/projects/four43/four43-local-players rebase --abort, stop and tell the user
+git -C /home/smiller/projects/four43/four43-local-players log --oneline origin/gh-pages..feat/local-players   # what the deploy adds: R7 (857740e, or its rebased copy) and this plan's game and site commits
 ```
-Expected: the push succeeds, and `git status --short` afterwards shows the user's unrelated changes exactly as before Task 1.
+
+2. **ASK USER** — "Deploy: push `feat/local-players` to `origin/gh-pages`? It adds: (the commit list printed above). Your own checkout is not touched by this." After a yes:
+
+```bash
+git -C /home/smiller/projects/four43/four43-local-players push origin feat/local-players:gh-pages
+```
+Expected: the push succeeds as a fast-forward of `origin/gh-pages`. GitHub Actions then builds and publishes four43.com.
+
+3. **ASK USER** (separately) — "Fast-forward your own `gh-pages` checkout (`/home/smiller/projects/four43/four43`) to the deployed commit? It changes only `games/` and `site/exp/` in your working tree; your uncommitted `site/`, `content/` and rally reference files are left as they are, and git refuses rather than overwrite a modified file." After a yes:
+
+```bash
+git -C /home/smiller/projects/four43/four43 status --short > /tmp/claude-1000/before-ff.txt
+git -C /home/smiller/projects/four43/four43 merge --ff-only feat/local-players
+git -C /home/smiller/projects/four43/four43 status --short | diff /tmp/claude-1000/before-ff.txt - && echo 'WIP unchanged'
+```
+Expected: `gh-pages` moves to the deployed commit and the status is unchanged. If `merge --ff-only` refuses, stop and tell the user why, and change nothing in their checkout. The two cases are:
+- git would overwrite a modified or untracked file;
+- step 1 rebased, so their `857740e` is not an ancestor of the deployed commit (the rebased R7 commit has the same change under a new SHA).
+
+Never stash, rebase, reset or check out in the user's checkout.
 
 ---
 
@@ -1829,6 +2030,7 @@ Expected: the push succeeds, and `git status --short` afterwards shows the user'
 
 - Rally follow-up: the "almost slip" brake warning in the left trigger (`trigger-rumble`; Chrome 126+, Bluetooth hidraw on Linux).
 - The user plays on real devices: Tractor's two-device join, a reload rejoin within 60 s, and the barn lock; Rally's rumble feel; Pig Pens' thumb pad.
+- Rally after a blur (N10): the engine stops the pads on blur, but Rally sends again on its next frame while the page is still visible ([C-14] lets a game override the blur stop). A follow-up decides whether Rally should hold off until focus comes back.
 - Tractor's devices can become a mapping context later. That would give a second couch seat its own tractor once the game wants one (`maxSeats` > 1).
 
 ## Rulings carried
@@ -1839,3 +2041,39 @@ Expected: the push succeeds, and `git status --short` afterwards shows the user'
 - **Plan 1 final, parked** (`seat()` uses `this.of`; `renumber` has no range check) → Task 2. The plan 1 history doc naming `createControllers` is not folded (ruled "cost: none").
 - **Plan 2 final, parked** (`seat.seen` not repeated on regain) → Task 2 spec note.
 - **Plan 4 final** (`view.haptics.stop` / `paused`, autoStop default; `seats.forEachUnpaired`, `game.pad` argument check) → Task 4 (Rally's stops and pause gate). The fake-pad calls in Tasks 4 and 5 pass a number index. `forEachUnpaired` is not needed by any game here.
+
+Ledger header and controller lines (`.superpowers/sdd/2026-10-21-local-players-5-migrate/progress.md`):
+- **USER approval: Task 1** (commit exactly the 15 R7 files, local only) → Task 1, marked DONE as `857740e`.
+- **USER approval: the train replicates the raw stick; the pilot runs on every peer; NET_VERSION 5** → Task 8 (unchanged).
+- **Ruling: the game worktree** (`four43-local-players`, `feat/local-players`) → Header status, Decisions, Global Constraints (Repos), Task 1 Step 5 (done), Tasks 3–12 (every path, command and commit in ROOT).
+- **Ruling: `game.pad()` / `pad(undefined)` unplugs pad 0** → Task 2 (same as S2).
+- **Plan-writer rulings (accepted)** → Decisions table, unchanged (archive copy, `quiet` field, farms from 1, bind required, offline T-25, Rally's long gap, versions).
+- **ASK USER points** → Task 11 Steps 5–6, Task 12 Step 8 (two asks: the push, then the user's checkout).
+- **Controller: Task 1 done; worktree made with `npm ci --prefer-offline --allow-git=all`; esbuild's postinstall blocked** → Header status, Task 1, Task 3 Step 1 (`npx --no-install esbuild --version` before the first build), Task 3 reversal, Task 12 Step 2.
+
+Pre-flight scan rulings:
+- **B1** (`rumbleLab.js` and `kill()`) → Task 4 (Files, Interfaces, Step 1 `kill()` assertion, Step 3 `kill`, Step 4 lab edit, Step 7 `git add`); Decisions; File map; Review Focus.
+- **B2** (worktree; every game path in ROOT) → Task 1 Step 5; Global Constraints; Tasks 3–12 (all `cd` and `git -C` paths); Task 12 Step 6 build and local server in ROOT; N9 in Task 12 Step 6.
+- **B3** (deploy from the worktree; two asks; no stash) → Task 12 Step 8; Decisions; Global Constraints (stop points, no `--autostash`); Review Focus.
+- **B4** (`mp.test.mjs:493-499`) → Task 9 (Files, Interfaces "Kept", Step 1 test, Step 2 expected failure, Step 6 run list, Step 7 `git add`); File map; Review Focus.
+- **S1** (pause e2e race) → Task 4 Step 5 (counts taken around the pause), Step 6 (three runs); Review Focus.
+- **S2** (bare `game.pad()`) → Task 2 (Files, Interfaces, Step 2 test, Step 3, Step 4 code and [T-24] note, Step 6); Task 11 Step 2 CHANGELOG; File map; Decisions.
+- **S3** (`--max-old-space-size=512`, `MemorySwapMax=0`, `RuntimeMaxSec`) → Global Constraints and every run command in Tasks 2–12. Browser files use 1024 MB and 900 s (as `gate.test.mjs` pins 900 s for browser steps); bakes and builds use 3G with a 2048 MB heap.
+- **S4** (`mobile.mjs` and the workspace run capped) → Task 5 Step 4 (alone under 3G; no dev server: `mobile.mjs` serves itself through `serveRally`), Task 12 Step 4 (mobile.mjs again, and `games/test/` under the 2G cap).
+- **S5** (`find`-built suite lists, `test/kits/*`) → Task 2 Step 5, Task 11 Step 3.
+- **S6** (`git -C` everywhere) → Task 2 Step 6, Tasks 4–12 commit steps, Task 11 Steps 4–6, Global Constraints.
+- **S7** (no `git checkout main`) → Task 11 Step 5 (`fetch . local-players:main`, tag on `local-players`); Global Constraints (Repos).
+- **S8** (rejoin test checks what persists) → Task 10 Step 1 (paint from the page's progress, PAINTS[1]; the at-join and 3 s-after assertions), Step 2 (record which T-25 tests passed early).
+- **N1** (§2.2 examples partly deferred) → Task 6 (rally-spec R8-3 "Deferred" lines), Task 10 (M-22 row: the delivery tally is not game state yet).
+- **N2** (`beforeunload` dropped; the engine's `pagehide` covers it) → accepted, no change (Task 4).
+- **N3** (`rumbleOut` swallows the rejection) → accepted, no change (Task 4).
+- **N4** (`silent` placed before `writeState`) → Task 9 Step 4.
+- **N5** (`quiet()`'s registry from the engine's kinds) → Task 9 Step 1 and Step 7; File map.
+- **N6** (M-80's place in the spec) → accepted, no change (Task 10).
+- **N7** (Task 3's failing list is a guess) → Task 3 Step 2 (advisory; record the real list).
+- **N8** (Task 9 Step 5 item 15 already done by item 9) → Task 9 Step 5 item 15 (skip, with a grep check).
+- **N9** (`*_OUT` unset before `build --site`) → Task 12 Step 6.
+- **N10** (Rally sends again after a blur) → accepted for now; "After this plan".
+- **N11** (`last >= 900` margin at HZ 240) → accepted, no change (Task 6).
+- **N12** (Tractor `game.sim.js:56` ends in a comment) → Task 9 Step 3 (a new line after it). Pig Pens' line 46 has no comment (Task 7 says so).
+- **N13** (`workspace.test.mjs` only after the pin) → Global Constraints, Task 3 Interfaces, Task 12 Step 4.
