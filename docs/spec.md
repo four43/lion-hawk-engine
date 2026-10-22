@@ -4,7 +4,7 @@ Version 0.1 (2026-10-11). Status: draft for review.
 Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
-Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; the rest is draft.
+Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25] in Tractor Pickup, Rally and Pig Pens. Released in 0.13.0.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
 
@@ -615,7 +615,8 @@ Local players (draft 2026-10-21):
 - **[T-23] Tapes per seat.** (built, plan 1) Tapes record input changes per seat and the `lh.seat` commands; a tape without seats replays as seat 0.
 - **[T-24] Fake pads.** (built, plan 4) The Playwright fake pads ([T-20]'s `pads: 'fake'`) hold any number of pads: `game.pad(index, state)` plugs or updates one (with optional `id` and `mapping`), `game.unplug(index)` removes it and fires `gamepaddisconnected`. Each fake pad has a `vibrationActuator` with a settable `effects` list that records every `playEffect` and `reset` call, read with `game.haptics(index)`. Rulings (plan 4): `game.pad(state)` is `game.pad(0, state)`; `game.pad(null)` and `game.pad(index, null)` unplug like `game.unplug(index)`; plugging an empty slot fires `gamepadconnected`; indexes are integers 0..15; `navigator.getGamepads()` returns a new array each call with `null` in empty slots (trailing ones trimmed). The actuator lists `['dual-rumble', 'trigger-rumble']` unless `effects` is given; `effects: null` gives that state no `vibrationActuator`; an unlisted effect rejects `NotSupportedError`; the actuator and its call log stay with the index until a pad with another `id` plugs in there. `game.haptics(index)` is `{ effects, calls }` (`{ op: 'playEffect', type, params }` / `{ op: 'reset' }`) or `null`.
   - *Note (plan 5):* a bare `game.pad()` or `game.pad(undefined)` is `game.pad(null)` (pad 0 unplugged), as in 0.12; `'1'`, `true`, `NaN`, and `undefined` with a state, still throw.
-- **[T-25] State homes.** Each migrated game has headless tests that player state survives a respawn and a rejoin, and that game state reaches a late joiner.
+- **[T-25] State homes.** (built, plan 5) Each migrated game has headless tests that player state survives a respawn and a rejoin, and that game state reaches a late joiner.
+  - *Ruling (plan 5):* a game with no net part (Rally, Pig Pens) tests the offline half: player 1's record outlives the pawn changing and game state follows the sim; the rejoin and late-joiner halves apply to networked games (Tractor Pickup).
 
 ### 7.6 Deferred
 
