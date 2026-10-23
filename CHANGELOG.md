@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.0 — 2026-10-21
+## 0.13.0 — 2026-10-23
 
 Local players (design: `docs/plans/2026-10-21-local-players-spec.md`; spec §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4], [D-7], [T-22]–[T-25]): several people on one device, each with their own controllers and bindings, and that device one peer in an online room.
 
