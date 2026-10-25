@@ -18,6 +18,9 @@ export const presets = Object.freeze({
   'iPhone SE': { viewport: { width: 667, height: 375 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA_IOS, safeArea: NONE },
   'iPhone 15 Pro landscape': { viewport: { width: 852, height: 393 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_IOS, safeArea: NOTCH_L },
   'iPhone 15 Pro portrait': { viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_IOS, safeArea: NOTCH_P },
+  'iPhone 15 Pro Max landscape': { viewport: { width: 932, height: 430 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_IOS, safeArea: NOTCH_L },
+  'iPhone 15 Pro Max portrait': { viewport: { width: 430, height: 932 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_IOS, safeArea: NOTCH_P },
+  'iPad Mini landscape': { viewport: { width: 1133, height: 744 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA_IPAD, safeArea: IPAD },
   'iPad Pro 11 landscape': { viewport: { width: 1194, height: 834 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA_IPAD, safeArea: IPAD },
   desktop: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false, safeArea: NONE },
 });

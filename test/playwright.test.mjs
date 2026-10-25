@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { presets, gameDriver, openGame, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap } from 'lion-hawk/playwright';
 
 test('presets have the documented shape', () => {
-  assert.deepEqual(Object.keys(presets).sort(), ['desktop', 'iPad Pro 11 landscape', 'iPhone 15 Pro landscape', 'iPhone 15 Pro portrait', 'iPhone SE']);
+  assert.deepEqual(Object.keys(presets).sort(), ['desktop', 'iPad Mini landscape', 'iPad Pro 11 landscape', 'iPhone 15 Pro Max landscape', 'iPhone 15 Pro Max portrait',
+    'iPhone 15 Pro landscape', 'iPhone 15 Pro portrait', 'iPhone SE']);
   for (const p of Object.values(presets)) {
     assert.ok(p.viewport.width > 0 && p.viewport.height > 0 && p.deviceScaleFactor >= 1);
     assert.equal(typeof p.isMobile, 'boolean'); assert.equal(typeof p.hasTouch, 'boolean');
@@ -11,6 +12,9 @@ test('presets have the documented shape', () => {
   }
   assert.equal(presets['iPhone 15 Pro landscape'].safeArea.left, 59);
   assert.equal(presets.desktop.hasTouch, false);
+  assert.deepEqual(presets['iPhone 15 Pro Max portrait'].viewport, { width: 430, height: 932 }); // [T-16]
+  assert.equal(presets['iPhone 15 Pro Max landscape'].safeArea.right, 59);
+  assert.deepEqual(presets['iPad Mini landscape'].viewport, { width: 1133, height: 744 });
 });
 
 const fake = evaluate => gameDriver({ page: { evaluate }, context: {}, preset: presets.desktop, presetName: 'desktop' });
