@@ -5,6 +5,7 @@ import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
 import { policy } from '../src/core/policy.js';
 import { worldFinite } from './invariants.js';
+import { useFixtures } from './fixtures.js';
 
 export { policy };
 const matcher = m => typeof m === 'function' ? m : e => e.type === m;
@@ -49,6 +50,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     // a policy's i counts from the start of each step()/until() call, so policy.seq schedules are relative to that call
     step(n = 1, input) { const f = resolve(input); for (let k = 0; k < n; k++) one(f, k); return h; },
     seconds: (s, input) => h.step(Math.round(s * hz), input),
+    use: (...specs) => useFixtures(h, specs), // [T-6]
     hold(p) { engine.input.hold(p); return h; },
     release(...ns) { engine.input.release(...ns); return h; },
     until(pred, { maxSteps, maxSeconds = 10, input, message } = {}) {
