@@ -1,0 +1,569 @@
+{
+  "repo": "lion-hawk-engine",
+  "source_commit": "7e239df",
+  "features": [
+    {
+      "id": "F01",
+      "slug": "core",
+      "title": "Engine core",
+      "summary": "Fixed-step engine, loop, scheduling, actions, events, players, controllers, UI and menu navigation model, RNG and math helpers.",
+      "paths": [
+        "src/core/**",
+        "src/version.js"
+      ],
+      "entrypoints": [
+        "src/core/engine.js:createEngine"
+      ],
+      "tests": [
+        "test/actions.test.mjs",
+        "test/alloc-rate.test.mjs",
+        "test/commands.test.mjs",
+        "test/controllers.test.mjs",
+        "test/engine.test.mjs",
+        "test/events.test.mjs",
+        "test/flags.test.mjs",
+        "test/inspect.test.mjs",
+        "test/loading.test.mjs",
+        "test/loop.test.mjs",
+        "test/math.test.mjs",
+        "test/nav.test.mjs",
+        "test/navScore.test.mjs",
+        "test/overlay-args.test.mjs",
+        "test/overlay-once.test.mjs",
+        "test/package-phase3.test.mjs",
+        "test/package.test.mjs",
+        "test/players-engine.test.mjs",
+        "test/players.test.mjs",
+        "test/reset.test.mjs",
+        "test/rng.test.mjs",
+        "test/schedule.test.mjs",
+        "test/ui.test.mjs",
+        "test/untilLoaded.test.mjs",
+        "test/world-engine.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/research-players.md",
+        "docs/research-menu-navigation.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1252,
+      "test_lines": 2261,
+      "imports": {
+        "F02": 2,
+        "F03": 1,
+        "F04": 3
+      },
+      "depends_on": [
+        "F02",
+        "F03",
+        "F04"
+      ]
+    },
+    {
+      "id": "F02",
+      "slug": "defs-and-kits",
+      "title": "Definitions and kits",
+      "summary": "Material registry, physics sidecar schema and net fields, plus the vehicle, terrain, coverage, fx and glyph kits.",
+      "paths": [
+        "src/defs/**",
+        "src/kits/**"
+      ],
+      "entrypoints": [
+        "src/defs/materials.js",
+        "src/kits/vehicle"
+      ],
+      "tests": [
+        "test/bake-sidecar.test.mjs",
+        "test/checks-materials.test.mjs",
+        "test/kits/coverage-view.test.mjs",
+        "test/kits/coverage.test.mjs",
+        "test/kits/fx-marks.test.mjs",
+        "test/kits/fx-particles.test.mjs",
+        "test/kits/glyphs.test.mjs",
+        "test/kits/kits-sim.test.mjs",
+        "test/kits/terrain-rapier.test.mjs",
+        "test/kits/terrain-view.test.mjs",
+        "test/kits/terrain.test.mjs",
+        "test/kits/vehicle-lifecycle.test.mjs",
+        "test/kits/vehicle-material.test.mjs",
+        "test/kits/vehicle-parts.test.mjs",
+        "test/kits/vehicle.test.mjs",
+        "test/materials-base.test.mjs",
+        "test/materials-hash.test.mjs",
+        "test/materials-pairs.test.mjs",
+        "test/materials.test.mjs",
+        "test/net-fields.test.mjs",
+        "test/sidecar-collider.test.mjs",
+        "test/sidecar.test.mjs",
+        "test/view-alloc.test.mjs",
+        "test/world-base-materials.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1231,
+      "test_lines": 1516,
+      "imports": {
+        "F01": 1
+      },
+      "depends_on": [
+        "F01"
+      ]
+    },
+    {
+      "id": "F03",
+      "slug": "sim-world-physics",
+      "title": "Simulation world and physics",
+      "summary": "Entity world, transform pool and placement, Rapier physics backend, colliders, collision groups, events and heightfields.",
+      "paths": [
+        "src/sim/world/**",
+        "src/sim/physics/**"
+      ],
+      "entrypoints": [
+        "src/sim/world/world.js"
+      ],
+      "tests": [
+        "test/physics-colliders.test.mjs",
+        "test/physics-events.test.mjs",
+        "test/physics-fixtures.test.mjs",
+        "test/physics-groups.test.mjs",
+        "test/physics-heightfield.test.mjs",
+        "test/physics-rapier.test.mjs",
+        "test/world-bodies.test.mjs",
+        "test/world-entities.test.mjs",
+        "test/world-headless.test.mjs",
+        "test/world-joints.test.mjs",
+        "test/world-parts.test.mjs",
+        "test/world-place.test.mjs",
+        "test/world-pool.test.mjs",
+        "test/world-replay.test.mjs",
+        "test/world-step.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 914,
+      "test_lines": 1342,
+      "imports": {
+        "F01": 2,
+        "F02": 2
+      },
+      "depends_on": [
+        "F01",
+        "F02"
+      ]
+    },
+    {
+      "id": "F04",
+      "slug": "net-replication",
+      "title": "Networking and replication",
+      "summary": "Transports, ports, peer keys, bridge, replica codec, wire schema and limits, interpolation and forecast, install, remote entities and replication.",
+      "paths": [
+        "src/net/**",
+        "src/sim/net/**",
+        "src/sim/forecast.js",
+        "src/sim/interp.js",
+        "src/sim/limits.js",
+        "src/sim/replica.js",
+        "src/sim/schema.js"
+      ],
+      "entrypoints": [
+        "src/sim/net/install.js"
+      ],
+      "tests": [
+        "test/bridge-e2e.test.mjs",
+        "test/bridge.test.mjs",
+        "test/forecast.test.mjs",
+        "test/interp.test.mjs",
+        "test/limits.test.mjs",
+        "test/mp-net.test.mjs",
+        "test/net-alloc.test.mjs",
+        "test/net-config.test.mjs",
+        "test/net-driven.test.mjs",
+        "test/net-guard.test.mjs",
+        "test/net-host.test.mjs",
+        "test/net-install.test.mjs",
+        "test/net-interp.test.mjs",
+        "test/net-join.test.mjs",
+        "test/net-key.test.mjs",
+        "test/net-locals.test.mjs",
+        "test/net-owner.test.mjs",
+        "test/net-record.test.mjs",
+        "test/net-rejoin.test.mjs",
+        "test/net-remote.test.mjs",
+        "test/net-replay.test.mjs",
+        "test/net-state.test.mjs",
+        "test/net-tractor.test.mjs",
+        "test/port.test.mjs",
+        "test/replica.test.mjs",
+        "test/schema.test.mjs",
+        "test/seats-net.test.mjs",
+        "test/transport.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1424,
+      "test_lines": 2175,
+      "imports": {
+        "F01": 3,
+        "F02": 3
+      },
+      "depends_on": [
+        "F01",
+        "F02"
+      ]
+    },
+    {
+      "id": "F05",
+      "slug": "view-input",
+      "title": "View boot, input and seats",
+      "summary": "Browser boot and driver, debug hook, keyboard, gamepad, touch, pointer and gestures, mapping contexts and profiles, local seats, haptics, DOM UI, menu navigation and the pad bench.",
+      "paths": [
+        "src/view/boot.js",
+        "src/view/contexts.js",
+        "src/view/debugHook.js",
+        "src/view/driver.js",
+        "src/view/gamepad.js",
+        "src/view/gesture.js",
+        "src/view/haptics.js",
+        "src/view/hook.js",
+        "src/view/keyboard.js",
+        "src/view/mapPair.js",
+        "src/view/menuNav.js",
+        "src/view/padEdges.js",
+        "src/view/pointer.js",
+        "src/view/profiles.js",
+        "src/view/seats.js",
+        "src/view/touch.js",
+        "src/view/uiDom.js",
+        "src/view/bench/**"
+      ],
+      "entrypoints": [
+        "src/view/boot.js"
+      ],
+      "tests": [
+        "test/bench-stats.test.mjs",
+        "test/bench.test.mjs",
+        "test/boot-args.test.mjs",
+        "test/boot.test.mjs",
+        "test/debugHook.test.mjs",
+        "test/driver.test.mjs",
+        "test/e2e.test.mjs",
+        "test/gamepad.test.mjs",
+        "test/gesture-stamp.test.mjs",
+        "test/gesture.test.mjs",
+        "test/haptics-boot.test.mjs",
+        "test/haptics-e2e.test.mjs",
+        "test/haptics.test.mjs",
+        "test/hold-e2e.test.mjs",
+        "test/hook-commands.test.mjs",
+        "test/hook.test.mjs",
+        "test/keyboard.test.mjs",
+        "test/load-e2e.test.mjs",
+        "test/menuNav.test.mjs",
+        "test/padEdges.test.mjs",
+        "test/pads-e2e.test.mjs",
+        "test/pointer.test.mjs",
+        "test/render-boot.test.mjs",
+        "test/replay-seats.test.mjs",
+        "test/seat-bindings.test.mjs",
+        "test/seat-contexts.test.mjs",
+        "test/seats-boot.test.mjs",
+        "test/seats.test.mjs",
+        "test/touch-e2e.test.mjs",
+        "test/touch.test.mjs",
+        "test/uiDom.test.mjs",
+        "test/untilLoaded-driver.test.mjs",
+        "test/untilLoaded-e2e.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/research-menu-navigation.md",
+        "docs/research-players.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 2157,
+      "test_lines": 3517,
+      "imports": {
+        "F01": 5,
+        "F06": 1
+      },
+      "depends_on": [
+        "F01",
+        "F06"
+      ]
+    },
+    {
+      "id": "F06",
+      "slug": "view-render",
+      "title": "Rendering and materials",
+      "summary": "Render pipeline, looks, lights, GPU hygiene, and the view material compiler with shader features.",
+      "paths": [
+        "src/view/render/**",
+        "src/view/materials/**"
+      ],
+      "entrypoints": [
+        "src/view/render"
+      ],
+      "tests": [
+        "test/compiler-apply.test.mjs",
+        "test/compiler-chunks.test.mjs",
+        "test/compiler-depth.test.mjs",
+        "test/compiler-e2e.page.js",
+        "test/compiler-e2e.test.mjs",
+        "test/compiler-fur.test.mjs",
+        "test/compiler-paint.test.mjs",
+        "test/compiler.test.mjs",
+        "test/e2e-render.test.mjs",
+        "test/peers-render.test.mjs",
+        "test/render-fixtures/render.view.js",
+        "test/render-hygiene.test.mjs",
+        "test/render-lights.test.mjs",
+        "test/render-pipeline.test.mjs",
+        "test/render-renderer.test.mjs",
+        "test/render-snapshot.test.mjs",
+        "test/render-tiltshift.test.mjs",
+        "test/render-timer.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1130,
+      "test_lines": 1579,
+      "imports": {
+        "F02": 1,
+        "F07": 3
+      },
+      "depends_on": [
+        "F02",
+        "F07"
+      ]
+    },
+    {
+      "id": "F07",
+      "slug": "view-presentation",
+      "title": "View sync, camera, assets and audio",
+      "summary": "Syncs sim entities to three.js objects, instancing and crowds, camera rigs, asset loading and animation tables, and audio.",
+      "paths": [
+        "src/view/sync/**",
+        "src/view/camera/**",
+        "src/view/instancing/**",
+        "src/view/assets/**",
+        "src/view/audio/**"
+      ],
+      "entrypoints": [
+        "src/view/sync/index.js"
+      ],
+      "tests": [
+        "test/assets-animTable.test.mjs",
+        "test/assets-loader.test.mjs",
+        "test/assets.test.mjs",
+        "test/audio-clips.test.mjs",
+        "test/audio-e2e.test.mjs",
+        "test/audio-lifecycle.test.mjs",
+        "test/audio.test.mjs",
+        "test/camera-chase.test.mjs",
+        "test/camera-mount.test.mjs",
+        "test/camera-orbit-gesture.test.mjs",
+        "test/camera-orbit.test.mjs",
+        "test/camera-project.test.mjs",
+        "test/sync-crowd.test.mjs",
+        "test/sync-hooks.test.mjs",
+        "test/sync-instanced.test.mjs",
+        "test/sync-instances.test.mjs",
+        "test/sync-netfix.test.mjs",
+        "test/sync-parts.test.mjs",
+        "test/sync-smooth.test.mjs",
+        "test/sync-world.test.mjs",
+        "test/sync.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1027,
+      "test_lines": 1424,
+      "imports": {
+        "F05": 1,
+        "F06": 2
+      },
+      "depends_on": [
+        "F05",
+        "F06"
+      ]
+    },
+    {
+      "id": "F08",
+      "slug": "testing",
+      "title": "Test helpers",
+      "summary": "The lion-hawk/test and lion-hawk/playwright helpers: headless harness, checks, invariants, golden state, record and replay, multiplayer harness and Playwright driver.",
+      "paths": [
+        "testing/**"
+      ],
+      "entrypoints": [
+        "testing/index.js",
+        "testing/playwright.js"
+      ],
+      "tests": [
+        "test/checks-alloc.test.mjs",
+        "test/checks-determinism.test.mjs",
+        "test/golden.test.mjs",
+        "test/headless.test.mjs",
+        "test/kits/purity.test.mjs",
+        "test/mp.test.mjs",
+        "test/playwright.test.mjs",
+        "test/purity-phase3.test.mjs",
+        "test/purity.test.mjs",
+        "test/replay.test.mjs",
+        "test/state.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/research-testing.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1007,
+      "test_lines": 729,
+      "imports": {
+        "F01": 6,
+        "F02": 2,
+        "F04": 1,
+        "F09": 2
+      },
+      "depends_on": [
+        "F01",
+        "F02",
+        "F04",
+        "F09"
+      ]
+    },
+    {
+      "id": "F09",
+      "slug": "tools-and-package",
+      "title": "CLI, tools and package surface",
+      "summary": "The lion-hawk CLI: bake, build, dev server and glyph build, plus the package entry points and exports.",
+      "paths": [
+        "tools/**",
+        "bin/**",
+        "src/index.sim.js",
+        "src/index.view.js",
+        "src/index.net.js",
+        "package.json"
+      ],
+      "entrypoints": [
+        "bin/lion-hawk.js",
+        "tools/cli.js",
+        "src/index.sim.js"
+      ],
+      "tests": [
+        "test/bake-anim.test.mjs",
+        "test/bake-check.test.mjs",
+        "test/bake-colliders.test.mjs",
+        "test/bake-config.test.mjs",
+        "test/bake-conventions.test.mjs",
+        "test/bake-fixtures.test.mjs",
+        "test/bake-hull.test.mjs",
+        "test/bake-mass.test.mjs",
+        "test/bake-optimise.test.mjs",
+        "test/bake-output.test.mjs",
+        "test/bake-read.test.mjs",
+        "test/build-dev.test.mjs",
+        "test/build-page.test.mjs",
+        "test/build-run.test.mjs",
+        "test/build.test.mjs",
+        "test/cli.test.mjs"
+      ],
+      "docs": [
+        "docs/spec.md",
+        "docs/design.md",
+        "docs/field-notes.md",
+        "CHANGELOG.md"
+      ],
+      "tickets": [],
+      "depends_manual": [],
+      "lines": 1013,
+      "test_lines": 838,
+      "imports": {
+        "F01": 13,
+        "F02": 4,
+        "F03": 2,
+        "F04": 10,
+        "F05": 12,
+        "F06": 7,
+        "F07": 10
+      },
+      "depends_on": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "glob": "test/fixtures/**",
+      "reason": "Test support: fixture games, models and phys data"
+    },
+    {
+      "glob": "test/helpers/**",
+      "reason": "Test support: shared fakes and helpers"
+    },
+    {
+      "glob": "test/kits/fixtures/**",
+      "reason": "Test support: kit fixture games"
+    },
+    {
+      "glob": "test/net/fixtures/**",
+      "reason": "Test support: net fixture games"
+    },
+    {
+      "glob": "test/field-notes.test.mjs",
+      "reason": "Repo hygiene guard on docs/field-notes.md numbering"
+    },
+    {
+      "glob": "test/domAsserts*.test.mjs",
+      "reason": "Repo hygiene guard on DOM assert usage in tests"
+    }
+  ]
+}

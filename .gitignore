@@ -1,3 +1,5 @@
 node_modules/
 test-results/
 .DS_Store
+docs/spec/_work/
+docs/specs/as-built/_work/
