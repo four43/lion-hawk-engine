@@ -144,7 +144,7 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 | 129 | `GLTFLoader` sanitises node names, and Kenney models repeat them | engine, all | done (0.8.0, 3d) |
 | 130 | A multi-material part loads as a `Group` of meshes | engine | open |
 | 131 | Kenney decorations carry flat decal primitives | engine, Tractor Pickup | done (0.8.0, 3d) |
-| 132 | `bake --check` does not see config changes | engine | open |
+| 132 | `bake --check` does not see config changes | engine | done (0.12.0) |
 | 133 | Pet anim tables moved from nlerp to slerp | Tractor Pickup | documented (0.8.0, 3d) |
 | 134 | Rapier's f32 principal frame drifts on repeated principal inertia | engine | documented (0.8.0, 3d) |
 | 135 | gltf-transform `prune` drops single-colour textures | engine | done (0.8.0, 3d) |
@@ -881,8 +881,8 @@ Add entries as you go. Don't wait for the end of a phase. Plans pull their engin
 ### 132. `bake --check` does not see config changes: engine (phase 3d)
 - **What happened:** `bake --check` compares sources, the registry hash and the engine major.minor only. Renames, `static`, palette and other config edits do not make it stale, and a `.gltf` sha covers only the `.gltf` (not `.bin` or textures).
 - **Workaround:** Re-bake by hand after a config change.
-- **Engine change:** None yet; hash the effective per-model config into `phys.json`.
-- **Status:** open (0.8.0, 3d).
+- **Engine change:** `manifest.json` records each model's bake-options hash (`models[id].options`), and `bake --check` reports `bake options changed` when a model's options or the global `rename`, `palette`, `paint.base` or `optimise` change.
+- **Status:** done (0.12.0).
 
 ### 133. Pet anim tables moved from nlerp to slerp: Tractor Pickup (phase 3d)
 - **What happened:** The bake samples anim tables with slerp; frames differ from the old `assets.json` tables (nlerp) by under 1e-3 at 30 fps.

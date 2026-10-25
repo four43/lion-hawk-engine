@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Haptics: a stop now sends a zero `trigger-rumble` (with `leftTrigger` and `rightTrigger` at 0) to a pad whose `effects` lists it, and a zero `dual-rumble` to other pads, so a trigger effect sent a frame earlier does not outlive the stop ([C-14]). The pad bench's own stops use the same zero effect.
+- Test: `mp()` steps a peer added by a `beforeStep` from the next step, as documented.
+- Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
+- Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.
+
 ## 0.13.0 — 2026-10-23
 
 Local players (design: `docs/plans/2026-10-21-local-players-spec.md`; spec §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4], [D-7], [T-22]–[T-25]): several people on one device, each with their own controllers and bindings, and that device one peer in an online room.

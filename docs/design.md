@@ -327,6 +327,8 @@ Buoyancy reuses the same data. Sample each panel's depth below the fluid surface
 
 ### 7.1 A game
 
+*Superseded:* this was the proposal. The built game shape is `defineGame({ id, scenes, start, actions, commands, policies, sim, physics, net, ... })`; see `docs/spec.md` §8.2 and `docs/specs/as-built/core.md`.
+
 ```js
 export default defineGame({
   id: 'tractor-pickup',
@@ -360,6 +362,7 @@ The ground `material` under each wheel drives dirt accrual, tire marks, spray, s
 ### 7.4 Debug and testing
 
 - `window.engine` exposes `stepN`, `pause`, `resume`, `render(alpha)`, `state()`, plus each game's own `debug()` extras.
+  - *Superseded:* the built hook ([D-4]) has `stepN`, `advance`, `render`, `state()`, scene and command calls, and no `pause` or `resume`; manual stepping is `driver.manual()` ([R-7]). See `docs/specs/as-built/view-input.md`.
 - Playwright scripts use only this API, so one driver works for every game.
 
 ---

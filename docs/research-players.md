@@ -110,7 +110,7 @@ Unity and Godot stop at "connection = player" in their netcode, and Survival Kid
 |---|---|---|
 | **peer** | `UNetConnection` | One page in the room. Transport peer id, rates and bandwidth ([N-3]), one send clock. Unchanged. |
 | **local player** | `ULocalPlayer` | A seat on this page: slot 0..k. It owns devices (pad indices, a keyboard scheme, touch) and has its own input snapshot. It is page-local and never replicated. |
-| **player** | `APlayerState` | Game-wide identity: player number 1..255 plus replicated per-player state (name, colour, score). The host assigns it and everyone sees it. The roster is `net.players`, which plays the part of `PlayerArray`. |
+| **player** | `APlayerState` | Game-wide identity: player number 1..255 plus replicated per-player state (name, colour, score). The host assigns it and everyone sees it. The roster is `engine.players` (this draft said `net.players`), which plays the part of `PlayerArray`. |
 | **controller** | `APlayerController` | Per local player: the input snapshot, the devices it holds, haptics, and the entity it possesses. It exists only on the owning page. |
 | **pawn / actor** | `APawn` | The entity with `e.input`. It changes hands by possession, not by spawning. |
 
