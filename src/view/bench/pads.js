@@ -4,6 +4,7 @@
 // never changes seats or bindings. Its haptics tests drive the selected pad's vibrationActuator, as a game does.
 // Cost: the dynamic import() in boot is inlined by the build, so this file and padStats.js ship inside every bundle, but
 // nothing here is evaluated, and no listener or device exists, unless ?debug=pads is on.
+import { zeroEffect } from '../haptics.js';
 import { STD_BUTTONS, STD_AXES, SECTORS, PATTERNS, createPadStats, updateStats, rate, stickEdge, liveState, liveEffect, play, selfTest, supports, describe } from './padStats.js';
 
 const CSS = `[data-lh-bench]{position:fixed;top:calc(var(--lh-sa-top,0px) + 8px);right:calc(var(--lh-sa-right,0px) + 8px);z-index:2147483000;width:min(440px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;box-sizing:border-box;padding:8px 10px;border-radius:8px;background:#0d1117f0;color:#e6edf3;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;pointer-events:auto}
@@ -90,15 +91,15 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
     inp.addEventListener('input', () => { out.textContent = inp.value; });
   }
   const offSeat = view.onSeat(e => log(`${e.type} · seat ${e.seat ?? '-'} · ${describe(e.device)}${e.op ? ` · ${e.op}` : ''}`, e.type === 'seat.lost' ? 'err' : 'sys'));
-  const offStop = haptics?.on(e => hlog(`engine stop (${e.reason}): zero dual-rumble + reset for ${e.frames} frames`, 'sys')) ?? null;
+  const offStop = haptics?.on(e => hlog(`engine stop (${e.reason}): zero effect + reset for ${e.frames} frames`, 'sys')) ?? null;
 
   // haptics on the selected pad
   const act = () => current?.vibrationActuator ?? null;
   const hplay = (type, params, label, quiet = false, a = act()) => play(a, type, params, { log: hlog, label, quiet, timer, alive: () => !closed });
-  // zero dual-rumble first, then reset: a tap queued a frame ago can overtake a lone reset (as dispose does)
+  // the engine's zero effect first, then reset: a tap queued a frame ago can overtake a lone reset (as dispose does)
   const reset = label => {
     const a = act(); if (typeof a?.reset !== 'function') return;
-    try { Promise.resolve(a.playEffect?.('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })).catch(() => {}); } catch { /* no rumble to stop */ }
+    try { Promise.resolve(a.playEffect?.(...zeroEffect(a))).catch(() => {}); } catch { /* no rumble to stop */ }
     try { Promise.resolve(a.reset()).then(r => hlog(`${label}: ${r}`, 'ok'), e => hlog(`${label}: ${e?.name}: ${e?.message}`, 'err')); }
     catch (e) { hlog(`${label}: ${e?.name}: ${e?.message}`, 'err'); }
   };
@@ -249,7 +250,7 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
       stopSeq(); lst = liveState();
       for (const d of padDevices()) {
         const a = view.gamepad(d)?.vibrationActuator; if (!a) continue;
-        try { Promise.resolve(a.playEffect?.('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })).catch(() => {}); } catch { /* no rumble to stop */ }
+        try { Promise.resolve(a.playEffect?.(...zeroEffect(a))).catch(() => {}); } catch { /* no rumble to stop */ }
         try { Promise.resolve(a.reset?.()).catch(() => {}); } catch { /* none */ }
       }
       closed = true; offSeat(); offStop?.(); root.remove(); style.remove(); },

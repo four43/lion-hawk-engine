@@ -13,10 +13,12 @@ const ZERO = Object.freeze({ startDelay: 0, duration: 1, strongMagnitude: 0, wea
 const ZERO_TRIGGERS = Object.freeze({ ...ZERO, leftTrigger: 0, rightTrigger: 0 });
 const quiet = () => {}; // a stop's promises resolve 'preempted' or reject on a pad that went away: nothing to handle
 
+// the zero effect for an actuator, as [type, params]: the pad bench stops with the same one
+export const zeroEffect = a => Array.isArray(a?.effects) && a.effects.includes('trigger-rumble') ? ['trigger-rumble', ZERO_TRIGGERS] : ['dual-rumble', ZERO];
+
 const zero = a => {
   if (typeof a?.playEffect !== 'function') return; // no actuator (Firefox, most of Safari): rumble is never an error
-  const triggers = Array.isArray(a.effects) && a.effects.includes('trigger-rumble');
-  try { (triggers ? a.playEffect('trigger-rumble', ZERO_TRIGGERS) : a.playEffect('dual-rumble', ZERO))?.catch?.(quiet); } catch { /* an actuator that throws is skipped */ }
+  try { a.playEffect(...zeroEffect(a))?.catch?.(quiet); } catch { /* an actuator that throws is skipped */ }
   try { a.reset?.()?.catch?.(quiet); } catch { /* as above */ }
 };
 

@@ -92,7 +92,7 @@ test('live trigger taps follow the pull: taps last at least 50 ms and are full s
   advance(130); slots[0] = pull(0.96, 0.3); tick();
   assert.equal(a.calls.length, 2);
   slots[0] = pull(0, 0); tick();
-  assert.deepEqual(a.calls.slice(2), [['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }], ['reset']], 'let go: a zero effect, then one reset');
+  assert.deepEqual(a.calls.slice(2), [['play', 'trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 }], ['reset']], 'let go: a zero effect (trigger-rumble: the pad lists it, C-14), then one reset');
   tick(); assert.equal(a.calls.length, 4);
 });
 
@@ -175,7 +175,7 @@ test('play() with undefined params is an unhandled-rejection-free {} (plan 4 tas
 });
 
 test('closing the bench zeroes the pads it could reach: a long play ends in a zero dual-rumble then reset, nothing after (fix round 1)', async () => {
-  const { slots, tick, el, bench, timer } = rig(), a = actuator();
+  const { slots, tick, el, bench, timer } = rig(), a = actuator(['dual-rumble']);
   slots[0] = pad(0, { act: a }); tick();
   el('[data-bench="dr-dur"]').value = '5000';
   el('[data-hap="dual"]').click(); await flush();
@@ -184,13 +184,20 @@ test('closing the bench zeroes the pads it could reach: a long play ends in a ze
   assert.equal(a.calls.length, 3);
 });
 
+test('closing the bench zeroes a pad with trigger motors with a zero trigger-rumble, as the engine stop does (C-14)', async () => {
+  const { slots, tick, bench } = rig(), a = actuator();
+  slots[0] = pad(0, { act: a }); tick();
+  bench.dispose(); await flush();
+  assert.deepEqual(a.calls, [['play', 'trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 }], ['reset']]);
+});
+
 test('disposing during the self-test stops its second run: no trigger-rumble after the dispose (fix round 1)', async () => {
   const { slots, tick, el, bench } = rig(), a = actuator();
   slots[0] = pad(0, { act: a }); tick();
   el('[data-bench="self-test"]').click();
   assert.equal(a.calls.length, 1, 'the body run started');
   bench.dispose(); await flush();
-  assert.ok(!a.calls.some(c => c[1] === 'trigger-rumble'));
+  assert.ok(!a.calls.some(c => c[1] === 'trigger-rumble' && (c[2].leftTrigger > 0 || c[2].rightTrigger > 0)), 'only the zero trigger-rumble of the stop');
   assert.deepEqual(a.calls.at(-1), ['reset']);
 });
 
@@ -204,7 +211,7 @@ test('a pattern stays on the pad it started on when another tab is picked (fix r
 });
 
 test('Stop all, live off and live idle send a zero dual-rumble then reset, as dispose does (final review)', async () => {
-  const { slots, tick, el } = rig(), a = actuator();
+  const { slots, tick, el } = rig(), a = actuator(['dual-rumble']);
   slots[0] = pad(0, { act: a }); tick();
   el('[data-bench="stop"]').click(); await flush();
   assert.deepEqual(a.calls, [['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }], ['reset']]);
