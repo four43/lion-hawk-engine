@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 export const importFresh = file => import(`${pathToFileURL(file).href}?v=${createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12)}`);
 
 const KEYS = {
-  '': ['id', 'site', 'outEnv', 'bake', 'build'],
+  '': ['id', 'site', 'outEnv', 'bake', 'build', 'test'],
   bake: ['src', 'out', 'materials', 'rename', 'palette', 'paint', 'models', 'optimise'],
   'bake.rename': ['materials', 'nodes'],
   'bake.paint': ['base'],
@@ -19,6 +19,7 @@ const KEYS = {
   'bake.models.*.rename': ['materials', 'nodes'],
   'bake.models.*.animTable': ['fps', 'clips'],
   build: ['entry', 'template', 'pwa', 'hooks', 'manifest'],
+  test: ['dir', 'game', 'roots', 'zeroAlloc'],
   'build.manifest': ['name', 'shortName', 'themeColor', 'backgroundColor', 'icon', 'display', 'orientation'],
 };
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -58,6 +59,9 @@ export async function loadConfig(dir = '.') {
     if (man.display !== undefined && !DISPLAYS.includes(man.display)) throw new Error(`config: 'build.manifest.display' must be one of ${DISPLAYS.join(', ')}`);
     for (const k of ['shortName', 'themeColor', 'backgroundColor', 'icon', 'orientation']) if (man[k] !== undefined && typeof man[k] !== 'string') throw new Error(`config: 'build.manifest.${k}' must be a string`);
   }
+  const t = raw.test ?? {}; // lion-hawk test
+  if (t.roots !== undefined && (!Array.isArray(t.roots) || !t.roots.every(r => typeof r === 'string'))) throw new Error(`config: 'test.roots' must be an array of paths`);
+  if (t.game !== undefined && typeof t.game !== 'string') throw new Error(`config: 'test.game' must be a path`);
   const models = {};
   for (const [id, m] of Object.entries(b.models ?? {})) {
     const at = m.animTable === true ? { fps: 30, clips: null } : m.animTable ? { fps: m.animTable.fps ?? 30, clips: m.animTable.clips ?? null } : null;
@@ -74,5 +78,6 @@ export async function loadConfig(dir = '.') {
       models,
     },
     build: { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null, manifest: null, ...(raw.build ?? {}) },
+    test: { dir: 'test', game: null, roots: null, zeroAlloc: false, ...(raw.test ?? {}) },
   };
 }

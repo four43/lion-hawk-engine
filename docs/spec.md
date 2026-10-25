@@ -486,6 +486,7 @@ Where state goes:
 | `lion-hawk test [--visual]` | `node --test` for the game + engine checks; `--visual` adds `@visual` Playwright tests |
 | `lion-hawk release` | bump version → bake → build → test → commit; push stays manual |
 
+- *Clarification (built, post-0.13):* `lion-hawk test [--game] [--visual]` runs `node --test` over the game's `test.dir` (default `test`) and, when `game.config.js` names `test.game` (the module whose default export is the game), a generated file with the engine checks: `determinism`, `materials`, `simPurity` over `test.roots` when given, and `zeroAlloc` with `test.zeroAlloc: true`. Tests whose names contain `@visual` are skipped unless `--visual` (`$LH_VISUAL` is `1` then). `lion-hawk release [--game] [--bump patch|minor|major] (--out | $<outEnv>) [--site]` needs a clean git tree; it bumps `package.json`, bakes, builds and tests, then commits `release: <id> <version>`. A failing step restores `package.json` and commits nothing. It never pushes or tags.
 - **[B-1]** The CLI is Node only; it replaces `build.py`, `bake.mjs` and `dev.mjs`.
 - **[B-2]** Game-specific build steps (for example Tractor Pickup's voice and animal audio embedding) are hooks declared in `game.config.js`.
 - **[B-3] Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page: the build writes the bundle at the template's bare `<!--APP-->` marker as an inline `<script type="module">` (D1).
