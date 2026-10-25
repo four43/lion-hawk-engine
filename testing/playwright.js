@@ -54,6 +54,15 @@ export function formatFailure(what, f, maxSteps) {
 // [T-24] a fake pad's index: an integer in 0..15
 const padIndex = i => { if (!Number.isInteger(i) || i < 0 || i > 15) throw new Error(`playwright: pad index must be an integer in 0..15 (got ${JSON.stringify(i)})`); return i; };
 
+// after a navigation: the preset's safe areas, then ready and settled (open, and [T-17] restore's reload)
+async function arrived(page, safeArea) {
+  await page.evaluate(sa => { for (const [k, v] of Object.entries(sa)) document.documentElement.style.setProperty(`--lh-sa-${k}`, `${v}px`); }, safeArea);
+  await page.waitForFunction(() => window.engine, null, { timeout: 30000 });
+  await page.evaluate(() => window.engine.ready);
+  await page.waitForFunction(() => window.engine.settled(), null, { timeout: 30000 });
+}
+const shotName = n => { if (typeof n !== 'string' || !/^[\w.-]+$/.test(n)) throw new Error(`shot: a name is letters, digits, '.', '_' or '-' (got ${JSON.stringify(n)})`); return n; };
+
 export function gameDriver({ page, context, preset, presetName, errors = [] }) {
   let cdp = null;
   const ev = (fn, arg) => page.evaluate(fn, arg);
@@ -173,6 +182,27 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     untilLoaded, // #50: { maxSteps = 1200, timeout = 30000 }
     render: () => ev(() => window.engine.render(0)),
     state: () => ev(() => JSON.parse(JSON.stringify(window.engine.state()))),
+    // [T-17] entities as window.engine.query summaries; where: a partial object, or a predicate (sent as source)
+    query: (name, where) => ev(([n, w, src]) => window.engine.query(n, src ? new Function(`return (${src})`)() : w), [name ?? null, typeof where === 'function' ? null : where ?? null, typeof where === 'function' ? fnSource(where) : null]),
+    control: testid => ev(id => window.engine.ui.tree().find(c => c.id === id) ?? null, testid), // a control's ui.tree() entry, or null
+    checksum: () => ev(() => window.engine.checksum()),
+    // [D-4] needs open({ record: true }); restore reloads the page with ?replay=session and waits until it is ready again
+    snapshot: () => ev(() => window.engine.snapshot()),
+    async restore(snap) {
+      const nav = page.waitForURL(u => /[?&]replay=session(&|$)/.test(String(u)), { timeout: 30000 });
+      await ev(s => { window.engine.restore(s); }, snap).catch(e => { if (!/context was destroyed|navigat/i.test(e.message)) throw e; });
+      await nav; await arrived(page, preset.safeArea);
+      errors.length = 0; // a reload: the old page's errors are gone with it (the replay's own land in window.engine.errors)
+    },
+    // [T-17] a screenshot after a render: $LH_SHOTS (default test-results/shots)/<preset>/<name>.png; mask: targets to cover
+    async shot(name, { mask = [] } = {}) {
+      const dir = path.join(process.env.LH_SHOTS || path.join('test-results', 'shots'), presetName.replace(/[^\w.-]+/g, '-'));
+      const file = path.join(dir, `${shotName(name)}.png`);
+      fs.mkdirSync(dir, { recursive: true });
+      await ev(() => window.engine.render(0));
+      await page.screenshot({ path: file, mask: mask.map(m => typeof m === 'string' ? page.locator(m) : m) });
+      return file;
+    },
     scene: () => ev(() => { const s = window.engine.scene; return { name: s.name, args: s.args, overlays: [...s.overlays] }; }),
     go: (name, args) => ev(([n, a]) => window.engine.go(n, a), [name, args]),
     jump: (scene, preset, opts, args) => ev(a => window.engine.jump(...a), [scene, preset, opts, args]),
@@ -234,6 +264,14 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
     touch: {
       async start(id, target) { const p = { ...(await point(target)), id }; active.set(id, p); await send('touchStart', [...active.values()]); },
       async move(id, target) { const p = { ...(await point(target)), id }; active.set(id, p); await send('touchMove', [...active.values()]); await ev(() => window.engine.render(0)); },
+      // [T-17] start at `from`, `steps` moves along the line to `to`, then lift
+      async drag(id, from, to, { steps = 8 } = {}) {
+        if (!Number.isInteger(steps) || steps < 1) throw new Error('touch.drag: steps must be a positive integer');
+        const a = await point(from), b = await point(to);
+        await game.touch.start(id, a);
+        for (let i = 1; i <= steps; i++) await game.touch.move(id, { x: a.x + (b.x - a.x) * i / steps, y: a.y + (b.y - a.y) * i / steps });
+        await game.touch.end(id);
+      },
       async end(...ids) {
         const lifting = ids.filter(id => active.has(id)).map(id => active.get(id));
         for (const id of ids) active.delete(id);
@@ -253,14 +291,15 @@ export function gameDriver({ page, context, preset, presetName, errors = [] }) {
 }
 
 // the URL openGame loads: ?lh-test (or ?lh-test=render for render: 'manual', #47) plus seed, scene, args and extras
-export function testUrl(url, { seed, scene, args, query = {}, render = 'auto' } = {}) {
+export function testUrl(url, { seed, scene, args, query = {}, render = 'auto', record = false } = {}) {
   const u = new URL(url);
   u.searchParams.set('lh-test', render === 'manual' ? 'render' : '');
+  if (record) u.searchParams.set('lh-record', ''); // [D-4] the page records its tape (snapshot / restore)
   if (seed !== undefined) u.searchParams.set('seed', String(seed));
   if (scene !== undefined) u.searchParams.set('scene', String(scene));
   if (args !== undefined) u.searchParams.set('args', JSON.stringify(args));
   for (const [k, v] of Object.entries(query)) u.searchParams.set(k, String(v));
-  return u.href.replace('lh-test=&', 'lh-test&').replace(/lh-test=$/, 'lh-test');
+  return u.href.replace('lh-test=&', 'lh-test&').replace(/lh-test=$/, 'lh-test').replace('lh-record=&', 'lh-record&').replace(/lh-record=$/, 'lh-record');
 }
 
 // #74: initScript (a function or { content }) runs in the page before any of its scripts, e.g. to stub WebGL.
@@ -307,7 +346,7 @@ const FAKE_PADS = () => {
   window.__lhHaptics = index => { const x = acts[index]; return x ? { effects: [...x.a.effects], calls: x.a.calls.map(c => ({ ...c, ...(c.params ? { params: { ...c.params } } : {}) })) } : null; };
   Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value: () => pads.slice() });
 };
-async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', initScript, pads = 'fake' } = {}, prepare) {
+async function open(browser, url, { preset = 'desktop', seed, scene, args, query = {}, settings, render = 'auto', record = false, initScript, pads = 'fake' } = {}, prepare) {
   if (pads !== 'fake' && pads !== 'host') throw new Error("playwright: pads must be 'fake' or 'host'");
   const p = typeof preset === 'string' ? presets[preset] : preset, name = typeof preset === 'string' ? preset : 'custom';
   if (!p) throw new Error(`playwright: unknown preset '${preset}' (known: ${Object.keys(presets).join(', ')})`);
@@ -320,12 +359,9 @@ async function open(browser, url, { preset = 'desktop', seed, scene, args, query
   if (initScript) await context.addInitScript(initScript); // #74: on the context, so popups and new tabs (a join link) get it too
   if (prepare) await prepare(context, page);
   if (settings) await page.addInitScript(s => { try { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch { /* storage blocked */ } }, settings);
-  const goto = testUrl(url, { seed, scene, args, query, render });
+  const goto = testUrl(url, { seed, scene, args, query, render, record });
   await page.goto(goto);
-  await page.evaluate(sa => { for (const [k, v] of Object.entries(sa)) document.documentElement.style.setProperty(`--lh-sa-${k}`, `${v}px`); }, safeArea);
-  await page.waitForFunction(() => window.engine, null, { timeout: 30000 });
-  await page.evaluate(() => window.engine.ready);
-  await page.waitForFunction(() => window.engine.settled(), null, { timeout: 30000 });
+  await arrived(page, safeArea);
   return gameDriver({ page, context, preset: p, presetName: name, errors });
 }
 
@@ -461,4 +497,34 @@ export async function expectNoOverlap(game, tgtA, tgtB) {
   const ta = target(tgtA), tb = target(tgtB), [a, b] = [await boxOf(game, ta), await boxOf(game, tb)];
   if (a.missing || b.missing) fail(`expectNoOverlap: '${a.missing ? ta.name : tb.name}' not found`);
   if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fail(`expectNoOverlap: '${ta.name}' (${dims(a)}) overlaps '${tb.name}' (${dims(b)})`);
+}
+
+// [T-18] matchers: expectGame(game) for the game, expectGame(game, target) for layout (a target as in #48; a string is a
+// test id for toBeTappable and toBeThumbReachable, CSS for the others). Each is async and throws an AssertionError.
+// toBeThumbReachable(side): the target's centre is within 0.6 x the viewport's short side of the bottom-left ('left') or
+// bottom-right ('right') corner inside the safe area, the reach of a thumb holding the phone there.
+export function expectGame(game, tgt) {
+  const needTarget = m => { if (tgt === undefined) throw new TypeError(`expectGame(game, target).${m}: needs a target`); };
+  return {
+    toBeInScene: async name => expectScene(game, name),
+    toHaveState: async (p, value) => expectState(game, p, value),
+    async toBeSettled() { if (!(await game.page.evaluate(() => window.engine.settled()))) fail('expectGame: the page is not settled (a load, a view.wait or an opening/closing control is pending)'); },
+    async toHaveEmitted(type, match) {
+      const evs = await game.page.evaluate(() => window.engine.events.since(0));
+      const ok = e => e.type === type && (!match || Object.keys(match).every(k => same(e[k], match[k])));
+      if (!evs.some(ok)) fail(`expectGame: no '${type}' event${match ? ` matching ${JSON.stringify(match)}` : ''} (seen: ${[...new Set(evs.map(e => e.type))].join(', ') || 'none'})`);
+    },
+    async toBeTappable(opts) { needTarget('toBeTappable'); return expectTappable(game, tgt, opts); },
+    async toFitSafeArea() { needTarget('toFitSafeArea'); return expectFitsSafeArea(game, tgt); },
+    async toNotOverlap(other) { needTarget('toNotOverlap'); return expectNoOverlap(game, tgt, other); },
+    async toBeThumbReachable(side) {
+      needTarget('toBeThumbReachable');
+      if (side !== 'left' && side !== 'right') throw new TypeError("toBeThumbReachable: side must be 'left' or 'right'");
+      const t = target(tgt, true), b = await boxOf(game, t), { viewport: v, safeArea: s } = game.preset;
+      if (b.missing) fail(`toBeThumbReachable: '${t.name}' not found`);
+      const cx = side === 'left' ? s.left : v.width - s.right, cy = v.height - s.bottom, reach = 0.6 * Math.min(v.width, v.height);
+      const d = Math.hypot(b.x + b.w / 2 - cx, b.y + b.h / 2 - cy);
+      if (d > reach) fail(`toBeThumbReachable: '${t.name}' (${dims(b)}) is ${d.toFixed(0)} px from the ${side} thumb, beyond ${reach.toFixed(0)} px`);
+    },
+  };
 }

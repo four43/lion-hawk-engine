@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { launch, openGame, expectScene, expectTappable, expectFitsSafeArea, expectNoOverlap, expectState } from 'lion-hawk/playwright';
+import { launch, openGame, expectScene, expectTappable, expectFitsSafeArea, expectNoOverlap, expectState, expectGame } from 'lion-hawk/playwright';
 import assert from 'node:assert/strict';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,6 +51,33 @@ test('countdown: title, play, race with the stick, results, retry (iPhone 15 Pro
     await game.tap('results.retry');
     await expectScene(game, 'race');
     await expectState(game, 'x', 0);
+    assert.deepEqual(await game.errors(), []);
+  } finally { await game.close(); }
+});
+
+test('T-17/T-18/D-4: snapshot and restore across a reload, query, control, shot, drag and the matchers (real Chromium)', async t => {
+  if (skip) return t.skip(skip);
+  const game = await openGame(chrome.browser, base, { preset: 'iPhone 15 Pro landscape', seed: 3, record: true });
+  try {
+    await expectGame(game).toBeInScene('title');
+    await expectGame(game, 'title.play').toBeTappable();
+    assert.equal((await game.control('title.play')).label, 'Play');
+    assert.equal(await game.control('nope'), null);
+    await game.tap('title.play'); await game.untilEvent('go');
+    await expectGame(game).toHaveEmitted('count', { n: 1 });
+    await game.touch.drag(1, { x: 300, y: 200 }, { x: 300, y: 140 }, { steps: 4 });
+    await game.input.hold({ throttle: 1 }); await game.step(30); await game.input.release('throttle');
+    const snap = await game.snapshot(), sum = await game.checksum(), x = (await game.state()).x;
+    assert.ok(x > 0);
+    await game.step(40, { throttle: 1 });
+    assert.notEqual(await game.checksum(), sum);
+    await game.restore(snap);
+    assert.ok(game.page.url().includes('replay=session'));
+    assert.equal(await game.checksum(), sum); assert.equal((await game.state()).x, x);
+    await expectGame(game).toBeInScene('race'); await expectGame(game).toBeSettled();
+    assert.deepEqual(await game.query('nope'), [], 'no World in this game');
+    const file = await game.shot('race', { mask: ['#x'] });
+    assert.ok(fs.statSync(file).size > 0);
     assert.deepEqual(await game.errors(), []);
   } finally { await game.close(); }
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { presets, gameDriver, openGame, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap } from 'lion-hawk/playwright';
+import { presets, gameDriver, openGame, formatFailure, expectScene, expectState, testUrl, expectTappable, expectFitsSafeArea, expectNoOverlap, expectGame } from 'lion-hawk/playwright';
 
 test('presets have the documented shape', () => {
   assert.deepEqual(Object.keys(presets).sort(), ['desktop', 'iPad Mini landscape', 'iPad Pro 11 landscape', 'iPhone 15 Pro Max landscape', 'iPhone 15 Pro Max portrait',
@@ -143,4 +143,46 @@ test('game.pad() and pad(undefined) unplug pad 0, as in 0.12; pad(\'1\'), pad(tr
   for (const bad of ['1', true, NaN]) await assert.rejects(g.pad(bad), /playwright: pad index must be an integer in 0\.\.15/);
   await assert.rejects(g.pad(undefined, { a: true }), /playwright: pad index must be an integer in 0\.\.15/, 'undefined with a state is still a bad index');
   assert.equal(calls.length, 2, 'a refused call reaches no page');
+});
+
+test('T-17: query, control and checksum evaluate in the page; a predicate goes as source', async () => {
+  const got = []; const g = fake(async (fn, a) => { got.push(a); return 'r'; });
+  await g.query('pig', { mood: 2 }); await g.query('pig', e => e.mood > 1); await g.control('title.play');
+  assert.deepEqual(got[0], ['pig', { mood: 2 }, null]);
+  assert.deepEqual(got[1], ['pig', null, 'e => e.mood > 1']);
+  assert.equal(got[2], 'title.play');
+});
+test('T-17: touch.drag starts, moves in steps along the line, then lifts', async () => {
+  const sent = [], page = { evaluate: async () => {} };
+  const context = { newCDPSession: async () => ({ send: async (m, p) => sent.push([p.type, p.touchPoints.map(t => [t.x, t.y])]) }) };
+  const g = gameDriver({ page, context, preset: presets['iPhone SE'], presetName: 'iPhone SE' });
+  await g.touch.drag(3, { x: 0, y: 0 }, { x: 40, y: 20 }, { steps: 2 });
+  assert.deepEqual(sent, [['touchStart', [[0, 0]]], ['touchMove', [[20, 10]]], ['touchMove', [[40, 20]]], ['touchEnd', [[40, 20]]]]);
+  await assert.rejects(g.touch.drag(3, { x: 0, y: 0 }, { x: 1, y: 1 }, { steps: 0 }), /touch.drag: steps must be a positive integer/);
+});
+test('T-17: shot renders, then writes <LH_SHOTS>/<preset>/<name>.png with masks as locators', async () => {
+  const calls = [], prev = process.env.LH_SHOTS; process.env.LH_SHOTS = '/tmp/lh-shots-unit';
+  const page = { evaluate: async () => calls.push('render'), locator: s => ({ sel: s }), screenshot: async o => calls.push(o) };
+  try {
+    const g = gameDriver({ page, context: {}, preset: presets['iPhone 15 Pro landscape'], presetName: 'iPhone 15 Pro landscape' });
+    assert.equal(await g.shot('title', { mask: ['#fps'] }), '/tmp/lh-shots-unit/iPhone-15-Pro-landscape/title.png');
+    assert.deepEqual(calls, ['render', { path: '/tmp/lh-shots-unit/iPhone-15-Pro-landscape/title.png', mask: [{ sel: '#fps' }] }]);
+    await assert.rejects(g.shot('../x'), /shot: a name is letters, digits/);
+  } finally { if (prev === undefined) delete process.env.LH_SHOTS; else process.env.LH_SHOTS = prev; }
+});
+test('T-18: expectGame matchers name what they saw', async () => {
+  const g = fake(async fn => fn.toString().includes('settled') ? false : [{ type: 'count', n: 2 }, { type: 'go' }]);
+  g.scene = async () => ({ name: 'race' }); g.state = async () => ({ x: 3 });
+  await expectGame(g).toBeInScene('race'); await expectGame(g).toHaveState('x', 3);
+  await expectGame(g).toHaveEmitted('count', { n: 2 });
+  await assert.rejects(expectGame(g).toHaveEmitted('finish'), /no 'finish' event \(seen: count, go\)/);
+  await assert.rejects(expectGame(g).toBeSettled(), /the page is not settled/);
+  await assert.rejects(expectGame(g).toBeTappable(), /expectGame\(game, target\).toBeTappable: needs a target/);
+});
+test('T-18: toBeThumbReachable measures from the bottom corner inside the safe area', async () => {
+  const at = box => ({ page: { evaluate: async () => ({ ...box, visible: true, hit: true }) }, preset: presets['iPhone 15 Pro landscape'] });
+  // 852 x 393, safe area left/right 59, bottom 21: the right thumb is at (793, 372), reach 0.6 x 393 = 236
+  await expectGame(at({ x: 700, y: 300, w: 40, h: 40 }), 'hud.fire').toBeThumbReachable('right');
+  await assert.rejects(expectGame(at({ x: 100, y: 20, w: 40, h: 40 }), 'hud.fire').toBeThumbReachable('right'), /'hud.fire' \(40x40 at 100,20\) is \d+ px from the right thumb, beyond 236 px/);
+  await assert.rejects(expectGame(at({ x: 0, y: 0, w: 1, h: 1 }), 'x').toBeThumbReachable('up'), /side must be 'left' or 'right'/);
 });
