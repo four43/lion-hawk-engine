@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { createHaptics, STOP_FRAMES } from '../src/view/haptics.js';
 import { setup, pad, actuator, WHEEL } from './helpers/seats.mjs';
 
-const ZERO = ['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }];
+// the default fake pad lists trigger-rumble, so its zero is a trigger-rumble one
+const ZERO = ['play', 'trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 }];
+const ZERO_DUAL = ['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }];
 const rounds = n => Array.from({ length: n }, () => [ZERO, ['reset']]).flat();
 const rig = (opts = {}) => {
   const t = setup(), h = createHaptics(t.e, { seats: t.seats, target: t.window, doc: t.document, ...opts });
@@ -24,7 +26,7 @@ test('a pad seen for the first time gets one full stop; the same pad again, or l
   assert.deepEqual(b.calls, rounds(1), 'another product on that index is a new pad');
 });
 
-test("blur stops every seat's pads: a zero dual-rumble then reset, at once and on each of the next 19 frames, then nothing (C-14, review focus)", () => {
+test("blur stops every seat's pads: a zero effect then reset, at once and on each of the next 19 frames, then nothing (C-14, review focus)", () => {
   const { e, seats, slots, tick, window } = rig(), a = actuator(), b = actuator();
   seats.enable();
   slots[0] = pad(0, { act: a, down: [0] }); slots[1] = pad(1, { act: b, down: [0] }); tick(); e.stepN(1); tick();
@@ -34,6 +36,13 @@ test("blur stops every seat's pads: a zero dual-rumble then reset, at once and o
   assert.deepEqual(a.calls, rounds(1), 'the first stop is sent at once');
   tick(30);
   assert.deepEqual(a.calls, rounds(STOP_FRAMES)); assert.deepEqual(b.calls, rounds(STOP_FRAMES));
+});
+
+test('a pad with trigger motors is zeroed with trigger-rumble (its triggers too); a pad without them with dual-rumble (C-14)', () => {
+  const { slots, tick } = rig(), t = actuator(), d = actuator(['dual-rumble']);
+  slots[0] = pad(0, { act: t }); slots[1] = pad(1, { act: d }); tick();
+  assert.deepEqual(t.calls, [ZERO, ['reset']]);
+  assert.deepEqual(d.calls, [ZERO_DUAL, ['reset']]);
 });
 
 // controller N2 ruling: unpaired connected pads (the ?debug=pads bench rumbles them) stop too

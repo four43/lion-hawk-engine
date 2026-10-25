@@ -10,7 +10,7 @@ import { allocRate } from './helpers/alloc.mjs';
 import { game, pad, actuator, setup } from './helpers/seats.mjs';
 
 const VIEW = fileURLToPath(new URL('../src/view/', import.meta.url));
-const ZERO = ['play', 'dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 }];
+const ZERO = ['play', 'trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 }]; // the fake pad lists trigger-rumble
 const start = halves => {
   const { window, document } = dom(), slots = [];
   const app = boot(game, halves, { doc: document, target: window, raf: () => 0, caf() {}, flags: parseFlags('?lh-test'), getGamepads: () => slots, storage: null });

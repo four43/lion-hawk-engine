@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'test-results');
 const WHEEL = 'G29 Driving Force Racing Wheel (Vendor: 046d Product: c24f)';
-const ZERO = { op: 'playEffect', type: 'dual-rumble', params: { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 } };
+const ZERO = { op: 'playEffect', type: 'trigger-rumble', params: { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 } }; // the fake pad lists trigger-rumble
 let server, base, chrome, skip = false;
 
 before(async () => {
@@ -31,7 +31,7 @@ before(async () => {
 });
 after(async () => { await chrome?.close(); await new Promise(r => (server ? server.close(r) : r())); });
 
-test('a pausing overlay stops a rumbling fake pad: a first-sight stop, then 20 zero dual-rumble effects each followed by a reset (C-14, T-24)', async t => {
+test('a pausing overlay stops a rumbling fake pad: a first-sight stop, then 20 zero effects each followed by a reset (C-14, T-24)', async t => {
   if (skip) return t.skip(skip);
   const game = await openGame(chrome.browser, base);
   try {
