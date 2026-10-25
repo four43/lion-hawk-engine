@@ -148,6 +148,8 @@ Every block is optional.
 | `fluid.{density, viscosity}` | kg/m³, Pa·s | buoyancy, fluid drag |
 | `sound`, `fx` | cue IDs | audio and fx, from contact events |
 
+*Clarification (built, post-0.13):* `createVehicle(world, e, { backend: 'tire', substeps = 'auto' })` is Rally's model (`src/kits/vehicle/tire.js`): the kit casts each wheel's ray and runs its spring and damper (`suspension: { rest = 0.3, stiffness, bump, rebound }`, defaults from the chassis mass), then steps the tire (brush patch with relaxation lengths, combined-slip Magic Formula with `B = tan(π / 2C)`, load sensitivity, low-speed damper), rolling resistance (`crr`) and the wheel's spin (`inertia = 1`) `substeps` times per step; `'auto'` keeps each substep at 1/1920 s or less, where the explicit integration is stable. Surface drag (`drag`) and the tire and spring forces are applied as impulses at the contact points. Controls are `steer`, `engine` (drive torque at the wheel, N m) and `brake` (torque, ≥ 0). The surface is the pair's `tire` block (`pair(tyre, ground).tire`), else dry asphalt. Each wheel also reports `omega`, `kappa`, `alpha`, `fx`, `fy` and `surface`. Rally-only parts (plow, snow, anti-roll bars, aero drag, assists) stay in the game.
+
 ### 3.3 Materials on colliders
 
 - **[M-4]** Each collider gets its material from the glTF material name of the part it was made from (§6.2). Its density, friction and restitution are set from that material.
