@@ -49,7 +49,7 @@ const disposeWarm = list => { for (const c of list) { if (c.isInstancedMesh) c.d
 // through ANGLE to Metal takes 50-400 ms. three.js compiles only visible objects, so hidden ones are shown for the
 // synchronous part of compileAsync and hidden again before any frame draws. Hidden lights stay hidden: a light count the
 // frame will not have compiles the wrong program variants. Materials not in the scene yet (the compiler's)
-// go on a warm group for that moment; each is a Material (its userData.lhUse picks the mesh kind) or { material, use }. With shadows on, the shadow pass's depth programs are compiled too (see depthGroup;
+// go on a warm group for that moment; each is a Material (its userData.lhUse picks the mesh kind) or { material, use }. With shadows on, the shadow pass's depth programs are compiled too (see depthEntries;
 // depth: [{ material, use }] adds depth twins).
 export function warm(renderer, scene, camera, { materials: given = [], depth = [] } = {}) {
   const hidden = [], materials = given.map(e => e?.isMaterial ? { material: e, use: e.userData?.lhUse ?? 'mesh' } : e); // Material or { material, use }

@@ -49,6 +49,8 @@ export function replay(game, tape, { invariants } = {}) {
     const want = sums.get(k + 1);
     if (want !== undefined) { const got = h.checksum(); if (got !== want) throw new Error(`replay: checksum differs at step ${k + 1} (tape ${want}, replay ${got})`); }
   }
+  // the ops issued after the last step. Input is never logged at `end` (the engine records it inside a step), and setting
+  // vals here would feed a step the recording never had
   apply(end);
   return h;
 }
