@@ -549,6 +549,7 @@ These run under `node:test`.
   - `h.until(pred, { maxSteps | maxSeconds, input, message })`, `h.untilEvent(typeOrPred, opts)`, `h.untilScene(name, opts)`. All are counted in steps.
   - On timeout they throw with the seed, the step number, the scene and the last 20 events.
 - **[T-4] Events.** `h.events` is the event log; reading it (`h.events`, `h.since`, and `window.engine.events.since` in a page) flushes pending events first with `engine.flushEvents()` (#71), which is re-entrancy safe: a listener that reads them sees each event once. `h.mark()`, `h.events.since(mark).of(type)`, `.first(...)`, `.count(...)`, and `expectEvents(h, since).toInclude(type, match)` / `.toBeSequence([...])`.
+  - *Clarification (built, post-0.13):* `since` defaults to 0 and `match` is a partial object (`===` per key) or a predicate; `toInclude` returns the event. `.toBeSequence([type | [type, match], ...])` wants the entries in that order, with other events allowed between them. Failures list the events seen.
 - **[T-5] World access.**
   - `h.find(kind | tag, where)`, `h.one(...)` (throws unless exactly one match), `h.get(id)`.
   - `h.place(e, opts)`, `h.spawn(desc)`, `h.despawn(e)`.

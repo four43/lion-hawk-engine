@@ -1,5 +1,6 @@
 // T-1…T-6: drive a game headless, in steps, with input policies, waits that explain their failures, event lists,
 // scene jumps and UI taps. Everything counts steps, never milliseconds.
+import { AssertionError } from 'node:assert';
 import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
 import { policy } from '../src/core/policy.js';
@@ -7,6 +8,10 @@ import { worldFinite } from './invariants.js';
 
 export { policy };
 const matcher = m => typeof m === 'function' ? m : e => e.type === m;
+// where: a predicate, or a partial object whose keys must be === (h.find, expectEvents)
+const whereFn = where => where === undefined ? null : typeof where === 'function' ? where
+  : e => { for (const k of Object.keys(where)) if (e[k] !== where[k]) return false; return true; };
+const fmt = e => { const { seq, step, type, ...rest } = e; return `  @${step} ${type} ${JSON.stringify(rest)}`; };
 export function eventList(arr) {
   return Object.assign(arr, {
     of: t => arr.filter(e => e.type === t),
@@ -37,10 +42,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     const w = engine.world; if (w !== undefined && w.stats.entities > 0) worldFinite(w, engine); // [T-1] always on
     for (const inv of invariants) inv(h);
   };
-  const fmt = e => { const { seq, step, type, ...rest } = e; return `  @${step} ${type} ${JSON.stringify(rest)}`; };
   const needWorld = () => { const w = engine.world; if (!w) throw new Error('headless: no World (no main scene)'); return w; };
-  const whereFn = where => where === undefined ? null : typeof where === 'function' ? where
-    : e => { for (const k of Object.keys(where)) if (e[k] !== where[k]) return false; return true; };
   const h = {
     engine, seed: engine.seed,
     get scene() { return engine.scene; }, get time() { return engine.time; },
@@ -103,4 +105,32 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     tape() { if (!sums) throw new Error('headless: not recording'); return { ...engine.tape(), end: engine.time.step, sums: sums.map(x => x.slice()) }; },
   };
   return h;
+}
+
+// [T-4] assertions over the handle's events since a mark (default 0). Each failure lists what was seen.
+export function expectEvents(h, since = 0) {
+  const list = h.since(since);
+  const seen = () => list.map(fmt).join('\n') || '  (none)';
+  const what = (type, match) => `'${type}'${match === undefined ? '' : typeof match === 'function' ? ' matching fn' : ` matching ${JSON.stringify(match)}`}`;
+  const test = (type, match) => { const w = whereFn(match); return e => e.type === type && (!w || w(e)); };
+  const fail = message => { throw new AssertionError({ message, stackStartFn: fail }); };
+  return {
+    toInclude(type, match) {
+      const e = list.find(test(type, match));
+      if (!e) fail(`expected an event ${what(type, match)} since seq ${since}; seen:\n${seen()}`);
+      return e;
+    },
+    // entries: a type or [type, match], in order; other events may come between them
+    toBeSequence(entries) {
+      if (!Array.isArray(entries)) throw new Error('expectEvents: toBeSequence takes an array of types or [type, match]');
+      let i = 0;
+      entries.forEach((x, n) => {
+        const [type, match] = Array.isArray(x) ? x : [x], f = test(type, match);
+        while (i < list.length && !f(list[i])) i++;
+        if (i === list.length) fail(`expected the sequence ${JSON.stringify(entries)} since seq ${since}: the sequence broke at entry ${n} (${what(type, match)}); seen:\n${seen()}`);
+        i++;
+      });
+      return list;
+    },
+  };
 }
