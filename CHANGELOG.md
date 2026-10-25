@@ -6,6 +6,7 @@
 - Test: `mp()` steps a peer added by a `beforeStep` from the next step, as documented.
 - Test: `expectEvents(h, since)` ([T-4]); `fixtures.define` and `h.use` with `warm:N` ([T-6]); `h.spy`, and warnings captured per handle: under `node --test` an unexpected `console.warn` / `console.error` during a handle call fails the test unless it calls `h.expectWarning(re)` ([T-8]). **Breaking for suites with silent warnings:** a test that warned through a handle and passed now fails until it expects the warning.
 - Test: `h.snapshot()`, `h.restore(snap)` and `h.fork()` for recording handles, built on the tape ([T-7]); `replay(game, tape, { record })`.
+- Test: `headless(game, { record: 'on-fail' })` writes a failed test's tapes to `$LH_TAPES` (default `test-results/tapes/`); `clock: 'virtual'` is accepted ([T-1]).
 - Playwright: iPhone 15 Pro Max (portrait, landscape) and iPad Mini landscape presets ([T-16]).
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.

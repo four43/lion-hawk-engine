@@ -2,6 +2,8 @@
 // scene jumps and UI taps. Everything counts steps, never milliseconds.
 import { AssertionError } from 'node:assert';
 import { afterEach } from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { format } from 'node:util';
 import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
@@ -30,11 +32,26 @@ export function eventList(arr) {
 // node --test, a test that leaves one unexpected (not matched by h.expectWarning) fails after it ends. Run directly with
 // node, nothing fails: read h.warnings yourself. A test that has replaced console.warn / console.error itself is
 // listening: its function still gets the call, and the warning counts as expected.
+// [T-1] record: 'on-fail': after a test that failed (or left an unexpected warning), the tapes of the on-fail handles made
+// during it are written to $LH_TAPES (default test-results/tapes) as <test>.<game>.<n>.tape.json, for replay().
 const unchecked = new Set(); // handles with warnings not yet reported
-if (process.env.NODE_TEST_CONTEXT) afterEach(() => {
+const onFail = []; // [handle, game id] made since the last test ended
+const slug = t => t.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'test';
+if (process.env.NODE_TEST_CONTEXT) afterEach(t => {
   const lines = [];
   for (const h of unchecked) for (const w of h.warnings) if (!w.expected && !w.reported) { w.reported = true; lines.push(`  ${w.level}: ${w.text}`); }
   unchecked.clear();
+  const made = onFail.splice(0);
+  if (made.length && (!t.passed || lines.length)) {
+    const dir = process.env.LH_TAPES || path.join('test-results', 'tapes'), seen = new Map();
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [h, id] of made) {
+      const n = (seen.get(id) ?? 0) + 1; seen.set(id, n);
+      const file = path.join(dir, `${slug(t.name)}.${id}.${n}.tape.json`);
+      fs.writeFileSync(file, JSON.stringify(h.tape()));
+      t.diagnostic(`tape written: ${file}`);
+    }
+  }
   if (lines.length) throw new AssertionError({ message: `headless: unexpected warning (call h.expectWarning(re) if it is expected):\n${lines.join('\n')}` });
 });
 let sink = null; // the handle whose call is running (the innermost one)
@@ -51,8 +68,10 @@ const capture = (h, fn) => function (...args) {
   try { return fn.apply(this, args); } finally { sink = prev; console.warn = warn; console.error = error; }
 };
 
-export function headless(game, { seed = 1, scene, args, invariants = [], record = false, wall0 = 0 } = {}) {
-  const hz = game.sim.hz;
+export function headless(game, { seed = 1, scene, args, invariants = [], record: rec = false, wall0 = 0, clock = 'virtual' } = {}) {
+  if (clock !== 'virtual') throw new Error(`headless: clock must be 'virtual' (got ${JSON.stringify(clock)})`); // steps set the wall
+  if (rec !== true && rec !== false && rec !== 'on-fail') throw new Error("headless: record must be true, false or 'on-fail'");
+  const hz = game.sim.hz, record = rec !== false;
   // engine, log, sums, scratch and dbg are reset together by a [T-7] restore
   let engine, log, sums, scratch, dbg;
   const init = start => {
@@ -172,6 +191,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
       return s;
     },
   };
+  if (rec === 'on-fail') onFail.push([h, game.id]);
   for (const k of Object.keys(h)) { // every method but the warning API itself runs under the capture
     const d = Object.getOwnPropertyDescriptor(h, k);
     if (typeof d.value === 'function' && k !== 'expectWarning' && k !== 'spy') h[k] = capture(h, d.value);
