@@ -12,6 +12,7 @@ import { socketsOf } from './sockets.js';
 import { massOf } from './mass.js';
 import { animTable } from './animTable.js';
 import { optimise } from './optimise.js';
+import { compressTextures } from './textures.js';
 import { readBaked, writeBaked, sha256 } from './write.js';
 export { loadConfig };
 
@@ -21,7 +22,8 @@ const DEFAULT_OPTS = { static: false, keepTextures: false, sockets: [], collider
 const canonical = v => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v ?? null);
 // everything in game.config.js that changes a model's bake output, hashed (manifest.models[id].options; --check compares it)
 export const optionsHash = (cfg, opts) => sha256(canonical({ model: { ...(opts ?? DEFAULT_OPTS), file: undefined }, rename: cfg.bake.rename,
-  palette: cfg.bake.palette ?? null, paint: cfg.bake.paint.base, optimise: cfg.bake.optimise })).slice(0, 16);
+  palette: cfg.bake.palette ?? null, paint: cfg.bake.paint.base, optimise: cfg.bake.optimise,
+  ...(cfg.bake.textures ? { textures: cfg.bake.textures } : {}) })).slice(0, 16); // [A-3] only when set: older bakes stay current
 
 // id → { file (absolute), rel (relative to the game dir), opts }
 export function sources(cfg) {
@@ -69,6 +71,7 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
     if (!mesh.listParents().some(p => p.propertyType === 'Node')) mesh.dispose();
   }
   await optimise(doc, { ...cfg.bake.optimise, keepAttributes: m.keepTextures }, { encoder: MeshoptEncoder }); // a textured model keeps every attribute
+  await compressTextures(doc, cfg.bake.textures); // [A-3] after prune, so only the textures that ship are encoded
   return { id, sidecar, glb: await io.writeBinary(doc), anim, options: optionsHash(cfg, opts) };
 }
 

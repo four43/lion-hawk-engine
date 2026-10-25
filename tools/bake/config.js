@@ -11,7 +11,8 @@ export const importFresh = file => import(`${pathToFileURL(file).href}?v=${creat
 
 const KEYS = {
   '': ['id', 'site', 'outEnv', 'bake', 'build', 'test'],
-  bake: ['src', 'out', 'materials', 'rename', 'palette', 'paint', 'models', 'optimise'],
+  bake: ['src', 'out', 'materials', 'rename', 'palette', 'paint', 'models', 'optimise', 'textures'],
+  'bake.textures': ['format', 'quality', 'resize', 'mode'],
   'bake.rename': ['materials', 'nodes'],
   'bake.paint': ['base'],
   'bake.optimise': ['meshopt', 'quantize', 'weld', 'prune', 'dedupe'],
@@ -51,6 +52,15 @@ export async function loadConfig(dir = '.') {
   const pkgFile = join(gameDir, 'package.json');
   const version = existsSync(pkgFile) ? JSON.parse(readFileSync(pkgFile, 'utf8')).version ?? '0.0.0' : '0.0.0';
   const b = raw.bake ?? {};
+  const tx = b.textures; // [A-3]
+  if (tx !== undefined) {
+    if (tx.format !== 'webp' && tx.format !== 'ktx2') throw new Error(`config: 'bake.textures.format' must be 'webp' or 'ktx2'`);
+    if (tx.quality !== undefined && (!Number.isInteger(tx.quality) || tx.quality < 1 || tx.quality > 100)) throw new Error(`config: 'bake.textures.quality' must be an integer in 1..100`);
+    if (tx.mode !== undefined && tx.format !== 'ktx2') throw new Error(`config: 'bake.textures.mode' is for ktx2 only`);
+    if (tx.mode !== undefined && tx.mode !== 'etc1s' && tx.mode !== 'uastc') throw new Error(`config: 'bake.textures.mode' must be 'etc1s' or 'uastc'`);
+    const okResize = tx.resize === undefined || ['nearest-pot', 'ceil-pot', 'floor-pot'].includes(tx.resize) || (Array.isArray(tx.resize) && tx.resize.length === 2 && tx.resize.every(n => Number.isInteger(n) && n > 0));
+    if (!okResize) throw new Error(`config: 'bake.textures.resize' must be [width, height] or 'nearest-pot', 'ceil-pot', 'floor-pot'`);
+  }
   if (b.palette != null && b.palette !== 'vertex') throw new Error(`config: 'bake.palette' must be 'vertex' or absent (got ${JSON.stringify(b.palette)})`);
   const man = raw.build?.manifest; // [P-3]
   if (man !== undefined) {
@@ -75,6 +85,7 @@ export async function loadConfig(dir = '.') {
       paint: { base: b.paint?.base ?? 'steel' },
       rename: { materials: b.rename?.materials ?? {}, nodes: b.rename?.nodes ?? {} },
       optimise: { meshopt: true, quantize: true, weld: true, prune: true, dedupe: true, ...(b.optimise ?? {}) },
+      textures: b.textures ?? null,
       models,
     },
     build: { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null, manifest: null, ...(raw.build ?? {}) },

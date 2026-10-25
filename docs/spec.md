@@ -442,6 +442,7 @@ Where state goes:
   - a `col-*` node has an unsupported shape;
   - a socket required by the game config is missing.
 - **[A-3]** Optimisation uses gltf-transform: meshopt geometry, KTX2 or WebP textures, prune and dedupe. Settings are per game, with engine defaults.
+  - *Clarification (built, post-0.13):* textures are compressed only when `game.config.js` sets `bake.textures: { format: 'webp' | 'ktx2', quality?, resize?, mode? }`, after prune, so only the textures a model ships are encoded (`palette: 'vertex'` removes them unless `keepTextures`). `webp` uses sharp (`EXT_texture_webp`, which three's `GLTFLoader` reads). `ktx2` runs `toktx` from KTX-Software, which must be on `PATH` (`mode: 'etc1s'`, the default, or `'uastc'`; colour slots sRGB, data slots linear; `KHR_texture_basisu`); the page then needs the optional KTX2 loader ([A-9]). `resize` is `[w, h]` or a `*-pot` preset. The setting is in the bake options hash only when set, so bakes without it stay current.
 - **[A-4] Paint materials.** `paint-*` materials map to a base material, `steel` by default, overridable per game. At runtime their colour comes from per-instance colours.
 
 ### 6.2 Physics sidecar

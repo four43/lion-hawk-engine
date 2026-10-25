@@ -11,6 +11,7 @@
 - Playwright: `game.query`, `control`, `checksum`, `snapshot`, `restore` (with `open({ record: true })`), `shot(name, { mask })` and `touch.drag` ([T-17]); `expectGame(game, target?)` with the [T-18] matchers.
 - Build: `build.manifest` in `game.config.js` generates `manifest.webmanifest` (name, colours, icon) and links it from the page ([P-3]).
 - CLI: `lion-hawk test [--visual]` (the game's tests plus the engine checks; `@visual` tests only with `--visual`) and `lion-hawk release [--bump]` (bump, bake, build, test, commit; push stays manual); `game.config.js` takes `test: { dir, game, roots, zeroAlloc }`.
+- Bake: `bake.textures: { format: 'webp' | 'ktx2' }` compresses the textures a model ships (WebP via sharp, now a direct dependency; KTX2 via `toktx` on `PATH`) ([A-3]).
 - Playwright: iPhone 15 Pro Max (portrait, landscape) and iPad Mini landscape presets ([T-16]).
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.
