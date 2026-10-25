@@ -8,6 +8,7 @@ import { checksum } from './state.js';
 import { policy } from '../src/core/policy.js';
 import { worldFinite } from './invariants.js';
 import { useFixtures } from './fixtures.js';
+import { checkTape, tapeStart, drive } from './replay.js';
 
 export { policy };
 const matcher = m => typeof m === 'function' ? m : e => e.type === m;
@@ -51,13 +52,19 @@ const capture = (h, fn) => function (...args) {
 };
 
 export function headless(game, { seed = 1, scene, args, invariants = [], record = false, wall0 = 0 } = {}) {
-  const engine = createEngine(game, { seed, scene, args, record, wall0 }), hz = game.sim.hz;
-  const scratch = new Map(); // [T-2] one persistent object per (handle, policy function) (#37)
+  const hz = game.sim.hz;
+  // engine, log, sums, scratch and dbg are reset together by a [T-7] restore
+  let engine, log, sums, scratch, dbg;
+  const init = start => {
+    engine = createEngine(game, { ...start, record });
+    scratch = new Map(); // [T-2] one persistent object per (handle, policy function) (#37)
+    dbg = undefined; // h.debug, lazily
+    sums = record ? [] : null; // [T-9] a checksum every 60 steps while recording
+    // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
+    log = eventList([]); engine.events.on(e => { log.push(e); });
+  };
+  init({ seed, scene, args, wall0 });
   const sc = f => { let o = scratch.get(f); if (!o) scratch.set(f, o = {}); return o; };
-  let dbg; // h.debug, lazily
-  const sums = record ? [] : null; // [T-9] a checksum every 60 steps while recording
-  // the engine's own log is a ring; the handle keeps every event it has seen so since()/until failures never lose history
-  const log = eventList([]); engine.events.on(e => { log.push(e); });
   const resolve = input => {
     if (input == null) return null;
     if (typeof input === 'function') return input;
@@ -72,7 +79,7 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
   };
   const needWorld = () => { const w = engine.world; if (!w) throw new Error('headless: no World (no main scene)'); return w; };
   const h = {
-    engine, seed: engine.seed,
+    get engine() { return engine; }, get seed() { return engine.seed; },
     get scene() { return engine.scene; }, get time() { return engine.time; },
     // a policy's i counts from the start of each step()/until() call, so policy.seq schedules are relative to that call
     step(n = 1, input) { const f = resolve(input); for (let k = 0; k < n; k++) one(f, k); return h; },
@@ -114,7 +121,26 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     close(n) { engine.close(n); return h; },
     jump(s, p, o, a) { engine.jump(s, p, o, a); return h; },
     state: () => engine.state(),
-    checksum: () => checksum(engine.state()),
+    checksum({ parts = 'sim' } = {}) { if (parts !== 'sim') throw new Error("headless: checksum parts must be 'sim'"); return checksum(engine.state()); },
+    // [T-7] built on the tape: a snapshot is the tape so far; restore and fork replay it and check the checksum
+    snapshot() {
+      if (!sums) throw new Error('headless: snapshot needs record: true');
+      return { v: 1, step: engine.time.step, checksum: h.checksum(), tape: h.tape() };
+    },
+    restore(snap) {
+      if (snap?.v !== 1 || !snap.tape) throw new Error('headless: restore: not a snapshot');
+      checkTape(game, snap.tape);
+      const n = h.warnings.length;
+      init(tapeStart(snap.tape)); drive(h, snap.tape);
+      h.warnings.length = n; // the replay repeats warnings already seen
+      matches('restore', h, snap.checksum);
+      return h;
+    },
+    fork() {
+      if (!sums) throw new Error('headless: fork needs record: true');
+      const tape = h.tape(), sum = h.checksum();
+      return matches('fork', drive(headless(game, { ...tapeStart(tape), invariants, record: true }), tape), sum);
+    },
     get world() { return engine.world; }, // [T-5]
     find(name, where) { // a bare name matches a tag or a net kind; where: predicate or partial object (===)
       const w = engine.world, test = whereFn(where), out = [];
@@ -152,6 +178,12 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
   }
   return h;
 }
+
+const matches = (what, h, sum) => {
+  const got = h.checksum();
+  if (got !== sum) throw new Error(`headless: ${what}: the replayed state differs from the snapshot (checksum ${got} vs ${sum}): something changed outside the tape`);
+  return h;
+};
 
 // [T-4] assertions over the handle's events since a mark (default 0). Each failure lists what was seen.
 export function expectEvents(h, since = 0) {
