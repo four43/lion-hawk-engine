@@ -71,12 +71,12 @@ export function validateCollider(c, { where = 'collider', path = 'collider', mat
 const strict = (o, keys, fail, path) => { for (const k of Object.keys(o)) if (!keys.includes(k)) fail(`${path}${k}`, 'unknown field', o[k]); };
 
 // One model's sidecar (overview §4.3). model: the id for messages. Required: v, parts, colliders.
-// Optional: source (hand-written fixtures have none), mass (informational), sockets, bounds.
+// Optional: source (hand-written fixtures have none), mass (informational), sockets, bounds, aero (A-5).
 export function validateSidecar(s, { model = '?', materials } = {}) {
   const where = `sidecar: ${model}`;
   const fail = (path, problem, v) => { throw new Error(`${where}: ${path} ${problem} (got ${show(v)})`); };
   if (!isPlain(s)) throw new Error(`${where}: must be an object (got ${show(s)})`);
-  strict(s, ['v', 'source', 'parts', 'colliders', 'mass', 'sockets', 'bounds'], fail, '');
+  strict(s, ['v', 'source', 'parts', 'colliders', 'mass', 'sockets', 'bounds', 'aero'], fail, '');
   if (s.v !== SIDECAR_VERSION) fail('v', `must be ${SIDECAR_VERSION}`, s.v);
   if (s.source !== undefined) {
     if (!isPlain(s.source)) fail('source', 'must be an object', s.source);
@@ -106,6 +106,23 @@ export function validateSidecar(s, { model = '?', materials } = {}) {
       if (!quat(so.q)) fail(`sockets.${k}.q`, 'must be a unit quaternion [x, y, z, w]', so.q);
       if (so.part !== null && !s.parts.includes(so.part)) fail(`sockets.${k}.part`, 'names an unknown part', so.part);
     }
+  }
+  if (s.aero !== undefined) { // [A-5] { panels: [{ part, a, n, c }], volume, centroid } in body space
+    const a = s.aero;
+    if (!isPlain(a)) fail('aero', 'must be an object', a);
+    strict(a, ['panels', 'volume', 'centroid'], fail, 'aero.');
+    if (!Array.isArray(a.panels)) fail('aero.panels', 'must be a list', a.panels);
+    a.panels.forEach((p, i) => {
+      const at = `aero.panels[${i}]`;
+      if (!isPlain(p)) fail(at, 'must be an object', p);
+      strict(p, ['part', 'a', 'n', 'c'], fail, `${at}.`);
+      if (!s.parts.includes(p.part)) fail(`${at}.part`, 'names an unknown part', p.part);
+      if (!finite(p.a) || p.a <= 0) fail(`${at}.a`, 'must be a number > 0', p.a);
+      if (!vec3(p.n) || Math.abs(Math.hypot(...p.n) - 1) > 1e-4) fail(`${at}.n`, 'must be a unit vector', p.n);
+      if (!vec3(p.c)) fail(`${at}.c`, 'must be 3 numbers', p.c);
+    });
+    if (!finite(a.volume) || a.volume < 0) fail('aero.volume', 'must be a number >= 0', a.volume);
+    if (!vec3(a.centroid)) fail('aero.centroid', 'must be 3 numbers', a.centroid);
   }
   if (s.bounds !== undefined) {
     const b = s.bounds;

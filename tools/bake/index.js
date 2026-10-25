@@ -13,6 +13,7 @@ import { massOf } from './mass.js';
 import { animTable } from './animTable.js';
 import { optimise } from './optimise.js';
 import { compressTextures } from './textures.js';
+import { aeroOf } from './aero.js';
 import { readBaked, writeBaked, sha256 } from './write.js';
 export { loadConfig };
 
@@ -64,6 +65,7 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
     v: 1, source: { file: rel, sha256: sha256(bytes) }, parts: cls.parts.map(p => p.name), colliders,
     mass: { mass: round(mp.mass), com: mp.com.map(round), inertia: mp.inertia.map(round), frame: mp.frame.map(round) },
     sockets: socketsOf(cls.socks), bounds: boundsOf(cls.parts),
+    ...(m.aero ? { aero: aeroOf(cls.parts) } : {}), // [A-5]
   };
   const anim = m.animTable ? animTable(doc, id, [...cls.parts, ...cls.socks.map(s => ({ node: s.node, name: `sock-${s.name}` }))], m.animTable) : null;
   for (const col of cls.cols) {

@@ -16,7 +16,7 @@ const KEYS = {
   'bake.rename': ['materials', 'nodes'],
   'bake.paint': ['base'],
   'bake.optimise': ['meshopt', 'quantize', 'weld', 'prune', 'dedupe'],
-  'bake.models.*': ['static', 'rename', 'keepTextures', 'animTable', 'sockets', 'file', 'colliders'],
+  'bake.models.*': ['static', 'rename', 'keepTextures', 'animTable', 'sockets', 'file', 'colliders', 'aero'],
   'bake.models.*.rename': ['materials', 'nodes'],
   'bake.models.*.animTable': ['fps', 'clips'],
   build: ['entry', 'template', 'pwa', 'hooks', 'manifest'],
@@ -76,7 +76,9 @@ export async function loadConfig(dir = '.') {
   for (const [id, m] of Object.entries(b.models ?? {})) {
     const at = m.animTable === true ? { fps: 30, clips: null } : m.animTable ? { fps: m.animTable.fps ?? 30, clips: m.animTable.clips ?? null } : null;
     models[id] = { static: !!m.static, keepTextures: !!m.keepTextures, sockets: m.sockets ?? [], file: m.file ?? null,
-      colliders: m.colliders !== false, animTable: at, rename: { materials: m.rename?.materials ?? {}, nodes: m.rename?.nodes ?? {} } };
+      colliders: m.colliders !== false, animTable: at, rename: { materials: m.rename?.materials ?? {}, nodes: m.rename?.nodes ?? {} },
+      ...(m.aero === true ? { aero: true } : {}) }; // [A-5] only when on: older option hashes stay the same
+    if (m.aero !== undefined && typeof m.aero !== 'boolean') throw new Error(`config: 'bake.models.${id}.aero' must be true or false`);
   }
   return {
     dir: gameDir, version, id: raw.id, site: raw.site ?? raw.id, outEnv: raw.outEnv ?? null,

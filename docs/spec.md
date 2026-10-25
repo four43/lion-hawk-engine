@@ -454,6 +454,7 @@ Where state goes:
   - mass properties from volume × density;
   - sockets;
   - aero panels and the closed volume (from phase 8).
+    - *Clarification (built, post-0.13):* opt-in per model, `bake.models.<id>.aero: true`, so other sidecars and their option hashes are unchanged. `sidecar.aero = { panels: [{ part, a, n, c }], volume, centroid }` in body space: each part's triangles are bucketed by the nearest of 26 directions, a panel being the bucket's area, area-weighted unit normal and centroid; the volume and its centroid come from the divergence theorem (right for closed, outward-wound meshes). The fields that read them ([M-14]–[M-18]) are not built yet.
 
   All of a game's sidecars live in `baked/phys.json`, `{ v, engine, materials: <registry hash>, models: { <id>: sidecar } }` (D2).
   *Clarification (phase 3, 0.7.4; 3b):* `<registry hash>` is the [M-3] hash (ids, order, effective `phys`, pair friction/restitution). `validatePhys` checks shape and material existence only; comparing the hash is the caller's job (`checks.materials`, `bake --check`), so a stale bake reads as stale, not malformed.
