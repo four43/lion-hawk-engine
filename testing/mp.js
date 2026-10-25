@@ -39,7 +39,7 @@ export function mp(game, { peers = 2, link = {}, clock, record = false, seed = 1
   };
   const one = inputs => {
     k++; hub.tick(k * 1000 / hz);
-    for (let i = 0; i < list.length; i++) { // peers added by a beforeStep wait for the next step
+    for (let i = 0, n = list.length; i < n; i++) { // peers added by a beforeStep wait for the next step
       const p = list[i]; if (p.dropped) continue; beforeStep?.(p, i);
       const snap = typeof inputs === 'function' ? inputs(p, i) : inputs?.[i];
       if (snap != null) setInputs(p, snap);

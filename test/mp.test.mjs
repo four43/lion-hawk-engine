@@ -35,3 +35,10 @@ test('2f: mp() passes args per peer, calls beforeStep before each peer\'s step a
   assert.deepEqual(run(3), run(3), 'the same seed, the same jitter');
   assert.notDeepEqual(run(3), run(4), 'another seed, other jitter');
 });
+test('mp(): a peer added by a beforeStep waits for the next step', () => {
+  let w; const added = [];
+  w = mp(relay, { peers: 2, beforeStep: (p, i) => { if (i === 0 && p.engine.time.step === 1) added.push(w.addPeer()); } });
+  w.step(2);
+  assert.equal(added.length, 1); assert.equal(w.peers[2].engine.time.step, 0, 'not stepped in the pass that added it');
+  w.step(1); assert.equal(w.peers[2].engine.time.step, 1);
+});
