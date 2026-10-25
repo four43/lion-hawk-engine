@@ -3,7 +3,9 @@ import { createEngine } from '../core/engine.js';
 import { parseFlags } from '../core/flags.js';
 import { createDriver } from './driver.js';
 import { createUiDom } from './uiDom.js';
-import { installEngine } from './hook.js';
+import { installEngine, REPLAY_KEY } from './hook.js';
+import { checkTape, tapeStart, replayTape } from '../core/tape.js';
+import { checksum } from '../core/checksum.js';
 import { createPipeline, checkRender } from './render/pipeline.js';
 import { bindMenuNav } from './menuNav.js';
 import { createSeats } from './seats.js';
@@ -32,8 +34,19 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     const s = flags.extra?.scene; if (s) scene = s;
     const a = flags.extra?.args; if (a) { try { args = JSON.parse(a); } catch { /* ignore a malformed ?args */ } }
   }
+  // [D-4] ?lh-test&replay=session: a restore reloaded the page; the snapshot's tape sets the start and is replayed below
+  let snap = null;
+  if (flags.lhTest && flags.replay === 'session') {
+    try {
+      const text = target.sessionStorage?.getItem(REPLAY_KEY);
+      if (text == null) throw new Error('engine: ?replay=session but no snapshot in sessionStorage');
+      target.sessionStorage.removeItem(REPLAY_KEY); // used once: a reload starts fresh
+      snap = JSON.parse(text); checkTape(game, snap.tape);
+    } catch (err) { report(err); snap = null; }
+  }
+  const start = snap ? tapeStart(snap.tape) : { seed: flags.seed ?? seed ?? 1, scene, args };
   // [S-6] ?lh-test counts every step as a presented frame (deterministic; game.until never waits for a rAF)
-  const engine = createEngine(game, { seed: flags.seed ?? seed ?? 1, scene, args, acks: flags.lhTest ? 'steps' : 'frames', timer });
+  const engine = createEngine(game, { ...start, acks: flags.lhTest ? 'steps' : 'frames', timer, record: flags.lhRecord === true });
   // [C-5]–[C-13] seats: one seat holding every device until view.seats() is called; polled before the game's devices
   const seats = createSeats(engine, { getGamepads, target, doc, storage, onError: report });
   // [C-14] the haptics lifecycle: stops the rumble a hide, blur or pausing overlay would leave running; after the seats
@@ -162,6 +175,14 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
       if (disposed) return;
       bench = m.openPadBench({ get localPlayers() { return seats.list; }, unpaired: () => seats.unpaired(), gamepad: d => seats.gamepad(d), onSeat: fn => seats.on(fn) }, { doc, haptics });
     }).catch(report);
+  }
+  if (snap) { // [D-4] replay the restored snapshot before the first frame; a mismatch lands in errors
+    try {
+      replayTape(engine, snap.tape);
+      const got = checksum(engine.state());
+      if (got !== snap.checksum) throw new Error(`engine: replay=session: the replayed state differs from the snapshot (checksum ${got} vs ${snap.checksum})`);
+    } catch (err) { report(err); }
+    refresh();
   }
   driver.start();
   return { engine, driver, ui, hook, view, dispose };

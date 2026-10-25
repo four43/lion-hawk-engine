@@ -300,7 +300,7 @@ A peer is a page; a player is a person. A peer carries one or more players, one 
   - With step acks (`acks: 'steps'`, the default: headless and `?lh-test`), `engine.presented()` runs at the very start of each step, so every step counts as a presented frame. A browser boot uses frame acks ([S-6]).
   - `engine.onStep(fn)` calls `fn(engine)` after every step (after `events.flush` and the step counter) and returns an unsubscribe; listeners are copy-on-write (N-4: a port drains `engine.net` there).
   - `engine.onRender(fn)` appends a render slot and returns an unsubscribe; `engine.render(alpha)` calls every slot in registration order (removal during a render applies from the next one). `boot` keeps its own slot, so a game's `onRender` no longer silences the view halves.
-- **[R-7] Manual mode.** `driver.manual(true)` (also `?lh-test`) stops automatic stepping; the engine itself has no manual switch. `stepN(n)`, `advance(sec)` and `render(alpha)` then drive the engine by hand. Headless runs are always manual. `driver.manual('all')` (also `?lh-test=render`, [D-1]) additionally stops automatic rendering: the tick updates devices only (no step, no render, so no frame ack), and tests call `render()` themselves.
+- **[R-7] Manual mode.** `driver.manual(true)` (`window.engine.manual(true)` in a page; `?lh-test` sets it) stops automatic stepping; the engine itself has no manual switch. `stepN(n)`, `advance(sec)` and `render(alpha)` then drive the engine by hand. Headless runs are always manual. `driver.manual('all')` (also `?lh-test=render`, [D-1]) additionally stops automatic rendering: the tick updates devices only (no step, no render, so no frame ack), and tests call `render()` themselves.
 - **[R-8] No allocation.** Nothing is allocated per step or per frame in engine code. Enforced by [T-13].
 
 ### 5.2 Scenes
@@ -504,7 +504,7 @@ Where state goes:
 
 ### 7.3 Debug
 
-- **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug` (`?debug=<topics>`, comma-separated, lists its topics in `flags.debugs`; `?debug=pads` opens the pad bench, [D-7]), `?tune`, `?fps`, `?seed=`, `?replay=`, `?slow=`, `?nosw`, `?mute`, `?lh-test`. `?lh-test=render` (`flags.lhRender`) additionally boots in full-manual mode: nothing renders until a test calls `render()` (#47).
+- **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug` (`?debug=<topics>`, comma-separated, lists its topics in `flags.debugs`; `?debug=pads` opens the pad bench, [D-7]), `?tune`, `?fps`, `?seed=`, `?replay=` (`?replay=session`, [D-4]), `?lh-record` (with `?lh-test`: record the tape), `?slow=`, `?nosw`, `?mute`, `?lh-test`. `?lh-test=render` (`flags.lhRender`) additionally boots in full-manual mode: nothing renders until a test calls `render()` (#47).
 - **[D-2]** `?tune` lazy-loads lil-gui. Kits and games register tunables with `engine.tune(group, obj, spec)`.
 - **[D-3]** `?fps` shows:
   - frame ms;
@@ -519,6 +519,7 @@ Where state goes:
   - **commands and loading:** `command(type, data)`, `commands` (the live `engine.commands`: `pending`, `dropped`, `handles`), `loading` (the live `engine.loading`);
   - **events:** `events.since(seq)`;
   - **state:** `state`, `query`, `snapshot`, `restore`, `checksum`;
+    - *Clarification (built, post-0.13):* `query(name, where)` matches a tag or a net kind (`null`: every entity) and a `where` partial object or predicate, and returns JSON-safe summaries `{ id, tags, net?, netId?, p?, q?, ...primitive fields }`. `checksum()` is the [T-7] checksum of `state()`. `snapshot()` needs a recording page, `?lh-test&lh-record`, and returns `{ v: 1, step, checksum, tape }` like `h.snapshot()`. `restore(snap)` stores it in `sessionStorage` (`lh-replay`) and reloads with `?replay=session`; boot then starts from the tape, replays it before the first frame and reports a checksum mismatch in `errors`. A replay is used once. `policies` is `game.policies`.
   - **input:** `input.set/hold/release/read`; `ui.enabled/tryTap/tap/press/release`;
   - **settling:** `settled()`;
   - **view:** `view.project` (set by the game's view half; world targets call it), `ui.tree()`;

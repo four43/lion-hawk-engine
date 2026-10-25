@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import { parseFlags, FLAGS } from '../src/core/flags.js';
 
 test('defaults when nothing is set', () => {
-  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, lhRender: false, seed: null, slow: null, replay: null, extra: {}, debugs: [] });
+  assert.deepEqual({ ...parseFlags('') }, { debug: false, tune: false, fps: false, nosw: false, mute: false, lhTest: false, lhRecord: false, lhRender: false, seed: null, slow: null, replay: null, extra: {}, debugs: [] });
 });
 test('booleans: present means on, unless 0 or false', () => {
   const f = parseFlags('?tune&fps=1&mute=0&debug=false&lh-test');
   assert.equal(f.tune, true); assert.equal(f.fps, true); assert.equal(f.mute, false); assert.equal(f.debug, false); assert.equal(f.lhTest, true);
+});
+test('lh-record is on only with lh-test (D-4)', () => {
+  assert.equal(parseFlags('?lh-test&lh-record').lhRecord, true);
+  assert.equal(parseFlags('?lh-record').lhRecord, false);
 });
 test('seed: digits become a uint32, anything else stays a string', () => {
   assert.equal(parseFlags('?seed=14').seed, 14);

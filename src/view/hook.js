@@ -1,5 +1,6 @@
 // D-4: the full window.engine hook, built on installEngineHook.
 import { installEngineHook } from './debugHook.js';
+import { checksum } from '../core/checksum.js';
 
 const prim = v => v === null || ['string', 'number', 'boolean'].includes(typeof v);
 // JSON-safe copy of an event: object/function values become { id, kind } when they carry either, otherwise are dropped.
@@ -14,6 +15,23 @@ export function safeEvent(e) {
   }
   return o;
 }
+
+// [D-4] query: a JSON-safe summary of an entity (its primitive fields, tags, net identity and current pose)
+const summary = e => {
+  const o = { id: e.id, tags: [...e.tags] };
+  for (const k of Object.keys(e)) if (k !== 'id' && k !== 'tags' && k !== 'xf' && prim(e[k])) o[k] = e[k];
+  if (e.xf) { const { p, q } = e.xf; o.p = { x: p.x, y: p.y, z: p.z }; o.q = { x: q.x, y: q.y, z: q.z, w: q.w }; }
+  return o;
+};
+const whereFn = where => where == null ? null : typeof where === 'function' ? where
+  : e => { for (const k of Object.keys(where)) if (e[k] !== where[k]) return false; return true; };
+// [D-4] restore: the page reloads with ?replay=session and boot replays the snapshot's tape (sessionStorage 'lh-replay')
+export const REPLAY_KEY = 'lh-replay';
+const withReplay = href => {
+  const [url, hash = ''] = href.split('#'), [base, q = ''] = url.split('?');
+  const parts = q.split('&').filter(x => x && !/^replay(=|$)/.test(x)); parts.push('replay=session');
+  return `${base}?${parts.join('&')}${hash ? '#' + hash : ''}`;
+};
 
 export function installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false, view } = {}) {
   const note = (...a) => { after(); return a[0]; };
@@ -33,6 +51,24 @@ export function installEngine(engine, { driver, target = globalThis, errors = []
     on: (type, fn) => engine.events.on(e => { if (e.type === type) fn(safeEvent(e)); }),
     events: { since: seq => { engine.flushEvents(); return engine.events.since(seq).map(safeEvent); } }, // #71
     state: () => engine.state(),
+    query(name, where) { // a bare name matches a tag or a net kind (null: every entity); where: a partial object or a predicate
+      const w = engine.world, test = whereFn(where), out = [];
+      if (!w) return out;
+      for (const e of w.with()) if ((name == null || e.tags.has(name) || e.net === name) && (!test || test(e))) out.push(summary(e));
+      return out;
+    },
+    checksum: () => checksum(engine.state()),
+    snapshot() {
+      let tape; try { tape = engine.tape(); } catch { throw new Error('engine: snapshot needs a recording page (?lh-test&lh-record)'); }
+      return { v: 1, step: engine.time.step, checksum: checksum(engine.state()), tape: { ...tape, end: engine.time.step } };
+    },
+    restore(snap) {
+      if (snap?.v !== 1 || !snap.tape) throw new Error('engine: restore: not a snapshot');
+      const s = target.sessionStorage, loc = target.location;
+      if (!s || !loc?.replace) throw new Error('engine: restore needs a page (sessionStorage and location)');
+      s.setItem(REPLAY_KEY, JSON.stringify(snap)); loc.replace(withReplay(loc.href));
+    },
+    policies: engine.game.policies,
     input: { set: p => engine.input.set(p), hold: p => engine.input.hold(p), release: (...n) => engine.input.release(...n), read: () => engine.input.values() },
     settled() {
       if (busy() || engine.loading.active) return false; // #20: view.wait promises pending; [S-6] a scene loading
