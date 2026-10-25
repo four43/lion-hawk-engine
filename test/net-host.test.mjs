@@ -76,4 +76,5 @@ test('3i: a record that cannot encode (an out-of-range field) costs only its own
   assert.ok(H.stats.unsent > unsent, 'the bad frame is counted');
   assert.ok(H.stats.sent > sent, 'other frames still go out');
   assert.deepEqual(w.diverged({ agree: { cart: 0.5 } }), [], 'the guest still follows the host\'s cart');
+  w.host.h.expectWarning(/net: kind 'crate' not sent/); w.host.h.expectWarning(/net: frame not sent/); // [T-8]
 });

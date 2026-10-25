@@ -1,6 +1,8 @@
 // T-1…T-6: drive a game headless, in steps, with input policies, waits that explain their failures, event lists,
 // scene jumps and UI taps. Everything counts steps, never milliseconds.
 import { AssertionError } from 'node:assert';
+import { afterEach } from 'node:test';
+import { format } from 'node:util';
 import { createEngine } from '../src/core/engine.js';
 import { checksum } from './state.js';
 import { policy } from '../src/core/policy.js';
@@ -22,6 +24,31 @@ export function eventList(arr) {
     since: m => eventList(arr.filter(e => e.seq > m)),
   });
 }
+
+// [T-8] warnings and errors printed during a handle's calls are captured on h.warnings instead of the console. Under
+// node --test, a test that leaves one unexpected (not matched by h.expectWarning) fails after it ends. Run directly with
+// node, nothing fails: read h.warnings yourself. A test that has replaced console.warn / console.error itself is
+// listening: its function still gets the call, and the warning counts as expected.
+const unchecked = new Set(); // handles with warnings not yet reported
+if (process.env.NODE_TEST_CONTEXT) afterEach(() => {
+  const lines = [];
+  for (const h of unchecked) for (const w of h.warnings) if (!w.expected && !w.reported) { w.reported = true; lines.push(`  ${w.level}: ${w.text}`); }
+  unchecked.clear();
+  if (lines.length) throw new AssertionError({ message: `headless: unexpected warning (call h.expectWarning(re) if it is expected):\n${lines.join('\n')}` });
+});
+let sink = null; // the handle whose call is running (the innermost one)
+const native = { warn: console.warn, error: console.error };
+const capture = (h, fn) => function (...args) {
+  if (sink === h) return fn.apply(this, args);
+  const prev = sink, { warn, error } = console, was = { warn, error };
+  const put = level => (...a) => {
+    const listening = was[level] !== native[level];
+    h.warnings.push({ level, text: format(...a), expected: listening, reported: false });
+    if (listening) was[level](...a); else unchecked.add(h);
+  };
+  sink = h; console.warn = put('warn'); console.error = put('error');
+  try { return fn.apply(this, args); } finally { sink = prev; console.warn = warn; console.error = error; }
+};
 
 export function headless(game, { seed = 1, scene, args, invariants = [], record = false, wall0 = 0 } = {}) {
   const engine = createEngine(game, { seed, scene, args, record, wall0 }), hz = game.sim.hz;
@@ -105,7 +132,24 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record 
     despawn(e) { needWorld().despawn(e); return h; },
     place(e, at, opts) { needWorld().place(e, at, opts); return h; },
     tape() { if (!sums) throw new Error('headless: not recording'); return { ...engine.tape(), end: engine.time.step, sums: sums.map(x => x.slice()) }; },
+    warnings: [], // [T-8] { level: 'warn' | 'error', text, expected }
+    expectWarning(re) {
+      const w = h.warnings.find(x => !x.expected && re.test(x.text));
+      if (!w) throw new AssertionError({ message: `headless: no captured warning matches ${re} (captured: ${h.warnings.map(x => x.text + (x.expected ? ' [expected]' : '')).join('; ') || 'none'})` });
+      w.expected = true; return w.text;
+    },
+    spy(obj, method) {
+      const orig = obj?.[method];
+      if (typeof orig !== 'function') throw new Error(`headless: spy needs a method: '${method}' is not a function`);
+      const s = { calls: [], get count() { return s.calls.length; }, restore() { obj[method] = orig; } };
+      obj[method] = function (...a) { s.calls.push(a); return orig.apply(this, a); };
+      return s;
+    },
   };
+  for (const k of Object.keys(h)) { // every method but the warning API itself runs under the capture
+    const d = Object.getOwnPropertyDescriptor(h, k);
+    if (typeof d.value === 'function' && k !== 'expectWarning' && k !== 'spy') h[k] = capture(h, d.value);
+  }
   return h;
 }
 
