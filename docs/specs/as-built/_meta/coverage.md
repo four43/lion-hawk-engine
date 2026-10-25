@@ -5,7 +5,7 @@ Source commit `7e239df`. 9 features. `inventory.py coverage` reports 0 unassigne
 | ID | Spec | Source files | Source lines | Test files | Claims | B- statements | Lint errors | Remaining issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F01 | [core](../core.md) | 15 | 1252 | 25 | 315 | 232 | 0 | 0 |
-| F02 | [defs-and-kits](../defs-and-kits.md) | 12 | 1231 | 24 | 175 | 176 | 0 | 1 |
+| F02 | [defs-and-kits](../defs-and-kits.md) | 12 | 1231 | 24 | 175 | 176 | 0 | 0 |
 | F03 | [sim-world-physics](../sim-world-physics.md) | 9 | 914 | 15 | 197 | 201 | 0 | 0 |
 | F04 | [net-replication](../net-replication.md) | 12 | 1424 | 28 | 238 | 262 | 0 | 0 |
 | F05 | [view-input](../view-input.md) | 19 | 2157 | 33 | 412 | 344 | 0 | 0 |
@@ -41,7 +41,6 @@ Totals: 2318 claims, 1949 B- statements.
 
 - `inventory.py scan` puts every file under a directory named `build` in category "other" with 0 lines (its `SKIP_DIRS` holds `build`). So `tools/build/index.js`, `tools/build/out.js` and `tools/build/page.js` (118 lines) have no outline and are not in the F09 line count. The F09 author and verifier read them directly, and the `tools/**` glob covers them.
 
-- F02: missing-behavior at Configuration, createVehicle row. suspension.rest (default 0.3, src/kits/vehicle/sim.js:76-77) is in B-157 but not in the Configuration row. The author kept that row to top-level options.
 
 ## Open questions
 

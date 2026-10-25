@@ -1,0 +1,761 @@
+{
+  "repo": "lion-hawk-engine",
+  "source_commit": "7e239df",
+  "features": [
+    {
+      "id": "F01",
+      "slug": "core",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/core/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/actions.test.mjs",
+        "test/controllers.test.mjs",
+        "test/engine.test.mjs",
+        "test/events.test.mjs",
+        "test/flags.test.mjs",
+        "test/loop.test.mjs",
+        "test/math.test.mjs",
+        "test/nav.test.mjs",
+        "test/navScore.test.mjs",
+        "test/players-engine.test.mjs",
+        "test/players.test.mjs",
+        "test/rng.test.mjs",
+        "test/schedule.test.mjs",
+        "test/ui.test.mjs",
+        "test/world-engine.test.mjs"
+      ],
+      "docs": [
+        "docs/research-players.md"
+      ],
+      "tickets": [],
+      "depends_on": [
+        "F02",
+        "F03",
+        "F06"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F02": 2,
+        "F03": 4,
+        "F06": 1
+      },
+      "lines": 1250,
+      "test_lines": 1687
+    },
+    {
+      "id": "F02",
+      "slug": "kits",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/kits/**",
+        "src/defs/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/bake-sidecar.test.mjs",
+        "test/checks-materials.test.mjs",
+        "test/kits/coverage-view.test.mjs",
+        "test/kits/coverage.test.mjs",
+        "test/kits/fx-marks.test.mjs",
+        "test/kits/fx-particles.test.mjs",
+        "test/kits/glyphs.test.mjs",
+        "test/kits/kits-sim.test.mjs",
+        "test/kits/terrain-rapier.test.mjs",
+        "test/kits/terrain-view.test.mjs",
+        "test/kits/terrain.test.mjs",
+        "test/kits/vehicle-lifecycle.test.mjs",
+        "test/kits/vehicle-material.test.mjs",
+        "test/kits/vehicle-parts.test.mjs",
+        "test/kits/vehicle.test.mjs",
+        "test/materials-base.test.mjs",
+        "test/materials-hash.test.mjs",
+        "test/materials-pairs.test.mjs",
+        "test/materials.test.mjs",
+        "test/net-fields.test.mjs",
+        "test/sidecar-collider.test.mjs",
+        "test/sidecar.test.mjs",
+        "test/view-alloc.test.mjs",
+        "test/world-base-materials.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [
+        "F01"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F01": 1
+      },
+      "lines": 1231,
+      "test_lines": 1516
+    },
+    {
+      "id": "F03",
+      "slug": "sim",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/sim/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/forecast.test.mjs",
+        "test/interp.test.mjs",
+        "test/limits.test.mjs",
+        "test/net-install.test.mjs",
+        "test/net-remote.test.mjs",
+        "test/physics-colliders.test.mjs",
+        "test/physics-events.test.mjs",
+        "test/physics-fixtures.test.mjs",
+        "test/physics-groups.test.mjs",
+        "test/physics-heightfield.test.mjs",
+        "test/physics-rapier.test.mjs",
+        "test/replica.test.mjs",
+        "test/schema.test.mjs",
+        "test/sync-world.test.mjs",
+        "test/world-bodies.test.mjs",
+        "test/world-entities.test.mjs",
+        "test/world-headless.test.mjs",
+        "test/world-joints.test.mjs",
+        "test/world-parts.test.mjs",
+        "test/world-place.test.mjs",
+        "test/world-pool.test.mjs",
+        "test/world-replay.test.mjs",
+        "test/world-step.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [
+        "F01",
+        "F02"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F01": 5,
+        "F02": 5
+      },
+      "lines": 2108,
+      "test_lines": 1800
+    },
+    {
+      "id": "F04",
+      "slug": "view",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/view/boot.js",
+        "src/view/contexts.js",
+        "src/view/debugHook.js",
+        "src/view/driver.js",
+        "src/view/gamepad.js",
+        "src/view/gesture.js",
+        "src/view/haptics.js",
+        "src/view/hook.js",
+        "src/view/keyboard.js",
+        "src/view/mapPair.js",
+        "src/view/menuNav.js",
+        "src/view/padEdges.js",
+        "src/view/pointer.js",
+        "src/view/profiles.js",
+        "src/view/seats.js",
+        "src/view/touch.js",
+        "src/view/uiDom.js"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/boot-args.test.mjs",
+        "test/boot.test.mjs",
+        "test/debugHook.test.mjs",
+        "test/driver.test.mjs",
+        "test/gamepad.test.mjs",
+        "test/gesture-stamp.test.mjs",
+        "test/gesture.test.mjs",
+        "test/haptics-boot.test.mjs",
+        "test/haptics-e2e.test.mjs",
+        "test/haptics.test.mjs",
+        "test/hook-commands.test.mjs",
+        "test/hook.test.mjs",
+        "test/keyboard.test.mjs",
+        "test/menuNav.test.mjs",
+        "test/padEdges.test.mjs",
+        "test/pointer.test.mjs",
+        "test/render-boot.test.mjs",
+        "test/replay-seats.test.mjs",
+        "test/seat-contexts.test.mjs",
+        "test/seats-boot.test.mjs",
+        "test/seats.test.mjs",
+        "test/touch-e2e.test.mjs",
+        "test/touch.test.mjs",
+        "test/uiDom.test.mjs",
+        "test/untilLoaded-driver.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [
+        "F01",
+        "F05",
+        "F06"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F01": 4,
+        "F05": 1,
+        "F06": 2
+      },
+      "lines": 1765,
+      "test_lines": 2707
+    },
+    {
+      "id": "F05",
+      "slug": "view-render",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/view/render/**",
+        "src/view/materials/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/compiler-apply.test.mjs",
+        "test/compiler-chunks.test.mjs",
+        "test/compiler-depth.test.mjs",
+        "test/compiler-e2e.page.js",
+        "test/compiler-e2e.test.mjs",
+        "test/compiler-fur.test.mjs",
+        "test/compiler-paint.test.mjs",
+        "test/compiler.test.mjs",
+        "test/e2e-render.test.mjs",
+        "test/peers-render.test.mjs",
+        "test/render-fixtures/render.view.js",
+        "test/render-hygiene.test.mjs",
+        "test/render-lights.test.mjs",
+        "test/render-pipeline.test.mjs",
+        "test/render-renderer.test.mjs",
+        "test/render-snapshot.test.mjs",
+        "test/render-tiltshift.test.mjs",
+        "test/render-timer.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [
+        "F02",
+        "F06"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F02": 1,
+        "F06": 3
+      },
+      "lines": 1130,
+      "test_lines": 1579
+    },
+    {
+      "id": "F06",
+      "slug": "view-sync",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "src/view/sync/**",
+        "src/net/**",
+        "src/view/camera/**",
+        "src/view/instancing/**",
+        "bin/**",
+        "src/view/bench/**",
+        "src/view/assets/**",
+        "src/view/audio/**",
+        "src/index.net.js",
+        "src/index.sim.js",
+        "src/index.view.js",
+        "src/version.js"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/assets-animTable.test.mjs",
+        "test/assets-loader.test.mjs",
+        "test/assets.test.mjs",
+        "test/audio-clips.test.mjs",
+        "test/audio-e2e.test.mjs",
+        "test/audio-lifecycle.test.mjs",
+        "test/audio.test.mjs",
+        "test/bench-stats.test.mjs",
+        "test/bench.test.mjs",
+        "test/bridge-e2e.test.mjs",
+        "test/bridge.test.mjs",
+        "test/camera-chase.test.mjs",
+        "test/camera-mount.test.mjs",
+        "test/camera-orbit-gesture.test.mjs",
+        "test/camera-orbit.test.mjs",
+        "test/camera-project.test.mjs",
+        "test/mp-net.test.mjs",
+        "test/net-alloc.test.mjs",
+        "test/net-config.test.mjs",
+        "test/net-driven.test.mjs",
+        "test/net-guard.test.mjs",
+        "test/net-host.test.mjs",
+        "test/net-interp.test.mjs",
+        "test/net-join.test.mjs",
+        "test/net-key.test.mjs",
+        "test/net-locals.test.mjs",
+        "test/net-owner.test.mjs",
+        "test/net-record.test.mjs",
+        "test/net-rejoin.test.mjs",
+        "test/net-replay.test.mjs",
+        "test/net-state.test.mjs",
+        "test/net-tractor.test.mjs",
+        "test/pads-e2e.test.mjs",
+        "test/port.test.mjs",
+        "test/seats-net.test.mjs",
+        "test/sync-crowd.test.mjs",
+        "test/sync-hooks.test.mjs",
+        "test/sync-instanced.test.mjs",
+        "test/sync-instances.test.mjs",
+        "test/sync-netfix.test.mjs",
+        "test/sync-parts.test.mjs",
+        "test/sync-smooth.test.mjs",
+        "test/sync.test.mjs",
+        "test/transport.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F08"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F01": 12,
+        "F02": 4,
+        "F03": 12,
+        "F04": 13,
+        "F05": 9,
+        "F08": 1
+      },
+      "lines": 1719,
+      "test_lines": 3563
+    },
+    {
+      "id": "F07",
+      "slug": "testing",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "testing/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/checks-alloc.test.mjs",
+        "test/checks-determinism.test.mjs",
+        "test/golden.test.mjs",
+        "test/headless.test.mjs",
+        "test/kits/purity.test.mjs",
+        "test/mp.test.mjs",
+        "test/playwright.test.mjs",
+        "test/purity-phase3.test.mjs",
+        "test/purity.test.mjs",
+        "test/replay.test.mjs",
+        "test/state.test.mjs"
+      ],
+      "docs": [
+        "docs/research-testing.md"
+      ],
+      "tickets": [],
+      "depends_on": [
+        "F01",
+        "F02",
+        "F03",
+        "F06"
+      ],
+      "depends_manual": [],
+      "imports": {
+        "F01": 6,
+        "F02": 2,
+        "F03": 1,
+        "F06": 2
+      },
+      "lines": 1007,
+      "test_lines": 729
+    },
+    {
+      "id": "F08",
+      "slug": "tools",
+      "title": "",
+      "summary": "",
+      "paths": [
+        "tools/**"
+      ],
+      "entrypoints": [],
+      "tests": [
+        "test/bake-anim.test.mjs",
+        "test/bake-check.test.mjs",
+        "test/bake-colliders.test.mjs",
+        "test/bake-config.test.mjs",
+        "test/bake-conventions.test.mjs",
+        "test/bake-fixtures.test.mjs",
+        "test/bake-hull.test.mjs",
+        "test/bake-mass.test.mjs",
+        "test/bake-optimise.test.mjs",
+        "test/bake-output.test.mjs",
+        "test/bake-read.test.mjs",
+        "test/build-dev.test.mjs",
+        "test/build-page.test.mjs",
+        "test/build-run.test.mjs",
+        "test/build.test.mjs",
+        "test/cli.test.mjs"
+      ],
+      "docs": [],
+      "tickets": [],
+      "depends_on": [],
+      "depends_manual": [],
+      "imports": {},
+      "lines": 945,
+      "test_lines": 838
+    }
+  ],
+  "excluded": [],
+  "unassigned": [
+    {
+      "path": "package.json",
+      "category": "config",
+      "lines": 44
+    },
+    {
+      "path": "test/alloc-rate.test.mjs",
+      "category": "test",
+      "lines": 27
+    },
+    {
+      "path": "test/commands.test.mjs",
+      "category": "test",
+      "lines": 139
+    },
+    {
+      "path": "test/domAsserts-scan.test.mjs",
+      "category": "test",
+      "lines": 22
+    },
+    {
+      "path": "test/domAsserts.test.mjs",
+      "category": "test",
+      "lines": 17
+    },
+    {
+      "path": "test/e2e.test.mjs",
+      "category": "test",
+      "lines": 56
+    },
+    {
+      "path": "test/field-notes.test.mjs",
+      "category": "test",
+      "lines": 22
+    },
+    {
+      "path": "test/fixtures/countdown.js",
+      "category": "test",
+      "lines": 29
+    },
+    {
+      "path": "test/fixtures/countdown.view.js",
+      "category": "test",
+      "lines": 20
+    },
+    {
+      "path": "test/fixtures/hold.js",
+      "category": "test",
+      "lines": 4
+    },
+    {
+      "path": "test/fixtures/hold.view.js",
+      "category": "test",
+      "lines": 5
+    },
+    {
+      "path": "test/fixtures/hull-wheel-back-right.json",
+      "category": "test",
+      "lines": 1
+    },
+    {
+      "path": "test/fixtures/loader.js",
+      "category": "test",
+      "lines": 21
+    },
+    {
+      "path": "test/fixtures/loader.view.js",
+      "category": "test",
+      "lines": 15
+    },
+    {
+      "path": "test/fixtures/models/engine-probe/index.js",
+      "category": "test",
+      "lines": 2
+    },
+    {
+      "path": "test/fixtures/models/engine-probe/package.json",
+      "category": "test",
+      "lines": 1
+    },
+    {
+      "path": "test/fixtures/models/game/baked/manifest.json",
+      "category": "test",
+      "lines": 40
+    },
+    {
+      "path": "test/fixtures/models/game/baked/models/pet.anim.json",
+      "category": "test",
+      "lines": 1
+    },
+    {
+      "path": "test/fixtures/models/game/baked/phys.json",
+      "category": "test",
+      "lines": 1
+    },
+    {
+      "path": "test/fixtures/models/game/build.hooks.js",
+      "category": "test",
+      "lines": 7
+    },
+    {
+      "path": "test/fixtures/models/game/game.config.js",
+      "category": "test",
+      "lines": 14
+    },
+    {
+      "path": "test/fixtures/models/game/materials.js",
+      "category": "test",
+      "lines": 3
+    },
+    {
+      "path": "test/fixtures/models/game/package.json",
+      "category": "test",
+      "lines": 1
+    },
+    {
+      "path": "test/fixtures/models/game/pwa/sw.js",
+      "category": "test",
+      "lines": 3
+    },
+    {
+      "path": "test/fixtures/models/game/src/main.js",
+      "category": "test",
+      "lines": 6
+    },
+    {
+      "path": "test/fixtures/models/make.mjs",
+      "category": "test",
+      "lines": 148
+    },
+    {
+      "path": "test/fixtures/phys/engine.js",
+      "category": "test",
+      "lines": 15
+    },
+    {
+      "path": "test/fixtures/phys/game.js",
+      "category": "test",
+      "lines": 18
+    },
+    {
+      "path": "test/fixtures/phys/materials.js",
+      "category": "test",
+      "lines": 43
+    },
+    {
+      "path": "test/fixtures/phys/phys.json",
+      "category": "test",
+      "lines": 30
+    },
+    {
+      "path": "test/fixtures/phys/rapier.js",
+      "category": "test",
+      "lines": 6
+    },
+    {
+      "path": "test/fixtures/relay.js",
+      "category": "test",
+      "lines": 31
+    },
+    {
+      "path": "test/fixtures/relay.view.js",
+      "category": "test",
+      "lines": 15
+    },
+    {
+      "path": "test/fixtures/rumble.js",
+      "category": "test",
+      "lines": 4
+    },
+    {
+      "path": "test/fixtures/rumble.view.js",
+      "category": "test",
+      "lines": 5
+    },
+    {
+      "path": "test/helpers/alloc.mjs",
+      "category": "test",
+      "lines": 44
+    },
+    {
+      "path": "test/helpers/bakeGame.mjs",
+      "category": "test",
+      "lines": 49
+    },
+    {
+      "path": "test/helpers/dom.mjs",
+      "category": "test",
+      "lines": 9
+    },
+    {
+      "path": "test/helpers/domScan.mjs",
+      "category": "test",
+      "lines": 34
+    },
+    {
+      "path": "test/helpers/fakeAssets.mjs",
+      "category": "test",
+      "lines": 47
+    },
+    {
+      "path": "test/helpers/fakeAudio.mjs",
+      "category": "test",
+      "lines": 41
+    },
+    {
+      "path": "test/helpers/fakeCanvas.mjs",
+      "category": "test",
+      "lines": 19
+    },
+    {
+      "path": "test/helpers/fakeRenderer.mjs",
+      "category": "test",
+      "lines": 28
+    },
+    {
+      "path": "test/helpers/fakeWorld.mjs",
+      "category": "test",
+      "lines": 29
+    },
+    {
+      "path": "test/helpers/glb.mjs",
+      "category": "test",
+      "lines": 102
+    },
+    {
+      "path": "test/helpers/rapierMass.mjs",
+      "category": "test",
+      "lines": 35
+    },
+    {
+      "path": "test/helpers/seats.mjs",
+      "category": "test",
+      "lines": 36
+    },
+    {
+      "path": "test/helpers/syncSetup.mjs",
+      "category": "test",
+      "lines": 11
+    },
+    {
+      "path": "test/helpers/tmp.mjs",
+      "category": "test",
+      "lines": 9
+    },
+    {
+      "path": "test/hold-e2e.test.mjs",
+      "category": "test",
+      "lines": 53
+    },
+    {
+      "path": "test/inspect.test.mjs",
+      "category": "test",
+      "lines": 64
+    },
+    {
+      "path": "test/kits/fixtures/car.js",
+      "category": "test",
+      "lines": 29
+    },
+    {
+      "path": "test/kits/fixtures/carGame.js",
+      "category": "test",
+      "lines": 57
+    },
+    {
+      "path": "test/kits/fixtures/kitGame.js",
+      "category": "test",
+      "lines": 39
+    },
+    {
+      "path": "test/load-e2e.test.mjs",
+      "category": "test",
+      "lines": 82
+    },
+    {
+      "path": "test/loading.test.mjs",
+      "category": "test",
+      "lines": 103
+    },
+    {
+      "path": "test/net/fixtures/carts.js",
+      "category": "test",
+      "lines": 60
+    },
+    {
+      "path": "test/net/fixtures/farmlet.js",
+      "category": "test",
+      "lines": 64
+    },
+    {
+      "path": "test/net/fixtures/seats.js",
+      "category": "test",
+      "lines": 63
+    },
+    {
+      "path": "test/overlay-args.test.mjs",
+      "category": "test",
+      "lines": 27
+    },
+    {
+      "path": "test/overlay-once.test.mjs",
+      "category": "test",
+      "lines": 44
+    },
+    {
+      "path": "test/package-phase3.test.mjs",
+      "category": "test",
+      "lines": 80
+    },
+    {
+      "path": "test/package.test.mjs",
+      "category": "test",
+      "lines": 12
+    },
+    {
+      "path": "test/reset.test.mjs",
+      "category": "test",
+      "lines": 40
+    },
+    {
+      "path": "test/seat-bindings.test.mjs",
+      "category": "test",
+      "lines": 151
+    },
+    {
+      "path": "test/untilLoaded-e2e.test.mjs",
+      "category": "test",
+      "lines": 46
+    },
+    {
+      "path": "test/untilLoaded.test.mjs",
+      "category": "test",
+      "lines": 38
+    }
+  ]
+}

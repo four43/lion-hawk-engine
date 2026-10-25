@@ -310,6 +310,7 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 | `createTerrain` options | `nx`, `nz`, `cell`, `x0` 0, `z0` 0, `heights`, `materials`, `blend` null, `material`, `groups`, `fixInternalEdges` false | Heightfield and sampling settings. | [src/kits/terrain/sim.js:10] <!-- C-123 --> |
 | `createTerrainMesh` options | `compiler` null, `chunks` `[6, 6]`, `chunkCells` null, `lods` `[1]`, `lodFar` `[]`, `hysteresis` 12, `skirt` 2, `visFar` Infinity, `evict` null, `colorAt` null, `attributes` `{}`, `drop` null, `material` `grass`, `budgetMs` 3, `moveEps` 2, `now` `performance.now` | Chunk, LOD and build settings. | [src/kits/terrain/view.js:31-32] <!-- C-137 --> |
 | `createVehicle` options | `wheels`, `rayGroups`, `forward` `x`, `terrain` null, `tyre` `rubber`, `grip` false | Vehicle settings. | [src/kits/vehicle/sim.js:53] <!-- C-153 --> |
+| `suspension.rest` (in the vehicle spec) | 0.3 | Suspension rest length in metres. | [src/kits/vehicle/sim.js:76-77] <!-- C-158 --> |
 
 ## Errors and limits
 
