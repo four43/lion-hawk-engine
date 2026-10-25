@@ -18,7 +18,8 @@ const KEYS = {
   'bake.models.*': ['static', 'rename', 'keepTextures', 'animTable', 'sockets', 'file', 'colliders'],
   'bake.models.*.rename': ['materials', 'nodes'],
   'bake.models.*.animTable': ['fps', 'clips'],
-  build: ['entry', 'template', 'pwa', 'hooks'],
+  build: ['entry', 'template', 'pwa', 'hooks', 'manifest'],
+  'build.manifest': ['name', 'shortName', 'themeColor', 'backgroundColor', 'icon', 'display', 'orientation'],
 };
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -50,6 +51,13 @@ export async function loadConfig(dir = '.') {
   const version = existsSync(pkgFile) ? JSON.parse(readFileSync(pkgFile, 'utf8')).version ?? '0.0.0' : '0.0.0';
   const b = raw.bake ?? {};
   if (b.palette != null && b.palette !== 'vertex') throw new Error(`config: 'bake.palette' must be 'vertex' or absent (got ${JSON.stringify(b.palette)})`);
+  const man = raw.build?.manifest; // [P-3]
+  if (man !== undefined) {
+    if (typeof man.name !== 'string' || !man.name) throw new Error(`config: 'build.manifest.name' must be a non-empty string`);
+    const DISPLAYS = ['fullscreen', 'standalone', 'minimal-ui', 'browser'];
+    if (man.display !== undefined && !DISPLAYS.includes(man.display)) throw new Error(`config: 'build.manifest.display' must be one of ${DISPLAYS.join(', ')}`);
+    for (const k of ['shortName', 'themeColor', 'backgroundColor', 'icon', 'orientation']) if (man[k] !== undefined && typeof man[k] !== 'string') throw new Error(`config: 'build.manifest.${k}' must be a string`);
+  }
   const models = {};
   for (const [id, m] of Object.entries(b.models ?? {})) {
     const at = m.animTable === true ? { fps: 30, clips: null } : m.animTable ? { fps: m.animTable.fps ?? 30, clips: m.animTable.clips ?? null } : null;
@@ -65,6 +73,6 @@ export async function loadConfig(dir = '.') {
       optimise: { meshopt: true, quantize: true, weld: true, prune: true, dedupe: true, ...(b.optimise ?? {}) },
       models,
     },
-    build: { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null, ...(raw.build ?? {}) },
+    build: { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null, manifest: null, ...(raw.build ?? {}) },
   };
 }

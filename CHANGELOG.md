@@ -9,6 +9,7 @@
 - Test: `headless(game, { record: 'on-fail' })` writes a failed test's tapes to `$LH_TAPES` (default `test-results/tapes/`); `clock: 'virtual'` is accepted ([T-1]).
 - Debug: `window.engine.query`, `checksum`, `snapshot`, `restore` and `policies` ([D-4]); `?lh-test&lh-record` records the page's tape, and `?replay=session` replays a restored snapshot at boot.
 - Playwright: `game.query`, `control`, `checksum`, `snapshot`, `restore` (with `open({ record: true })`), `shot(name, { mask })` and `touch.drag` ([T-17]); `expectGame(game, target?)` with the [T-18] matchers.
+- Build: `build.manifest` in `game.config.js` generates `manifest.webmanifest` (name, colours, icon) and links it from the page ([P-3]).
 - Playwright: iPhone 15 Pro Max (portrait, landscape) and iPad Mini landscape presets ([T-16]).
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.

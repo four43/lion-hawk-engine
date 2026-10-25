@@ -501,6 +501,7 @@ Where state goes:
   - game files are served cache-first.
 - **[P-2]** No `skipWaiting` while a session is running. When an update is waiting, the engine shows a "new version ready" message.
 - **[P-3]** The manifest is generated from `game.config.js`: name, colours, icon.
+  - *Clarification (built, post-0.13):* `build.manifest: { name, shortName?, themeColor?, backgroundColor?, icon?, display = 'fullscreen', orientation? }` makes the build write `manifest.webmanifest` (`start_url` and `scope` `./`; `short_name` defaults to `name`; the icon, a path from the game dir, is copied beside it with its MIME type, svg, png, webp or jpeg). The page gets `<link rel="manifest">` and a `theme-color` meta unless the template has them; the manifest and icon are in the content hash and the precache. A `pwa/manifest.webmanifest` beside `build.manifest` is an error. Without `build.manifest` the pwa directory's files are copied as before.
 
 ### 7.3 Debug
 

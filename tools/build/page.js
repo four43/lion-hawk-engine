@@ -16,3 +16,26 @@ export function stampWorker(sw, { version, engine, hash, precache }) {
   if (!sw.includes('__VERSION__')) throw new Error('build: pwa/sw.js has no __VERSION__');
   return sw.replaceAll('__VERSION__', `${version}+lh${engine}-${hash}`).replace('__PRECACHE__', () => JSON.stringify(precache));
 }
+
+// [P-3] build.manifest → the web app manifest JSON (icon: its file name in the out dir, or none)
+const ICON_TYPES = { '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+export function makeManifest(m, iconName) {
+  const out = { name: m.name, short_name: m.shortName ?? m.name, start_url: './', scope: './', display: m.display ?? 'fullscreen' };
+  if (m.orientation) out.orientation = m.orientation;
+  if (m.themeColor) out.theme_color = m.themeColor;
+  if (m.backgroundColor) out.background_color = m.backgroundColor;
+  if (iconName) {
+    const ext = iconName.slice(iconName.lastIndexOf('.')).toLowerCase(), type = ICON_TYPES[ext];
+    if (!type) throw new Error(`build: build.manifest.icon must be ${Object.keys(ICON_TYPES).join(', ')} (got '${iconName}')`);
+    out.icons = [{ src: iconName, sizes: 'any', type, purpose: 'any' }];
+  }
+  return out;
+}
+// the <link rel="manifest"> (and theme-color meta) a generated manifest needs, unless the template has them
+export function linkManifest(html, m) {
+  let tags = '';
+  if (!/<link[^>]+rel=["']?manifest/i.test(html)) tags += '<link rel="manifest" href="manifest.webmanifest">';
+  if (m.themeColor && !/<meta[^>]+name=["']?theme-color/i.test(html)) tags += `<meta name="theme-color" content="${m.themeColor}">`;
+  if (!tags) return html;
+  return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, x => `${x}\n${tags}`) : `${tags}\n${html}`;
+}

@@ -21,7 +21,7 @@ test('3d: loadConfig fills the engine defaults and reads the game version', asyn
   assert.equal(c.bake.src, 'assets/models'); assert.equal(c.bake.out, 'baked'); assert.equal(c.bake.palette, null);
   assert.deepEqual(c.bake.models.pig, { static: false, keepTextures: false, sockets: ['hat'], file: null, colliders: true,
     animTable: { fps: 30, clips: null }, rename: { materials: {}, nodes: {} } });
-  assert.deepEqual(c.build, { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null });
+  assert.deepEqual(c.build, { entry: 'src/main.js', template: 'template.html', pwa: 'pwa', hooks: null, manifest: null });
 });
 test('3d: a misspelt key fails loudly with its path', async () => {
   await assert.rejects(loadConfig(game({ id: 'g', bake: { optimize: { meshopt: false } } })), /config: unknown key 'bake\.optimize'/);

@@ -9,14 +9,14 @@
 // Also exported: bundle, bakedAssets, ENGINE_VERSION, dedupe, UsageError.
 import { build as esbuild } from 'esbuild';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { dedupe } from '../dedupe.js';
 import { loadConfig, importFresh } from '../bake/config.js';
 import { readBaked, sha256 } from '../bake/write.js';
 import { resolveOut, UsageError } from './out.js';
-import { fillTemplate, stampPage, stampWorker } from './page.js';
+import { fillTemplate, stampPage, stampWorker, makeManifest, linkManifest } from './page.js';
 export { dedupe, UsageError };
 
 export const ENGINE_VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
@@ -58,9 +58,24 @@ export async function build({ game = '.', out, env = process.env, site = false, 
   if (typeof html !== 'string') throw new Error('build: hooks.page must return the html string');
   const assets = bakedAssets(cfg), pwaDir = resolve(cfg.dir, cfg.build.pwa);
   const pwa = existsSync(pwaDir) ? readdirSync(pwaDir).sort().filter(f => statSync(join(pwaDir, f)).isFile()) : [];
+  // [P-3] a generated manifest (and its icon), written beside the PWA files
+  const man = cfg.build.manifest, made = [];
+  if (man) {
+    if (pwa.includes('manifest.webmanifest')) throw new Error('build: pwa/manifest.webmanifest and build.manifest both make the manifest: keep one');
+    let icon = null;
+    if (man.icon) {
+      const src = resolve(cfg.dir, man.icon);
+      if (!existsSync(src)) throw new Error(`build: build.manifest.icon '${man.icon}' does not exist`);
+      icon = basename(src);
+      if (!pwa.includes(icon)) made.push({ rel: icon, data: readFileSync(src) });
+    }
+    made.push({ rel: 'manifest.webmanifest', data: Buffer.from(JSON.stringify(makeManifest(man, icon), null, 2) + '\n') });
+    html = linkManifest(html, man);
+  }
   const h = createHash('sha256').update(html);
   for (const a of assets) h.update(a.rel).update(readFileSync(a.src));
   for (const f of pwa) if (f !== 'sw.js') h.update(f).update(readFileSync(join(pwaDir, f)));
+  for (const f of made) h.update(f.rel).update(f.data);
   const hash = h.digest('hex').slice(0, 12);
   html = stampPage(html, { id: cfg.id, version: cfg.version, engine: ENGINE_VERSION, hash });
   mkdirSync(join(dir, 'assets/models'), { recursive: true });
@@ -71,6 +86,7 @@ export async function build({ game = '.', out, env = process.env, site = false, 
     if (f === 'sw.js') continue;
     copyFileSync(join(pwaDir, f), join(dir, f)); files.push(f);
   }
+  for (const f of made) { writeFileSync(join(dir, f.rel), f.data); files.push(f.rel); }
   if (pwa.includes('sw.js') && !e2e) {
     const precache = ['./', ...files.filter(f => f !== 'index.html')];
     writeFileSync(join(dir, 'sw.js'), stampWorker(readFileSync(join(pwaDir, 'sw.js'), 'utf8'), { version: cfg.version, engine: ENGINE_VERSION, hash, precache }));
