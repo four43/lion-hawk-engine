@@ -19,7 +19,8 @@ const KEYS = {
   'bake.models.*': ['static', 'rename', 'keepTextures', 'animTable', 'sockets', 'file', 'colliders', 'aero'],
   'bake.models.*.rename': ['materials', 'nodes'],
   'bake.models.*.animTable': ['fps', 'clips'],
-  build: ['entry', 'template', 'pwa', 'hooks', 'manifest'],
+  build: ['entry', 'template', 'pwa', 'hooks', 'manifest', 'shared'],
+  'build.shared': ['dir', 'base'],
   test: ['dir', 'game', 'roots', 'zeroAlloc'],
   'build.manifest': ['name', 'shortName', 'themeColor', 'backgroundColor', 'icon', 'display', 'orientation'],
 };

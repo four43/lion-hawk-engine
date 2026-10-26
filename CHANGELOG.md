@@ -14,6 +14,7 @@
 - Bake: `bake.textures: { format: 'webp' | 'ktx2' }` compresses the textures a model ships (WebP via sharp, now a direct dependency; KTX2 via `toktx` on `PATH`) ([A-3]).
 - Kits: `createVehicle(world, e, { backend: 'tire' })`, Rally's tire model as kit-vehicle's second backend: own suspension rays, Magic Formula grip from the ground's `tire` block, wheel spin, rolling resistance and surface drag, `substeps: 'auto'`.
 - Bake: `bake.models.<id>.aero: true` bakes aero panels and the closed volume into the sidecar (`sidecar.aero`, [A-5], phase 8's panel bake).
+- Build: `--mode shared` ([B-4], phase 9's engine side): the game bundle imports lion-hawk, three and Rapier through an import map from one content-hashed pack at `/exp/lion-hawk/<version>/`, which a second game reuses (`build.shared: { dir, base }`).
 - Playwright: iPhone 15 Pro Max (portrait, landscape) and iPad Mini landscape presets ([T-16]).
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.

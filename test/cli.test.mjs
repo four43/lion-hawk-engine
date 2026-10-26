@@ -29,7 +29,7 @@ test('3d: build with no --out and no $<outEnv> exits 2 with the contract message
   const site = join(tmp('lh-site-'), 'site/exp/fixture');
   r = await run(['build', '--game', game, '--out', site]);
   assert.equal(r.code, 2); assert.ok(!existsSync(site));
-  r = await run(['build', '--game', game, '--mode', 'shared', '--out', tmp('lh-out-')]);
+  r = await run(['build', '--game', game, '--mode', 'frob', '--out', tmp('lh-out-')]);
   assert.equal(r.code, 2);
   const out = tmp('lh-out-');
   r = await run(['build', '--game', game], { LH_FIXTURE_OUT: out });

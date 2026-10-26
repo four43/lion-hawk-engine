@@ -9,7 +9,7 @@ import { release } from './release/index.js';
 
 export const USAGE = `usage:
   lion-hawk bake  [--game <dir>] [--check] [ids...]
-  lion-hawk build [--game <dir>] (--out <dir> | $<outEnv>) [--site] [--mode single] [--e2e]
+  lion-hawk build [--game <dir>] (--out <dir> | $<outEnv>) [--site] [--mode single|shared] [--e2e]
   lion-hawk dev   [--game <dir>] [--port 8740] [--host 0.0.0.0]
   lion-hawk test  [--game <dir>] [--visual]
   lion-hawk release [--game <dir>] [--bump patch|minor|major] (--out <dir> | $<outEnv>) [--site]`;
