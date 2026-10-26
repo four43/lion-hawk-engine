@@ -1,20 +1,25 @@
 // Audio service (#67, overview §4.9): one AudioContext per page, made and resumed inside a user gesture (iOS starts audio only
 // there), suspended while the tab is hidden and resumed on return; after an interruption (a call, Siri) the next gesture
-// resumes it. Games connect their synths to `master`: master -> mute gain -> compressor limiter (R-8 settings) ->
-// speakers. load(url) fetches at once and decodes once a context exists (B-8: never mid-game); play(buffer, opts)
+// resumes it. Games connect their synths to a bus (H-1): bus -> master -> mute gain -> compressor limiter (R-8 settings)
+// -> speakers. load(url) fetches at once and decodes once a context exists (B-8: never mid-game); play(buffer, opts)
 // plays a decoded buffer, optionally placed in the world (`at`, against the object given to listen(): distance
 // volume). ctx and master stay null until the first gesture. View-only: sim code never imports this.
 const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']; // iOS activates on pointerup/touchend/click, not a touch pointerdown
 const LIMITER = Object.freeze({ threshold: -14, knee: 24, ratio: 4, attack: 0.005, release: 0.2 });
 const POSITIONAL = Object.freeze({ ref: 18, near: 10, min: 0.05, max: 0.6, pan: 0 });
+const BUSES = Object.freeze(['sfx', 'music', 'ui', 'voice', 'ambience']); // H-1: master -> each bus -> sources
 const short = url => { const s = String(url); return s.length > 48 ? `${s.slice(0, 45)}...` : s; };
 
-export function createAudio({ doc = globalThis.document, flags = {}, AudioContext: AC, fetch: fetchFn, volume = 0.55, limiter = {}, positional = {} } = {}) {
+export function createAudio({ doc = globalThis.document, flags = {}, AudioContext: AC, fetch: fetchFn, volume = 0.55, limiter = {}, positional = {}, buses = BUSES } = {}) {
   if (!doc?.addEventListener) throw new Error('createAudio: doc required');
   const win = doc.defaultView ?? globalThis.window;
   AC ??= win?.AudioContext ?? win?.webkitAudioContext; // false: no Web Audio (tests)
   fetchFn ??= win?.fetch ? win.fetch.bind(win) : globalThis.fetch?.bind(globalThis);
   const lim = { ...LIMITER, ...limiter }, pos = { ...POSITIONAL, ...positional };
+  if (!Array.isArray(buses) || buses.some(b => typeof b !== 'string' || !b || b === 'master') || new Set(buses).size !== buses.length) throw new Error("createAudio: buses must be distinct names other than 'master'");
+  const level = new Map(), ducks = new Map(), busNode = new Map(); // H-1: per-bus level, active duck factors, gain nodes
+  for (const b of buses) { level.set(b, 1); ducks.set(b, []); }
+  let masterLevel = volume;
   const unlockFns = [], gestureFns = [], clips = new Map(), warned = new Set();
   let ctx = null, muteGain = null, muted = !!flags.mute, everUnlocked = false, armed = false, disposed = false, failed = false, listener = null;
   let readyOk, readyFail;
@@ -28,9 +33,10 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     try {
       if (!AC) throw new Error('no AudioContext');
       const c = new AC(), m = c.createGain(), mg = c.createGain(), comp = c.createDynamicsCompressor();
-      m.gain.value = volume; mg.gain.value = muted ? 0 : 1;
+      m.gain.value = masterLevel; mg.gain.value = muted ? 0 : 1;
       for (const k of Object.keys(LIMITER)) comp[k].value = lim[k];
       m.connect(mg); mg.connect(comp); comp.connect(c.destination);
+      for (const b of buses) { const g = c.createGain(); g.gain.value = busGain(b); g.connect(m); busNode.set(b, g); }
       ctx = c; muteGain = mg; audio.ctx = c; audio.master = m;
       c.onstatechange = onState;
       readyOk(c);
@@ -82,7 +88,24 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     const lp = listener.position, e = listener.matrixWorld.elements, dx = x - lp.x, dz = z - lp.z, d = Math.hypot(dx, dz);
     return d < 1e-6 ? 0 : (dx * e[0] + dz * e[2]) / d;
   }
-  function play(buffer, { gain = 1, rate = 1, pan = 0, at = null, when = 0, loop = false, offset = 0 } = {}) {
+  const needBus = (name, who) => { if (!level.has(name)) throw new Error(`audio.${who}: unknown bus '${name}' (${buses.join(', ')})`); };
+  const busGain = name => { let g = level.get(name); for (const d of ducks.get(name)) g *= d; return g; };
+  const applyBus = (name, tc) => { const n = busNode.get(name); if (n) n.gain.setTargetAtTime(busGain(name), ctx.currentTime, tc); };
+  function setVolume(name, v) { // H-1: 'master' is the game volume; a bus level multiplies its ducks
+    if (v !== undefined && !(Number.isFinite(v) && v >= 0)) throw new Error(`audio.volume: volume must be a number >= 0 (got ${v})`);
+    if (name === 'master') { if (v !== undefined) { masterLevel = v; audio.master?.gain.setTargetAtTime(v, ctx.currentTime, 0.02); } return masterLevel; }
+    needBus(name, 'volume');
+    if (v !== undefined) { level.set(name, v); applyBus(name, 0.02); }
+    return level.get(name);
+  }
+  function duck(name, { to = 0.3, attack = 0.05, release = 0.4 } = {}) { // H-1: undo() lifts it; ducks multiply
+    needBus(name, 'duck');
+    const list = ducks.get(name); list.push(to); applyBus(name, attack / 3);
+    let done = false;
+    return () => { if (done) return; done = true; list.splice(list.indexOf(to), 1); applyBus(name, release / 3); };
+  }
+  function play(buffer, { gain = 1, rate = 1, pan = 0, at = null, when = 0, loop = false, offset = 0, bus = 'sfx' } = {}) {
+    needBus(bus, 'play');
     if (!buffer || !ctx || ctx.state !== 'running') return null;
     let g = gain, p = pan;
     if (at) {
@@ -94,8 +117,8 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     src.buffer = buffer; src.loop = loop; src.playbackRate.value = rate; gn.gain.value = g;
     src.connect(gn);
     let pn = null;
-    if (p !== 0 && ctx.createStereoPanner) { pn = ctx.createStereoPanner(); pn.pan.value = Math.max(-1, Math.min(1, p)); gn.connect(pn); pn.connect(audio.master); }
-    else gn.connect(audio.master);
+    if (p !== 0 && ctx.createStereoPanner) { pn = ctx.createStereoPanner(); pn.pan.value = Math.max(-1, Math.min(1, p)); gn.connect(pn); pn.connect(busNode.get(bus)); }
+    else gn.connect(busNode.get(bus));
     src.onended = () => { src.disconnect(); gn.disconnect(); pn?.disconnect(); };
     src.start(ctx.currentTime + when, offset);
     return { source: src, gain: gn, stop(t = 0) { try { src.stop(ctx.currentTime + t); } catch { /* stopping a stopped source throws; nothing to do */ } } };
@@ -139,6 +162,8 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
       unlockFns.push(fn); return remover(unlockFns, fn);
     },
     onGesture(fn) { if (typeof fn !== 'function') throw new Error('audio.onGesture: function required'); gestureFns.push(fn); return remover(gestureFns, fn); },
+    bus(name) { needBus(name, 'bus'); return busNode.get(name) ?? null; },
+    volume: setVolume, duck,
     load, play, mute, distanceGain, dispose,
     listen(obj) { listener = obj ?? null; },
   };

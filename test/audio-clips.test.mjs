@@ -26,7 +26,7 @@ test('3g: play is null until audio runs; then source -> gain -> master with rate
   s.fire(); await flush(); s.fa.made[0].currentTime = 2;
   const h = s.audio.play(buf, { gain: 0.5, rate: 1.5, loop: true, when: 0.25, offset: 0.1 }), src = h.source;
   assert.equal(src.buffer, buf); assert.equal(src.loop, true); assert.equal(src.playbackRate.value, 1.5);
-  assert.equal(src.out[0], h.gain); assert.equal(h.gain.gain.value, 0.5); assert.equal(h.gain.out[0], s.audio.master);
+  assert.equal(src.out[0], h.gain); assert.equal(h.gain.gain.value, 0.5); assert.equal(h.gain.out[0], s.audio.bus('sfx'));
   assert.deepEqual(src.started, [2.25, 0.1]);
   h.stop(); h.stop(); assert.equal(src.stopped, 2); // a second stop is harmless
   src.onended(); assert.equal(src.disconnected, true); assert.equal(h.gain.disconnected, true);
@@ -35,7 +35,7 @@ test('3g: play is null until audio runs; then source -> gain -> master with rate
 test('3g: pan adds a stereo panner, clamped to -1..1 (#67)', async () => {
   const s = audioPage(); s.fire(); await flush();
   const h = s.audio.play({}, { pan: 3 }), pn = h.gain.out[0];
-  assert.equal(pn.kind, 'panner'); assert.equal(pn.pan.value, 1); assert.equal(pn.out[0], s.audio.master);
+  assert.equal(pn.kind, 'panner'); assert.equal(pn.pan.value, 1); assert.equal(pn.out[0], s.audio.bus('sfx'));
   h.source.onended(); assert.equal(pn.disconnected, true);
 });
 test('3g: positional: distance volume from the listener (planar); optional pan from the listener\'s right (#67)', async () => {
@@ -50,7 +50,7 @@ test('3g: positional: distance volume from the listener (planar); optional pan f
   assert.equal(h.gain.out[0].pan.value, 1); // +x is the default camera's right
   assert.equal(s.audio.play({}, { at: { x: -10, y: 0, z: 0 } }).gain.out[0].pan.value, -1);
   const d = audioPage(); d.fire(); await flush(); d.audio.listen(cam);
-  assert.equal(d.audio.play({}, { at: [10, 0, 0] }).gain.out[0], d.audio.master); // no pan unless positional.pan is set
+  assert.equal(d.audio.play({}, { at: [10, 0, 0] }).gain.out[0], d.audio.bus('sfx')); // no pan unless positional.pan is set
 });
 test('3g: no Web Audio: load rejects with the reason and play returns null (#67)', async t => {
   t.mock.method(console, 'warn', () => {});
