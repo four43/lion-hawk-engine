@@ -24,11 +24,16 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
   wheelInertia = 2, turbo = null, running = true } = {}) {
   const E = typeof engine === 'string' ? ENGINE_PRESETS[engine] : engine;
   if (!E) fail(`unknown engine '${engine}' (${Object.keys(ENGINE_PRESETS).join(', ')})`);
-  for (const k of ['idle', 'redline', 'limiter', 'torque', 'peakRpm', 'inertia']) if (!(E[k] > 0)) fail(`engine.${k} must be a number > 0 (got ${E[k]})`);
+  for (const k of ['idle', 'redline', 'limiter', 'torque', 'peakRpm', 'inertia', 'pipe', 'pulseDeg', 'gain']) if (!(E[k] > 0)) fail(`engine.${k} must be a number > 0 (got ${E[k]})`);
+  const cyl = a => Array.isArray(a) && a.length === E.angles.length && a.every(Number.isFinite); // the sound's firing layout (H-7)
+  if (!Array.isArray(E.angles) || !E.angles.length || !cyl(E.angles) || !cyl(E.banks) || !cyl(E.header)) fail('engine.angles, banks and header must be lists of one number per cylinder');
+  if (E.stereo !== 0 && E.stereo !== 1) fail(`engine.stereo must be 0 or 1 (got ${E.stereo})`);
   if (!Array.isArray(gears) || !gears.length || !gears.every(g => g > 0)) fail('gears must be a non-empty list of ratios > 0');
   for (const [k, v] of [['reverse', reverse], ['final', final], ['wheelInertia', wheelInertia]]) if (!(v > 0)) fail(`${k} must be a number > 0 (got ${v})`);
   if (!(shiftTime >= 0)) fail(`shiftTime must be a number >= 0 (got ${shiftTime})`);
   const T = turbo ? Object.freeze({ maxBoost: turbo.maxBoost ?? 1, size: turbo.size ?? 0.4, bov: turbo.bov ?? true }) : null;
+  if (T && !(T.maxBoost > 0)) fail(`turbo.maxBoost must be a number > 0 (got ${T.maxBoost})`);
+  if (T && !(T.size >= 0 && T.size <= 1)) fail(`turbo.size must be a number in 0..1 (got ${T.size})`);
   const st = { rpm: running ? E.idle : 0, map: running ? 0.35 : 1, thrEff: 0, fuelCut: false, limiter: false, popWin: 0, running: !!running, starter: false,
     stalled: false, crankT: 0, gear: 0, shiftT: 0, shaft: 0, boost: 0, wg: 0, thrSlow: 0, bovCool: 0, bovVent: 0, bovId: 0, bovAmp: 0, bovMode: T?.bov ? 1 : 0, wheelTorque: 0 };
   // R-8: substep inputs go through this object, not arguments or return values, so no number is boxed per call
@@ -49,7 +54,7 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
   }
   function sub() { // §3.1–3.3 for one substep of k.h; k.Tc is the clutch torque held for the step
     const h = k.h, Tc = k.Tc;
-    const thr = st.shiftT > 0 ? 0 : clamp(pt.throttle, 0, 1);
+    const t = pt.throttle, thr = st.shiftT > 0 || !(t > 0) ? 0 : t < 1 ? t : 1; // NaN or undefined counts as 0
     if (st.starter) { st.crankT += h; if (st.crankT > 0.55 && st.rpm > 150) st.running = true; if ((st.running && st.rpm > E.idle * 0.7) || st.crankT > 4) st.starter = false; }
     const idleAir = st.running ? clamp(0.05 + (E.idle - st.rpm) * 0.00015, 0, 0.14) : 0, thrEff = Math.max(thr, idleAir);
     st.thrEff = thr;
@@ -84,6 +89,7 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
     // driven wheels together. A shift opens the clutch and cuts the throttle for shiftTime.
     step(dt, wheelOmega = 0) {
       if (!(dt > 0)) fail(`dt must be a number > 0 (got ${dt})`);
+      if (!Number.isFinite(wheelOmega)) fail(`wheelOmega must be a finite number (got ${wheelOmega})`);
       const g = st.gear, G = st.shiftT > 0 || g === 0 ? 0 : g < 0 ? -reverse * final : gears[g - 1] * final;
       let Tc = 0;
       if (G !== 0) { // launch slips at 0.6 N m per rpm engaging from 0.9 idle, else 8; capped by capacity and by one step's transfer

@@ -86,3 +86,19 @@ test('H-6: options and calls are checked', () => {
   assert.ok(Object.isFrozen(ENGINE_PRESETS.v8x) && Object.isFrozen(ENGINE_PRESETS.v8x.angles));
   assert.deepEqual(ENGINE_PRESETS.v8x.banks, [0, 1, 0, 0, 1, 0, 1, 1]);
 });
+test('H-6: a throttle that is undefined or NaN for a frame counts as 0 and cannot poison the state', () => {
+  for (const bad of [undefined, NaN, null, 'x']) {
+    const pt = createPowertrain(); pt.shift(1); run(pt, 0.5, () => {}, () => 5); pt.throttle = bad; pt.step(DT, 5); // after the shift's throttle cut pt.throttle = 0; run(pt, 2, () => {}, () => 5);
+    for (const [k, v] of Object.entries(pt.state)) if (typeof v === 'number') assert.ok(Number.isFinite(v), `${String(bad)}: state.${k} = ${v}`);
+  }
+});
+test('H-6: a non-finite wheel spin, a turbo without boost, and a custom engine without its sound layout are refused', () => {
+  const pt = createPowertrain(); pt.shift(1);
+  assert.throws(() => pt.step(DT, NaN), /^Error: powertrain: wheelOmega must be a finite number \(got NaN\)$/);
+  assert.throws(() => createPowertrain({ turbo: { maxBoost: 0 } }), /powertrain: turbo\.maxBoost must be a number > 0 \(got 0\)/);
+  assert.throws(() => createPowertrain({ turbo: { size: 2 } }), /powertrain: turbo\.size must be a number in 0\.\.1 \(got 2\)/);
+  const { pulseDeg, ...noPulse } = ENGINE_PRESETS.i4;
+  assert.throws(() => createPowertrain({ engine: noPulse }), /powertrain: engine\.pulseDeg must be a number > 0 \(got undefined\)/);
+  assert.throws(() => createPowertrain({ engine: { ...ENGINE_PRESETS.i4, banks: [0, 1] } }), /powertrain: engine\.angles, banks and header must be lists of one number per cylinder/);
+  assert.throws(() => createPowertrain({ engine: { ...ENGINE_PRESETS.i4, stereo: 2 } }), /powertrain: engine\.stereo must be 0 or 1 \(got 2\)/);
+});
