@@ -2,7 +2,7 @@
 id: F07
 title: View sync, camera, assets and audio
 status: as-built
-source_commit: cb8b3d3
+source_commit: 4cd5a94
 paths:
   - src/view/sync/**
   - src/view/camera/**
@@ -105,7 +105,7 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 | `audio.frame()` | in | Takes no argument. Places the voices that follow an object. The render pipeline calls it. | [src/view/audio/index.js:151-154; src/view/audio/index.js:197] <!-- C-266 -->
 | `createCues(audio, defs, { rng })` | in | Returns `{ ready, has(id), play(id, { gain = 1, rate = 1, at, when = 0 }) }` | [src/view/audio/cues.js:7; src/view/audio/cues.js:25-28] <!-- C-267 -->
 | `bindContactSounds(engine, cues, { min = 0.5, full = 20, gap = 0.12 })` | in | Returns the value of `engine.events.on`, which removes the handler | [src/view/audio/contacts.js:4; src/view/audio/contacts.js:14; test/audio-contacts.test.mjs:26] <!-- C-268 -->
-| `createDsp(audio, { name, Class, channels = 2, options = {}, AudioWorkletNode })` | in | Returns a promise of `{ node, mode, send(msg), dispose() }` | [src/view/audio/dsp.js:25; src/view/audio/dsp.js:36; src/view/audio/dsp.js:40] <!-- C-269 -->
+| `createDsp(audio, { name, Class, channels = 2, options = {}, AudioWorkletNode })` | in | Returns a promise of `{ node, mode, send(msg), dispose() }` | [src/view/audio/dsp.js:25; src/view/audio/dsp.js:38; src/view/audio/dsp.js:42] <!-- C-269 -->
 | `workletSource(name, Class)` | in | Returns the source text of an AudioWorklet module | [src/view/audio/dsp.js:7-15] <!-- C-270 --> |
 
 ## Behavior
@@ -311,7 +311,7 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - **B-166** `play` checks the bus name before it checks the context. A name that is not a bus throws even before audio runs. The `bus` option defaults to `'sfx'`. [src/view/audio/index.js:108-110; test/audio-buses.test.mjs:31] <!-- C-280 -->
 
 ### Audio voices
-- **B-167** `voice` returns null when the context does not exist or does not run. The bus name check comes first. [src/view/audio/index.js:129-130; test/audio-voices.test.mjs:9] <!-- C-281 -->
+- **B-167** `voice` returns null when the context does not exist or its state is `closed`. A suspended context still gets a voice. The bus name check comes first. [src/view/audio/index.js:129-130; test/audio-voices.test.mjs:9] <!-- C-281 -->
 - **B-168** A voice is an input gain node, then a place gain node, then a stereo panner, then the bus node. The input gain is the `gain` option. When `createStereoPanner` is missing, the place node connects to the bus node. [src/view/audio/index.js:131-133; test/audio-voices.test.mjs:9] <!-- C-282 -->
 - **B-169** A new voice has `audible` true and `stopped` false. The service adds the voice to its voice list and places the voice at once. [src/view/audio/index.js:134; src/view/audio/index.js:140; test/audio-voices.test.mjs:9] <!-- C-283 -->
 - **B-170** A voice without `follow` keeps place gain 1 and `audible` true. When no listener exists, a voice with `follow` also keeps its values. [src/view/audio/index.js:144; test/audio-voices.test.mjs:39] <!-- C-284 -->
@@ -345,8 +345,8 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - **B-194** The contact handler ignores events that are not type `'contact'`. The handler also ignores contact events whose `impulse` is not at least `min`, including a missing or NaN `impulse`. [src/view/audio/contacts.js:15; test/audio-contacts.test.mjs:20] <!-- C-310 -->
 - **B-195** The cue id comes from `engine.world.materials`. With no registry the id is null. With two materials the id is `reg.pair(a, b).sound`. With one material the id is `reg.get(m).sound`. With none the id is null. [src/view/audio/contacts.js:9-13; src/view/audio/contacts.js:16; test/audio-contacts.test.mjs:15; test/audio-contacts.test.mjs:20] <!-- C-311 -->
 - **B-196** The handler plays nothing when the cue id is missing or `cues.has(id)` is false. [src/view/audio/contacts.js:17; test/audio-contacts.test.mjs:20] <!-- C-312 -->
-- **B-197** The handler keys a pair by `e.a` and `e.b` in that order. The handler skips a contact when `engine.time.sim` minus the last time of the key is below `gap`. The handler records the time before it calls `cues.play`. [src/view/audio/contacts.js:18-19; src/view/audio/contacts.js:21; test/audio-contacts.test.mjs:26] <!-- C-313 -->
-- **B-198** When the pair map holds more than 512 keys, the handler removes the keys at least `gap` old. Then the handler records the new key. [src/view/audio/contacts.js:20] <!-- C-314 -->
+- **B-197** The handler keys a pair by `e.a` and `e.b` in that order. Every qualifying contact records `engine.time.sim` for its key before the gap check. [src/view/audio/contacts.js:18; src/view/audio/contacts.js:20; test/audio-contacts.test.mjs:26] <!-- C-313 -->
+- **B-198** When the pair map holds more than 512 keys and the key is new, the handler removes the keys at least `gap` old. [src/view/audio/contacts.js:19] <!-- C-314 -->
 - **B-199** The handler calls `cues.play(id, { gain, at: e.point })`. The `gain` is `min(1, (impulse - min) / (full - min))`. [src/view/audio/contacts.js:22; test/audio-contacts.test.mjs:15] <!-- C-315 -->
 
 ### DSP host
@@ -357,12 +357,14 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - **B-204** A name already registered on the context with another `Class` makes `createDsp` reject. [src/view/audio/dsp.js:32; test/audio-dsp.test.mjs:50] <!-- C-322 -->
 - **B-205** When the context has no `audioWorklet`, or `AudioWorkletNode` is not a function, the module load warns and reports failure. The warning is `audio: no AudioWorklet; '<name>' runs on the main thread`. [src/view/audio/dsp.js:18; test/audio-dsp.test.mjs:35] <!-- C-323 -->
 - **B-206** Otherwise the module load adds the `workletSource` text through a Blob URL with `audioWorklet.addModule`. The module load then revokes the URL. When `addModule` fails, it warns and reports failure. [src/view/audio/dsp.js:19-22; test/audio-dsp.test.mjs:35] <!-- C-324 -->
-- **B-207** When the module loaded, `createDsp` makes an `AudioWorkletNode` with 0 inputs, 1 output, `outputChannelCount` `[channels]` and `processorOptions` set to `options`. The returned `mode` is `'worklet'`. [src/view/audio/dsp.js:34-36; test/audio-dsp.test.mjs:23] <!-- C-325 -->
-- **B-208** In `'worklet'` mode, `send` posts the message to the port. `dispose` posts `{ type: 'dispose' }` and disconnects the node. [src/view/audio/dsp.js:36; test/audio-dsp.test.mjs:23] <!-- C-325 -->
-- **B-209** When the module did not load, `createDsp` runs `new Class(ctx.sampleRate, options)` behind a ScriptProcessor. The ScriptProcessor has buffer size 1024, 1 input and `channels` outputs. `mode` is `'script'`. [src/view/audio/dsp.js:38-40; test/audio-dsp.test.mjs:35] <!-- C-326 -->
-- **B-210** In `'script'` mode, each audio process event renders channel 0 and channel 1 (null when `channels` is 1). `send` calls `setParams`. `dispose` clears `onaudioprocess` and disconnects the node. [src/view/audio/dsp.js:39-40; test/audio-dsp.test.mjs:35] <!-- C-326 -->
-- **B-211** `createDsp` does not connect the returned node to another node. The caller connects the node, for example to a voice input. (inferred) [src/view/audio/dsp.js:34-40; test/audio-dsp-e2e.test.mjs:46] <!-- C-327 -->
+- **B-207** When the module loaded, `createDsp` makes an `AudioWorkletNode` with 0 inputs, 1 output, `outputChannelCount` `[channels]` and `processorOptions` set to `options`. The returned `mode` is `'worklet'`. [src/view/audio/dsp.js:34-35; src/view/audio/dsp.js:38; test/audio-dsp.test.mjs:23] <!-- C-325 -->
+- **B-208** In `'worklet'` mode, `send` posts the message to the port. `dispose` posts `{ type: 'dispose' }` and disconnects the node. [src/view/audio/dsp.js:38; test/audio-dsp.test.mjs:23] <!-- C-325 -->
+- **B-209** When the module did not load, `createDsp` runs `new Class(ctx.sampleRate, options)` behind a ScriptProcessor. The ScriptProcessor has buffer size 1024, 1 input and `channels` outputs. `mode` is `'script'`. [src/view/audio/dsp.js:40-42; test/audio-dsp.test.mjs:35] <!-- C-326 -->
+- **B-210** In `'script'` mode, each audio process event renders channel 0 and channel 1 (null when `channels` is 1). `send` calls `setParams`. `dispose` clears `onaudioprocess` and disconnects the node. [src/view/audio/dsp.js:41-42; test/audio-dsp.test.mjs:35] <!-- C-326 -->
+- **B-211** `createDsp` does not connect the returned node to another node. The caller connects the node, for example to a voice input. (inferred) [src/view/audio/dsp.js:34-42; test/audio-dsp-e2e.test.mjs:46] <!-- C-327 -->
 - **B-212** The `Class` source runs in the worklet scope, so the `Class` must name nothing outside itself. [src/view/audio/dsp.js:1-4; src/view/audio/dsp.js:8] <!-- C-328 -->
+- **B-213** In `'worklet'` mode, the node gets an `onprocessorerror` handler. The handler warns once `audio: the '<name>' processor threw on the audio thread and is now silent`. [src/view/audio/dsp.js:36-37] <!-- C-329 -->
+- **B-214** The contact handler skips a contact when its key already has a time and the time since then is below `gap`. So a pair plays only after `gap` seconds without contact. A body at rest or sliding plays once. [src/view/audio/contacts.js:1-3; src/view/audio/contacts.js:20-21] <!-- C-330 -->
 
 ## Data and state
 - View sync keeps one view sync record per entity, in an array and a Map by id. A steady-state frame allocates nothing. A new entity makes its record and, when drawn, its Object3D. Part binding makes matrices once. The first instanced write makes one Vector3 and one Quaternion. Instanced frames make no three.js objects and retain nothing. [src/view/sync/index.js:17-18; src/view/sync/index.js:45; test/sync.test.mjs:63; test/sync-parts.test.mjs:43] <!-- C-55 -->
@@ -374,7 +376,7 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - The audio service keeps one level and one list of active ducks for each bus. The bus gain is the level times the duck factors. [src/view/audio/index.js:20-21; src/view/audio/index.js:93] <!-- C-277 -->
 - The audio service keeps one list of live voices. A voice leaves the list when its `stop()` runs. [src/view/audio/index.js:22; src/view/audio/index.js:138] <!-- C-283 C-290 -->
 - A cue keeps its decoded clips, the time of its last play and a list of live plays. [src/view/audio/cues.js:17-18; src/view/audio/cues.js:40] <!-- C-308 -->
-- The contact handler keeps a Map from the pair key `<a>|<b>` to the engine time of the last play. [src/view/audio/contacts.js:8; src/view/audio/contacts.js:18-21] <!-- C-313 -->
+- The contact handler keeps a Map from the pair key `<a>|<b>` to the engine time of the last qualifying contact. [src/view/audio/contacts.js:8; src/view/audio/contacts.js:18-20] <!-- C-313 -->
 - The DSP host keeps one registry per context. The registry maps each name to its `Class` and its load result. [src/view/audio/dsp.js:5; src/view/audio/dsp.js:30-33] <!-- C-321 -->
 - `rig.state` of the orbit rig is the live pose `{ tx, ty, tz, yaw, pitch, dist, chaseOff }`. `rig.limits` is `{ pitchMin, pitchMax, min, max, bounds }`. Both can be read and written. [src/view/camera/orbit.js:1-3; src/view/camera/orbit.js:24-25; test/camera-orbit.test.mjs:63] <!-- C-194 -->
 

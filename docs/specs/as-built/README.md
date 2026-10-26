@@ -4,7 +4,7 @@ These specs describe what the Lion Hawk engine code does at the source commit, n
 
 Written in STE style (ASD-STE100-inspired). Not certified compliant.
 
-Source commit: `7224d6b`; F02 and F07 were rerun at `cb8b3d3`.
+Source commit: `7224d6b`; F02 and F07 were rerun at `4cd5a94`.
 
 | ID | Feature | Summary | Spec |
 | --- | --- | --- | --- |
