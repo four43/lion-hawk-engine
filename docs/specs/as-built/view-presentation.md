@@ -2,7 +2,7 @@
 id: F07
 title: View sync, camera, assets and audio
 status: as-built
-source_commit: 7224d6b
+source_commit: cb8b3d3
 paths:
   - src/view/sync/**
   - src/view/camera/**
@@ -15,10 +15,10 @@ generated: STE spec writer
 # View sync, camera, assets and audio
 
 ## Summary
-This feature turns World entities into three.js objects each frame. It also loads baked models, draws instanced meshes and crowds, moves the camera, and plays sound. All code here is view-only. Sim code never imports it.
+This feature turns World entities into three.js objects each frame. The feature also loads baked models, draws instanced meshes and crowds, and moves the camera. The feature plays sound through buses, voices, cues, contact sounds and a DSP host. All code here is view-only. Sim code never imports it.
 
 ## Scope
-- **In scope:** view sync and its netFix smoothing, the asset store and loader, anim tables, instanced meshes and crowds. Also in scope: three camera rigs, the projection helper and the audio service.
+- **In scope:** view sync and its netFix smoothing, the asset store and loader, anim tables, instanced meshes and crowds. Also in scope: three camera rigs, the projection helper, the audio service, cues, contact sounds and the DSP host.
 - **Out of scope:** the material compiler, `warm`, `instancedShadows` and `disposeTree` (the view-render feature, F06, outline only). The `bindGesture` input module is in the [view-input spec](view-input.md). The World is in the [sim-world-physics spec](sim-world-physics.md). The `netFix` source is in the [net-replication spec](net-replication.md).
 
 ## Terms
@@ -28,6 +28,10 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - **view sync record:** the per-entity record that view sync makes when the entity first appears. [src/view/sync/index.js:97] <!-- C-55 -->
 - **camera mount point:** the `{ p, look? }` object that the mount rig reads, in body space. A camera mount point is not a socket node. [src/view/camera/mount.js:1-3] <!-- C-187 -->
 - **crowd:** the group of one instanced mesh per anim-table part, made by `createCrowd`. [src/view/instancing/crowd.js:1] <!-- C-250 -->
+- **bus:** a named gain node between the sources and `master`. Each bus has a level and a list of active ducks. [src/view/audio/index.js:10; src/view/audio/index.js:20] <!-- C-271 -->
+- **duck:** a factor that multiplies the gain of a bus until the undo function of `audio.duck` runs. [src/view/audio/index.js:102-107] <!-- C-278 -->
+- **voice:** a long-lived audio emitter made by `audio.voice`. Sources connect to `voice.input`, and the audio service places the voice against the listener. [src/view/audio/index.js:128] <!-- C-265 -->
+- **cue:** a named sound made by `createCues`. A cue picks one of its clips and varies the gain and the rate. [src/view/audio/cues.js:1-3] <!-- C-267 -->
 
 ## Interfaces
 
@@ -87,13 +91,22 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 
 | Interface | Direction | Format | Evidence |
 | --- | --- | --- | --- |
-| `createAudio({ doc, flags, AudioContext, fetch, volume, limiter, positional })` | in | Returns the audio service | [src/view/audio/index.js:12] <!-- C-115 --> |
-| `audio.play(buffer, { gain = 1, rate = 1, pan = 0, at = null, when = 0, loop = false, offset = 0 })` | in | Returns `{ source, gain, stop(t = 0) }` or `null` | [src/view/audio/index.js:85; src/view/audio/index.js:101] <!-- C-133 C-138 --> |
-| `audio.load(url)` | in | Returns a promise of a decoded buffer | [src/view/audio/index.js:103-114] <!-- C-144 --> |
-| `audio.mute(on)`, `audio.muted`, `audio.unlocked` | in and out | `mute` returns the muted state. The other two are read-only getters. | [src/view/audio/index.js:115-119; src/view/audio/index.js:134-135] <!-- C-152 --> |
-| `audio.onUnlock(fn)`, `audio.onGesture(fn)` | in | Each returns a function that removes the callback | [src/view/audio/index.js:136-141] <!-- C-154 --> |
-| `audio.listen(obj)` | in | Sets the listener object. `listen(null)` clears it. The service reads its `position` and `matrixWorld`. | [src/view/audio/index.js:76-84; src/view/audio/index.js:143] <!-- C-143 --> |
-| `audio.distanceGain(x, y, z)`, `audio.dispose()` | in | Gain by planar distance, and cleanup | [src/view/audio/index.js:142] <!-- C-141 --> |
+| `createAudio({ doc, flags, AudioContext, fetch, volume, limiter, positional, buses })` | in | Returns the audio service | [src/view/audio/index.js:13] <!-- C-115 --> |
+| `audio.play(buffer, { gain = 1, rate = 1, pan = 0, at = null, when = 0, loop = false, offset = 0, bus = 'sfx' })` | in | Returns `{ source, gain, stop(t = 0) }` or `null` | [src/view/audio/index.js:108; src/view/audio/index.js:126] <!-- C-133 C-138 --> |
+| `audio.load(url)` | in | Returns a promise of a decoded buffer | [src/view/audio/index.js:155-166] <!-- C-144 --> |
+| `audio.mute(on)`, `audio.muted`, `audio.unlocked` | in and out | `mute` returns the muted state. The other two are read-only getters. | [src/view/audio/index.js:167-171; src/view/audio/index.js:187-188] <!-- C-152 --> |
+| `audio.onUnlock(fn)`, `audio.onGesture(fn)` | in | Each returns a function that removes the callback | [src/view/audio/index.js:189-194] <!-- C-154 --> |
+| `audio.listen(obj)` | in | Sets the listener object. `listen(null)` clears it. The service reads its `position` and `matrixWorld`. | [src/view/audio/index.js:87-90; src/view/audio/index.js:198] <!-- C-143 --> |
+| `audio.distanceGain(x, y, z)`, `audio.dispose()` | in | Gain by planar distance, and cleanup | [src/view/audio/index.js:83; src/view/audio/index.js:197] <!-- C-141 -->
+| `audio.bus(name)` | in | Returns the gain node of the bus, or `null` before the context exists | [src/view/audio/index.js:195] <!-- C-262 -->
+| `audio.volume(name, v)` | in and out | Reads a level when `v` is undefined. Otherwise sets the level. Returns the level. The name `'master'` is the game volume. | [src/view/audio/index.js:95-101; src/view/audio/index.js:196] <!-- C-263 -->
+| `audio.duck(name, { to = 0.3, attack = 0.05, release = 0.4 })` | in | Returns an undo function | [src/view/audio/index.js:102-107] <!-- C-264 -->
+| `audio.voice({ bus = 'sfx', gain = 1, follow = null })` | in | Returns a voice `{ input, follow, audible, stopped, place, pn, stop() }`, or `null` | [src/view/audio/index.js:128-141] <!-- C-265 -->
+| `audio.frame()` | in | Takes no argument. Places the voices that follow an object. The render pipeline calls it. | [src/view/audio/index.js:151-154; src/view/audio/index.js:197] <!-- C-266 -->
+| `createCues(audio, defs, { rng })` | in | Returns `{ ready, has(id), play(id, { gain = 1, rate = 1, at, when = 0 }) }` | [src/view/audio/cues.js:7; src/view/audio/cues.js:25-28] <!-- C-267 -->
+| `bindContactSounds(engine, cues, { min = 0.5, full = 20, gap = 0.12 })` | in | Returns the value of `engine.events.on`, which removes the handler | [src/view/audio/contacts.js:4; src/view/audio/contacts.js:14; test/audio-contacts.test.mjs:26] <!-- C-268 -->
+| `createDsp(audio, { name, Class, channels = 2, options = {}, AudioWorkletNode })` | in | Returns a promise of `{ node, mode, send(msg), dispose() }` | [src/view/audio/dsp.js:25; src/view/audio/dsp.js:36; src/view/audio/dsp.js:40] <!-- C-269 -->
+| `workletSource(name, Class)` | in | Returns the source text of an AudioWorklet module | [src/view/audio/dsp.js:7-15] <!-- C-270 --> |
 
 ## Behavior
 
@@ -261,30 +274,95 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - **B-133** `project` returns a fresh object when `out` is not given. [src/view/camera/project.js:3-4; src/view/camera/project.js:17] <!-- C-226 -->
 
 ### Audio
-- **B-134** On the first gesture, the service makes the AudioContext and the chain master, then mute gain, then compressor limiter, then destination. [src/view/audio/index.js:26-35; test/audio.test.mjs:7; test/audio.test.mjs:16] <!-- C-121 -->
-- **B-135** From creation until the context runs, the service listens on `doc`, in the capture phase, for pointerdown, pointerup, touchend, click and keydown. [src/view/audio/index.js:7; src/view/audio/index.js:58-59; src/view/audio/index.js:146] <!-- C-123 -->
-- **B-136** On a gesture, the service first calls each `onGesture` callback. It then makes the context if needed. When the context runs, the service settles. Otherwise the service tries to resume the context. [src/view/audio/index.js:52-57; test/audio.test.mjs:32] <!-- C-124 -->
-- **B-137** When the context runs, the service stops listening for gestures. The first time, it calls and clears every `onUnlock` callback. [src/view/audio/index.js:43-47; test/audio.test.mjs:7] <!-- C-125 -->
-- **B-138** `onUnlock` callbacks do not fire again after a later unlock, because the service keeps its unlocked state. [src/view/audio/index.js:19; src/view/audio/index.js:46; test/audio-lifecycle.test.mjs:12] <!-- C-130 -->
-- **B-139** When a resume is refused, the service warns once `audio: resume refused (the next gesture tries again)` and keeps listening. [src/view/audio/index.js:48-51; test/audio.test.mjs:32] <!-- C-126 -->
-- **B-140** When the document becomes hidden and the context runs, the service suspends the context. A failed suspend warns once `audio: suspend failed`. [src/view/audio/index.js:64-70; test/audio-lifecycle.test.mjs:5] <!-- C-127 -->
-- **B-141** When the document becomes visible, or the window fires `pageshow`, the service checks the context. The service acts only when the context is not running, not closed, and the document is not hidden. Then the service listens for gestures again and tries to resume. [src/view/audio/index.js:60-66; src/view/audio/index.js:145; test/audio-lifecycle.test.mjs:12; test/audio-lifecycle.test.mjs:20] <!-- C-128 -->
-- **B-142** When the context leaves running while the document is visible and the context is not closed, the service listens for gestures again. An example is iOS `interrupted`. A change to running settles. [src/view/audio/index.js:71-75; test/audio-lifecycle.test.mjs:26] <!-- C-129 -->
-- **B-143** `play` returns null when `buffer` is missing, no context exists, or the context is not running. [src/view/audio/index.js:86; test/audio-clips.test.mjs:23; test/audio-clips.test.mjs:55] <!-- C-134 -->
-- **B-144** `play` connects a buffer source to a gain node, and the gain node to `master`. It sets rate, loop and gain. It starts at `currentTime + when` with `offset`. [src/view/audio/index.js:93-100; test/audio-clips.test.mjs:23] <!-- C-135 -->
-- **B-145** When the pan is not 0 and the context has `createStereoPanner`, `play` adds a stereo panner. It clamps the pan to -1..1. [src/view/audio/index.js:96-98; test/audio-clips.test.mjs:35] <!-- C-136 -->
-- **B-146** When the source ends, `play` disconnects the source, gain and panner nodes. [src/view/audio/index.js:99; test/audio-clips.test.mjs:23] <!-- C-137 -->
-- **B-147** The `stop(t = 0)` of a played sound calls `source.stop` at `currentTime + t`. It ignores the error of a stopped source. [src/view/audio/index.js:101] <!-- C-138 -->
-- **B-148** When `at` is set, `play` multiplies the gain by `distanceGain(x, 0, z)`. The value `at` is an array `[x, y, z]` or an object with `x` and `z`. [src/view/audio/index.js:88-90; test/audio-clips.test.mjs:41] <!-- C-139 -->
-- **B-149** When `at` is set, `positional.pan` is not 0 and a listener exists, `play` adds `panOf(x, z)` times `positional.pan` to the pan. [src/view/audio/index.js:91; test/audio-clips.test.mjs:41] <!-- C-140 -->
-- **B-150** Without a listener, `distanceGain` returns `positional.max`. Otherwise it returns `ref / (planar distance + near)` clamped to `min..max`. It ignores `y`. [src/view/audio/index.js:76-80; test/audio-clips.test.mjs:41] <!-- C-141 -->
-- **B-151** `panOf` is the unit vector from the listener to the point, projected on the listener world x axis. The value is 0 when the distance is below 1e-6. [src/view/audio/index.js:81-84] <!-- C-142 -->
-- **B-152** `load` fetches at once and decodes once the context exists. It caches the promise by URL. [src/view/audio/index.js:4-5; src/view/audio/index.js:104; src/view/audio/index.js:110; test/audio-clips.test.mjs:8] <!-- C-145 -->
-- **B-153** A failed `load` removes its cache entry, so the load can be tried again. [src/view/audio/index.js:112; test/audio-clips.test.mjs:16] <!-- C-150 -->
-- **B-154** `mute(on)` ramps the mute gain to 0 or 1 with `setTargetAtTime` and a time constant of 0.02 s. It never changes `master`. [src/view/audio/index.js:117; test/audio.test.mjs:24] <!-- C-153 -->
-- **B-155** When the service has already unlocked, `onUnlock(fn)` calls `fn` at once. It returns a function that does nothing. [src/view/audio/index.js:138; test/audio.test.mjs:49] <!-- C-155 -->
-- **B-156** `onGesture` callbacks run inside each gesture, so they can prime speech or similar. They run only while the service listens for gestures. [src/view/audio/index.js:54; test/audio.test.mjs:32] <!-- C-157 -->
-- **B-157** The second call of `audio.dispose()` does nothing. The first call removes the gesture, `visibilitychange` and `pageshow` listeners. It clears the callbacks and the listener, and closes the context. [src/view/audio/index.js:120-130; test/audio-lifecycle.test.mjs:34] <!-- C-158 -->
+- **B-134** On the first gesture, the service makes the AudioContext and this chain. Each bus gain node feeds `master`. Then `master` feeds the mute gain, the compressor limiter and the destination. [src/view/audio/index.js:32-41; test/audio.test.mjs:16; test/audio-buses.test.mjs:6] <!-- C-121 -->
+- **B-135** From creation until the context runs, the service listens on `doc`, in the capture phase, for pointerdown, pointerup, touchend, click and keydown. [src/view/audio/index.js:7; src/view/audio/index.js:65; src/view/audio/index.js:201] <!-- C-123 -->
+- **B-136** On a gesture, the service first calls each `onGesture` callback. It then makes the context if needed. When the context runs, the service settles. Otherwise the service tries to resume the context. [src/view/audio/index.js:59-64; test/audio.test.mjs:32] <!-- C-124 -->
+- **B-137** When the context runs, the service stops listening for gestures. The first time, it calls and clears every `onUnlock` callback. [src/view/audio/index.js:50-54; test/audio.test.mjs:7] <!-- C-125 -->
+- **B-138** `onUnlock` callbacks do not fire again after a later unlock, because the service keeps its unlocked state. [src/view/audio/index.js:25; src/view/audio/index.js:53; test/audio-lifecycle.test.mjs:12] <!-- C-130 -->
+- **B-139** When a resume is refused, the service warns once `audio: resume refused (the next gesture tries again)` and keeps listening. [src/view/audio/index.js:55-58; test/audio.test.mjs:32] <!-- C-126 -->
+- **B-140** When the document becomes hidden and the context runs, the service suspends the context. A failed suspend warns once `audio: suspend failed`. [src/view/audio/index.js:71-77; test/audio-lifecycle.test.mjs:5] <!-- C-127 -->
+- **B-141** When the document becomes visible, or the window fires `pageshow`, the service checks the context. The service acts only when the context is not running, not closed, and the document is not hidden. Then the service listens for gestures again and tries to resume. [src/view/audio/index.js:67-70; src/view/audio/index.js:73; src/view/audio/index.js:200; test/audio-lifecycle.test.mjs:12; test/audio-lifecycle.test.mjs:20] <!-- C-128 -->
+- **B-142** When the context leaves running while the document is visible and the context is not closed, the service listens for gestures again. An example is iOS `interrupted`. A change to running settles. [src/view/audio/index.js:78-82; test/audio-lifecycle.test.mjs:26] <!-- C-129 -->
+- **B-143** `play` returns null when `buffer` is missing, no context exists, or the context is not running. [src/view/audio/index.js:110; test/audio-clips.test.mjs:23; test/audio-clips.test.mjs:55] <!-- C-134 -->
+- **B-144** `play` connects a buffer source to a gain node. Then `play` connects the gain node to the node of the bus, through the panner when `play` adds one. `play` sets rate, loop and gain. `play` starts at `currentTime + when` with `offset`. [src/view/audio/index.js:118-125; test/audio-clips.test.mjs:23; test/audio-buses.test.mjs:31] <!-- C-135 -->
+- **B-145** When the pan is not 0 and the context has `createStereoPanner`, `play` adds a stereo panner. It clamps the pan to -1..1. [src/view/audio/index.js:121-123; test/audio-clips.test.mjs:35] <!-- C-136 -->
+- **B-146** When the source ends, `play` disconnects the source, gain and panner nodes. [src/view/audio/index.js:124; test/audio-clips.test.mjs:23] <!-- C-137 -->
+- **B-147** The `stop(t = 0)` of a played sound calls `source.stop` at `currentTime + t`. It ignores the error of a stopped source. [src/view/audio/index.js:126] <!-- C-138 -->
+- **B-148** When `at` is set, `play` multiplies the gain by `distanceGain(x, 0, z)`. The value `at` is an array `[x, y, z]` or an object with `x` and `z`. [src/view/audio/index.js:112-115; test/audio-clips.test.mjs:41] <!-- C-139 -->
+- **B-149** When `at` is set, `positional.pan` is not 0 and a listener exists, `play` adds `panOf(x, z)` times `positional.pan` to the pan. [src/view/audio/index.js:116; test/audio-clips.test.mjs:41] <!-- C-140 -->
+- **B-150** Without a listener, `distanceGain` returns `positional.max`. Otherwise it returns `ref / (planar distance + near)` clamped to `min..max`. It ignores `y`. [src/view/audio/index.js:83-87; test/audio-clips.test.mjs:41] <!-- C-141 -->
+- **B-151** `panOf` is the unit vector from the listener to the point, projected on the listener world x axis. The value is 0 when the distance is below 1e-6. [src/view/audio/index.js:88-91] <!-- C-142 -->
+- **B-152** `load` fetches at once and decodes once the context exists. It caches the promise by URL. [src/view/audio/index.js:4-5; src/view/audio/index.js:156; src/view/audio/index.js:162; src/view/audio/index.js:165; test/audio-clips.test.mjs:8] <!-- C-145 -->
+- **B-153** A failed `load` removes its cache entry, so the load can be tried again. [src/view/audio/index.js:164; test/audio-clips.test.mjs:16] <!-- C-150 -->
+- **B-154** `mute(on)` ramps the mute gain to 0 or 1 with `setTargetAtTime` and a time constant of 0.02 s. It never changes `master`. [src/view/audio/index.js:169; test/audio.test.mjs:24] <!-- C-153 -->
+- **B-155** When the service has already unlocked, `onUnlock(fn)` calls `fn` at once. It returns a function that does nothing. [src/view/audio/index.js:191; test/audio.test.mjs:49] <!-- C-155 -->
+- **B-156** `onGesture` callbacks run inside each gesture, so they can prime speech or similar. They run only while the service listens for gestures. [src/view/audio/index.js:61; src/view/audio/index.js:65-66; test/audio.test.mjs:32] <!-- C-157 -->
+- **B-157** The second call of `audio.dispose()` does nothing. The first call removes the gesture, `visibilitychange` and `pageshow` listeners. The first call also stops every voice and clears the callbacks and the listener. Then the first call clears `onstatechange` and closes the context. [src/view/audio/index.js:172-183; test/audio-lifecycle.test.mjs:34; test/audio-voices.test.mjs:44] <!-- C-158 -->
+
+### Audio buses
+- **B-158** The `buses` option names the buses, and the default is `sfx`, `music`, `ui`, `voice`, `ambience`. Each name must be a non-empty string other than `'master'`, and no name repeats. Otherwise `createAudio` throws. [src/view/audio/index.js:10; src/view/audio/index.js:19; test/audio-buses.test.mjs:38] <!-- C-271 -->
+- **B-159** When the service makes the context, it makes one gain node per bus. The service sets the gain to the bus level times the duck factors and connects the node to `master`. [src/view/audio/index.js:40; test/audio-buses.test.mjs:6] <!-- C-272 -->
+- **B-160** `audio.bus(name)` returns the gain node of the bus, or `null` before the context exists. A name that is not a bus throws. [src/view/audio/index.js:92; src/view/audio/index.js:195; test/audio-buses.test.mjs:6] <!-- C-262 C-273 -->
+- **B-161** `volume('master', v)` sets the master level. The service keeps the level before the context exists and uses it as the first `master` gain. When `master` exists, the service ramps its gain with a time constant of 0.02 s. [src/view/audio/index.js:23; src/view/audio/index.js:37; src/view/audio/index.js:97; test/audio-buses.test.mjs:13] <!-- C-274 -->
+- **B-162** `volume(bus, v)` stores the level of the bus. When the bus node exists, the service ramps the bus gain with a time constant of 0.02 s. The call returns the stored level. [src/view/audio/index.js:94; src/view/audio/index.js:98-100; test/audio-buses.test.mjs:13] <!-- C-275 -->
+- **B-163** The gain of a bus is its level times every active duck factor of the bus. [src/view/audio/index.js:93; test/audio-buses.test.mjs:23] <!-- C-277 -->
+- **B-164** `duck` adds the factor `to` to the active ducks of the bus. Then `duck` ramps the bus gain with a time constant of `attack / 3` s. Ducks multiply. [src/view/audio/index.js:102-104; test/audio-buses.test.mjs:23] <!-- C-278 -->
+- **B-165** The undo function of `duck` removes the first active duck with that factor. Then the undo function ramps the bus gain with a time constant of `release / 3` s. A second call does nothing. [src/view/audio/index.js:105-106; test/audio-buses.test.mjs:23] <!-- C-279 -->
+- **B-166** `play` checks the bus name before it checks the context. A name that is not a bus throws even before audio runs. The `bus` option defaults to `'sfx'`. [src/view/audio/index.js:108-110; test/audio-buses.test.mjs:31] <!-- C-280 -->
+
+### Audio voices
+- **B-167** `voice` returns null when the context does not exist or does not run. The bus name check comes first. [src/view/audio/index.js:129-130; test/audio-voices.test.mjs:9] <!-- C-281 -->
+- **B-168** A voice is an input gain node, then a place gain node, then a stereo panner, then the bus node. The input gain is the `gain` option. When `createStereoPanner` is missing, the place node connects to the bus node. [src/view/audio/index.js:131-133; test/audio-voices.test.mjs:9] <!-- C-282 -->
+- **B-169** A new voice has `audible` true and `stopped` false. The service adds the voice to its voice list and places the voice at once. [src/view/audio/index.js:134; src/view/audio/index.js:140; test/audio-voices.test.mjs:9] <!-- C-283 -->
+- **B-170** A voice without `follow` keeps place gain 1 and `audible` true. When no listener exists, a voice with `follow` also keeps its values. [src/view/audio/index.js:144; test/audio-voices.test.mjs:39] <!-- C-284 -->
+- **B-171** For a voice with `follow`, the service reads the position from `follow.position`, or from `follow` itself. The voice is audible when the planar distance to the listener is at most `positional.cull`. [src/view/audio/index.js:145-146; test/audio-voices.test.mjs:20; test/audio-voices.test.mjs:30] <!-- C-285 -->
+- **B-172** The place gain of an audible voice is `distanceGain(x, 0, z)`. The place gain of an inaudible voice is 0. [src/view/audio/index.js:147; test/audio-voices.test.mjs:30] <!-- C-286 -->
+- **B-173** A new voice takes its place gain at once. During `frame()`, the place gain and the pan glide with `setTargetAtTime` and a time constant of 0.05 s. [src/view/audio/index.js:140; src/view/audio/index.js:143; src/view/audio/index.js:148; src/view/audio/index.js:153] <!-- C-287 -->
+- **B-174** When a voice has `follow`, a listener exists, the voice has a panner and `positional.pan` is not 0, the voice pan is `panOf(x, z)` times `positional.pan`. The service clamps the pan to -1..1. [src/view/audio/index.js:144; src/view/audio/index.js:149; test/audio-voices.test.mjs:20] <!-- C-288 -->
+- **B-175** `frame()` does nothing after dispose or before the context exists. Otherwise `frame()` places every voice. The header comment says `frame()` allocates nothing (R-8). [src/view/audio/index.js:151-154; test/audio-voices.test.mjs:44] <!-- C-289 -->
+- **B-176** The second call of `voice.stop()` does nothing. The first call sets `stopped`, disconnects the input, place and panner nodes, and removes the voice from the voice list. [src/view/audio/index.js:135-139; test/audio-voices.test.mjs:44] <!-- C-290 -->
+- **B-177** When `at` is set and a listener exists, `play` returns null if the planar distance to the listener is above `positional.cull`. Without a listener, `play` applies no cull. [src/view/audio/index.js:112-114; test/audio-voices.test.mjs:30] <!-- C-291 -->
+- **B-178** The render pipeline calls `view.audio.frame()` each frame, unless the pipeline is disposed. With gfx, the call comes after `view.sync.frame(alpha)`. Without gfx, the pipeline calls only `view.audio.frame()`. [src/view/render/pipeline.js:62; src/view/render/pipeline.js:87] <!-- C-292 -->
+
+### Cues
+- **B-179** `createCues` throws `createCues: rng with next() required (pass engine.rng('fx'))` when `rng` has no `next` function. [src/view/audio/cues.js:8] <!-- C-293 -->
+- **B-180** A cue def may have only the keys `src`, `gain`, `gainJitter`, `rate`, `rateJitter`, `bus`, `cooldown` and `max`. Another key throws. [src/view/audio/cues.js:4; src/view/audio/cues.js:11; test/audio-cues.test.mjs:39] <!-- C-294 -->
+- **B-181** A cue `src` is a URL string or a non-empty list of non-empty URL strings. Otherwise `createCues` throws. [src/view/audio/cues.js:12-13; test/audio-cues.test.mjs:39] <!-- C-295 -->
+- **B-182** A cue `max` defaults to 4. A `max` that is not an integer of at least 1 throws. [src/view/audio/cues.js:14-15; test/audio-cues.test.mjs:39] <!-- C-296 -->
+- **B-183** A cue `bus` defaults to `'sfx'`. `createCues` calls `audio.bus(bus)`, so a name that is not a bus throws at creation. [src/view/audio/cues.js:16; test/audio-cues.test.mjs:39] <!-- C-297 -->
+- **B-184** `createCues` calls `audio.load` at once for every URL of every cue. Each decoded buffer joins its cue. `ready` rejects when one load fails, and the cue plays the clips that did load. [src/view/audio/cues.js:19; src/view/audio/cues.js:22-23; test/audio-cues.test.mjs:47] <!-- C-299 -->
+- **B-185** `cues.has(id)` is true when the cue is defined. [src/view/audio/cues.js:27; test/audio-cues.test.mjs:12] <!-- C-300 -->
+- **B-186** `cues.play` returns null when audio is not unlocked or no clip of the cue has decoded. [src/view/audio/cues.js:31; test/audio-cues.test.mjs:12] <!-- C-302 -->
+- **B-187** `cues.play` returns null when the context time minus the time of the last play is below the cooldown. The last play time starts at -Infinity. [src/view/audio/cues.js:17-18; src/view/audio/cues.js:32-33; test/audio-cues.test.mjs:28] <!-- C-303 -->
+- **B-188** `cues.play` picks the clip at index `floor(rng.next() * clip count)`, limited to the last clip. The call draws from `rng` once for each play that passes the cooldown, even for one clip. [src/view/audio/cues.js:34; test/audio-cues.test.mjs:20] <!-- C-304 -->
+- **B-189** The play gain is the cue gain times the call gain times a jitter. The play rate is the cue rate times the call rate times a jitter. A jitter is `1 + j * (2 * rng.next() - 1)`, and it is 1 without a draw when `j` is 0. [src/view/audio/cues.js:24; src/view/audio/cues.js:35; test/audio-cues.test.mjs:20] <!-- C-305 -->
+- **B-190** `cues.play` drops the live plays that ended. When the live count is at `max`, it stops the oldest live play. Both happen before `audio.play` runs. [src/view/audio/cues.js:36-37; test/audio-cues.test.mjs:32] <!-- C-306 -->
+- **B-191** `cues.play` calls `audio.play(buffer, { gain, rate, at, when, bus })`. When `audio.play` returns null, `cues.play` returns null and records nothing. [src/view/audio/cues.js:38-39] <!-- C-307 -->
+- **B-192** After a successful play, the cue records the play time and a live entry that ends at `now + when + buffer duration / rate`. `cues.play` returns the handle of `audio.play`. [src/view/audio/cues.js:40-41; test/audio-cues.test.mjs:32] <!-- C-308 -->
+
+### Contact sounds
+- **B-193** `bindContactSounds` throws when `engine.events.on` is missing, when `cues.play` or `cues.has` is missing, or unless `min >= 0` and `full > min`. [src/view/audio/contacts.js:5-7; test/audio-contacts.test.mjs:33] <!-- C-309 -->
+- **B-194** The contact handler ignores events that are not type `'contact'`. The handler also ignores contact events whose `impulse` is not at least `min`, including a missing or NaN `impulse`. [src/view/audio/contacts.js:15; test/audio-contacts.test.mjs:20] <!-- C-310 -->
+- **B-195** The cue id comes from `engine.world.materials`. With no registry the id is null. With two materials the id is `reg.pair(a, b).sound`. With one material the id is `reg.get(m).sound`. With none the id is null. [src/view/audio/contacts.js:9-13; src/view/audio/contacts.js:16; test/audio-contacts.test.mjs:15; test/audio-contacts.test.mjs:20] <!-- C-311 -->
+- **B-196** The handler plays nothing when the cue id is missing or `cues.has(id)` is false. [src/view/audio/contacts.js:17; test/audio-contacts.test.mjs:20] <!-- C-312 -->
+- **B-197** The handler keys a pair by `e.a` and `e.b` in that order. The handler skips a contact when `engine.time.sim` minus the last time of the key is below `gap`. The handler records the time before it calls `cues.play`. [src/view/audio/contacts.js:18-19; src/view/audio/contacts.js:21; test/audio-contacts.test.mjs:26] <!-- C-313 -->
+- **B-198** When the pair map holds more than 512 keys, the handler removes the keys at least `gap` old. Then the handler records the new key. [src/view/audio/contacts.js:20] <!-- C-314 -->
+- **B-199** The handler calls `cues.play(id, { gain, at: e.point })`. The `gain` is `min(1, (impulse - min) / (full - min))`. [src/view/audio/contacts.js:22; test/audio-contacts.test.mjs:15] <!-- C-315 -->
+
+### DSP host
+- **B-200** `workletSource` returns text that defines `C` as the source of `Class`. The text registers a processor named `name` that extends `AudioWorkletProcessor`. The processor builds `new C(sampleRate, processorOptions)`. [src/view/audio/dsp.js:7-10; test/audio-dsp.test.mjs:14] <!-- C-316 -->
+- **B-201** The processor sends each port message to `setParams`, except `{ type: 'dispose' }`, which ends the processor. Each `process` call renders into output channel 0 and channel 1 (null when absent). [src/view/audio/dsp.js:11-12; test/audio-dsp.test.mjs:14] <!-- C-317 -->
+- **B-202** `createDsp` rejects when `name` is not a string of word characters and hyphens. `createDsp` rejects when `Class` lacks `render` or `setParams` on its prototype. `createDsp` rejects when `audio.ctx` is null. [src/view/audio/dsp.js:26-29; test/audio-dsp.test.mjs:50] <!-- C-318 C-319 C-320 -->
+- **B-203** `createDsp` registers each name once per context. A second call with the same `Class` reuses the load result, so `addModule` runs once per context and name. [src/view/audio/dsp.js:5; src/view/audio/dsp.js:30-33; test/audio-dsp.test.mjs:23] <!-- C-321 -->
+- **B-204** A name already registered on the context with another `Class` makes `createDsp` reject. [src/view/audio/dsp.js:32; test/audio-dsp.test.mjs:50] <!-- C-322 -->
+- **B-205** When the context has no `audioWorklet`, or `AudioWorkletNode` is not a function, the module load warns and reports failure. The warning is `audio: no AudioWorklet; '<name>' runs on the main thread`. [src/view/audio/dsp.js:18; test/audio-dsp.test.mjs:35] <!-- C-323 -->
+- **B-206** Otherwise the module load adds the `workletSource` text through a Blob URL with `audioWorklet.addModule`. The module load then revokes the URL. When `addModule` fails, it warns and reports failure. [src/view/audio/dsp.js:19-22; test/audio-dsp.test.mjs:35] <!-- C-324 -->
+- **B-207** When the module loaded, `createDsp` makes an `AudioWorkletNode` with 0 inputs, 1 output, `outputChannelCount` `[channels]` and `processorOptions` set to `options`. The returned `mode` is `'worklet'`. [src/view/audio/dsp.js:34-36; test/audio-dsp.test.mjs:23] <!-- C-325 -->
+- **B-208** In `'worklet'` mode, `send` posts the message to the port. `dispose` posts `{ type: 'dispose' }` and disconnects the node. [src/view/audio/dsp.js:36; test/audio-dsp.test.mjs:23] <!-- C-325 -->
+- **B-209** When the module did not load, `createDsp` runs `new Class(ctx.sampleRate, options)` behind a ScriptProcessor. The ScriptProcessor has buffer size 1024, 1 input and `channels` outputs. `mode` is `'script'`. [src/view/audio/dsp.js:38-40; test/audio-dsp.test.mjs:35] <!-- C-326 -->
+- **B-210** In `'script'` mode, each audio process event renders channel 0 and channel 1 (null when `channels` is 1). `send` calls `setParams`. `dispose` clears `onaudioprocess` and disconnects the node. [src/view/audio/dsp.js:39-40; test/audio-dsp.test.mjs:35] <!-- C-326 -->
+- **B-211** `createDsp` does not connect the returned node to another node. The caller connects the node, for example to a voice input. (inferred) [src/view/audio/dsp.js:34-40; test/audio-dsp-e2e.test.mjs:46] <!-- C-327 -->
+- **B-212** The `Class` source runs in the worklet scope, so the `Class` must name nothing outside itself. [src/view/audio/dsp.js:1-4; src/view/audio/dsp.js:8] <!-- C-328 -->
 
 ## Data and state
 - View sync keeps one view sync record per entity, in an array and a Map by id. A steady-state frame allocates nothing. A new entity makes its record and, when drawn, its Object3D. Part binding makes matrices once. The first instanced write makes one Vector3 and one Quaternion. Instanced frames make no three.js objects and retain nothing. [src/view/sync/index.js:17-18; src/view/sync/index.js:45; test/sync.test.mjs:63; test/sync-parts.test.mjs:43] <!-- C-55 -->
@@ -292,7 +370,12 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 - An offset is a plain object `{ px, py, pz, qx, qy, qz, qw, left, seq }`. It starts with identity rotation, `left` 0 and `seq` -1. The code makes it once per entity. [src/view/sync/smooth.js:4-5] <!-- C-59 -->
 - The asset store holds three Maps: file promises by URL, tracked promises by key, and frozen templates by key. The store also holds the set of skinned keys. The returned object is not frozen. [src/view/assets/index.js:15-18; src/view/assets/index.js:126-127] <!-- C-94 -->
 - `assets.progress` is `{ loaded, total, bytes }`. Each key counts once. `bytes` adds the manifest entry `bytes`, or 0 when it has none. [src/view/assets/index.js:19; src/view/assets/index.js:70-78; test/assets.test.mjs:34] <!-- C-81 -->
-- `audio.ctx` and `audio.master` are null until the first gesture makes the context. [src/view/audio/index.js:6; src/view/audio/index.js:133; test/audio.test.mjs:7] <!-- C-122 -->
+- `audio.ctx` and `audio.master` are null until the first gesture makes the context. [src/view/audio/index.js:6; src/view/audio/index.js:41; src/view/audio/index.js:186; test/audio.test.mjs:7] <!-- C-122 -->
+- The audio service keeps one level and one list of active ducks for each bus. The bus gain is the level times the duck factors. [src/view/audio/index.js:20-21; src/view/audio/index.js:93] <!-- C-277 -->
+- The audio service keeps one list of live voices. A voice leaves the list when its `stop()` runs. [src/view/audio/index.js:22; src/view/audio/index.js:138] <!-- C-283 C-290 -->
+- A cue keeps its decoded clips, the time of its last play and a list of live plays. [src/view/audio/cues.js:17-18; src/view/audio/cues.js:40] <!-- C-308 -->
+- The contact handler keeps a Map from the pair key `<a>|<b>` to the engine time of the last play. [src/view/audio/contacts.js:8; src/view/audio/contacts.js:18-21] <!-- C-313 -->
+- The DSP host keeps one registry per context. The registry maps each name to its `Class` and its load result. [src/view/audio/dsp.js:5; src/view/audio/dsp.js:30-33] <!-- C-321 -->
 - `rig.state` of the orbit rig is the live pose `{ tx, ty, tz, yaw, pitch, dist, chaseOff }`. `rig.limits` is `{ pitchMin, pitchMax, min, max, bounds }`. Both can be read and written. [src/view/camera/orbit.js:1-3; src/view/camera/orbit.js:24-25; test/camera-orbit.test.mjs:63] <!-- C-194 -->
 
 ## Configuration
@@ -301,11 +384,18 @@ See the [glossary](_meta/glossary.md). The terms below are specific to this feat
 | --- | --- | --- | --- |
 | `SMOOTH_MS` (view sync) | 150 ms | Smoothing time of a fix. Live value is `world.net.tunables[e.net].smoothMs` when the kind has one. | [src/view/sync/index.js:25; src/view/sync/index.js:207; src/view/sync/index.js:221; test/sync-netfix.test.mjs:24] <!-- C-38 --> |
 | `base` (assets) | `'./assets/'` | URL prefix for model files. A trailing `/` is added. | [src/view/assets/index.js:11; src/view/assets/index.js:13] <!-- C-67 C-69 --> |
-| `limiter` (audio) | threshold -14, knee 24, ratio 4, attack 0.005, release 0.2 | Compressor limiter settings. The option overrides per key. | [src/view/audio/index.js:3; src/view/audio/index.js:8; src/view/audio/index.js:17; src/view/audio/index.js:32] <!-- C-118 --> |
-| `positional` (audio) | ref 18, near 10, min 0.05, max 0.6, pan 0 | Distance gain and pan settings. The option overrides per key. | [src/view/audio/index.js:9; src/view/audio/index.js:17] <!-- C-119 --> |
-| `volume` (audio) | 0.55 | Gain of `master`. | [src/view/audio/index.js:12; src/view/audio/index.js:31] <!-- C-120 --> |
-| `flags.mute` (audio) | false | When true, the service starts muted. | [src/view/audio/index.js:19; test/audio.test.mjs:24] <!-- C-120 --> |
-| `AudioContext` and `fetch` (audio) | `window.AudioContext`, then `window.webkitAudioContext`. `window.fetch`, then `globalThis.fetch`. | A value of false for `AudioContext` means no Web Audio. | [src/view/audio/index.js:14-16] <!-- C-117 --> |
+| `limiter` (audio) | threshold -14, knee 24, ratio 4, attack 0.005, release 0.2 | Compressor limiter settings. The option overrides per key. | [src/view/audio/index.js:8; src/view/audio/index.js:18; src/view/audio/index.js:38] <!-- C-118 --> |
+| `positional` (audio) | ref 18, near 10, min 0.05, max 0.6, pan 0, cull Infinity | Distance gain, pan and cull settings. The option overrides per key. | [src/view/audio/index.js:9; src/view/audio/index.js:18] <!-- C-119 --> |
+| `volume` (audio) | 0.55 | First gain of `master`. | [src/view/audio/index.js:13; src/view/audio/index.js:23; src/view/audio/index.js:37] <!-- C-120 --> |
+| `flags.mute` (audio) | false | When true, the service starts muted. | [src/view/audio/index.js:25; test/audio.test.mjs:24] <!-- C-120 --> |
+| `AudioContext` and `fetch` (audio) | `window.AudioContext`, then `window.webkitAudioContext`. `window.fetch`, then `globalThis.fetch`. | A value of false for `AudioContext` means no Web Audio. | [src/view/audio/index.js:15-17] <!-- C-117 -->
+| `buses` (audio) | `sfx`, `music`, `ui`, `voice`, `ambience` | Names of the buses. | [src/view/audio/index.js:10; src/view/audio/index.js:13; src/view/audio/index.js:19] <!-- C-271 -->
+| Bus level | 1 | Start level of each bus. `audio.volume` changes it. | [src/view/audio/index.js:21; src/view/audio/index.js:95-101] <!-- C-275 -->
+| `duck` options (audio) | to 0.3, attack 0.05, release 0.4 | Factor, and the times that set the ramp time constants (`attack / 3` and `release / 3`). | [src/view/audio/index.js:102-106] <!-- C-278 C-279 -->
+| `voice` options (audio) | bus `'sfx'`, gain 1, follow null | Bus, input gain and the followed object. | [src/view/audio/index.js:128] <!-- C-265 -->
+| Cue def keys | gain 1, gainJitter 0, rate 1, rateJitter 0, cooldown 0 s, max 4, bus `'sfx'` | Values of a cue. `src` has no default. | [src/view/audio/cues.js:14; src/view/audio/cues.js:16-17] <!-- C-298 -->
+| `bindContactSounds` options | min 0.5, full 20, gap 0.12 | Impulse range of the gain and the time between plays of a pair. | [src/view/audio/contacts.js:4] <!-- C-268 -->
+| `createDsp` options | channels 2, options `{}`, `AudioWorkletNode` is `globalThis.AudioWorkletNode` | Output channel count, class options and the worklet node class. | [src/view/audio/dsp.js:25] <!-- C-269 --> |
 | Chase `'heading'` defaults | distance 12, height 10.2, lag 3, lookAhead 11, lookHeight 0.8, ease 6, slide 2, portrait 1.25, portraitAspect 0.9, shakeTime 0.25 | Fill undefined keys of `opts`. | [src/view/camera/chase.js:18] <!-- C-164 --> |
 | Chase `'travel'` defaults | distance 6.8, height 2.4, lag 3.5, lookAhead 3, lookHeight 0.6, ease 8, lookEase 12, blendFrom 3, blendSpan 20, blendMax 0.55, shakeTime 0.25 | Fill undefined keys of `opts`. | [src/view/camera/chase.js:19] <!-- C-165 --> |
 | Chase `'travel'` extra defaults | fovAdd 2, fovSpeed 0.25, fovMax 10, orbitRadius 9, orbitHeight 3.2, orbitLook 0.4, orbitSpeed 0.12, orbitStart 0.6, orbitFovAdd -5 | Fill undefined keys of `opts`. | [src/view/camera/chase.js:19-20] <!-- C-166 --> |
@@ -361,23 +451,42 @@ All errors are thrown `Error` objects unless the row says RangeError or a reject
 | orbit `ray` | No element known | `orbit.ray: no element (pass canvas, or bindGesture first)` | [src/view/camera/orbit.js:61] <!-- C-207 --> |
 | orbit `bindGesture` | No element | `orbit.bindGesture: element required` | [src/view/camera/orbit.js:70] <!-- C-208 --> |
 | `makeProject` | No camera, or canvas has no `getBoundingClientRect` | `makeProject: camera required`, `makeProject: canvas required` | [src/view/camera/project.js:8-9] <!-- C-221 --> |
-| `createAudio` | `doc` has no `addEventListener` | `createAudio: doc required` | [src/view/audio/index.js:13] <!-- C-116 --> |
-| audio context | No AudioContext class, or the constructor throws | The service stops listening, warns once `audio: no Web Audio`, and rejects its ready promise with `audio: no Web Audio (<reason>)`. | [src/view/audio/index.js:20-22; src/view/audio/index.js:29; src/view/audio/index.js:37-40] <!-- C-131 --> |
-| audio `load` | No fetch function | Rejects with `audio: no fetch in this page` | [src/view/audio/index.js:107] <!-- C-146 --> |
-| audio `load` | Response not ok | Rejects with `audio: load '<url>' failed (<status>)` | [src/view/audio/index.js:108] <!-- C-147 --> |
-| audio `load` | Decode fails | Rejects with `audio: decode '<url>' failed: <reason>` | [src/view/audio/index.js:111] <!-- C-148 --> |
-| audio `load` | No Web Audio | Rejects with the no Web Audio reason, because it waits for the ready promise | [src/view/audio/index.js:110; src/view/audio/index.js:39] <!-- C-151 --> |
-| audio messages | URL longer than 48 characters | The URL is cut to 45 characters plus `...` | [src/view/audio/index.js:10] <!-- C-149 --> |
-| audio callbacks | `onUnlock` or `onGesture` callback throws | Logs `audio: listener failed` with `console.error`. The other callbacks still run. | [src/view/audio/index.js:24] <!-- C-132 --> |
-| audio `onUnlock`, `onGesture` | Argument is not a function | `audio.onUnlock: function required`, `audio.onGesture: function required` | [src/view/audio/index.js:137; src/view/audio/index.js:141] <!-- C-156 --> |
-| audio `dispose` | Context close fails | Warns once `audio: close failed` | [src/view/audio/index.js:127] <!-- C-159 --> |
+| `createAudio` | `doc` has no `addEventListener` | `createAudio: doc required` | [src/view/audio/index.js:14] <!-- C-116 --> |
+| audio context | No AudioContext class, or the constructor throws | The service stops listening, warns once `audio: no Web Audio`, and rejects its ready promise with `audio: no Web Audio (<reason>)`. | [src/view/audio/index.js:29; src/view/audio/index.js:35; src/view/audio/index.js:44-47; test/audio.test.mjs:43] <!-- C-131 --> |
+| audio `load` | No fetch function | Rejects with `audio: no fetch in this page` | [src/view/audio/index.js:159] <!-- C-146 --> |
+| audio `load` | Response not ok | Rejects with `audio: load '<url>' failed (<status>)` | [src/view/audio/index.js:160] <!-- C-147 --> |
+| audio `load` | Decode fails | Rejects with `audio: decode '<url>' failed: <reason>` | [src/view/audio/index.js:163] <!-- C-148 --> |
+| audio `load` | No Web Audio | Rejects with the no Web Audio reason, because it waits for the ready promise | [src/view/audio/index.js:162; src/view/audio/index.js:46] <!-- C-151 --> |
+| audio messages | URL longer than 48 characters | The URL is cut to 45 characters plus `...` | [src/view/audio/index.js:11] <!-- C-149 --> |
+| audio callbacks | `onUnlock` or `onGesture` callback throws | Logs `audio: listener failed` with `console.error`. The other callbacks still run. | [src/view/audio/index.js:30; src/view/audio/index.js:53; src/view/audio/index.js:61] <!-- C-132 --> |
+| audio `onUnlock`, `onGesture` | Argument is not a function | `audio.onUnlock: function required`, `audio.onGesture: function required` | [src/view/audio/index.js:190; src/view/audio/index.js:194] <!-- C-156 --> |
+| audio `dispose` | Context close fails | Warns once `audio: close failed` | [src/view/audio/index.js:180-181] <!-- C-159 -->
+| `createAudio` | `buses` is not distinct non-empty names other than `'master'` | `createAudio: buses must be distinct names other than 'master'` | [src/view/audio/index.js:19] <!-- C-271 -->
+| audio `bus`, `volume`, `duck`, `play`, `voice` | Bus name is not a bus | `audio.<method>: unknown bus '<name>' (<bus names>)`. The `<method>` is the method name. | [src/view/audio/index.js:92; src/view/audio/index.js:98; src/view/audio/index.js:103; src/view/audio/index.js:109; src/view/audio/index.js:129; src/view/audio/index.js:195] <!-- C-273 -->
+| audio `volume` | `v` is not a finite number of at least 0 | `audio.volume: volume must be a number >= 0 (got <v>)`. The check comes before the bus name check. | [src/view/audio/index.js:96] <!-- C-276 -->
+| `createCues` | `rng` has no `next` function | `createCues: rng with next() required (pass engine.rng('fx'))` | [src/view/audio/cues.js:8] <!-- C-293 -->
+| `createCues` | A cue has a key that is not allowed | `createCues: cue '<id>' has no '<key>' (<keys>)` | [src/view/audio/cues.js:11] <!-- C-294 -->
+| `createCues` | Bad `src` | `createCues: cue '<id>': src must be a url or a non-empty list of urls` | [src/view/audio/cues.js:13] <!-- C-295 -->
+| `createCues` | Bad `max` | `createCues: cue '<id>': max must be an integer >= 1` | [src/view/audio/cues.js:15] <!-- C-296 -->
+| `cues.play` | Unknown cue id | `cues.play: unknown cue '<id>'` | [src/view/audio/cues.js:30] <!-- C-301 -->
+| `bindContactSounds` | `engine.events.on` is missing | `bindContactSounds: engine with events required` | [src/view/audio/contacts.js:5] <!-- C-309 -->
+| `bindContactSounds` | `cues.play` or `cues.has` is missing | `bindContactSounds: cues from createCues required` | [src/view/audio/contacts.js:6] <!-- C-309 -->
+| `bindContactSounds` | Not `min >= 0` and `full > min` | `bindContactSounds: need 0 <= min < full` | [src/view/audio/contacts.js:7] <!-- C-309 -->
+| `createDsp` | Bad `name` | Rejects with `createDsp: name must match [\w-]+` | [src/view/audio/dsp.js:26] <!-- C-318 -->
+| `createDsp` | `Class` lacks `render` or `setParams` | Rejects with `createDsp: Class must have render(L, R, n) and setParams(msg)` | [src/view/audio/dsp.js:27] <!-- C-319 -->
+| `createDsp` | `audio.ctx` is null | Rejects with `createDsp: no audio context yet (call it from audio.onUnlock)` | [src/view/audio/dsp.js:29] <!-- C-320 -->
+| `createDsp` | Name registered with another `Class` | Rejects with `createDsp: '<name>' is already registered with another class` | [src/view/audio/dsp.js:32] <!-- C-322 -->
+| DSP module load | No AudioWorklet, or `addModule` fails | Warns with `console.warn` and runs the class on the main thread | [src/view/audio/dsp.js:18; src/view/audio/dsp.js:21] <!-- C-323 C-324 --> |
 
 ## Dependencies
 - **Internal:** `bindGesture` from `src/view/gesture.js`, in the [view-input spec](view-input.md). The orbit rig makes three bindings: touch drag and pinch, mouse button 2, and mouse button 1. [src/view/camera/orbit.js:15; src/view/camera/orbit.js:96-100] <!-- C-219 -->
 - **Internal:** View sync, crowd and the asset store call `compiler.apply`, `instancedShadows`, `disposeTree` and `gfx.warm` from the view-render feature (F06). The F06 outline gives those interfaces. [src/view/sync/index.js:20; src/view/instancing/parts.js:11; src/view/assets/index.js:96] <!-- C-259 -->
 - **Internal:** View sync reads `world.with`, `world.xfPrev`, `world.partXfPrev`, `world.serial` and `world.net.tunables`. It reads the entity parts `xf`, `partXf`, `netFix`, `model`, `draw`, `paint`, `scale`, `coverage`, `tags` and `net`. [src/view/sync/index.js:149; src/view/sync/index.js:178; src/view/sync/index.js:207] <!-- C-260 -->
 - **Internal:** The asset store is view only. Headless engines and sim code have no assets. [src/view/assets/index.js:4] <!-- C-95 -->
-- **Internal:** The audio service is view only. Sim code never imports it. Each warning prints once per key through `console.warn`. [src/view/audio/index.js:6; src/view/audio/index.js:23] <!-- C-160 -->
+- **Internal:** The audio service is view only. Sim code never imports it. Each warning prints once per key through `console.warn`. [src/view/audio/index.js:6; src/view/audio/index.js:29] <!-- C-160 -->
+- **Internal:** The render pipeline in the view-render feature (F06) calls `view.audio.frame()` after `view.sync.frame(alpha)`. [src/view/render/pipeline.js:62; src/view/render/pipeline.js:87] <!-- C-292 -->
+- **Internal:** `bindContactSounds` reads `engine.events.on`, `engine.world.materials` (`pair`, `get` and the `sound` field), and `engine.time.sim`. The contact event fields are `a`, `b`, `materials`, `impulse` and `point`. [src/view/audio/contacts.js:5; src/view/audio/contacts.js:11-12; src/view/audio/contacts.js:16-18] <!-- C-311 C-313 -->
+- **Internal:** `createCues` needs an `rng` with `next()`. The header comment says to pass `engine.rng('fx')`. [src/view/audio/cues.js:2; src/view/audio/cues.js:8] <!-- C-293 -->
 - **External:** three, and `GLTFLoader` and the meshopt decoder from `three/addons`. [src/view/assets/loader.js:4-5; src/view/assets/index.js:5-6] <!-- C-261 -->
 
 <!-- related-specs -->
@@ -391,3 +500,6 @@ Related specs:
 ## Open questions and discrepancies
 - Open question: why does view sync start each instanced part at 16 instances? No source states the reason.
 - Open question: why does the shake jitter move only x and y of the wanted camera position? No source states the reason.
+- Open question: why does the contact handler prune its pair map only above 512 keys? No source states the reason.
+- Open question: why does `cues.play` stop the oldest live play before it knows that `audio.play` succeeds? No source states the reason.
+- Note: `docs/spec.md` [U-6] and [R-8] hold clarifications for [H-5]. A DSP class cannot reach `engine.rng`, and the engine does not control the structured clone of `postMessage`. The code of `dsp.js` does not show either rule. [docs/spec.md:311; docs/spec.md:382]

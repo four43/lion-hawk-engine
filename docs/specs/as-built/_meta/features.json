@@ -68,7 +68,7 @@
       "id": "F02",
       "slug": "defs-and-kits",
       "title": "Definitions and kits",
-      "summary": "Material registry, physics sidecar schema and net fields, plus the vehicle (raycast and tire backends), terrain, coverage, fx and glyph kits.",
+      "summary": "Material registry, physics sidecar schema and net fields, plus the vehicle kit (raycast and tire backends, the powertrain, and the engine sound view half), terrain, coverage, fx and glyph kits.",
       "paths": [
         "src/defs/**",
         "src/kits/**"
@@ -102,23 +102,30 @@
         "test/sidecar-collider.test.mjs",
         "test/sidecar.test.mjs",
         "test/view-alloc.test.mjs",
-        "test/world-base-materials.test.mjs"
+        "test/world-base-materials.test.mjs",
+        "test/kits/powertrain.test.mjs",
+        "test/kits/engine-dsp.test.mjs",
+        "test/kits/vehicle-sound.test.mjs",
+        "test/engine-sound-e2e.test.mjs"
       ],
       "docs": [
         "docs/spec.md",
         "docs/design.md",
         "docs/field-notes.md",
-        "CHANGELOG.md"
+        "CHANGELOG.md",
+        "docs/research-engine-sound.md"
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1438,
-      "test_lines": 1598,
+      "lines": 1835,
+      "test_lines": 1862,
       "imports": {
-        "F01": 1
+        "F01": 1,
+        "F07": 1
       },
       "depends_on": [
-        "F01"
+        "F01",
+        "F07"
       ]
     },
     {
@@ -227,7 +234,7 @@
       "tickets": [],
       "depends_manual": [],
       "lines": 1424,
-      "test_lines": 2176,
+      "test_lines": 2152,
       "imports": {
         "F01": 3,
         "F02": 3
@@ -363,7 +370,7 @@
       "tickets": [],
       "depends_manual": [],
       "lines": 1130,
-      "test_lines": 1579,
+      "test_lines": 1585,
       "imports": {
         "F02": 1,
         "F07": 3
@@ -377,7 +384,7 @@
       "id": "F07",
       "slug": "view-presentation",
       "title": "View sync, camera, assets and audio",
-      "summary": "Syncs sim entities to three.js objects, instancing and crowds, camera rigs, asset loading and animation tables, and audio.",
+      "summary": "Syncs sim entities to three.js objects, instancing and crowds, camera rigs, asset loading and animation tables, and audio: buses, voices, cues, contact sounds and the DSP host.",
       "paths": [
         "src/view/sync/**",
         "src/view/camera/**",
@@ -409,18 +416,25 @@
         "test/sync-parts.test.mjs",
         "test/sync-smooth.test.mjs",
         "test/sync-world.test.mjs",
-        "test/sync.test.mjs"
+        "test/sync.test.mjs",
+        "test/audio-buses.test.mjs",
+        "test/audio-voices.test.mjs",
+        "test/audio-cues.test.mjs",
+        "test/audio-contacts.test.mjs",
+        "test/audio-dsp.test.mjs",
+        "test/audio-dsp-e2e.test.mjs"
       ],
       "docs": [
         "docs/spec.md",
         "docs/design.md",
         "docs/field-notes.md",
-        "CHANGELOG.md"
+        "CHANGELOG.md",
+        "docs/research-engine-sound.md"
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1027,
-      "test_lines": 1424,
+      "lines": 1191,
+      "test_lines": 1724,
       "imports": {
         "F05": 1,
         "F06": 2
@@ -468,8 +482,8 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1185,
-      "test_lines": 987,
+      "lines": 1187,
+      "test_lines": 998,
       "imports": {
         "F01": 8,
         "F02": 2,
@@ -522,7 +536,8 @@
         "test/build-shared.test.mjs",
         "test/build.test.mjs",
         "test/cli-test-release.test.mjs",
-        "test/cli.test.mjs"
+        "test/cli.test.mjs",
+        "test/agents-doc.test.mjs"
       ],
       "docs": [
         "docs/spec.md",
@@ -532,8 +547,8 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1172,
-      "test_lines": 1169,
+      "lines": 1176,
+      "test_lines": 1233,
       "imports": {
         "F01": 13,
         "F02": 4,
@@ -541,7 +556,7 @@
         "F04": 10,
         "F05": 12,
         "F06": 7,
-        "F07": 10
+        "F07": 13
       },
       "depends_on": [
         "F01",
