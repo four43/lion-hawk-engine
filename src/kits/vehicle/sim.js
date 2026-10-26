@@ -1,5 +1,5 @@
-// kit-vehicle (sim half, design §7.3): two backends on a World entity with the same wheels, controls and contact
-// readback. 'raycast' (the default) is Rapier's ray-cast vehicle controller (L-1: car.controller is the real one).
+// kit-vehicle (sim half, design §7.3): two backends on a World entity with the same wheel specs and contact readback;
+// their controls differ (raycast: steer, engine, brake, slip, side; tire: steer, engine and brake as torques). 'raycast' (the default) is Rapier's ray-cast vehicle controller (L-1: car.controller is the real one).
 // 'tire' (design §3.5) is Rally's: the kit casts each wheel's ray, runs its spring and damper, and steps the tire model
 // (./tire.js, Magic Formula from the ground's tire block) and the wheel's spin `substeps` times per step. The kit owns the wiring: wheels from body-space points or sockets, per-wheel controls, one update per
 // step before 'lh.physics.step', and contact readback. Tuning stays game-side: a game system before VEHICLE_SYSTEM calls
