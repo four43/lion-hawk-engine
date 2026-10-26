@@ -4,13 +4,13 @@ These specs describe what the Lion Hawk engine code does at the source commit, n
 
 Written in STE style (ASD-STE100-inspired). Not certified compliant.
 
-Source commit: `7e239df`.
+Source commit: `7224d6b`.
 
 | ID | Feature | Summary | Spec |
 | --- | --- | --- | --- |
 | F01 | Engine core | Fixed-step engine, loop, scheduling, actions, events, players, controllers, UI and menu navigation model, RNG and math helpers. | [core.md](core.md) |
-| F02 | Definitions and kits | Material registry, physics sidecar schema and net fields, plus the vehicle, terrain, coverage, fx and glyph kits. | [defs-and-kits.md](defs-and-kits.md) |
-| F03 | Simulation world and physics | Entity world, transform pool and placement, Rapier physics backend, colliders, collision groups, events and heightfields. | [sim-world-physics.md](sim-world-physics.md) |
+| F02 | Definitions and kits | Material registry, physics sidecar schema and net fields, plus the vehicle (raycast and tire backends), terrain, coverage, fx and glyph kits. | [defs-and-kits.md](defs-and-kits.md) |
+| F03 | Simulation world, physics and fields | Entity world, transform pool and placement, Rapier physics backend, colliders, collision groups, events, heightfields, and the phase 8 fields: wind, aero, buoyancy and magnetism. | [sim-world-physics.md](sim-world-physics.md) |
 | F04 | Networking and replication | Transports, ports, peer keys, bridge, replica codec, wire schema and limits, interpolation and forecast, install, remote entities and replication. | [net-replication.md](net-replication.md) |
 | F05 | View boot, input and seats | Browser boot and driver, debug hook, keyboard, gamepad, touch, pointer and gestures, mapping contexts and profiles, local seats, haptics, DOM UI, menu navigation and the pad bench. | [view-input.md](view-input.md) |
 | F06 | Rendering and materials | Render pipeline, looks, lights, GPU hygiene, and the view material compiler with shader features. | [view-render.md](view-render.md) |

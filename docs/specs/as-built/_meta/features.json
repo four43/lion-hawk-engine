@@ -1,6 +1,6 @@
 {
   "repo": "lion-hawk-engine",
-  "source_commit": "7e239df",
+  "source_commit": "7224d6b",
   "features": [
     {
       "id": "F01",
@@ -51,8 +51,8 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1252,
-      "test_lines": 2261,
+      "lines": 1332,
+      "test_lines": 2265,
       "imports": {
         "F02": 2,
         "F03": 1,
@@ -68,7 +68,7 @@
       "id": "F02",
       "slug": "defs-and-kits",
       "title": "Definitions and kits",
-      "summary": "Material registry, physics sidecar schema and net fields, plus the vehicle, terrain, coverage, fx and glyph kits.",
+      "summary": "Material registry, physics sidecar schema and net fields, plus the vehicle (raycast and tire backends), terrain, coverage, fx and glyph kits.",
       "paths": [
         "src/defs/**",
         "src/kits/**"
@@ -92,6 +92,7 @@
         "test/kits/vehicle-lifecycle.test.mjs",
         "test/kits/vehicle-material.test.mjs",
         "test/kits/vehicle-parts.test.mjs",
+        "test/kits/vehicle-tire.test.mjs",
         "test/kits/vehicle.test.mjs",
         "test/materials-base.test.mjs",
         "test/materials-hash.test.mjs",
@@ -111,8 +112,8 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1231,
-      "test_lines": 1516,
+      "lines": 1438,
+      "test_lines": 1598,
       "imports": {
         "F01": 1
       },
@@ -123,16 +124,18 @@
     {
       "id": "F03",
       "slug": "sim-world-physics",
-      "title": "Simulation world and physics",
-      "summary": "Entity world, transform pool and placement, Rapier physics backend, colliders, collision groups, events and heightfields.",
+      "title": "Simulation world, physics and fields",
+      "summary": "Entity world, transform pool and placement, Rapier physics backend, colliders, collision groups, events, heightfields, and the phase 8 fields: wind, aero, buoyancy and magnetism.",
       "paths": [
         "src/sim/world/**",
-        "src/sim/physics/**"
+        "src/sim/physics/**",
+        "src/sim/fields/**"
       ],
       "entrypoints": [
         "src/sim/world/world.js"
       ],
       "tests": [
+        "test/fields.test.mjs",
         "test/physics-colliders.test.mjs",
         "test/physics-events.test.mjs",
         "test/physics-fixtures.test.mjs",
@@ -157,8 +160,8 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 914,
-      "test_lines": 1342,
+      "lines": 1107,
+      "test_lines": 1440,
       "imports": {
         "F01": 2,
         "F02": 2
@@ -224,7 +227,7 @@
       "tickets": [],
       "depends_manual": [],
       "lines": 1424,
-      "test_lines": 2175,
+      "test_lines": 2176,
       "imports": {
         "F01": 3,
         "F02": 3
@@ -278,6 +281,7 @@
         "test/haptics.test.mjs",
         "test/hold-e2e.test.mjs",
         "test/hook-commands.test.mjs",
+        "test/hook-state.test.mjs",
         "test/hook.test.mjs",
         "test/keyboard.test.mjs",
         "test/load-e2e.test.mjs",
@@ -307,10 +311,10 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 2157,
-      "test_lines": 3517,
+      "lines": 2217,
+      "test_lines": 3629,
       "imports": {
-        "F01": 5,
+        "F01": 8,
         "F06": 1
       },
       "depends_on": [
@@ -441,6 +445,8 @@
       "tests": [
         "test/checks-alloc.test.mjs",
         "test/checks-determinism.test.mjs",
+        "test/expectEvents.test.mjs",
+        "test/fixtures-api.test.mjs",
         "test/golden.test.mjs",
         "test/headless.test.mjs",
         "test/kits/purity.test.mjs",
@@ -448,7 +454,10 @@
         "test/playwright.test.mjs",
         "test/purity-phase3.test.mjs",
         "test/purity.test.mjs",
+        "test/record-on-fail.test.mjs",
         "test/replay.test.mjs",
+        "test/snapshot.test.mjs",
+        "test/spy-warnings.test.mjs",
         "test/state.test.mjs"
       ],
       "docs": [
@@ -459,10 +468,10 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1007,
-      "test_lines": 729,
+      "lines": 1185,
+      "test_lines": 987,
       "imports": {
-        "F01": 6,
+        "F01": 8,
         "F02": 2,
         "F04": 1,
         "F09": 2
@@ -493,6 +502,7 @@
         "src/index.sim.js"
       ],
       "tests": [
+        "test/bake-aero.test.mjs",
         "test/bake-anim.test.mjs",
         "test/bake-check.test.mjs",
         "test/bake-colliders.test.mjs",
@@ -504,10 +514,14 @@
         "test/bake-optimise.test.mjs",
         "test/bake-output.test.mjs",
         "test/bake-read.test.mjs",
+        "test/bake-textures.test.mjs",
         "test/build-dev.test.mjs",
+        "test/build-manifest.test.mjs",
         "test/build-page.test.mjs",
         "test/build-run.test.mjs",
+        "test/build-shared.test.mjs",
         "test/build.test.mjs",
+        "test/cli-test-release.test.mjs",
         "test/cli.test.mjs"
       ],
       "docs": [
@@ -518,12 +532,12 @@
       ],
       "tickets": [],
       "depends_manual": [],
-      "lines": 1013,
-      "test_lines": 838,
+      "lines": 1172,
+      "test_lines": 1169,
       "imports": {
         "F01": 13,
         "F02": 4,
-        "F03": 2,
+        "F03": 3,
         "F04": 10,
         "F05": 12,
         "F06": 7,

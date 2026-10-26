@@ -2,7 +2,7 @@
 id: F01
 title: Engine core
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/core/**
   - src/version.js
@@ -21,6 +21,7 @@ The engine core makes the engine from a game definition. It runs fixed steps, sc
   - actions, input, controllers and the roster
   - events, the UI registry, `nav` and `pickNeighbour`
   - flags, policies, rng, math and the engine version
+  - `canonical`, `checksum` and tape replay (`checkTape`, `tapeStart`, `replayTape`)
 - **Out of scope:** the World, physics and the net part (`src/sim/**`), the definitions and kits in [defs-and-kits.md](defs-and-kits.md), and the view modules in `src/view/**`.
 
 ## Terms
@@ -87,7 +88,12 @@ See the [glossary](_meta/glossary.md). Four more terms apply to this feature.
 | `createInput(schema)` | in | returns `{ snapshot, kinds, device, clearDevice, gate, gated, set, hold, release, apply, values }` | [src/core/actions.js:19; src/core/actions.js:56-108] <!-- C-192 --> |
 | `input.gated`, `input.kinds`, `input.values()` | out | gating flag, map of action kinds, plain value copy | [src/core/actions.js:55; src/core/actions.js:83; src/core/actions.js:107] <!-- C-213 --> |
 | `pickNeighbour(from, dir, rects)` | in | `from` is a rect or an index, `dir` is in `NAV_DIRS`, returns an index or -1 | [src/core/navScore.js:14; src/core/navScore.js:20-21] <!-- C-280 --> |
-| `parseFlags(search)`, `FLAGS` | in | query string, returns a frozen object | [src/core/flags.js:1-5; src/core/flags.js:17] <!-- C-289 --> |
+| `parseFlags(search)`, `FLAGS` | in | query string, returns a frozen object | [src/core/flags.js:1-5; src/core/flags.js:18] <!-- C-289 --> |
+| `canonical(value, { digits = 6, exact = false } = {})` | in | returns a canonical JSON string | [src/core/checksum.js:16] <!-- C-317 --> |
+| `checksum(value, opts)` | in | returns 8 lowercase hexadecimal characters | [src/core/checksum.js:17] <!-- C-320 --> |
+| `checkTape(game, tape)` | in | throws if the tape does not fit the game | [src/core/tape.js:6-10] <!-- C-321 --> |
+| `tapeStart(tape)` | in | returns `{ seed, scene, args, wall0 }` | [src/core/tape.js:12] <!-- C-322 --> |
+| `replayTape(e, tape, { step = () => e.stepN(1) } = {})` | in | re-feeds a checked tape into the fresh engine `e`, returns `e` | [src/core/tape.js:15-18; src/core/tape.js:61] <!-- C-323 --> |
 | `policy` | in | `still()`, `const(p)`, `seq(list)`, `fn(f)`, `every(n, fn, { phase = 0, key })` | [src/core/policy.js:1-8] <!-- C-296 --> |
 | `v3`, `q4`, `qmul`, `rotate`, `qnorm`, `qslerp`, `vlerp`, `qFromYaw` | in | plain-object vector and quaternion math | [src/core/math.js:3-28] <!-- C-302 --> |
 | `mIdent`, `mMul`, `mTRS` | in | return column-major 16-number arrays, allocate |
@@ -352,11 +358,34 @@ See the [glossary](_meta/glossary.md). Four more terms apply to this feature.
 
 ### Flags
 - **B-215** A boolean flag (`debug`, `tune`, `fps`, `nosw`, `mute`, and `lh-test` as `lhTest`) is true when the parameter is present. A value of `'0'` or `'false'` makes it false. [src/core/flags.js:2; src/core/flags.js:7; test/flags.test.mjs:8] <!-- C-290 -->
-- **B-216** The `seed` flag is null when absent. A value of only digits becomes `Number(BigInt(seed) & 0xffffffffn)`. Any other value stays a string. [src/core/flags.js:9; test/flags.test.mjs:12] <!-- C-291 -->
+- **B-216** The `seed` flag is null when absent. A value of only digits becomes `Number(BigInt(seed) & 0xffffffffn)`. Any other value stays a string. [src/core/flags.js:9; test/flags.test.mjs:16] <!-- C-291 -->
 - **B-217** The `slow` flag is the `parseFloat` value when it is finite, else null. The `replay` flag is the string value or null. [src/core/flags.js:10-11] <!-- C-292 -->
-- **B-218** `lhRender` is true only when `lhTest` is true and the `lh-test` value is `'render'`. [src/core/flags.js:12; test/flags.test.mjs:25] <!-- C-293 -->
-- **B-219** `debugs` is a frozen list of the comma-separated topics of an on `debug` flag, trimmed, without empty entries. The list is empty when `debug` is off or has no value. [src/core/flags.js:13-14; test/flags.test.mjs:30] <!-- C-294 -->
-- **B-220** `extra` is a frozen object with every query parameter whose name is not in `FLAGS`. [src/core/flags.js:15-16] <!-- C-295 -->
+- **B-218** `lhRender` is true only when `lhTest` is true and the `lh-test` value is `'render'`. [src/core/flags.js:12; test/flags.test.mjs:29] <!-- C-293 -->
+- **B-219** `debugs` is a frozen list of the comma-separated topics of an on `debug` flag, trimmed, without empty entries. The list is empty when `debug` is off or has no value. [src/core/flags.js:14-15; test/flags.test.mjs:34] <!-- C-294 -->
+- **B-220** `extra` is a frozen object with every query parameter whose name is not in `FLAGS`. [src/core/flags.js:16-17] <!-- C-295 -->
+- **B-233** `lhRecord` is true only when `lhTest` is true and the `lh-record` parameter is present and not `'0'` or `'false'`. [src/core/flags.js:2; src/core/flags.js:7; src/core/flags.js:13; test/flags.test.mjs:12] <!-- C-316 -->
+
+### Checksum
+- **B-234** `canonical(value, { digits = 6, exact = false })` returns `JSON.stringify` of a normalized copy of `value`. [src/core/checksum.js:16] <!-- C-317 -->
+- **B-235** The normalized copy sorts object keys and drops keys whose value is `undefined`. [src/core/checksum.js:13] <!-- C-318 -->
+- **B-236** A `Map`, a `Set`, a typed array (not a `DataView`) and an array each become an array of normalized items. [src/core/checksum.js:6; src/core/checksum.js:9-12] <!-- C-318 -->
+- **B-237** The normalized copy rounds each number to `digits` decimals with `toFixed` and turns -0 into 0. [src/core/checksum.js:5; src/core/checksum.js:16] <!-- C-319 -->
+- **B-238** With `exact` true, the copy keeps every bit of each number and still turns -0 into 0. [src/core/checksum.js:7-8; src/core/checksum.js:16] <!-- C-319 -->
+- **B-239** `NaN`, `Infinity` and `-Infinity` become strings in the normalized copy. [src/core/checksum.js:5; src/core/checksum.js:8] <!-- C-319 -->
+- **B-240** `checksum(value, opts)` returns `fnv(canonical(value, opts))` as lowercase hexadecimal, padded with zeros to 8 characters. [src/core/checksum.js:17] <!-- C-320 -->
+
+### Tape replay
+- **B-241** `tapeStart(tape)` returns `{ seed, scene, args, wall0 }` for the `createEngine` options. The value `wall0` is 0 when the tape has none. [src/core/tape.js:12] <!-- C-322 -->
+- **B-242** For each step k from 0 to the end step minus 1, `replayTape` applies the log entry of step k. [src/core/tape.js:45-46] <!-- C-324 -->
+- **B-243** Then `replayTape` sets the accumulated seat 0 input with `e.input.set`. The function sets the accumulated input of each other seat on the controller of that seat. Last, the function takes one step and compares the checksum. [src/core/tape.js:46-56] <!-- C-324 -->
+- **B-244** A log entry applies its ops in order. Then the `input` of the entry merges into the accumulated seat 0 values. Each `seats` value merges into the accumulated values of its seat. [src/core/tape.js:39-44] <!-- C-325 -->
+- **B-245** `replayTape` replays the ops `tap`, `fill`, `press`, `release`, `command`, `go`, `overlay`, `close` and `jump`. [src/core/tape.js:19-34] <!-- C-326 -->
+- **B-246** A null `args` or `opts` value in an op becomes `undefined`. A `command` op replays a JSON copy of its data, so the tape stays unchanged. [src/core/tape.js:18; src/core/tape.js:27-31] <!-- C-326 -->
+- **B-247** The end step is `tape.end`. If `tape.end` is absent, the end step is the step of the last log entry, or 0 for an empty log. [src/core/tape.js:17] <!-- C-327 -->
+- **B-248** After the loop, `replayTape` applies the ops of the entry at the end step and sets no input for it. [src/core/tape.js:58-61] <!-- C-327 -->
+- **B-249** After step k + 1, `replayTape` compares `checksum(e.state())` with the value that `tape.sums` holds for that step. A step with no entry in `tape.sums` is not compared. [src/core/tape.js:16; src/core/tape.js:55-56] <!-- C-328 -->
+- **B-250** A seat that had a controller earlier in the replay and has none now is skipped, and its input is not set. [src/core/tape.js:37; src/core/tape.js:47-53] <!-- C-329 -->
+- **B-251** `checksum.js` imports `fnv` from `rng.js`, and `tape.js` imports `checksum` from `checksum.js`. The view modules `boot.js` and `hook.js` import these helpers. [src/core/checksum.js:3; src/core/tape.js:4; src/view/boot.js:7-8; src/view/hook.js:3] <!-- C-333 -->
 
 ### Policies
 - **B-221** `policy.still()` returns a policy that returns `{}`. `policy.const(p)` returns a policy that returns `p`. `policy.fn(f)` returns `f`. [src/core/policy.js:5-8] <!-- C-297 -->
@@ -549,6 +578,15 @@ Evidence: [src/core/players.js:16-28] <!-- C-244 -->
 - `roster.add` throws 'players: number must be an integer in 1..255 (got <n>)'. It throws 'players: player <n> is already in the roster' for a repeated number. [src/core/players.js:49-50] <!-- C-248 -->
 - `roster.renumber` throws 'players: player <to> is already in the roster' when the `to` number exists. [src/core/players.js:79] <!-- C-254 -->
 
+### Tape replay
+- `checkTape` throws 'replay: unknown tape version' when `tape.v` is not 1. [src/core/tape.js:7] <!-- C-321 -->
+- `checkTape` throws "replay: tape is for '<tape.game>'" when `tape.game` differs from `game.id`. [src/core/tape.js:8] <!-- C-321 -->
+- `checkTape` throws 'replay: tape hz differs (tape <hz>, game <hz>)' when `tape.hz` differs from `game.sim.hz`. [src/core/tape.js:9] <!-- C-321 -->
+- `replayTape` throws "replay: unknown op '<op>'" for an unknown op name. [src/core/tape.js:32] <!-- C-330 -->
+- `replayTape` throws 'replay: this engine has no ui.<press|release>' when `e.ui` lacks that function. [src/core/tape.js:24] <!-- C-330 -->
+- `replayTape` throws 'replay: seat <s> has input but no controller at step <k>' for a seat with recorded input, no controller and no earlier controller. [src/core/tape.js:47-51] <!-- C-331 -->
+- `replayTape` throws 'replay: checksum differs at step <n> (tape <want>, replay <got>)' at the first step whose checksum differs. [src/core/tape.js:56] <!-- C-332 -->
+
 ### Navigation and policies
 - `pickNeighbour` throws "nav: unknown direction '<dir>'" for a direction not in `NAV_DIRS`. [src/core/navScore.js:22; test/navScore.test.mjs:105] <!-- C-281 -->
 - `policy.every` throws 'policy.every: n must be a positive integer' and 'policy.every: key must be a function'. [src/core/policy.js:14; src/core/policy.js:16] <!-- C-300 -->
@@ -556,6 +594,7 @@ Evidence: [src/core/players.js:16-28] <!-- C-244 -->
 
 ## Dependencies
 - **Internal:** the core imports `F` and `kind` from `src/defs/fields.js` (see [defs-and-kits.md](defs-and-kits.md)). The core also imports the wire codec from `src/sim/schema.js`, `createRegistry` from `src/sim/replica.js`, `installWorld` and `checkPhysics` from `src/sim/world/install.js`, and `installNet` from `src/sim/net/install.js`. [src/core/engine.js:12-18; src/core/players.js:7] <!-- C-311 -->
+- **Used by:** the view modules `src/view/boot.js` and `src/view/hook.js` import `checkTape`, `tapeStart`, `replayTape` and `checksum`. [src/view/boot.js:7-8; src/view/hook.js:3] <!-- C-333 -->
 - **Internal:** `installWorld` calls `checkRapier` for `game.physics.rapier`. An absent value passes. [src/sim/world/install.js:18; src/sim/physics/rapier.js:37-41] <!-- C-313 -->
 - **External:** none in `src/core`. The module list in the source imports no package.
 
@@ -578,13 +617,6 @@ Related specs:
 - A test holds engine code under 1 KB of allocation per step for a step of 30 falling and settling crates. [test/alloc-rate.test.mjs:21] <!-- C-309 -->
 
 ## Open questions and discrepancies
-- `docs/spec.md` [R-7] says `engine.manual(true)` stops automatic stepping. The engine object in `src/core/engine.js` has no `manual` method. [doc:docs/spec.md:303; src/core/engine.js:418-497]
-- `docs/spec.md` [R-1] says the engine drives `requestAnimationFrame` and clamps frame time to 0.25 s. The core loop has no `requestAnimationFrame`. The clamp is the `maxFrame` setting, default 0.25 s, so it can differ per game. [doc:docs/spec.md:287; src/core/loop.js:1-4; src/core/engine.js:67]
-- `docs/design.md` section 7.1 shows a game as `defineGame({ sim, kits, defs, createSim, createView, debug })`. The code defines a game by `id`, `scenes`, `start`, `actions`, `commands`, `setup`, `reset`, `state`, `player`, `gameState`, `net` and `physics`. [doc:docs/design.md:330-340; src/core/engine.js:29-69]
-- `docs/design.md` section 7.4 says `window.engine` exposes `pause` and `resume`. The core engine object has no `pause` or `resume` method. [doc:docs/design.md:362; src/core/engine.js:418-497]
-- `docs/research-players.md` section 6.1 says the roster is `net.players`. The roster is `engine.players`, and `CHANGELOG.md` 0.13.0 says `world.net.players` is gone. [doc:docs/research-players.md:113; src/core/engine.js:422; doc:CHANGELOG.md:9]
-- `docs/spec.md` [C-4] says a bot has no player number unless the game assigns one. In code a bot has player 0, and the roster does not list it. [doc:docs/spec.md:411; src/core/controllers.js:28; src/core/engine.js:424-427]
-- Open question: where does `engine.manual(true)` live? It may be in the view driver or the headless handle.
 - Open question: why does `defineGame` check `sim.hz` and `sim.maxCatchUp` but not `sim.maxFrame`? No source states the reason.
 - Open question: why does an engine without `physics.rapier` still make a World with bodiless entities? No comment states the reason.
 
@@ -596,3 +628,4 @@ Related specs:
 - `src/core/events.js`, `src/core/loop.js`, `src/core/schedule.js`: events, fixed-step loop and stage schedule.
 - `src/core/ui.js`, `src/core/nav.js`, `src/core/navScore.js`: UI registry, menu options and neighbour scoring.
 - `src/core/rng.js`, `src/core/math.js`, `src/core/flags.js`, `src/core/policy.js`, `src/version.js`: helpers and the engine version.
+- `src/core/checksum.js`, `src/core/tape.js`: canonical JSON, checksums and tape replay.

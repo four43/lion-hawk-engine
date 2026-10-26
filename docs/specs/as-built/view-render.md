@@ -2,7 +2,7 @@
 id: F06
 title: Rendering and materials
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/view/render/**
   - src/view/materials/**
@@ -437,8 +437,6 @@ Related specs:
 - Imported by: [CLI, tools and package surface](tools-and-package.md)
 
 ## Open questions and discrepancies
-- **Discrepancy.** `docs/spec.md` M-11 names the compile-time defines `COVERAGE`, `FUR` and `SUBSURFACE` only. The code also has `WIND`, `PAINT` and `COVERAGE_INSTANCED`. [doc:docs/spec.md:173; src/view/materials/chunks.js:8-14; src/view/materials/compiler.js:155]
-- **Discrepancy.** A comment in `hygiene.js` refers to `depthGroup`. No such symbol exists in the file. The code builds depth entries with `depthEntries()`. [src/view/render/hygiene.js:52; src/view/render/hygiene.js:35]
 - **Open question.** The default `uSubStrength` of 0.5 in `uniformsFor` cannot apply, because `SUBSURFACE` needs `look.subsurface.strength` above 0. No source states the reason for the default. [src/view/materials/compiler.js:68; src/view/materials/compiler.js:87]
 - **Open question.** `createPipeline` does not call `gfx.warm()` at boot. Only a restored context calls it in this feature. No source states where the first call comes from. [src/view/render/pipeline.js:55; src/view/render/pipeline.js:74]
 

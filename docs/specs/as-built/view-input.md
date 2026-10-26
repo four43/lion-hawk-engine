@@ -2,7 +2,7 @@
 id: F05
 title: View boot, input and seats
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/view/boot.js
   - src/view/contexts.js
@@ -28,11 +28,11 @@ generated: STE spec writer
 # View boot, input and seats
 
 ## Summary
-This feature is the browser side of the engine. `boot` joins the engine, the driver, the devices, the DOM UI and the view halves of the scenes. The input modules turn keyboard, gamepad, touch and pointer use into actions and commands. The seat modules give each local player a seat with devices, mapping contexts, profiles and haptics. The menu navigator, the DOM UI and the pad bench complete the feature.
+This feature is the browser side of the engine. `boot` joins the engine, the driver, the devices, the DOM UI and the view halves of the scenes. The input modules turn keyboard, gamepad, touch and pointer use into actions and commands. The seat modules give each local player a seat with devices, mapping contexts, profiles and haptics. The `window.engine` hook gives tests state, snapshot and restore calls. The menu navigator, the DOM UI and the pad bench complete the feature.
 
 ## Scope
 - **In scope:** `boot`, `defineView`, the driver and `window.engine`. The keyboard, gamepad, touch, pointer and gesture devices and the map hook. Mapping contexts, profiles, seats and haptics. Pad edges, the menu navigator, the DOM UI and the pad bench.
-- **Out of scope:** the engine core, input merging, controllers and nav rules in [core](core.md). The render pipeline that `createPipeline` and `checkRender` build is in the view-render feature (F06). Playwright helpers and fake pads are in the testing feature.
+- **Out of scope:** the engine core, input merging, controllers, tapes and nav rules in [core](core.md). The render pipeline that `createPipeline` and `checkRender` build is in the view-render feature (F06). Playwright helpers and fake pads are in the testing feature.
 
 ## Terms
 See the [glossary](_meta/glossary.md). This spec adds the terms below.
@@ -42,6 +42,7 @@ See the [glossary](_meta/glossary.md). This spec adds the terms below.
 | bench | The `?debug=pads` overlay that shows seats, pad state and haptics tests. The bench reads view state only. | [src/view/bench/pads.js:2-4] |
 | game device kind | A device kind that a game registers with `view.device(kind, { read })`. The built-in kinds are `pad`, `keys` and `touch`. | [src/view/seats.js:109-117] |
 | unit | One entry in the list that the `read()` function of a game device kind returns. A unit has `key`, `id`, `active` and `values`. | [src/view/seats.js:120-139] |
+| session snapshot | The object `{ v: 1, step, checksum, tape }` that `window.engine.snapshot()` returns. `window.engine.restore()` reloads the page with it. | [src/view/hook.js:61-64] |
 
 In this spec, "values object" means the object of action values that a device writes to a source.
 
@@ -51,11 +52,12 @@ In this spec, "values object" means the object of action values that a device wr
 
 | Interface | Direction | Format | Evidence |
 | --- | --- | --- | --- |
-| `defineView({ scenes, render, haptics })` | in | Returns a frozen view definition. | [src/view/boot.js:12-24] <!-- C-5 --> |
-| `boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf, canvas, timer, renderer, nav, getGamepads, storage } = {})` | in | Returns `{ engine, driver, ui, hook, view, dispose }`. | [src/view/boot.js:26; src/view/boot.js:167] <!-- C-6 C-48 --> |
+| `defineView({ scenes, render, haptics })` | in | Returns a frozen view definition. | [src/view/boot.js:14-26] <!-- C-5 --> |
+| `boot(game, halves = { scenes: {} }, { root, doc, target = globalThis, seed, scene, args, flags, devices = [], raf, caf, canvas, timer, renderer, nav, getGamepads, storage } = {})` | in | Returns `{ engine, driver, ui, hook, view, dispose }`. | [src/view/boot.js:28; src/view/boot.js:188] <!-- C-6 C-48 --> |
 | `createDriver(engine, { raf, caf, doc, devices = [], onError } = {})` | in | Returns `{ start, stop, manual(on), running, devices }`. The driver resolves `raf`, `caf` and the document from the globals at call time. | [src/view/driver.js:3-6; src/view/driver.js:32-45] <!-- C-50 --> |
 | `driver.manual(on)` | in | Sets the mode to `'all'` for `'all'` and to `!!on` for another defined value. Returns the mode. With no argument it only returns the mode. | [src/view/driver.js:42] <!-- C-53 --> |
-| `installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false, view })` | in | Builds the `window.engine` hook and returns it. | [src/view/hook.js:18; src/view/hook.js:49] <!-- C-65 --> |
+| `installEngine(engine, { driver, target = globalThis, errors = [], ready = Promise.resolve(), after = () => {}, busy = () => false, view })` | in | Builds the `window.engine` hook and returns it. | [src/view/hook.js:36; src/view/hook.js:85] <!-- C-65 --> |
+| `REPLAY_KEY` | out | The string `'lh-replay'`. The `sessionStorage` key for a session snapshot. | [src/view/hook.js:29] <!-- C-426 --> |
 | `installEngineHook(api, { game, target = globalThis })` | in | Defines `target.engine` and returns the hook. | [src/view/debugHook.js:6-11] <!-- C-82 --> |
 | `bindGamepad(engine, bindings, { getGamepads, source = 'pad', map } = {})` | in | Returns `{ update, dispose }`. `getGamepads` defaults to `navigator.getGamepads()` or an empty list. | [src/view/gamepad.js:4-6; src/view/gamepad.js:37] <!-- C-83 --> |
 | `bindKeyboard(engine, bindings, { target, doc, source = 'keyboard', ramps = {}, map } = {})` | in | Returns `{ update, release, dispose }`. `target` defaults to `globalThis.window`. `doc` defaults to `target.document` or `globalThis.document`. | [src/view/keyboard.js:6-8; src/view/keyboard.js:71] <!-- C-93 --> |
@@ -66,34 +68,36 @@ In this spec, "values object" means the object of action values that a device wr
 | `createPadEdges({ getGamepads } = {})` | in | Returns the state `{ dir, any, active, family, down, pressed, released, update }`. `update()` returns the same object. | [src/view/padEdges.js:20-26; src/view/padEdges.js:49-51] <!-- C-194 --> |
 | `bindMenuNav(engine, { doc, target, getGamepads, rectOf, focusTries = 10 })` | in | Returns `{ update, sync, dispose, state, move, activate, back }`. `rectOf` defaults to `el.getBoundingClientRect()`. | [src/view/menuNav.js:14; src/view/menuNav.js:16-17; src/view/menuNav.js:207] <!-- C-311 --> |
 | `createUiDom(engine, { root, doc, onTap, errors } = {})` | in | Returns `{ sync, adopt, dispose }`. Appends a div with the attribute `data-lh-ui-root` to `root` or the document body. | [src/view/uiDom.js:3-6; src/view/uiDom.js:130] <!-- C-340 --> |
-| `createHaptics(engine, { seats, target = globalThis, doc, frames = STOP_FRAMES })` | in | Returns `{ on(fn), stopping, paused, stop, update, dispose }`. | [src/view/haptics.js:23; src/view/haptics.js:49-57] <!-- C-215 --> |
+| `createHaptics(engine, { seats, target = globalThis, doc, frames = STOP_FRAMES })` | in | Returns `{ on(fn), stopping, paused, stop, update, dispose }`. | [src/view/haptics.js:25; src/view/haptics.js:51-59] <!-- C-215 --> |
+| `zeroEffect(actuator)` | in | Returns `[type, params]`, the zero effect for the actuator. The pad bench uses it too. | [src/view/haptics.js:16-17] <!-- C-427 --> |
 | `createSeats(engine, { getGamepads, target = globalThis, doc, storage, onError })` | in | Returns `{ list, on, enable, unpaired, forEachUnpaired, context, kind, gamepad, update(dt, raw), dispose }`. `onError` defaults to `console.warn(err.message)`. | [src/view/seats.js:14; src/view/seats.js:457-466] <!-- C-223 --> |
-| `openPadBench(view, { doc, haptics = null, now, timer, env })` | in | Returns `{ el, update(), dispose() }`. `view` needs `localPlayers`, `unpaired()`, `gamepad(dev)` and `onSeat(fn)`. | [src/view/bench/pads.js:72; src/view/bench/pads.js:228-257] <!-- C-383 --> |
+| `openPadBench(view, { doc, haptics = null, now, timer, env })` | in | Returns `{ el, update(), dispose() }`. `view` needs `localPlayers`, `unpaired()`, `gamepad(dev)` and `onSeat(fn)`. | [src/view/bench/pads.js:73; src/view/bench/pads.js:229-258] <!-- C-383 --> |
 
 ### The view object that view halves receive
 
 | Member | Direction | Format | Evidence |
 | --- | --- | --- | --- |
-| `view.root`, `view.doc`, `view.ui`, `view.driver`, `view.dt`, `view.rawDt`, `view.wait(p)`, `view.focus(id)`, `view.haptics`, `view.nav` | out | `root` is `root ?? doc.body`. | [src/view/boot.js:48-51; src/view/boot.js:55-61] <!-- C-14 --> |
-| `view.seats(o)`, `view.localPlayers` | out | `seats(o)` calls `seats.enable(o)` and returns the live seat list. `localPlayers` returns the same list. | [src/view/boot.js:50-51; test/seats-boot.test.mjs:35] <!-- C-15 --> |
-| `view.context(name, def)`, `view.device(kind, spec)`, `view.onSeat(fn)`, `view.unpaired()`, `view.gamepad(dev)` | out | Each member calls the seats function of the matching name. `device` calls `seats.kind`. | [src/view/boot.js:50-51; test/seats-boot.test.mjs:61] <!-- C-15 --> |
-| `view.haptics` | out | A frozen object `{ stop(reason), stopping, paused }`, or `null` with `autoStop` false. `stopping` is true while stop rounds remain. `paused` is true while a pausing overlay is open. `view.haptics` sends no rumble. | [src/view/boot.js:43-44; test/haptics-boot.test.mjs:69] <!-- C-12 --> |
-| `view.project` | in | The game's view half sets this function. World targets call it through `window.engine.view.project`. | [src/view/hook.js:44] <!-- C-77 --> |
+| `view.root`, `view.doc`, `view.ui`, `view.driver`, `view.dt`, `view.rawDt`, `view.wait(p)`, `view.focus(id)`, `view.haptics`, `view.nav` | out | `root` is `root ?? doc.body`. | [src/view/boot.js:61-64; src/view/boot.js:68; src/view/boot.js:74] <!-- C-14 --> |
+| `view.seats(o)`, `view.localPlayers` | out | `seats(o)` calls `seats.enable(o)` and returns the live seat list. `localPlayers` returns the same list. | [src/view/boot.js:63-64; test/seats-boot.test.mjs:35] <!-- C-15 --> |
+| `view.context(name, def)`, `view.device(kind, spec)`, `view.onSeat(fn)`, `view.unpaired()`, `view.gamepad(dev)` | out | Each member calls the seats function of the matching name. `device` calls `seats.kind`. | [src/view/boot.js:63-64; test/seats-boot.test.mjs:61] <!-- C-15 --> |
+| `view.haptics` | out | A frozen object `{ stop(reason), stopping, paused }`, or `null` with `autoStop` false. `stopping` is true while stop rounds remain. `paused` is true while a pausing overlay is open. `view.haptics` sends no rumble. | [src/view/boot.js:56-57; test/haptics-boot.test.mjs:69] <!-- C-12 --> |
+| `view.project` | in | The game's view half sets this function. World targets call it through `window.engine.view.project`. | [src/view/hook.js:80] <!-- C-77 --> |
 
 ### The window.engine hook
 
 | Member | Direction | Format | Evidence |
 | --- | --- | --- | --- |
-| `ready`, `seed`, `errors`, `hz`, `version`, `game` | out | `hz` is `engine.game.sim.hz`. `version` and `game` come from `installEngineHook`. | [src/view/hook.js:23-26; src/view/debugHook.js:9] <!-- C-67 C-68 C-81 --> |
-| `manual(on)`, `stepN(n)`, `advance(s)`, `render(a)` | out | `manual` forwards to `driver.manual`. | [src/view/hook.js:25-27; test/hook.test.mjs:26] <!-- C-67 C-68 --> |
-| `time`, `scene`, `loading`, `commands` | out | Getters that read the live engine values. `commands` is the live `engine.commands` object. | [src/view/hook.js:28; src/view/hook.js:32; test/hook-commands.test.mjs:10] <!-- C-68 --> |
-| `go`, `overlay(n, a, o)`, `close`, `jump(n, p, o, a)`, `command(type, data)` | out | `overlay` passes its options object (for example `{ once }`) to `engine.overlay`. | [src/view/hook.js:29-31; test/hook-commands.test.mjs:10] <!-- C-67 C-71 --> |
-| `on(type, fn)`, `events.since(seq)` | out | Events reach callers as JSON-safe copies. | [src/view/hook.js:33-34] <!-- C-67 C-72 C-73 --> |
-| `state()`, `input { set, hold, release, read }`, `settled()`, `isOpen(n, o)`, `rng(n)` | out | `read` returns `engine.input.values()`. | [src/view/hook.js:35-45; src/view/hook.js:36] <!-- C-67 C-75 --> |
-| `ui { tree, enabled, tryTap, tap, press, release, fill }` | out | `fill` forwards to `engine.ui.fill`. | [src/view/hook.js:43; test/hook.test.mjs:43] <!-- C-67 C-77 --> |
-| `view { project, nav }` | out | `nav` returns the navigator state object, or `undefined` without a navigator. | [src/view/hook.js:44] <!-- C-67 C-77 --> |
-| `debug` | out | A getter. Returns `engine.game.debug(engine)`, or an empty object when the game has no `debug` function. | [src/view/hook.js:46] <!-- C-78 --> |
-| `dispose()` | in | Removes the error and `unhandledrejection` listeners. `dispose()` does not remove `window.engine`. | [src/view/hook.js:47] <!-- C-67 C-79 --> |
+| `ready`, `seed`, `errors`, `hz`, `version`, `game` | out | `hz` is `engine.game.sim.hz`. `version` and `game` come from `installEngineHook`. | [src/view/hook.js:42-44; src/view/debugHook.js:9] <!-- C-67 C-68 C-81 --> |
+| `manual(on)`, `stepN(n)`, `advance(s)`, `render(a)` | out | `manual` forwards to `driver.manual`. | [src/view/hook.js:43; src/view/hook.js:45; test/hook.test.mjs:26] <!-- C-67 C-68 --> |
+| `time`, `scene`, `loading`, `commands` | out | Getters that read the live engine values. `commands` is the live `engine.commands` object. | [src/view/hook.js:46; src/view/hook.js:50; test/hook-commands.test.mjs:10] <!-- C-68 --> |
+| `go`, `overlay(n, a, o)`, `close`, `jump(n, p, o, a)`, `command(type, data)` | out | `overlay` passes its options object (for example `{ once }`) to `engine.overlay`. | [src/view/hook.js:47-49; test/hook-commands.test.mjs:10] <!-- C-67 C-71 --> |
+| `on(type, fn)`, `events.since(seq)` | out | Events reach callers as JSON-safe copies. | [src/view/hook.js:51-52] <!-- C-67 C-72 C-73 --> |
+| `state()`, `input { set, hold, release, read }`, `settled()`, `isOpen(n, o)`, `rng(n)` | out | `read` returns `engine.input.values()`. | [src/view/hook.js:53; src/view/hook.js:72-78; src/view/hook.js:81] <!-- C-67 C-75 --> |
+| `query(name, where)`, `checksum()`, `snapshot()`, `restore(snap)`, `policies` | out | The state calls of the hook. B-347 to B-354 describe them. | [src/view/hook.js:54-71; test/hook-state.test.mjs:20] <!-- C-67 C-418 C-421 C-422 C-424 C-426 --> |
+| `ui { tree, enabled, tryTap, tap, press, release, fill }` | out | `fill` forwards to `engine.ui.fill`. | [src/view/hook.js:79; test/hook.test.mjs:43] <!-- C-67 C-77 --> |
+| `view { project, nav }` | out | `nav` returns the navigator state object, or `undefined` without a navigator. | [src/view/hook.js:80] <!-- C-67 C-77 --> |
+| `debug` | out | A getter. Returns `engine.game.debug(engine)`, or an empty object when the game has no `debug` function. | [src/view/hook.js:82] <!-- C-78 --> |
+| `dispose()` | in | Removes the error and `unhandledrejection` listeners. `dispose()` does not remove `window.engine`. | [src/view/hook.js:83] <!-- C-67 C-79 --> |
 
 ### Seat, bindings and context objects
 
@@ -103,57 +107,59 @@ In this spec, "values object" means the object of action values that a device wr
 | `lp.claim(dev)`, `lp.release(dev)`, `lp.leave()` | in | `claim` attaches a device to the seat and returns the seat. `release` detaches a device and returns the seat. | [src/view/seats.js:185; src/view/seats.js:270-281; src/view/seats.js:333-343; test/seats.test.mjs:181] <!-- C-226 C-265 --> |
 | `lp.bindings` | out | `profile` (get and set), `get(name, dev)`, `map(name, dev, input)`, `reset(name)`, `capture()` and `cancel()`. | [src/view/seats.js:80-106] <!-- C-284 --> |
 | `seats.gamepad(dev)`, `seats.unpaired()`, `seats.forEachUnpaired(fn)` | out | `gamepad` returns the live Gamepad of a pad device of this page, paired or not. It returns `null` for a lost pad or another device kind. `unpaired` returns a new list. `forEachUnpaired` calls `fn` for each unpaired device and builds no list. | [src/view/seats.js:344-347; test/seats.test.mjs:389; test/seats.test.mjs:430] <!-- C-268 --> |
-| `seats.kind(name, spec)` | in | Registers a game device kind. `view.device(kind, { read })` calls it. The name must be a new non-empty string. | [src/view/seats.js:109-117; src/view/boot.js:50] <!-- C-299 --> |
+| `seats.kind(name, spec)` | in | Registers a game device kind. `view.device(kind, { read })` calls it. The name must be a new non-empty string. | [src/view/seats.js:109-117; src/view/boot.js:63] <!-- C-299 --> |
 
 ## Behavior
 
 ### Boot and view halves
-- **B-1** `defineView` calls `checkRender(render)` from the render feature (F06) to check the render option. [src/view/boot.js:15] <!-- C-3 -->
-- **B-2** `boot` uses `target.document`, then `globalThis.document`, when `doc` is not given. `boot` parses `target.location.search` (or an empty string) with `parseFlags` when `flags` is not given. [src/view/boot.js:27-28] <!-- C-7 -->
-- **B-3** When `flags.lhTest` is set, `boot` replaces `scene` with the `?scene` value and `args` with the parsed `?args` JSON. `boot` ignores a malformed `?args` value. [src/view/boot.js:31-34; test/boot.test.mjs:76] <!-- C-8 -->
-- **B-4** Without `lhTest`, `boot` ignores `?scene` and `?args`. [src/view/boot.js:31; test/boot.test.mjs:76] <!-- C-8 -->
-- **B-5** `boot` creates the engine with seed `flags.seed ?? seed ?? 1`, the `scene`, the `args`, the `timer` option, and acks `'steps'` under `lhTest` or `'frames'` otherwise. [src/view/boot.js:36; test/render-boot.test.mjs:48] <!-- C-9 -->
-- **B-6** Under `lhTest`, each step counts as a presented frame, so `game.until` never waits for rAF. [src/view/boot.js:35-36] <!-- C-49 -->
-- **B-7** `boot` creates the seats module with `getGamepads`, `target`, `doc`, `storage` and an `onError` that adds the error to the errors list. [src/view/boot.js:38] <!-- C-10 -->
-- **B-8** `boot` creates the haptics lifecycle with `createHaptics(engine, { seats, target, doc })` unless `halves.haptics.autoStop` is false. With `autoStop` false, `boot` creates no haptics device. [src/view/boot.js:40; test/haptics-boot.test.mjs:39] <!-- C-11 -->
-- **B-9** The pad bench is on only when `flags.debugs` includes `'pads'`. [src/view/boot.js:45] <!-- C-13 -->
-- **B-10** The first driver device sets `view.dt` to `dt` and `view.rawDt` to `raw` (default `dt`) in `update(dt, raw)`. Later devices and the frame see the times of this frame. [src/view/boot.js:52; test/boot.test.mjs:86; test/boot.test.mjs:102] <!-- C-16 -->
-- **B-11** `boot` sets `view.nav` to `bindMenuNav(engine, { doc, target, getGamepads })` when `nav` is not false and a game scene declares `nav`. Otherwise `view.nav` is `null`. [src/view/boot.js:54-55; test/menuNav.test.mjs:160] <!-- C-17 -->
-- **B-12** `boot(game, halves, { nav: false })` creates no navigator even when a scene declares `nav`. [src/view/boot.js:54; doc:docs/spec.md:375] <!-- C-407 -->
-- **B-13** The driver devices run in this order: the frame-time device, the seats, and the haptics device (when present). Next come the devices that the `devices` option functions return when called with the engine. The menu navigator (when present) and the bench slot (when the bench is on) come last. [src/view/boot.js:56] <!-- C-18 -->
-- **B-14** `boot` appends a style element to `doc.head` (or `documentElement`). The style sets `--lh-sa-top`, `--lh-sa-right`, `--lh-sa-bottom` and `--lh-sa-left` on `:root` to `env(safe-area-inset-*, 0px)`. `boot` removes the element on dispose. [src/view/boot.js:57-59; src/view/boot.js:151; test/boot.test.mjs:71] <!-- C-19 -->
-- **B-15** `boot` creates the DOM UI with `root` (or `doc.body`), `doc`, the errors list and an `onTap` that refreshes the view. [src/view/boot.js:60-61] <!-- C-20 -->
-- **B-16** The `report` function adds `{ type: 'error', message, stack }` to the errors list. The message is `String(err.message ?? err)`. [src/view/boot.js:29-30] <!-- C-21 -->
-- **B-17** When `halves.render` is set, `boot` creates a pipeline with `createPipeline(engine, view, halves.render, { doc, target, canvas, renderer, flags, report })` from F06. Without `render`, no pipeline exists. [src/view/boot.js:64; test/render-boot.test.mjs:21] <!-- C-22 -->
-- **B-18** `view.focus(id)` stores a pending focus request. The request holds the active element, the scene id and a try count of 0. [src/view/boot.js:71] <!-- C-23 -->
-- **B-19** `applyFocus` drops the pending request quietly when the scene id has changed. [src/view/boot.js:74; test/boot.test.mjs:159] <!-- C-24 -->
-- **B-20** `applyFocus` stops on the 6th call, that is after 5 refreshes without the control. Under `flags.debug` it first writes `console.warn` with the text `lion-hawk: view.focus('<id>') gave up: the control did not appear enabled after 5 refreshes`. [src/view/boot.js:75-78; test/boot.test.mjs:180] <!-- C-25 -->
-- **B-21** `applyFocus` drops the request when the active element is neither the element active at request time nor the body. So a focus move by the player wins. [src/view/boot.js:79; test/boot.test.mjs:135] <!-- C-26 -->
-- **B-22** `applyFocus` focuses the element `[data-testid=<id>]` with `preventScroll` once the element exists and is not disabled. Then `applyFocus` drops the request. [src/view/boot.js:80-81; test/boot.test.mjs:122] <!-- C-27 -->
-- **B-23** The active entries are the main scene `{ name, key: scene id, args }`, followed by each overlay `{ name, key: overlay id, args: overlay args }`. [src/view/boot.js:84-89; test/boot-args.test.mjs:17] <!-- C-28 -->
-- **B-24** Each reconcile compares the active entries with the actual stack of the engine by name and key. [src/view/boot.js:102-115; test/boot.test.mjs:23] <!-- C-29 -->
-- **B-25** For the differences, `reconcile` calls `exit` on each removed half in reverse order. Then it calls `ui.sync()`. Then it calls `enter(engine, view, args)` on each added half. Then it calls `applyFocus`. [src/view/boot.js:102-115; test/boot.test.mjs:122] <!-- C-29 -->
-- **B-26** `reconcile` runs at most 16 passes, so a half that starts a transition re-enters on the next pass. `reconcile` returns at once when it already runs or the stack is unchanged. [src/view/boot.js:94-108] <!-- C-30 -->
-- **B-27** If a scene closes and reopens an overlay, the half gets `exit` and then `enter`, because the overlay id is part of the entry key. [src/view/boot.js:90; test/boot.test.mjs:46] <!-- C-31 -->
+- **B-1** `defineView` calls `checkRender(render)` from the render feature (F06) to check the render option. [src/view/boot.js:17] <!-- C-3 -->
+- **B-2** `boot` uses `target.document`, then `globalThis.document`, when `doc` is not given. `boot` parses `target.location.search` (or an empty string) with `parseFlags` when `flags` is not given. [src/view/boot.js:29-30] <!-- C-7 -->
+- **B-3** When `flags.lhTest` is set, `boot` replaces `scene` with the `?scene` value and `args` with the parsed `?args` JSON. `boot` ignores a malformed `?args` value. [src/view/boot.js:33-36; test/boot.test.mjs:76] <!-- C-8 -->
+- **B-4** Without `lhTest`, `boot` ignores `?scene` and `?args`. [src/view/boot.js:33; test/boot.test.mjs:76] <!-- C-8 -->
+- **B-5** `boot` creates the engine with the `timer` option and acks `'steps'` under `lhTest` or `'frames'` otherwise. The engine start is seed `flags.seed ?? seed ?? 1`, the `scene` and the `args`. When `boot` loaded a session snapshot, the start of its tape replaces it. A missing or invalid snapshot leaves the normal start. The option `record` is true only when `flags.lhRecord` is true. [src/view/boot.js:47-49; test/render-boot.test.mjs:48] <!-- C-9 C-414 -->
+- **B-6** Under `lhTest`, each step counts as a presented frame, so `game.until` never waits for rAF. [src/view/boot.js:48-49] <!-- C-49 -->
+- **B-7** `boot` creates the seats module with `getGamepads`, `target`, `doc`, `storage` and an `onError` that adds the error to the errors list. [src/view/boot.js:51] <!-- C-10 -->
+- **B-8** `boot` creates the haptics lifecycle with `createHaptics(engine, { seats, target, doc })` unless `halves.haptics.autoStop` is false. With `autoStop` false, `boot` creates no haptics device. [src/view/boot.js:53; test/haptics-boot.test.mjs:39] <!-- C-11 -->
+- **B-9** The pad bench is on only when `flags.debugs` includes `'pads'`. [src/view/boot.js:58] <!-- C-13 -->
+- **B-10** The first driver device sets `view.dt` to `dt` and `view.rawDt` to `raw` (default `dt`) in `update(dt, raw)`. Later devices and the frame see the times of this frame. [src/view/boot.js:65; test/boot.test.mjs:86; test/boot.test.mjs:102] <!-- C-16 -->
+- **B-11** `boot` sets `view.nav` to `bindMenuNav(engine, { doc, target, getGamepads })` when `nav` is not false and a game scene declares `nav`. Otherwise `view.nav` is `null`. [src/view/boot.js:67-68; test/menuNav.test.mjs:160] <!-- C-17 -->
+- **B-12** `boot(game, halves, { nav: false })` creates no navigator even when a scene declares `nav`. [src/view/boot.js:67; doc:docs/spec.md:381] <!-- C-407 -->
+- **B-13** The driver devices run in this order: the frame-time device, the seats, and the haptics device (when present). Next come the devices that the `devices` option functions return when called with the engine. The menu navigator (when present) and the bench slot (when the bench is on) come last. [src/view/boot.js:69] <!-- C-18 -->
+- **B-14** `boot` appends a style element to `doc.head` (or `documentElement`). The style sets `--lh-sa-top`, `--lh-sa-right`, `--lh-sa-bottom` and `--lh-sa-left` on `:root` to `env(safe-area-inset-*, 0px)`. `boot` removes the element on dispose. [src/view/boot.js:70-72; src/view/boot.js:164; test/boot.test.mjs:71] <!-- C-19 -->
+- **B-15** `boot` creates the DOM UI with `root` (or `doc.body`), `doc`, the errors list and an `onTap` that refreshes the view. [src/view/boot.js:73-74] <!-- C-20 -->
+- **B-16** The `report` function adds `{ type: 'error', message, stack }` to the errors list. The message is `String(err.message ?? err)`. [src/view/boot.js:32] <!-- C-21 -->
+- **B-17** When `halves.render` is set, `boot` creates a pipeline with `createPipeline(engine, view, halves.render, { doc, target, canvas, renderer, flags, report })` from F06. Without `render`, no pipeline exists. [src/view/boot.js:77; test/render-boot.test.mjs:21] <!-- C-22 -->
+- **B-18** `view.focus(id)` stores a pending focus request. The request holds the active element, the scene id and a try count of 0. [src/view/boot.js:84] <!-- C-23 -->
+- **B-19** `applyFocus` drops the pending request quietly when the scene id has changed. [src/view/boot.js:87; test/boot.test.mjs:159] <!-- C-24 -->
+- **B-20** `applyFocus` stops on the 6th call, that is after 5 refreshes without the control. Under `flags.debug` it first writes `console.warn` with the text `lion-hawk: view.focus('<id>') gave up: the control did not appear enabled after 5 refreshes`. [src/view/boot.js:88-91; test/boot.test.mjs:180] <!-- C-25 -->
+- **B-21** `applyFocus` drops the request when the active element is neither the element active at request time nor the body. So a focus move by the player wins. [src/view/boot.js:92; test/boot.test.mjs:135] <!-- C-26 -->
+- **B-22** `applyFocus` focuses the element `[data-testid=<id>]` with `preventScroll` once the element exists and is not disabled. Then `applyFocus` drops the request. [src/view/boot.js:93-94; test/boot.test.mjs:122] <!-- C-27 -->
+- **B-23** The active entries are the main scene `{ name, key: scene id, args }`, followed by each overlay `{ name, key: overlay id, args: overlay args }`. [src/view/boot.js:97-102; test/boot-args.test.mjs:17] <!-- C-28 -->
+- **B-24** Each reconcile compares the active entries with the actual stack of the engine by name and key. [src/view/boot.js:115-128; test/boot.test.mjs:23] <!-- C-29 -->
+- **B-25** For the differences, `reconcile` calls `exit` on each removed half in reverse order. Then it calls `ui.sync()`. Then it calls `enter(engine, view, args)` on each added half. Then it calls `applyFocus`. [src/view/boot.js:115-128; test/boot.test.mjs:122] <!-- C-29 -->
+- **B-26** `reconcile` runs at most 16 passes, so a half that starts a transition re-enters on the next pass. `reconcile` returns at once when it already runs or the stack is unchanged. [src/view/boot.js:107-121] <!-- C-30 -->
+- **B-27** If a scene closes and reopens an overlay, the half gets `exit` and then `enter`, because the overlay id is part of the entry key. [src/view/boot.js:103; test/boot.test.mjs:46] <!-- C-31 -->
 - **B-28** The view halves of the main scene and of an overlay get their args on `enter`. A reopened overlay and a re-entered main scene get their new args. [test/boot-args.test.mjs:17; test/boot-args.test.mjs:25] <!-- C-408 -->
-- **B-29** A view half's `enter` runs after the UI sync, so the controls of its scene exist. A view half that builds a screen after the sync gets its slot adopted by `view.ui.adopt()`. [src/view/boot.js:110-111; test/boot.test.mjs:122; test/boot.test.mjs:192] <!-- C-409 -->
-- **B-30** `refresh` does nothing after dispose. Otherwise `refresh` runs `reconcile`, `ui.sync`, `applyFocus` and `view.nav.sync`. Then it sets the html attribute `data-lh-settled` to `'1'` or `'0'`, only when the value changed. [src/view/boot.js:116-120; test/boot.test.mjs:82] <!-- C-33 -->
-- **B-31** A click refreshes the view halves at once. A game error from a click lands in `engine.errors`. [src/view/boot.js:60; test/boot.test.mjs:41] <!-- C-410 -->
-- **B-32** `view.wait(p)` adds 1 to the pending count, takes `engine.block('view.wait')`, refreshes and returns `p`. When `p` resolves or rejects, `boot` lowers the count, releases the block and refreshes. [src/view/boot.js:121-126; test/boot.test.mjs:86; test/boot.test.mjs:109] <!-- C-34 -->
+- **B-29** A view half's `enter` runs after the UI sync, so the controls of its scene exist. A view half that builds a screen after the sync gets its slot adopted by `view.ui.adopt()`. [src/view/boot.js:123-124; test/boot.test.mjs:122; test/boot.test.mjs:192] <!-- C-409 -->
+- **B-30** `refresh` does nothing after dispose. Otherwise `refresh` runs `reconcile`, `ui.sync`, `applyFocus` and `view.nav.sync`. Then it sets the html attribute `data-lh-settled` to `'1'` or `'0'`, only when the value changed. [src/view/boot.js:129-133; test/boot.test.mjs:82] <!-- C-33 -->
+- **B-31** A click refreshes the view halves at once. A game error from a click lands in `engine.errors`. [src/view/boot.js:73; test/boot.test.mjs:41] <!-- C-410 -->
+- **B-32** `view.wait(p)` adds 1 to the pending count, takes `engine.block('view.wait')`, refreshes and returns `p`. When `p` resolves or rejects, `boot` lowers the count, releases the block and refreshes. [src/view/boot.js:134-139; test/boot.test.mjs:86; test/boot.test.mjs:109] <!-- C-34 -->
 - **B-33** A view half that waits in reaction to a build delays `then` until the wait settles, in both ack modes. `view.wait` keeps `settled()` false and blocks loads. [test/boot.test.mjs:109; test/boot.test.mjs:141] <!-- C-411 -->
-- **B-34** `boot` refreshes on each engine event of type `'scene'` or `'overlay'`. [src/view/boot.js:127; test/boot.test.mjs:23] <!-- C-36 -->
-- **B-35** On each load build (`engine.onBuilt`), `boot` reconciles and calls `built(engine, view)` on the active half that matches the scene name and id of the load. Then `boot` refreshes. A `view.wait` started in `built` holds the settle of the load. [src/view/boot.js:128-136; test/boot.test.mjs:141] <!-- C-37 -->
-- **B-36** On each render (`engine.onRender(alpha)`), `boot` reconciles. Then it runs `pipe.frame(alpha)` when a pipeline exists. Then it calls `frame(engine, alpha, view)` on each active half, on the half itself. Then it runs `pipe.draw()`. [src/view/boot.js:137-145; test/render-boot.test.mjs:35; test/boot.test.mjs:203] <!-- C-38 -->
-- **B-37** After the render work, `boot` sets `view.dt` and `view.rawDt` to 0 and refreshes. [src/view/boot.js:144] <!-- C-38 -->
-- **B-38** The render loop walks a snapshot of the active list. So a half that an earlier `frame` call exited is skipped for the rest of the frame. [src/view/boot.js:141-142] <!-- C-39 -->
-- **B-39** `boot` installs `window.engine` through `installEngine` with the driver, the target, the errors list, `after: refresh`, `busy` (true while a `view.wait` is pending) and the view. [src/view/boot.js:146] <!-- C-41 -->
-- **B-40** `boot` refreshes once before the driver starts. [src/view/boot.js:147] <!-- C-41 -->
-- **B-41** A second call to `dispose` does nothing. The first call stops the driver and calls `dispose` on each driver device. Then it disposes the UI and the hook and removes the safe-area style. Last, it removes the engine listeners and disposes the pipeline. [src/view/boot.js:148-153; test/boot.test.mjs:62] <!-- C-42 -->
-- **B-42** Under `flags.lhTest`, `boot` sets the driver to manual mode, or to manual `'all'` when `flags.lhRender` is set. `boot` also appends a style that turns off CSS transitions and animations. [src/view/boot.js:155-159; test/boot.test.mjs:16; test/boot.test.mjs:177] <!-- C-43 -->
-- **B-43** `boot` always calls `driver.start()`, after the `lhTest` block. Without `lhTest`, the driver is not manual, so each rAF frame steps the sim. Errors in views go to the errors list. [src/view/boot.js:166; test/boot.test.mjs:32] <!-- C-44 -->
-- **B-44** With the bench on, `boot` adds a slot device. The slot's `update` calls `bench.update()` and its `dispose` disposes the bench. [src/view/boot.js:47] <!-- C-45 -->
-- **B-45** With the bench on, `boot` loads `./bench/pads.js` with a dynamic import. Unless `boot` was disposed, it then opens the bench with the read-only view `{ localPlayers, unpaired, gamepad, onSeat }` and `{ doc, haptics }`. [src/view/boot.js:160-165] <!-- C-45 -->
-- **B-46** Without `?debug=pads`, `boot` adds no bench device, creates no bench element and imports no bench code. [src/view/boot.js:41-47; test/bench.test.mjs:120] <!-- C-47 -->
+- **B-34** `boot` refreshes on each engine event of type `'scene'` or `'overlay'`. [src/view/boot.js:140; test/boot.test.mjs:23] <!-- C-36 -->
+- **B-35** On each load build (`engine.onBuilt`), `boot` reconciles and calls `built(engine, view)` on the active half that matches the scene name and id of the load. Then `boot` refreshes. A `view.wait` started in `built` holds the settle of the load. [src/view/boot.js:141-149; test/boot.test.mjs:141] <!-- C-37 -->
+- **B-36** On each render (`engine.onRender(alpha)`), `boot` reconciles. Then it runs `pipe.frame(alpha)` when a pipeline exists. Then it calls `frame(engine, alpha, view)` on each active half, on the half itself. Then it runs `pipe.draw()`. [src/view/boot.js:150-158; test/render-boot.test.mjs:35; test/boot.test.mjs:203] <!-- C-38 -->
+- **B-37** After the render work, `boot` sets `view.dt` and `view.rawDt` to 0 and refreshes. [src/view/boot.js:157] <!-- C-38 -->
+- **B-38** The render loop walks a snapshot of the active list. So a half that an earlier `frame` call exited is skipped for the rest of the frame. [src/view/boot.js:154-155] <!-- C-39 -->
+- **B-39** `boot` installs `window.engine` through `installEngine` with the driver, the target, the errors list, `after: refresh`, `busy` (true while a `view.wait` is pending) and the view. [src/view/boot.js:159] <!-- C-41 -->
+- **B-40** `boot` refreshes once before the driver starts. [src/view/boot.js:160] <!-- C-41 -->
+- **B-41** A second call to `dispose` does nothing. The first call stops the driver and calls `dispose` on each driver device. Then it disposes the UI and the hook and removes the safe-area style. Last, it removes the engine listeners and disposes the pipeline. [src/view/boot.js:161-166; test/boot.test.mjs:62] <!-- C-42 -->
+- **B-42** Under `flags.lhTest`, `boot` sets the driver to manual mode, or to manual `'all'` when `flags.lhRender` is set. `boot` also appends a style that turns off CSS transitions and animations. [src/view/boot.js:168-172; test/boot.test.mjs:16; test/boot.test.mjs:177] <!-- C-43 -->
+- **B-43** `boot` always calls `driver.start()`, after the `lhTest` block, the bench block and the session replay. Without `lhTest`, the driver is not manual, so each rAF frame steps the sim. Errors in views go to the errors list. [src/view/boot.js:187; test/boot.test.mjs:32] <!-- C-44 -->
+- **B-44** With the bench on, `boot` adds a slot device. The slot's `update` calls `bench.update()` and its `dispose` disposes the bench. [src/view/boot.js:60] <!-- C-45 -->
+- **B-45** With the bench on, `boot` loads `./bench/pads.js` with a dynamic import. Unless `boot` was disposed, it then opens the bench with the read-only view `{ localPlayers, unpaired, gamepad, onSeat }` and `{ doc, haptics }`. [src/view/boot.js:173-178] <!-- C-45 -->
+- **B-46** Without `?debug=pads`, `boot` adds no bench device, creates no bench element and imports no bench code. [src/view/boot.js:54-60; test/bench.test.mjs:120] <!-- C-47 -->
+- **B-345** Under `flags.lhTest` with `flags.replay` equal to `'session'`, `boot` reads the text under `REPLAY_KEY` from `target.sessionStorage`. `boot` removes the entry, so the page uses it once. Then `boot` parses the text as the session snapshot and calls `checkTape(game, snap.tape)`. [src/view/boot.js:37-46; test/hook-state.test.mjs:51] <!-- C-413 -->
+- **B-346** When `boot` loaded a session snapshot, it calls `replayTape(engine, snap.tape)` after the bench block and before `driver.start()`. Then `boot` compares `checksum(engine.state())` with `snap.checksum` and refreshes the view. [src/view/boot.js:179-187; test/hook-state.test.mjs:51] <!-- C-416 -->
 
 ### Driver
 - **B-47** `start()` does nothing when the driver already runs. Otherwise `start()` sets `running`, clears the last timestamp and the rendered flag, and calls `engine.loop.reset()`. [src/view/driver.js:33-37; test/driver.test.mjs:65] <!-- C-51 -->
@@ -171,19 +177,27 @@ In this spec, "values object" means the object of action values that a device wr
 - **B-59** A load that is requested between two callbacks builds only after a frame drawn after the request. The driver drops a pending ack on `start()` and on a hidden callback. [test/driver.test.mjs:76; test/driver.test.mjs:87] <!-- C-63 -->
 
 ### The window.engine hook
-- **B-60** `installEngine` adds each `'error'` event and each `'unhandledrejection'` event of the target to the errors list as `{ type, message, stack }`. For an error, the message is `String(ev.message ?? ev.error ?? 'error')`. For a rejection, `type` is `'unhandledrejection'`. [src/view/hook.js:20-22; test/hook.test.mjs:32] <!-- C-66 -->
-- **B-61** The hook calls `after()` (the refresh of `boot`) once after `stepN`, `advance`, `render`, `go`, `overlay`, `close`, `jump`, `command`, `ui.tap`, `ui.press`, `ui.release` and `ui.fill`. `stepN` and `advance` return the result of the engine. [src/view/hook.js:19; src/view/hook.js:27-31; src/view/hook.js:43] <!-- C-69 -->
-- **B-62** `ui.tryTap(id)` calls `engine.ui.tryTap` and calls `after()` in a `finally` block. `ui.tree` and `ui.enabled` read the engine and do not call `after()`. [src/view/hook.js:43] <!-- C-70 -->
-- **B-63** `on(type, fn)` subscribes `fn` to the engine events of that type. `fn` gets a JSON-safe copy of the event. `on` returns the unsubscribe function of the engine. [src/view/hook.js:33; test/hook.test.mjs:26] <!-- C-72 -->
-- **B-64** `events.since(seq)` calls `engine.flushEvents()` first. Then it returns JSON-safe copies of the events since `seq`. So an event that was emitted outside a step is visible. [src/view/hook.js:34; test/hook.test.mjs:20; test/hook.test.mjs:55] <!-- C-73 -->
-- **B-65** `safeEvent` keeps `null`, string, boolean and number values. It replaces a number that is not finite with `null`. It copies an array of such values. [src/view/hook.js:4-16; test/hook.test.mjs:20] <!-- C-74 -->
-- **B-66** `safeEvent` reduces an object or function value that has `id` or `kind` to `{ id, kind }` with only the primitive fields. `safeEvent` drops every other value. [src/view/hook.js:11-13; test/hook.test.mjs:20] <!-- C-74 -->
-- **B-67** `settled()` is false when `busy()` is true or `engine.loading.active` is true. [src/view/hook.js:37-38; test/boot.test.mjs:109] <!-- C-76 -->
-- **B-68** If the target has no `document.querySelector`, `settled()` is true. Otherwise `settled()` is false while any element has `data-lh-state` `'opening'` or `'closing'`. [src/view/hook.js:39-40; test/boot.test.mjs:82] <!-- C-76 -->
+- **B-60** `installEngine` adds each `'error'` event and each `'unhandledrejection'` event of the target to the errors list as `{ type, message, stack }`. For an error, the message is `String(ev.message ?? ev.error ?? 'error')`. For a rejection, `type` is `'unhandledrejection'`. [src/view/hook.js:38-40; test/hook.test.mjs:32] <!-- C-66 -->
+- **B-61** The hook calls `after()` (the refresh of `boot`) once after `stepN`, `advance`, `render`, `go`, `overlay`, `close`, `jump`, `command`, `ui.tap`, `ui.press`, `ui.release` and `ui.fill`. `stepN` and `advance` return the result of the engine. [src/view/hook.js:37; src/view/hook.js:45-49; src/view/hook.js:79] <!-- C-69 -->
+- **B-62** `ui.tryTap(id)` calls `engine.ui.tryTap` and calls `after()` in a `finally` block. `ui.tree` and `ui.enabled` read the engine and do not call `after()`. [src/view/hook.js:79] <!-- C-70 -->
+- **B-63** `on(type, fn)` subscribes `fn` to the engine events of that type. `fn` gets a JSON-safe copy of the event. `on` returns the unsubscribe function of the engine. [src/view/hook.js:51; test/hook.test.mjs:26] <!-- C-72 -->
+- **B-64** `events.since(seq)` calls `engine.flushEvents()` first. Then it returns JSON-safe copies of the events since `seq`. So an event that was emitted outside a step is visible. [src/view/hook.js:52; test/hook.test.mjs:20; test/hook.test.mjs:55] <!-- C-73 -->
+- **B-65** `safeEvent` keeps `null`, string, boolean and number values. It replaces a number that is not finite with `null`. It copies an array of such values. [src/view/hook.js:5-17; test/hook.test.mjs:20] <!-- C-74 -->
+- **B-66** `safeEvent` reduces an object or function value that has `id` or `kind` to `{ id, kind }` with only the primitive fields. `safeEvent` drops every other value. [src/view/hook.js:12-14; test/hook.test.mjs:20] <!-- C-74 -->
+- **B-67** `settled()` is false when `busy()` is true or `engine.loading.active` is true. [src/view/hook.js:73-74; test/boot.test.mjs:109] <!-- C-76 -->
+- **B-68** If the target has no `document.querySelector`, `settled()` is true. Otherwise `settled()` is false while any element has `data-lh-state` `'opening'` or `'closing'`. [src/view/hook.js:75-76; test/boot.test.mjs:82] <!-- C-76 -->
 - **B-69** `installEngineHook` copies the property descriptors of `api` into the hook, so getters stay live. [src/view/debugHook.js:8; test/debugHook.test.mjs:12] <!-- C-81 -->
 - **B-70** `installEngineHook` adds `version` (`ENGINE_VERSION`) and `game` as enumerable, configurable values. These values win over the same keys in `api`. [src/view/debugHook.js:9; test/debugHook.test.mjs:28] <!-- C-81 -->
 - **B-71** `installEngineHook` defines `target.engine` as a non-writable, configurable, enumerable property. Assignment does not replace it, and a second install can replace it. [src/view/debugHook.js:10-11; test/debugHook.test.mjs:17] <!-- C-82 -->
 - **B-72** The command `untilLoaded` waits for the load that a command starts. With commands pending, it takes the delivering step and then waits for `engine.loading.active` to clear. [test/untilLoaded-driver.test.mjs:24; test/untilLoaded-driver.test.mjs:30; doc:docs/field-notes.md:755-759] <!-- C-412 -->
+- **B-347** `query(name, where)` returns an empty list when `engine.world` does not exist. Otherwise it returns a summary of each entity from `world.with()` that passes both tests. The first test is that its tags hold `name` or its `net` equals `name`. A `name` of `null` or `undefined` passes every entity. The second test is `where`. [src/view/hook.js:54-59; test/hook-state.test.mjs:20] <!-- C-418 -->
+- **B-348** `where` applies no filter when it is `null` or `undefined`. A function is a predicate on the entity. An object matches an entity when each key of the object equals the same key of the entity with `===`. [src/view/hook.js:26-27; test/hook-state.test.mjs:20] <!-- C-419 -->
+- **B-349** An entity summary holds `id` and a `tags` array. It also holds each own enumerable field whose value is `null`, a string, a number or a boolean, except `id`, `tags` and `xf`. With `xf`, it adds `p { x, y, z }` and `q { x, y, z, w }` of the current pose. [src/view/hook.js:19-25; test/hook-state.test.mjs:20] <!-- C-420 -->
+- **B-350** `checksum()` returns `checksum(engine.state())`. [src/view/hook.js:60; test/hook-state.test.mjs:39] <!-- C-421 -->
+- **B-351** `snapshot()` returns `{ v: 1, step: engine.time.step, checksum: checksum(engine.state()), tape }`. The `tape` is a copy of `engine.tape()` with `end` set to `engine.time.step`. [src/view/hook.js:61-64; test/hook-state.test.mjs:51] <!-- C-422 -->
+- **B-352** `restore(snap)` stores `JSON.stringify(snap)` in `target.sessionStorage` under `'lh-replay'`. Then it calls `target.location.replace` with the current href. The new href has any `replay` parameter removed and `replay=session` appended last. The hash stays. [src/view/hook.js:28-34; src/view/hook.js:65-70; test/hook-state.test.mjs:51] <!-- C-424 -->
+- **B-353** The hook member `policies` is `engine.game.policies`. [src/view/hook.js:71; test/hook-state.test.mjs:39] <!-- C-426 -->
+- **B-354** On a real Chromium page, `restore` reloads the page with `replay=session`. After the reload, the checksum and the state equal the values at the snapshot. The page shows the scene of the snapshot. [test/e2e.test.mjs:58] <!-- C-429 -->
 
 ### Gamepad device
 - **B-73** For each axis, `bindGamepad` reads the raw value (0 when the pad lacks the axis). The value is 0 when the raw magnitude is at or below the dead zone. Otherwise the value is `sign(raw) * (|raw| - dz) / (1 - dz)`. [src/view/gamepad.js:23-24; test/gamepad.test.mjs:14] <!-- C-87 -->
@@ -364,22 +378,23 @@ In this spec, "values object" means the object of action values that a device wr
 - **B-232** Seat input is recorded under the controller of the seat and replays the same. An old tape without seats replays as seat 0. [test/replay-seats.test.mjs:12; test/replay-seats.test.mjs:26] <!-- C-310 -->
 
 ### Haptics
-- **B-233** To zero a pad, haptics does nothing when the actuator has no `playEffect` function. Otherwise it plays a zero `trigger-rumble` when `actuator.effects` is an array that lists `'trigger-rumble'`, and a zero `dual-rumble` in all other cases. Then it calls `reset()`. [src/view/haptics.js:16-21; test/haptics.test.mjs:41] <!-- C-205 -->
-- **B-234** `stop(reason)` zeroes the live pads of every seat (`lp.pads`), then every unpaired pad that the seats module knows. [src/view/haptics.js:29-36; test/haptics.test.mjs:29; test/haptics.test.mjs:49] <!-- C-207 -->
-- **B-235** `stop(reason)` sets the remaining rounds to `frames - 1` and sends `{ type: 'haptics.stop', reason, frames }` to each listener. [src/view/haptics.js:37-41] <!-- C-207 -->
-- **B-236** A window blur calls `stop('blur')`. A pagehide calls `stop('pagehide')`. A `visibilitychange` to hidden calls `stop('hidden')`. A page that turns visible does not stop. [src/view/haptics.js:44-48; test/haptics.test.mjs:62] <!-- C-209 -->
-- **B-237** When a seat reports `'seat.seen'` for a pad, haptics zeroes that pad once. So a pad that the page sees for the first time gets one full stop round, even if the pad is unpaired. The same pad again, or later frames, get none. [src/view/haptics.js:6-7; src/view/haptics.js:46; test/haptics.test.mjs:19] <!-- C-210 -->
-- **B-238** A pausing overlay is any open overlay whose scene sets `pauses`. `update()` calls `stop('pause')` on the frame that a pausing overlay appears and returns. [src/view/haptics.js:42-43; src/view/haptics.js:61-64; test/haptics.test.mjs:79] <!-- C-211 -->
-- **B-239** `update()` does not stop again while the pausing overlay stays open. A non-pausing overlay never stops. [src/view/haptics.js:61-64; test/haptics.test.mjs:79] <!-- C-211 -->
-- **B-240** On each `update()` while stop rounds remain, haptics lowers the count by 1 and zeroes all pads again. So a stop is one round at once and `frames - 1` rounds on the next frames, `frames` rounds in all. [src/view/haptics.js:37-38; src/view/haptics.js:65; test/haptics.test.mjs:29] <!-- C-212 -->
-- **B-241** A game's own rumble in the `STOP_FRAMES` after a pausing overlay opens is cancelled by design. A game's rumble after the last stop round is left alone. [src/view/haptics.js:58; test/haptics.test.mjs:92] <!-- C-213 -->
-- **B-242** The driver does not call devices while the page is hidden, so the remaining rounds of a hide stop run after the page returns. [src/view/haptics.js:60; test/haptics.test.mjs:62] <!-- C-214 -->
-- **B-243** `dispose` of haptics removes the blur, pagehide and `visibilitychange` listeners and the `seat.seen` hook. It clears the listeners and sets the remaining rounds to 0. [src/view/haptics.js:67-71; test/haptics.test.mjs:113] <!-- C-217 -->
+- **B-233** To zero a pad, haptics does nothing when the actuator has no `playEffect` function. Otherwise it plays the effect that `zeroEffect(actuator)` returns. Then it calls `reset()`. [src/view/haptics.js:19-22; test/haptics.test.mjs:41] <!-- C-205 -->
+- **B-234** `stop(reason)` zeroes the live pads of every seat (`lp.pads`), then every unpaired pad that the seats module knows. [src/view/haptics.js:34-40; test/haptics.test.mjs:29; test/haptics.test.mjs:49] <!-- C-207 -->
+- **B-235** `stop(reason)` sets the remaining rounds to `frames - 1` and sends `{ type: 'haptics.stop', reason, frames }` to each listener. [src/view/haptics.js:39-43] <!-- C-207 -->
+- **B-236** A window blur calls `stop('blur')`. A pagehide calls `stop('pagehide')`. A `visibilitychange` to hidden calls `stop('hidden')`. A page that turns visible does not stop. [src/view/haptics.js:46-50; test/haptics.test.mjs:62] <!-- C-209 -->
+- **B-237** When a seat reports `'seat.seen'` for a pad, haptics zeroes that pad once. So a pad that the page sees for the first time gets one full stop round, even if the pad is unpaired. The same pad again, or later frames, get none. [src/view/haptics.js:6-7; src/view/haptics.js:48; test/haptics.test.mjs:19] <!-- C-210 -->
+- **B-238** A pausing overlay is any open overlay whose scene sets `pauses`. `update()` calls `stop('pause')` on the frame that a pausing overlay appears and returns. [src/view/haptics.js:44-45; src/view/haptics.js:63-66; test/haptics.test.mjs:79] <!-- C-211 -->
+- **B-239** `update()` does not stop again while the pausing overlay stays open. A non-pausing overlay never stops. [src/view/haptics.js:63-66; test/haptics.test.mjs:79] <!-- C-211 -->
+- **B-240** On each `update()` while stop rounds remain, haptics lowers the count by 1 and zeroes all pads again. So a stop is one round at once and `frames - 1` rounds on the next frames, `frames` rounds in all. [src/view/haptics.js:39-40; src/view/haptics.js:67; test/haptics.test.mjs:29] <!-- C-212 -->
+- **B-241** A game's own rumble in the `STOP_FRAMES` after a pausing overlay opens is cancelled by design. A game's rumble after the last stop round is left alone. [src/view/haptics.js:60; test/haptics.test.mjs:92] <!-- C-213 -->
+- **B-242** The driver does not call devices while the page is hidden, so the remaining rounds of a hide stop run after the page returns. [src/view/haptics.js:62; test/haptics.test.mjs:62] <!-- C-214 -->
+- **B-243** `dispose` of haptics removes the blur, pagehide and `visibilitychange` listeners and the `seat.seen` hook. It clears the listeners and sets the remaining rounds to 0. [src/view/haptics.js:69-73; test/haptics.test.mjs:113] <!-- C-217 -->
 - **B-244** Haptics is a driver device that runs after the seats and reads `lp.pads` of this frame. It never writes seats, input or the sim. The game, not the engine, plays its own rumble. [src/view/haptics.js:2-3; src/view/haptics.js:8] <!-- C-218 -->
 - **B-245** A steady frame with haptics on, two pads that have actuators and an open overlay allocates under 128 bytes in view code. [test/haptics-boot.test.mjs:60] <!-- C-219 -->
 - **B-246** The haptics stops of `boot` run from the driver. A blur and a pausing overlay stop rumble on a fake pad. On a real page, a pausing overlay gives a first-sight stop and then 20 zero effects, each followed by a reset. [test/haptics-boot.test.mjs:21; test/haptics-e2e.test.mjs:34] <!-- C-220 -->
 - **B-247** `view.haptics.stop(reason)` runs the 20-round stop on every pad. With `autoStop` false, `view.haptics` is `null`. [test/haptics-boot.test.mjs:69] <!-- C-221 -->
-- **B-248** A game must stop sending rumble while a pausing overlay is open. The pause stop of the engine lasts 20 frames, so a game that keeps sending effects rumbles under the menu. [doc:docs/spec.md:429; src/view/haptics.js:58] <!-- C-406 -->
+- **B-248** A game must stop sending rumble while a pausing overlay is open. The pause stop of the engine lasts 20 frames, so a game that keeps sending effects rumbles under the menu. [doc:docs/spec.md:436; src/view/haptics.js:60] <!-- C-406 -->
+- **B-355** `zeroEffect(actuator)` returns a zero `trigger-rumble` effect when `actuator.effects` is an array that lists `'trigger-rumble'`. In all other cases it returns a zero `dual-rumble` effect. [src/view/haptics.js:16-17; test/haptics.test.mjs:41] <!-- C-427 -->
 
 ### Pad edges
 - **B-249** `familyOf(pad)` returns `'xbox'` for no pad. It returns `'ps'` when the lower-case id matches `054c`, `dualshock`, `dualsense`, `playstation` or `sony`. It returns `'deck'` for `28de`, `steam deck` or `steamdeck`. It returns `'xbox'` for `045e`, `xbox` or `xinput`. [src/view/padEdges.js:10-16; test/padEdges.test.mjs:53] <!-- C-192 -->
@@ -419,7 +434,7 @@ In this spec, "values object" means the object of action values that a device wr
 - **B-281** While an armed trigger is down, the navigator adds the raw dt to the held time. It opens the hold menu with the longest `seconds` that the held time has reached (within 1e-9 s), once. [src/view/menuNav.js:139-143; src/view/menuNav.js:180; src/view/menuNav.js:195-200; test/menuNav.test.mjs:105] <!-- C-335 -->
 - **B-282** A key trigger that is pressed while a menu exists is marked down and not armed. So a key that is held across a menu never opens anything. [src/view/menuNav.js:159; test/menuNav.test.mjs:95] <!-- C-336 -->
 - **B-283** On blur, the navigator clears the held keys and the down and armed state of every trigger. It also lifts a held control. [src/view/menuNav.js:166] <!-- C-337 -->
-- **B-284** `sync()` reads the topmost menu from `topNav`. `menuOwnsInput` from the core nav module decides input ownership. `boot` calls `view.nav.sync()` after each UI sync. [src/view/menuNav.js:7-8; src/view/menuNav.js:132; src/view/menuNav.js:173-179; src/view/boot.js:118] <!-- C-338 -->
+- **B-284** `sync()` reads the topmost menu from `topNav`. `menuOwnsInput` from the core nav module decides input ownership. `boot` calls `view.nav.sync()` after each UI sync. [src/view/menuNav.js:7-8; src/view/menuNav.js:132; src/view/menuNav.js:173-179; src/view/boot.js:131] <!-- C-338 -->
 - **B-285** `update(dt = 0, raw = dt)` counts hold triggers on the raw dt, so a slow frame does not stretch a 2 s hold. `dispose` removes the key, keyup and blur listeners and the capture-phase pointerdown listener. [src/view/menuNav.js:167-168; src/view/menuNav.js:180; src/view/menuNav.js:202-206] <!-- C-339 -->
 
 ### DOM UI
@@ -463,33 +478,35 @@ In this spec, "values object" means the object of action values that a device wr
 - **B-321** `selfTest` logs the browser, the page focus, the visibility, the secure context, the pad id, index and mapping, the actuator, `playEffect`, `reset` and `effects`. Then it plays a 500 ms `dual-rumble` and a 500 ms `trigger-rumble`. It logs an error and stops when no pad is selected or the pad has no actuator. [src/view/bench/padStats.js:109-122; test/bench-stats.test.mjs:95] <!-- C-380 -->
 - **B-322** `supports(a)` returns `{ dual, trigger }` from the `effects` list of the actuator. Both are false without an actuator. Without a list, `dual` is true when `a.type` is `'dual-rumble'` and `null` otherwise, and `trigger` is `null`. [src/view/bench/padStats.js:123-127; test/bench-stats.test.mjs:109] <!-- C-381 -->
 - **B-323** `describe(d)` returns `'-'` for no device. A pad reads `pad <index> "<id>" mapping "<mapping>"`. A keys device reads `keys <scheme>`. A touch device reads `touch`. A game device reads `<kind> <key> "<id>"`. A lost pad or game device adds ` · lost`. [src/view/bench/padStats.js:128-135; test/bench-stats.test.mjs:109] <!-- C-382 -->
-- **B-324** The bench appends a style element `[data-lh-bench-style]` and a section `[data-lh-bench=pads]` to the document. The markup is static and every live value goes in through `textContent`. `dispose` removes both. [src/view/bench/pads.js:73-76; src/view/bench/pads.js:255; test/bench.test.mjs:28] <!-- C-384 -->
-- **B-325** The bench log keeps at most 300 lines and the haptics log keeps at most 60 lines. Each line is `<seconds since open with 3 decimals>  <text>`, with the newest line first. [src/view/bench/pads.js:79-84] <!-- C-385 -->
-- **B-326** The bench logs each seat event as `<type> · seat <seat or -> · <device>`, with ` · <op>` for a device event. A `seat.lost` line has the class `err`. The bench logs each engine haptics stop as `engine stop (<reason>): zero dual-rumble + reset for <frames> frames`. [src/view/bench/pads.js:92-93; test/bench.test.mjs:28] <!-- C-386 -->
-- **B-327** The bench haptics buttons play on the actuator of the selected pad through `play()`. The dual-rumble button has the label `Play` (legend `Body: dual-rumble`) and logs as `Body`. The other buttons are Strong motor, Weak motor, Both, Left and Right (`trigger-rumble`). Strong motor and Weak motor use 1 when the slider is 0. [src/view/bench/pads.js:96-115; test/bench.test.mjs:63] <!-- C-389 -->
-- **B-328** A pattern button stops the pending steps of the running pattern, then schedules each step with the timer. The pattern stays on the pad it started on. All steps except the last play quiet. [src/view/bench/pads.js:116-124; test/bench.test.mjs:143; test/bench.test.mjs:197] <!-- C-390 -->
-- **B-329** A pattern button logs an error when the pad has no actuator. A trigger pattern logs an error that says to expect an error. This happens only when the actuator has an effects list that lacks `trigger-rumble`. Without an effects list, the bench logs nothing. [src/view/bench/pads.js:119-121; src/view/bench/padStats.js:123-127] <!-- C-390 -->
-- **B-330** The Self-test button runs `selfTest` on the selected pad with the user agent, the page focus, the visibility and the secure context. [src/view/bench/pads.js:129-132; test/bench.test.mjs:63] <!-- C-391 -->
-- **B-331** The Stop all button stops pattern steps and clears the three live checkboxes. The button also resets the live state and sends a zero `dual-rumble` then `reset` to the selected pad. Live off and live idle do the same reset. [src/view/bench/pads.js:98-104; src/view/bench/pads.js:133-136; src/view/bench/pads.js:141; test/bench.test.mjs:206] <!-- C-392 -->
-- **B-332** The clear traces button empties the stick traces and outlines of each pad. The hide button toggles the bench body and its label between `'hide'` and `'show'`. [src/view/bench/pads.js:137-138] <!-- C-393 -->
-- **B-333** Live coupling reads three values of the selected pad at each update. The values are the left trigger (button 6) and the right trigger (button 7). The third value is the length of the left stick (axes 0 and 1), capped at 1. Live coupling plays the effect from `liveEffect` quietly. When no live box is checked or no actuator exists, live coupling resets once after activity. [src/view/bench/pads.js:139-146; test/bench.test.mjs:79] <!-- C-394 -->
-- **B-334** The bench lists seats as `P<player or ?> · seat <n>` with ` · pending`, ` · leaving` and ` · a device is lost` where they apply. Then it lists the profile, the contexts and the devices of each seat. A group `'unpaired'` lists devices that no seat holds. The bench rebuilds this part only when its content changes. [src/view/bench/pads.js:159-173; test/bench.test.mjs:28] <!-- C-395 -->
-- **B-335** The bench has one tab for each pad device, held or unpaired. The selected pad is the first non-lost pad unless the player clicked a tab. A tab shows ` (lost)` for a lost pad. [src/view/bench/pads.js:153-158; src/view/bench/pads.js:174-183; src/view/bench/pads.js:240] <!-- C-396 -->
-- **B-336** For the selected pad, the bench shows id, index, mapping, axis and button counts, update rate in `/s`, and effects. It also shows a table of buttons (state, value, peak, presses) and a table of axes (value, min, max). Names come from `STD_BUTTONS` and `STD_AXES` only for the standard mapping. [src/view/bench/pads.js:47-48; src/view/bench/pads.js:190-213; test/bench.test.mjs:46] <!-- C-397 -->
-- **B-337** For each stick, the bench shows x, y and radius, and `(in deadzone)` below the dz slider. The bench also shows rest drift, the edge average with range and filled sectors, and a canvas. Without edge data the bench writes `roll the stick round its edge`. The bench skips the canvas without a 2D context. [src/view/bench/pads.js:51-54; src/view/bench/pads.js:214-222] <!-- C-398 -->
-- **B-338** The bench support table shows whether the pad has a `vibrationActuator`. It shows `yes`, `no` or `not listed: try it` for `dual-rumble` and `trigger-rumble`. [src/view/bench/pads.js:223-225] <!-- C-399 -->
-- **B-339** `update()` of the bench counts frames in the last 1000 ms and shows them as `N fps`. The bench makes new stats for a pad whose id changed. The bench logs each button change as `pad <index> · <name> [<i>] down · <value>` or `up`. [src/view/bench/pads.js:228-239; test/bench.test.mjs:46] <!-- C-400 -->
-- **B-340** When no pad is available, the bench shows `none yet: press a button on a controller`, or `lost` for a lost selected pad. [src/view/bench/pads.js:191-194] <!-- C-401 -->
-- **B-341** On dispose, the bench stops pattern steps and live state. It plays a zero `dual-rumble` and then `reset()` on every pad that it can reach. It then sets `closed` and removes its listeners, element and style. After the close, a late watchdog logs nothing and `play()` does nothing. [src/view/bench/pads.js:246-255; test/bench.test.mjs:157; test/bench.test.mjs:177; test/bench.test.mjs:187] <!-- C-402 -->
+- **B-324** The bench appends a style element `[data-lh-bench-style]` and a section `[data-lh-bench=pads]` to the document. The markup is static and every live value goes in through `textContent`. `dispose` removes both. [src/view/bench/pads.js:74-77; src/view/bench/pads.js:256; test/bench.test.mjs:28] <!-- C-384 -->
+- **B-325** The bench log keeps at most 300 lines and the haptics log keeps at most 60 lines. Each line is `<seconds since open with 3 decimals>  <text>`, with the newest line first. [src/view/bench/pads.js:80-85] <!-- C-385 -->
+- **B-326** The bench logs each seat event as `<type> · seat <seat or -> · <device>`, with ` · <op>` for a device event. A `seat.lost` line has the class `err`. The bench logs each engine haptics stop as `engine stop (<reason>): zero effect + reset for <frames> frames`. [src/view/bench/pads.js:93-94; test/bench.test.mjs:28] <!-- C-386 -->
+- **B-327** The bench haptics buttons play on the actuator of the selected pad through `play()`. The dual-rumble button has the label `Play` (legend `Body: dual-rumble`) and logs as `Body`. The other buttons are Strong motor, Weak motor, Both, Left and Right (`trigger-rumble`). Strong motor and Weak motor use 1 when the slider is 0. [src/view/bench/pads.js:97-116; test/bench.test.mjs:63] <!-- C-389 -->
+- **B-328** A pattern button stops the pending steps of the running pattern, then schedules each step with the timer. The pattern stays on the pad it started on. All steps except the last play quiet. [src/view/bench/pads.js:117-125; test/bench.test.mjs:143; test/bench.test.mjs:204] <!-- C-390 -->
+- **B-329** A pattern button logs an error when the pad has no actuator. A trigger pattern logs an error that says to expect an error. This happens only when the actuator has an effects list that lacks `trigger-rumble`. Without an effects list, the bench logs nothing. [src/view/bench/pads.js:120-122; src/view/bench/padStats.js:123-127] <!-- C-390 -->
+- **B-330** The Self-test button runs `selfTest` on the selected pad with the user agent, the page focus, the visibility and the secure context. [src/view/bench/pads.js:130-133; test/bench.test.mjs:63] <!-- C-391 -->
+- **B-331** The Stop all button stops pattern steps and clears the three live checkboxes. The button also resets the live state. It sends the zero effect from `zeroEffect(actuator)` and then `reset` to the selected pad. Live off and live idle do the same reset. [src/view/bench/pads.js:7; src/view/bench/pads.js:99-105; src/view/bench/pads.js:134-137; src/view/bench/pads.js:142; test/bench.test.mjs:213] <!-- C-392 -->
+- **B-332** The clear traces button empties the stick traces and outlines of each pad. The hide button toggles the bench body and its label between `'hide'` and `'show'`. [src/view/bench/pads.js:138-139] <!-- C-393 -->
+- **B-333** Live coupling reads three values of the selected pad at each update. The values are the left trigger (button 6) and the right trigger (button 7). The third value is the length of the left stick (axes 0 and 1), capped at 1. Live coupling plays the effect from `liveEffect` quietly. When no live box is checked or no actuator exists, live coupling resets once after activity. [src/view/bench/pads.js:140-147; test/bench.test.mjs:79] <!-- C-394 -->
+- **B-334** The bench lists seats as `P<player or ?> · seat <n>` with ` · pending`, ` · leaving` and ` · a device is lost` where they apply. Then it lists the profile, the contexts and the devices of each seat. A group `'unpaired'` lists devices that no seat holds. The bench rebuilds this part only when its content changes. [src/view/bench/pads.js:160-174; test/bench.test.mjs:28] <!-- C-395 -->
+- **B-335** The bench has one tab for each pad device, held or unpaired. The selected pad is the first non-lost pad unless the player clicked a tab. A tab shows ` (lost)` for a lost pad. [src/view/bench/pads.js:154-159; src/view/bench/pads.js:175-184; src/view/bench/pads.js:241] <!-- C-396 -->
+- **B-336** For the selected pad, the bench shows id, index, mapping, axis and button counts, update rate in `/s`, and effects. It also shows a table of buttons (state, value, peak, presses) and a table of axes (value, min, max). Names come from `STD_BUTTONS` and `STD_AXES` only for the standard mapping. [src/view/bench/pads.js:48-49; src/view/bench/pads.js:191-214; test/bench.test.mjs:46] <!-- C-397 -->
+- **B-337** For each stick, the bench shows x, y and radius, and `(in deadzone)` below the dz slider. The bench also shows rest drift, the edge average with range and filled sectors, and a canvas. Without edge data the bench writes `roll the stick round its edge`. The bench skips the canvas without a 2D context. [src/view/bench/pads.js:52-55; src/view/bench/pads.js:215-223] <!-- C-398 -->
+- **B-338** The bench support table shows whether the pad has a `vibrationActuator`. It shows `yes`, `no` or `not listed: try it` for `dual-rumble` and `trigger-rumble`. [src/view/bench/pads.js:224-226] <!-- C-399 -->
+- **B-339** `update()` of the bench counts frames in the last 1000 ms and shows them as `N fps`. The bench makes new stats for a pad whose id changed. The bench logs each button change as `pad <index> · <name> [<i>] down · <value>` or `up`. [src/view/bench/pads.js:229-240; test/bench.test.mjs:46] <!-- C-400 -->
+- **B-340** When no pad is available, the bench shows `none yet: press a button on a controller`, or `lost` for a lost selected pad. [src/view/bench/pads.js:192-195] <!-- C-401 -->
+- **B-341** On dispose, the bench stops pattern steps and live state. It plays the zero effect from `zeroEffect(actuator)` and then `reset()` on every pad that it can reach. It then sets `closed` and removes its listeners, element and style. After the close, a late watchdog logs nothing and `play()` does nothing. [src/view/bench/pads.js:247-256; test/bench.test.mjs:157; test/bench.test.mjs:177; test/bench.test.mjs:187; test/bench.test.mjs:194] <!-- C-402 -->
 - **B-342** The bench never changes seats or bindings and issues no command. The bench reads view state only. [src/view/bench/pads.js:2-4; test/bench.test.mjs:99] <!-- C-403 -->
-- **B-343** The bench code ships inside every bundle, because the build inlines the dynamic import. Without `?debug=pads`, nothing of it runs, and no listener, device or element exists. [src/view/bench/pads.js:5-6; src/view/boot.js:41-47] <!-- C-404 -->
-- **B-344** The bench is placed at the top right of the viewport with `--lh-sa-top` and `--lh-sa-right`. The bench has z-index 2147483000 and a width of `min(440px, 100vw - 16px)`. [src/view/bench/pads.js:9] <!-- C-405 -->
+- **B-343** The bench code ships inside every bundle, because the build inlines the dynamic import. Without `?debug=pads`, nothing of it runs, and no listener, device or element exists. [src/view/bench/pads.js:5-6; src/view/boot.js:54-60] <!-- C-404 -->
+- **B-344** The bench is placed at the top right of the viewport with `--lh-sa-top` and `--lh-sa-right`. The bench has z-index 2147483000 and a width of `min(440px, 100vw - 16px)`. [src/view/bench/pads.js:10] <!-- C-405 -->
+- **B-356** The pad bench imports `zeroEffect` from `haptics.js`. So its stops send the same zero effect as the engine stop. [src/view/bench/pads.js:7; src/view/bench/pads.js:102; src/view/bench/pads.js:253; test/bench.test.mjs:187] <!-- C-428 -->
 
 ## Data and state
 
 | Data | Shape | Evidence |
 | --- | --- | --- |
-| View definition | `defineView` returns a frozen object. It holds a frozen copy of `scenes`. It holds a frozen copy of `render` and of `haptics` only when those options are defined. | [src/view/boot.js:20-23] <!-- C-5 --> |
+| View definition | `defineView` returns a frozen object. It holds a frozen copy of `scenes`. It holds a frozen copy of `render` and of `haptics` only when those options are defined. | [src/view/boot.js:22-25] <!-- C-5 --> |
+| Session snapshot | `{ v: 1, step, checksum, tape }`. The `tape` is a copy of the recorded tape with `end` set to the step. A page stores it as text in `sessionStorage` under `'lh-replay'` until the next boot reads it. | [src/view/hook.js:29; src/view/hook.js:61-64; src/view/boot.js:41-43] <!-- C-413 C-422 C-426 --> |
 | `bindGamepad` bindings | `{ deadZone, axes: { <index>: [name, sign, curve?] }, buttons: { <index>: name \| [name, sign] \| list of those } }`. A list whose first element is not a string is flattened, so one button can drive several actions. | [src/view/gamepad.js:8-11; test/gamepad.test.mjs:32] <!-- C-85 --> |
 | `bindKeyboard` bindings | A key name maps to an action name (a button) or to `[action, sign]` (an axis). The module lowercases every key at bind time. | [src/view/keyboard.js:9-16; test/keyboard.test.mjs:47] <!-- C-94 --> |
 | `bindPointer` command data | The `at()` payload, then `phase`, `pointer`, `button` and `kind`. The reserved keys come last, so `at()` cannot override them. | [src/view/pointer.js:16; src/view/pointer.js:35; test/pointer.test.mjs:72] <!-- C-117 --> |
@@ -509,32 +526,41 @@ In this spec, "values object" means the object of action values that a device wr
 
 | Key | Default | Effect | Evidence |
 | --- | --- | --- | --- |
-| `boot` option `doc` | `target.document`, then `globalThis.document` | The document that `boot` uses. | [src/view/boot.js:27] <!-- C-7 --> |
-| `boot` option `flags` | `parseFlags(target.location.search)` | The parsed URL flags. | [src/view/boot.js:28] <!-- C-7 --> |
+| `boot` option `doc` | `target.document`, then `globalThis.document` | The document that `boot` uses. | [src/view/boot.js:29] <!-- C-7 --> |
+| `boot` option `flags` | `parseFlags(target.location.search)` | The parsed URL flags. | [src/view/boot.js:30] <!-- C-7 --> |
+| `flags.replay` | none | Under `lhTest`, the value `'session'` makes `boot` replay the session snapshot in `sessionStorage`. | [src/view/boot.js:39] <!-- C-413 --> |
+| `flags.lhRecord` | false | When true, `boot` creates the engine with `record: true`. The `snapshot()` call needs it. | [src/view/boot.js:49; src/view/hook.js:62] <!-- C-9 C-423 --> |
 | `bindGamepad` `bindings.deadZone` | 0.15 | The dead zone of every axis of the device. | [src/view/gamepad.js:7; test/gamepad.test.mjs:14] <!-- C-84 --> |
 | `bindPointer` `tap.move` | 12 px | The distance after which a press is far. | [src/view/pointer.js:9; test/pointer.test.mjs:25] <!-- C-113 --> |
 | `bindPointer` `tap.seconds` | 0.45 s | The longest held time of a tap. | [src/view/pointer.js:9; test/pointer.test.mjs:25] <!-- C-113 --> |
 | Object ramp of `bindKeyboard` | none | `{ rise, fall }` in units per second. See B-88. | [src/view/keyboard.js:53-57] <!-- C-103 --> |
 | `createProfiles` option `storage` | `window.localStorage` | With `undefined`, the module uses `window.localStorage` and never `globalThis.localStorage`. With `null`, nothing is saved. | [src/view/profiles.js:5-7; src/view/profiles.js:21; test/seat-bindings.test.mjs:71] <!-- C-187 --> |
 | `STICK` | `{ fire: 0.5, rearm: 0.3 }` | A stick push fires when an axis passes 0.5. The stick re-arms when both axes are under 0.3. | [src/view/padEdges.js:8; test/padEdges.test.mjs:21] <!-- C-191 --> |
-| `STOP_FRAMES` | 20 | The number of stop rounds. `createHaptics` takes `frames` with this default. | [src/view/haptics.js:9; src/view/haptics.js:23] <!-- C-202 --> |
+| `STOP_FRAMES` | 20 | The number of stop rounds. `createHaptics` takes `frames` with this default. | [src/view/haptics.js:9; src/view/haptics.js:25] <!-- C-202 --> |
 | `JOIN_AXIS`, `STILL`, `STILL_POLLS` | 0.5, 0.02, 10 | An axis edge needs a move of more than 0.5. An axis that moves less than 0.02 per poll for 10 polls re-anchors. | [src/view/seats.js:10-11] <!-- C-222 --> |
 | `enable({ max, join, contexts })` | `max` 4, `join` the default join, `contexts` `[]` | Sets the seat limit, the join function and the starting mapping contexts. A custom `join` makes `regain` same-id only. | [src/view/seats.js:365-370] <!-- C-271 --> |
 | Bench constants | `SECTORS` 36, `TRACE` 3000, `TAP_MIN` 50, `FULL` 0.95, `WINDOW` 1000 ms, `CENTRE` 0.3, `CALM` 30 polls, `CALM_MOVE` 0.01 | Limits of the bench statistics and of the live taps. | [src/view/bench/padStats.js:9-10] <!-- C-363 --> |
-| Bench slider defaults | dr-strong 1, dr-weak 0.5, dr-dur 400 ms, dr-delay 0 ms, tr-left 0.8, tr-right 0.8, tr-strong 0, tr-weak 0, tr-dur 300 ms, live-tap 130 ms, live-tap-len 60 ms, live-curve 0.6, dz 0.08 | Start values of the bench controls. | [src/view/bench/pads.js:20-26] <!-- C-387 --> |
-| Bench slider ranges | dr-strong, dr-weak, tr-left, tr-right, tr-strong and tr-weak 0 to 1. dr-dur and tr-dur 10 to 5000 ms. dr-delay 0 to 2000 ms. live-tap 80 to 400 ms. live-tap-len 50 to 150 ms. live-curve 0.3 to 1.5. dz 0 to 0.3. | Limits of the bench controls. | [src/view/bench/pads.js:21-26] <!-- C-388 --> |
+| Bench slider defaults | dr-strong 1, dr-weak 0.5, dr-dur 400 ms, dr-delay 0 ms, tr-left 0.8, tr-right 0.8, tr-strong 0, tr-weak 0, tr-dur 300 ms, live-tap 130 ms, live-tap-len 60 ms, live-curve 0.6, dz 0.08 | Start values of the bench controls. | [src/view/bench/pads.js:21-27] <!-- C-387 --> |
+| Bench slider ranges | dr-strong, dr-weak, tr-left, tr-right, tr-strong and tr-weak 0 to 1. dr-dur and tr-dur 10 to 5000 ms. dr-delay 0 to 2000 ms. live-tap 80 to 400 ms. live-tap-len 50 to 150 ms. live-curve 0.3 to 1.5. dz 0 to 0.3. | Limits of the bench controls. | [src/view/bench/pads.js:22-27] <!-- C-388 --> |
 
 ## Errors and limits
 
 | Source | Condition | Result | Evidence |
 | --- | --- | --- | --- |
-| `defineView` | `scenes` is missing or is not an object. | Throws `defineView: scenes required`. | [src/view/boot.js:13] <!-- C-1 --> |
-| `defineView` | A scene's `enter`, `exit`, `frame` or `built` is defined and is not a function. | Throws `defineView: scene '<n>'.<h> must be a function`. | [src/view/boot.js:14] <!-- C-2 --> |
-| `defineView` | `haptics` is `null`, is not an object, has a key other than `autoStop`, or has an `autoStop` that is not a boolean. | Throws `defineView: haptics must be { autoStop: boolean }`. | [src/view/boot.js:17-19; test/haptics-boot.test.mjs:51] <!-- C-4 --> |
-| `boot` | A half's `exit`, `enter`, `built` or `frame` throws. | `boot` adds the error to the errors list. The frame still draws. | [src/view/boot.js:62; src/view/boot.js:109; src/view/boot.js:111; src/view/boot.js:142; test/boot.test.mjs:32; test/render-boot.test.mjs:51] <!-- C-32 --> |
-| `boot` | `pipe.frame` or `pipe.draw` throws. | `boot` adds the error to the errors list. | [src/view/boot.js:140; src/view/boot.js:143; test/render-boot.test.mjs:51] <!-- C-40 --> |
-| `view.wait` | The promise rejects. | `boot` adds the rejection to the errors list. | [src/view/boot.js:124; test/boot.test.mjs:86] <!-- C-35 --> |
-| `boot` | The dynamic import of the bench fails. | `boot` adds the error to the errors list. | [src/view/boot.js:164] <!-- C-46 --> |
+| `defineView` | `scenes` is missing or is not an object. | Throws `defineView: scenes required`. | [src/view/boot.js:15] <!-- C-1 --> |
+| `defineView` | A scene's `enter`, `exit`, `frame` or `built` is defined and is not a function. | Throws `defineView: scene '<n>'.<h> must be a function`. | [src/view/boot.js:16] <!-- C-2 --> |
+| `defineView` | `haptics` is `null`, is not an object, has a key other than `autoStop`, or has an `autoStop` that is not a boolean. | Throws `defineView: haptics must be { autoStop: boolean }`. | [src/view/boot.js:19-21; test/haptics-boot.test.mjs:51] <!-- C-4 --> |
+| `boot` | A half's `exit`, `enter`, `built` or `frame` throws. | `boot` adds the error to the errors list. The frame still draws. | [src/view/boot.js:75; src/view/boot.js:122; src/view/boot.js:124; src/view/boot.js:147; src/view/boot.js:155; test/boot.test.mjs:32; test/render-boot.test.mjs:51] <!-- C-32 --> |
+| `boot` | `pipe.frame` or `pipe.draw` throws. | `boot` adds the error to the errors list. | [src/view/boot.js:153; src/view/boot.js:156; test/render-boot.test.mjs:51] <!-- C-40 --> |
+| `view.wait` | The promise rejects. | `boot` adds the rejection to the errors list. | [src/view/boot.js:137; test/boot.test.mjs:86] <!-- C-35 --> |
+| `boot` | The dynamic import of the bench fails. | `boot` adds the error to the errors list. | [src/view/boot.js:177] <!-- C-46 --> |
+| `boot` | `?replay=session` is set and `sessionStorage` holds no snapshot. | `boot` adds `engine: ?replay=session but no snapshot in sessionStorage` to the errors list. | [src/view/boot.js:39-46; test/hook-state.test.mjs:67] <!-- C-415 --> |
+| `boot` | Reading, parsing or checking the stored snapshot throws. | `boot` adds the error to the errors list and starts without a replay. | [src/view/boot.js:44-45; test/hook-state.test.mjs:67] <!-- C-415 --> |
+| `boot` | The replayed state has another checksum than `snap.checksum`. | `boot` adds `engine: replay=session: the replayed state differs from the snapshot (checksum <got> vs <snap.checksum>)` to the errors list. | [src/view/boot.js:179-186; test/hook-state.test.mjs:67] <!-- C-417 --> |
+| `boot` | `replayTape` throws. | `boot` adds the error to the errors list. The refresh still runs. | [src/view/boot.js:181; src/view/boot.js:184-185] <!-- C-417 --> |
+| `snapshot()` | `engine.tape()` throws, so the page does not record. | Throws `engine: snapshot needs a recording page (?lh-test&lh-record)`. | [src/view/hook.js:62; test/hook-state.test.mjs:46] <!-- C-423 --> |
+| `restore(snap)` | `snap.v` is not 1, or `snap.tape` is missing. | Throws `engine: restore: not a snapshot`. | [src/view/hook.js:66; test/hook-state.test.mjs:67] <!-- C-425 --> |
+| `restore(snap)` | `target.sessionStorage` or `target.location.replace` is missing. | Throws `engine: restore needs a page (sessionStorage and location)`. | [src/view/hook.js:67-68] <!-- C-425 --> |
 | Driver | The rAF callback throws. | The driver calls `onError(err)` and ignores an error that `onError` throws. Without `onError` it calls `console.error`. The loop stays alive. | [src/view/driver.js:23-24; test/driver.test.mjs:57] <!-- C-60 --> |
 | `installEngineHook` | `game` is not a non-empty string. | Throws TypeError `installEngineHook: game id required`. An earlier hook stays. | [src/view/debugHook.js:7; test/debugHook.test.mjs:23; test/debugHook.test.mjs:33] <!-- C-80 --> |
 | `bindGamepad` | A button binding is an empty array. | Throws `bindGamepad: button <k> has an empty binding list`. | [src/view/gamepad.js:11; test/gamepad.test.mjs:44] <!-- C-86 --> |
@@ -548,10 +574,10 @@ In this spec, "values object" means the object of action values that a device wr
 | `checkContext` | `keys` is not an object, a scheme lacks a `bindings` object, or `touch` is not a function. | Throws `<who>: keys must be { [scheme]: { bindings, ramps, map, mappable } }`, `<who>: keys.<s>.bindings must be bindKeyboard bindings` or `<who>: touch must be a function (engine) => devices`. | [src/view/contexts.js:43-51; test/seat-contexts.test.mjs:43] <!-- C-171 --> |
 | `checkContext` | `mappable` is not a plain object, or an input is not a string or is not bound by that entry. | Throws `<who> mappable must be { [name]: input }` or `<who> mappable '<n>' names <input>, which it does not bind`. | [src/view/contexts.js:21-31; test/seat-contexts.test.mjs:43] <!-- C-173 --> |
 | `load` and `save` of profiles | The store is missing, a storage call throws, the value is not a string, or the JSON is bad. | `load` returns `{}`. `save` returns `false` for a missing store or a throwing `setItem`, and `true` otherwise. Neither function throws. | [src/view/profiles.js:24-29; test/seat-bindings.test.mjs:56] <!-- C-188 C-298 --> |
-| `createHaptics` | `seats` is missing, or `frames` is not an integer of at least 1. | Throws `haptics: needs the seats` or `haptics: frames must be a positive integer`. | [src/view/haptics.js:24-25] <!-- C-203 --> |
-| Haptics zeroing | A zeroing call throws, a promise rejects, or the actuator has no `playEffect`. | The error is ignored and the other pads still stop. An actuator without `playEffect` is skipped without an error. | [src/view/haptics.js:14; src/view/haptics.js:17-20; test/haptics.test.mjs:101] <!-- C-206 --> |
-| Haptics listener | A listener throws. | The throw does not stop a stop. | [src/view/haptics.js:40] <!-- C-208 --> |
-| `haptics.on` | `fn` is not a function. | Throws `haptics.on: needs a function`. | [src/view/haptics.js:51] <!-- C-216 --> |
+| `createHaptics` | `seats` is missing, or `frames` is not an integer of at least 1. | Throws `haptics: needs the seats` or `haptics: frames must be a positive integer`. | [src/view/haptics.js:26-27] <!-- C-203 --> |
+| Haptics zeroing | A zeroing call throws, a promise rejects, or the actuator has no `playEffect`. | The error is ignored and the other pads still stop. An actuator without `playEffect` is skipped without an error. | [src/view/haptics.js:14; src/view/haptics.js:19-22; test/haptics.test.mjs:101] <!-- C-206 --> |
+| Haptics listener | A listener throws. | The throw does not stop a stop. | [src/view/haptics.js:42] <!-- C-208 --> |
+| `haptics.on` | `fn` is not a function. | Throws `haptics.on: needs a function`. | [src/view/haptics.js:53] <!-- C-216 --> |
 | `contexts.add` | The name is not declared, or the priority is not finite. | Throws `seats: unknown context '<name>' (declare it with view.context first)` or `seats: context priority must be a finite number`. | [src/view/seats.js:197-198] <!-- C-236 --> |
 | `context()` | `engine.game.id` is empty and a pad entry or key scheme has a `mappable`. | Throws `seats: a game with mappable bindings needs an id`. Without this check, saves land under `lh.bindings.undefined`. | [src/view/seats.js:215; test/seat-bindings.test.mjs:145] <!-- C-240 --> |
 | `offer` | `join` returns a value that is not an integer from 0 to `max - 1`, and not `'new'`, `null` or `undefined`. | Throws `seats: join must return a seat number in 0..<max-1>, 'new' or null`. | [src/view/seats.js:299; test/seats.test.mjs:82] <!-- C-256 --> |
@@ -567,12 +593,12 @@ In this spec, "values object" means the object of action values that a device wr
 | Game device values | `values` names an action that the input does not know. | The seats module skips the write of that frame, clears the source and reports once until the values are valid again: `seats.device: kind '<k>' unit: wrote unknown action '<a>'`. | [src/view/seats.js:119; src/view/seats.js:146-149; test/seats.test.mjs:248] <!-- C-304 --> |
 | Game device `read()` | `read()` throws or does not return an array. | The seats module reports once (until it recovers) `seats.device: kind '<k>' failed: <message>` through `onError`. It clears the source of each paired unit on each failing frame and marks no unit lost. It does not stop other kinds or seats. A throwing `onError` is ignored. | [src/view/seats.js:118-119; src/view/seats.js:126-127; src/view/seats.js:153-157; test/seats.test.mjs:260; test/seats.test.mjs:273] <!-- C-305 --> |
 | `seats.on` | `fn` is not a function. | Throws `seats.on: needs a function`. | [src/view/seats.js:39] <!-- C-308 --> |
-| DOM UI | `engine.ui.tap`, `press` or `fill` throws. | The DOM UI adds the error to the errors list unless the message contains `is disabled` or `is covered`. A click on a covered or disabled control is swallowed. | [src/view/uiDom.js:14; test/uiDom.test.mjs:34] <!-- C-355 -->
+| DOM UI | `engine.ui.tap`, `press` or `fill` throws. | The DOM UI adds the error to the errors list unless the message contains `is disabled` or `is covered`. A click on a covered or disabled control is swallowed. | [src/view/uiDom.js:14; test/uiDom.test.mjs:34] <!-- C-355 --> |
 
 ## Dependencies
-- **Internal:** the [core spec](core.md). The view calls `createEngine`, `parseFlags`, `engine.block`, `engine.onBuilt`, `engine.onRender`, `engine.presented`, `engine.controllers`, `engine.controllerOf`, `engine.input.device` and `engine.input.clearDevice`, `engine.ui`, `topNav`, `menuOwnsInput` and `pickNeighbour`.
-- **Internal:** the view-render feature (F06) supplies `createPipeline` and `checkRender`, which `boot` and `defineView` call. [src/view/boot.js:7; src/view/boot.js:15; src/view/boot.js:64] <!-- C-3 C-22 -->
-- **External:** the browser APIs for rAF, the Gamepad API, pointer events, `localStorage`, `MutationObserver` and dynamic `import()`.
+- **Internal:** the [core spec](core.md). The view calls `createEngine`, `parseFlags`, `engine.block`, `engine.onBuilt`, `engine.onRender`, `engine.presented`, `engine.controllers`, `engine.controllerOf`, `engine.input.device` and `engine.input.clearDevice`, `engine.ui`, `topNav`, `menuOwnsInput` and `pickNeighbour`. The view also calls `checkTape`, `tapeStart`, `replayTape`, `checksum` and `engine.tape`. [src/view/boot.js:2-3; src/view/boot.js:7-8; src/view/hook.js:62] <!-- C-413 C-422 -->
+- **Internal:** the view-render feature (F06) supplies `createPipeline` and `checkRender`, which `boot` and `defineView` call. [src/view/boot.js:9; src/view/boot.js:17; src/view/boot.js:77] <!-- C-3 C-22 -->
+- **External:** the browser APIs for rAF, the Gamepad API, pointer events, `localStorage`, `sessionStorage`, `MutationObserver` and dynamic `import()`.
 
 <!-- related-specs -->
 Related specs:
@@ -583,21 +609,16 @@ Related specs:
 - Imported by: [CLI, tools and package surface](tools-and-package.md)
 
 ## Open questions and discrepancies
-- **Discrepancy 1.** `docs/spec.md` [D-4] lists `state`, `query`, `snapshot`, `restore`, `checksum` and `policies` on `window.engine`. The hook has `state()` but no `query`, `snapshot`, `restore`, `checksum` or `policies` member. [doc:docs/spec.md:521; doc:docs/spec.md:525; src/view/hook.js:23-48]
-- **Discrepancy 2.** CHANGELOG 0.13.0 and the plan 4 rulings in `docs/spec.md` [C-14] describe the engine stop as a zero `dual-rumble` plus `reset()`. The code uses `trigger-rumble` for a pad whose `effects` list it, and `dual-rumble` for other pads. The text above the rulings agrees with the code. [doc:CHANGELOG.md:10; doc:docs/spec.md:430; doc:docs/spec.md:429; src/view/haptics.js:16-21]
-- **Discrepancy 3.** The stops of the bench (Stop all, live off, live idle and dispose) send a zero `dual-rumble` plus `reset()`, never a zero `trigger-rumble`. This holds even for a pad that lists `trigger-rumble`. The engine stop in `haptics.js` uses `trigger-rumble` for such a pad. [src/view/bench/pads.js:98-104; src/view/bench/pads.js:252-253; src/view/haptics.js:16-21]
-- **Discrepancy 4.** `docs/spec.md` [D-7] says that the engine adds one driver device after the game's. The code adds the bench slot after the menu navigator, and the menu navigator comes after the devices of the game. [doc:docs/spec.md:534; src/view/boot.js:56]
-- **Open question 1.** Why does the bench stop with a zero `dual-rumble` only, while the engine stop uses a zero `trigger-rumble` for pads that list it? No source states the reason.
-- **Open question 2.** Why does `createPadEdges` read only axes 0 and 1 (the left stick) for pushes? The comment names the standard mapping. No source states why the right stick is left out.
+- **Open question 1.** Why does `createPadEdges` read only axes 0 and 1 (the left stick) for pushes? The comment names the standard mapping. No source states why the right stick is left out.
 
 ## Evidence index
-- `src/view/boot.js`: `defineView` and `boot`, the wiring of the view.
+- `src/view/boot.js`: `defineView` and `boot`, the wiring of the view and the session replay.
 - `src/view/driver.js`: the rAF driver.
 - `src/view/hook.js` and `src/view/debugHook.js`: the `window.engine` hook.
 - `src/view/keyboard.js`, `src/view/gamepad.js`, `src/view/touch.js`, `src/view/pointer.js`, `src/view/gesture.js` and `src/view/mapPair.js`: the devices and the map hook.
 - `src/view/contexts.js` and `src/view/profiles.js`: mapping contexts and saved bindings.
 - `src/view/seats.js`: seats, pairing, loss, regain and capture.
-- `src/view/haptics.js`: the haptics stop.
+- `src/view/haptics.js`: the haptics stop and the zero effect.
 - `src/view/padEdges.js` and `src/view/menuNav.js`: the menu navigator.
 - `src/view/uiDom.js`: the DOM UI.
 - `src/view/bench/padStats.js` and `src/view/bench/pads.js`: the pad bench.

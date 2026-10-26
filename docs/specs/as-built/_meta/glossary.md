@@ -184,7 +184,7 @@ One term for each concept in all specs. Writers use the **term** exactly and do 
 
 ## Tools and testing
 
-- **game.config.js** — the per-game config file with `id`, `site`, `outEnv`, `bake` and `build` sections. Not: config (alone), settings. [tools/bake/config.js:42]
+- **game.config.js** — the per-game config file with `id`, `site`, `outEnv`, `bake`, `build` and `test` sections. Not: config (alone), settings. [tools/bake/config.js:42]
 - **build stamp** — the `lion-hawk-build` meta tag with game id, game version, engine version and content hash. Not: version tag. [tools/build/page.js:9]
 - **dedupe plugin** — the esbuild plugin that resolves three and Rapier from the game root. Not: alias plugin. [tools/dedupe.js:4]
 - **headless handle** — the object `h` that `headless()` returns. Not: harness instance, test engine. [testing/headless.js:20]

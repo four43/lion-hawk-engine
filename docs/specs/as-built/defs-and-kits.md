@@ -2,7 +2,7 @@
 id: F02
 title: Definitions and kits
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/defs/**
   - src/kits/**
@@ -12,7 +12,7 @@ generated: STE spec writer
 # Definitions and kits
 
 ## Summary
-This feature holds the plain-data definitions and the kits. The definitions are the material registry, the physics sidecar schema, and the net field and kind builders. The kits are vehicle, terrain, coverage, fx and glyphs. Sim halves import no three.js. View halves import three.js or the DOM.
+This feature holds the plain-data definitions and the kits. The definitions are the material registry, the physics sidecar schema, and the net field and kind builders. The kits are vehicle, terrain, coverage, fx and glyphs. Sim halves import no three.js. View halves import three.js or the DOM. The vehicle kit has two backends, raycast and tire.
 
 ## Scope
 - **In scope:** `src/defs/materials.js`, `src/defs/materials.base.js`, `src/defs/sidecar.js`, `src/defs/fields.js`, and the kits under `src/kits/`.
@@ -31,7 +31,7 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 | `PHYS_DEFAULTS`, `MAX_MATERIALS`, `canonicalJson` | out | constants and function | [src/defs/materials.js:7-8; src/defs/materials.js:91] <!-- C-1 --> |
 | Registry members `ids`, `hash`, `get`, `has`, `index`, `byIndex`, `density`, `collider`, `pair` | out | frozen object | [src/defs/materials.js:207-217] <!-- C-2 --> |
 | `BASE_MATERIALS` | out | frozen object of 18 entries | [src/defs/materials.base.js:7] <!-- C-40 --> |
-| `SIDECAR_VERSION`, `SHAPES`, `MAX_HULL_POINTS`, `validateCollider`, `validateSidecar`, `validatePhys`, `materialRefs` | out | functions and constants | [src/defs/sidecar.js:5-7; src/defs/sidecar.js:30; src/defs/sidecar.js:75; src/defs/sidecar.js:123; src/defs/sidecar.js:136] <!-- C-45 --> |
+| `SIDECAR_VERSION`, `SHAPES`, `MAX_HULL_POINTS`, `validateCollider`, `validateSidecar`, `validatePhys`, `materialRefs` | out | functions and constants | [src/defs/sidecar.js:5-7; src/defs/sidecar.js:30; src/defs/sidecar.js:75; src/defs/sidecar.js:140; src/defs/sidecar.js:153] <!-- C-45 --> |
 | `F`, `kind`, `REMOTES`, `FOLLOWS`, `TUNE`, `SEND`, `INPUT_BATCH`, `INPUT_WIRE_MAX` | out | field builders and constants | [src/defs/fields.js:6; src/defs/fields.js:31-38] <!-- C-66 --> |
 
 ### Kits
@@ -45,7 +45,9 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 | `GLYPH_ROLES` (confirm, back, menu, move, prev, next), `GLYPH_FAMILIES`, `glyphFor`, `familyFor`, `bindGlyphs` | out | view half | [src/kits/glyphs/view.js:7-8; src/kits/glyphs/view.js:13; src/kits/glyphs/view.js:19; src/kits/glyphs/view.js:24] <!-- C-114 --> |
 | `createTerrain(world, opts)` | in, returns a frozen terrain object | sim half | [src/kits/terrain/sim.js:9; src/kits/terrain/sim.js:51-73] <!-- C-122 --> |
 | `createTerrainMesh(terrain, opts)`, `chunkIndex(n, m)` | in, returns `{ group, update, dispose, stats }` | view half | [src/kits/terrain/view.js:10; src/kits/terrain/view.js:30; src/kits/terrain/view.js:143] <!-- C-136 --> |
-| `createVehicle(world, e, opts)`, `VEHICLE_SYSTEM` (`lh.kit.vehicle`) | in, returns a car | sim half | [src/kits/vehicle/sim.js:7; src/kits/vehicle/sim.js:48; src/kits/vehicle/sim.js:102-131] <!-- C-152 --> |
+| `createVehicle(world, e, opts)`, `VEHICLE_SYSTEM` (`lh.kit.vehicle`). The raycast car holds `controller`, `entity`, `wheels`, `tyre`, `removed`, `set` and `update`. | in, returns a car | sim half | [src/kits/vehicle/sim.js:11; src/kits/vehicle/sim.js:52; src/kits/vehicle/sim.js:109-138] <!-- C-152 --> |
+| The tire car holds `entity`, `wheels`, `tyre`, `backend` (`tire`), `substeps`, `removed`, `set` and `update`. The tire car has no `controller`. The raycast car has no `backend` field. | out | car object | [src/kits/vehicle/sim.js:109-110; src/kits/vehicle/sim.js:193-194] <!-- C-187 --> |
+| `mfNorm(rho, s)`, `TIRE`, `surfaceOf(tire)`, `DEFAULT_SURFACE`, `tireStep(out, st, vsx, vy, vx, fz, surf, h, cx, cy, apScale = 1)` | out | sim-pure maths in `src/kits/vehicle/tire.js` | [src/kits/vehicle/tire.js:1-3; src/kits/vehicle/tire.js:6; src/kits/vehicle/tire.js:9; src/kits/vehicle/tire.js:21; src/kits/vehicle/tire.js:27; src/kits/vehicle/tire.js:34] <!-- C-202 --> |
 
 ## Behavior
 
@@ -89,7 +91,7 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 - **B-31** The hash ignores `look`, `game`, `tire`, `dirtRate`, `coverage`, `aero`, `magnet`, `sound` and `fx`. A change to them needs no re-bake. [src/defs/materials.js:194-205; test/materials-hash.test.mjs:13] <!-- C-38 -->
 - **B-32** `canonicalJson` sorts object keys at every level. [src/defs/materials.js:90-97; test/materials-hash.test.mjs:5] <!-- C-39 -->
 - **B-33** `canonicalJson` throws `materials: cannot hash <value>` for a value that is not plain JSON. A function, `undefined` and a non-finite number are examples. [src/defs/materials.js:90-97; test/materials-hash.test.mjs:5] <!-- C-39 -->
-- **B-34** The base library registry hash is pinned in a test. [test/materials-hash.test.mjs:10] <!-- C-175 -->
+- **B-34** A test pins the base library registry hash as `2f4f4f95`. The file `docs/spec.md` gives the same value. [test/materials-hash.test.mjs:11; docs/spec.md:128] <!-- C-175 -->
 
 ### Sidecar validation
 - **B-35** Each sidecar validator returns its input unchanged or throws on the first error. [src/defs/sidecar.js:1-4; test/sidecar.test.mjs:76] <!-- C-46 -->
@@ -105,18 +107,22 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 - **B-45** A mesh needs `vertices` (a flat list, a multiple of 3, at least 9 numbers) and `indices` (whole triangles, at least 3). [src/defs/sidecar.js:60-66] <!-- C-55 -->
 - **B-46** Every mesh index must be an integer from 0 to the vertex count minus 1. [src/defs/sidecar.js:60-66] <!-- C-55 -->
 - **B-47** Collider number lists may be arrays or typed arrays except `DataView`. Every entry must be finite. [src/defs/sidecar.js:18-20] <!-- C-56 -->
-- **B-48** `validateSidecar` accepts the keys `v`, `source`, `parts`, `colliders`, `mass`, `sockets` and `bounds`. Any other key fails as `unknown field`. [src/defs/sidecar.js:71; src/defs/sidecar.js:73-79] <!-- C-57 -->
+- **B-48** `validateSidecar` accepts the keys `v`, `source`, `parts`, `colliders`, `mass`, `sockets`, `bounds` and `aero`. Any other key fails as `unknown field`. [src/defs/sidecar.js:73-79] <!-- C-57 -->
 - **B-49** A sidecar needs `v` equal to `SIDECAR_VERSION`, `parts` (a list of unique non-empty strings) and `colliders` (a list). [src/defs/sidecar.js:80; src/defs/sidecar.js:87-90] <!-- C-58 -->
 - **B-50** `validateSidecar` validates each collider with the sidecar `parts` and the registry. [src/defs/sidecar.js:87-90] <!-- C-58 -->
 - **B-51** A sidecar `source` is optional and hand-written fixtures have none. When present it needs `file` (a non-empty string) and `sha256` (64 lowercase hex digits). [src/defs/sidecar.js:74; src/defs/sidecar.js:81-86] <!-- C-59 -->
 - **B-52** A sidecar `mass` is optional and informational. When present it needs `mass` >= 0, `com` (3 numbers), `inertia` (3 numbers >= 0) and `frame` (a unit quaternion). [src/defs/sidecar.js:74; src/defs/sidecar.js:91-99] <!-- C-60 -->
 - **B-53** Each socket needs `p` (3 numbers), `q` (a unit quaternion) and `part`. The `part` is null or a name in `parts`. A null `part` means the socket has no parent part. [src/defs/sidecar.js:100-109; test/sidecar.test.mjs:32] <!-- C-61 -->
-- **B-54** Sidecar `bounds` are optional. When present they need `min` (3 numbers) and `max` (3 numbers, each >= the matching `min`). [src/defs/sidecar.js:110-116] <!-- C-62 -->
-- **B-55** `validatePhys` accepts the keys `v`, `engine`, `materials` and `models`. Any other key fails as `unknown field`. [src/defs/sidecar.js:120; src/defs/sidecar.js:126-130] <!-- C-63 -->
-- **B-56** `validatePhys` needs `v` equal to `SIDECAR_VERSION` and `models` as an object. It needs `materials` as 8 lowercase hex digits. It needs `engine` as a version like `0.8.0`, and an optional `-suffix` is allowed. [src/defs/sidecar.js:126-130] <!-- C-63 -->
-- **B-57** `validatePhys` validates each model with `validateSidecar` and the model id. [src/defs/sidecar.js:131] <!-- C-64 -->
-- **B-58** `validatePhys` does not compare `materials` with `registry.hash`. The caller does that (`checks.materials`, `lion-hawk bake --check`). [src/defs/sidecar.js:120-123; test/checks-materials.test.mjs:22] <!-- C-64 -->
-- **B-59** `materialRefs(phys)` returns an object that maps each material name used by a collider to a list of `<model>.colliders[<i>]` locations. Its keys are sorted. [src/defs/sidecar.js:135-140; test/sidecar.test.mjs:67] <!-- C-65 -->
+- **B-54** Sidecar `bounds` are optional. When present they need `min` (3 numbers) and `max` (3 numbers, each >= the matching `min`). [src/defs/sidecar.js:127-133] <!-- C-62 -->
+- **B-55** `validatePhys` accepts the keys `v`, `engine`, `materials` and `models`. Any other key fails as `unknown field`. [src/defs/sidecar.js:137; src/defs/sidecar.js:143-147] <!-- C-63 -->
+- **B-56** `validatePhys` needs `v` equal to `SIDECAR_VERSION` and `models` as an object. It needs `materials` as 8 lowercase hex digits. It needs `engine` as a version like `0.8.0`, and an optional `-suffix` is allowed. [src/defs/sidecar.js:143-147] <!-- C-63 -->
+- **B-57** `validatePhys` validates each model with `validateSidecar` and the model id. [src/defs/sidecar.js:148] <!-- C-64 -->
+- **B-58** `validatePhys` does not compare `materials` with `registry.hash`. The caller does that (`checks.materials`, `lion-hawk bake --check`). [src/defs/sidecar.js:137-140; test/checks-materials.test.mjs:22] <!-- C-64 -->
+- **B-59** `materialRefs(phys)` returns an object that maps each material name used by a collider to a list of `<model>.colliders[<i>]` locations. Its keys are sorted. [src/defs/sidecar.js:152-157; test/sidecar.test.mjs:67] <!-- C-65 -->
+- **B-177** A sidecar `aero` field is optional. When present it must be an object with only the keys `panels`, `volume` and `centroid`. [src/defs/sidecar.js:74; src/defs/sidecar.js:110-113] <!-- C-176 -->
+- **B-178** The `aero.panels` field must be a list. Each panel must be an object with only the keys `part`, `a`, `n` and `c`. [src/defs/sidecar.js:114-118] <!-- C-177 -->
+- **B-179** In an aero panel, `part` must name a sidecar part and `a` must be a finite number > 0. The vector `n` must be 3 numbers with a length within 1e-4 of 1. The point `c` must be 3 numbers. [src/defs/sidecar.js:119-122] <!-- C-178 -->
+- **B-180** The `aero.volume` field must be a finite number >= 0. The `aero.centroid` field must be 3 numbers. The source comment gives the frame as body space. [src/defs/sidecar.js:110; src/defs/sidecar.js:124-125] <!-- C-179 -->
 
 ### Net fields and kinds
 - **B-60** `F.bool` packs into a shared flags byte. An `F.obj` holds at most 8 bools. `F.obj` keys lists the non-bool fields in order. [src/defs/fields.js:7; src/defs/fields.js:14] <!-- C-67 -->
@@ -218,34 +224,82 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 - **B-148** When `evict` is set, `update` disposes the geometry of LOD `k` for a chunk whose distance exceeds `evict[k]`. The geometry builds again when the camera returns. [src/kits/terrain/view.js:110; test/kits/terrain-view.test.mjs:121] <!-- C-149 -->
 - **B-149** `dispose()` frees every built geometry, empties the group of chunk meshes and removes the group from its parent. [src/kits/terrain/view.js:134-141; test/kits/terrain-view.test.mjs:152] <!-- C-151 -->
 
-### Vehicle kit
-- **B-150** Each wheel spec needs `at` (a point `[x, y, z]` or `{x, y, z}`) or a `socket` name, and `radius` > 0. [src/kits/vehicle/sim.js:18; src/kits/vehicle/sim.js:59-64; test/kits/vehicle.test.mjs:56] <!-- C-155 -->
-- **B-151** The kit reads a socket from `e.sockets[socket].p`. A wheel with neither `at` nor `socket`, or with an unknown socket, throws. [src/kits/vehicle/sim.js:59-64; test/kits/vehicle.test.mjs:56] <!-- C-155 -->
-- **B-152** A wheel spec may name a part. The name must be a non-empty string and unique among the wheels, else `createVehicle` throws. [src/kits/vehicle/sim.js:65-70; test/kits/vehicle-parts.test.mjs:37] <!-- C-156 -->
-- **B-153** Named wheels write `e.partXf`, merged with the game's own part names. [src/kits/vehicle/sim.js:100-101; test/kits/vehicle-parts.test.mjs:37] <!-- C-156 -->
-- **B-154** Each step a named wheel writes its part pose into `e.partXf` in the chassis frame. The hub is the connection point moved down by the suspension length. [src/kits/vehicle/sim.js:19-27; src/kits/vehicle/sim.js:128; test/kits/vehicle-parts.test.mjs:18] <!-- C-157 -->
-- **B-155** The part pose is steered about +y, then rolled about the axle by minus the wheel rotation. [src/kits/vehicle/sim.js:19-27; test/kits/vehicle-parts.test.mjs:18] <!-- C-157 -->
-- **B-156** `createVehicle` adds one Rapier wheel per spec. It uses the spec radius, a down ray and the axle for the forward axis. [src/kits/vehicle/sim.js:12-13; src/kits/vehicle/sim.js:72-82] <!-- C-158 -->
-- **B-157** The suspension rest length is `suspension.rest`, with a default of 0.3. The spec `suspension` keys `stiffness`, `compression`, `relaxation`, `travel` and `maxForce` apply when set. [src/kits/vehicle/sim.js:72-82] <!-- C-158 -->
-- **B-158** Engine force greater than 0 drives the chassis along +x or +z, as `forward` is `x` or `z`. The kit sets the forward axis index of Rapier and the axle sign for that. [src/kits/vehicle/sim.js:10-12; src/kits/vehicle/sim.js:73; test/kits/vehicle.test.mjs:28] <!-- C-159 -->
-- **B-159** The `slip` and `side` values of a wheel start at the spec values, else the own defaults of Rapier. [src/kits/vehicle/sim.js:83-84] <!-- C-160 -->
-- **B-160** Each wheel has five controls: `steer`, `engine`, `brake`, `slip` and `side`. [src/kits/vehicle/sim.js:14; src/kits/vehicle/sim.js:83-84] <!-- C-160 -->
-- **B-161** `car.set(i, { steer, engine, brake, slip, side })` sets only the given controls of wheel `i` and returns the car. The new values reach the controller on the next update. [src/kits/vehicle/sim.js:104-113; test/kits/vehicle.test.mjs:44] <!-- C-161 -->
-- **B-162** `car.update(dt)` pushes the controls to the controller and runs `updateVehicle(dt)` with the ray mask. [src/kits/vehicle/sim.js:114-130; test/kits/vehicle.test.mjs:12] <!-- C-162 -->
-- **B-163** After `updateVehicle`, `car.update` reads `inContact`, the contact point, the normal, the suspension length, the steering and the suspension force for each wheel. [src/kits/vehicle/sim.js:122-129; test/kits/vehicle.test.mjs:12] <!-- C-162 -->
-- **B-164** `VEHICLE_SYSTEM` calls `update` once per step. Games do not call `update`. [src/kits/vehicle/sim.js:114-115] <!-- C-162 -->
-- **B-165** With `grip: true`, the `slip` and `side` values scale by the pair friction of the wheel from the previous step. Without `grip`, the factor is 1. [src/kits/vehicle/sim.js:117-119; test/kits/vehicle-material.test.mjs:32] <!-- C-163 -->
-- **B-166** Each wheel in contact reads the ground material. If the ray hit the terrain collider, the material is `terrain.materialAt` at the contact point. [src/kits/vehicle/sim.js:89-99; test/kits/vehicle-material.test.mjs:11] <!-- C-164 -->
-- **B-167** If the ray hit another collider, the material is the material of that collider from `world.materialOf`. A wheel in the air gets material null. [src/kits/vehicle/sim.js:89-99; test/kits/vehicle-material.test.mjs:21] <!-- C-164 -->
-- **B-168** `rayGroups` is `{ member, filter }` of declared collision group names. With `rayGroups`, the wheel rays use `world.groups.mask(member, filter)` as a u32. [src/kits/vehicle/sim.js:38-46; test/kits/vehicle.test.mjs:96] <!-- C-166 C-167 -->
-- **B-169** Without `rayGroups`, the wheel rays have no group filter. An empty `member` means every group, for the wheel rays only. [src/kits/vehicle/sim.js:38-46; test/kits/vehicle.test.mjs:96] <!-- C-166 C-167 -->
-- **B-170** `createVehicle` installs one `VEHICLE_SYSTEM` per engine, in stage `physics.world` before `lh.physics.step`. [src/kits/vehicle/sim.js:8-9; src/kits/vehicle/sim.js:28-36; test/kits/vehicle.test.mjs:88] <!-- C-168 -->
-- **B-171** `VEHICLE_SYSTEM` updates the cars of the current World in creation order. [src/kits/vehicle/sim.js:28-36; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-168 -->
-- **B-172** Tuning stays in the game. A game system before `VEHICLE_SYSTEM` calls `car.set()`. [src/kits/vehicle/sim.js:3-4; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-169 -->
-- **B-173** A game system after `VEHICLE_SYSTEM` and before `lh.physics.step` may read `car.wheels` and add impulses. [src/kits/vehicle/sim.js:3-4; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-169 -->
-- **B-174** When the entity despawns or the World clears, the kit removes the car from the update list and frees the Rapier controller once. [src/kits/vehicle/sim.js:135-141; test/kits/vehicle-lifecycle.test.mjs:11; test/kits/vehicle-lifecycle.test.mjs:21] <!-- C-170 -->
+### Vehicle kit: both backends
+- **B-150** Each wheel spec needs `at` (a point `[x, y, z]` or `{x, y, z}`) or a `socket` name, and `radius` > 0. Both backends share this check. [src/kits/vehicle/sim.js:22; src/kits/vehicle/sim.js:65-70; src/kits/vehicle/sim.js:78; test/kits/vehicle.test.mjs:56] <!-- C-155 -->
+- **B-151** The kit reads a socket from `e.sockets[socket].p`. A wheel with neither `at` nor `socket`, or with an unknown socket, throws. [src/kits/vehicle/sim.js:65-70; test/kits/vehicle.test.mjs:56] <!-- C-155 -->
+- **B-152** A wheel spec may name a part. The name must be a non-empty string and unique among the wheels, else `createVehicle` throws. [src/kits/vehicle/sim.js:71-76; test/kits/vehicle-parts.test.mjs:37] <!-- C-156 -->
+- **B-153** Named wheels write `e.partXf`, merged with the game's own part names. Both backends do this. [src/kits/vehicle/sim.js:107-108; src/kits/vehicle/sim.js:186-187; test/kits/vehicle-parts.test.mjs:37] <!-- C-156 -->
+- **B-154** Each step a named wheel writes its part pose into `e.partXf` in the chassis frame. The hub is the connection point moved down by the suspension length. [src/kits/vehicle/sim.js:23-30; src/kits/vehicle/sim.js:135; test/kits/vehicle-parts.test.mjs:18] <!-- C-157 -->
+- **B-155** The part pose is steered about +y, then rolled about the axle by minus the wheel rotation. The raycast backend reads the rotation from Rapier. The tire backend uses its own accumulated spin. [src/kits/vehicle/sim.js:23-30; src/kits/vehicle/sim.js:266; test/kits/vehicle-parts.test.mjs:18] <!-- C-157 -->
+- **B-181** The `backend` option is `raycast` (the default) or `tire`. The raycast backend uses the ray-cast vehicle controller of Rapier. The tire backend runs the own suspension and tire model of the kit. [src/kits/vehicle/sim.js:1-4; src/kits/vehicle/sim.js:57; src/kits/vehicle/sim.js:78-79; CHANGELOG.md:15] <!-- C-181 -->
+- **B-166** Each wheel in contact reads the ground material. If the ray hit the terrain collider, the material is `terrain.materialAt` at the contact point. [src/kits/vehicle/sim.js:96-106; src/kits/vehicle/sim.js:217-219; test/kits/vehicle-material.test.mjs:11] <!-- C-164 -->
+- **B-167** If the ray hit another collider, the material is the material of that collider from `world.materialOf`. A wheel in the air gets material null. Both backends do this. [src/kits/vehicle/sim.js:96-106; src/kits/vehicle/sim.js:217-219; test/kits/vehicle-material.test.mjs:21] <!-- C-164 -->
+- **B-168** `rayGroups` is `{ member, filter }` of declared collision group names. With `rayGroups`, the wheel rays use `world.groups.mask(member, filter)` as a u32. [src/kits/vehicle/sim.js:42-50; test/kits/vehicle.test.mjs:96] <!-- C-166 C-167 -->
+- **B-169** Without `rayGroups`, the wheel rays have no group filter. An empty `member` means every group, for the wheel rays only. Both backends pass the mask to their rays. [src/kits/vehicle/sim.js:45-49; src/kits/vehicle/sim.js:128; src/kits/vehicle/sim.js:210; test/kits/vehicle.test.mjs:96] <!-- C-166 C-167 -->
+- **B-170** `createVehicle` installs one `VEHICLE_SYSTEM` per engine, in stage `physics.world` before `lh.physics.step`. [src/kits/vehicle/sim.js:12-13; src/kits/vehicle/sim.js:32-40; test/kits/vehicle.test.mjs:88] <!-- C-168 -->
+- **B-171** `VEHICLE_SYSTEM` updates the cars of the current World in creation order. Both backends join the same list. [src/kits/vehicle/sim.js:32-40; src/kits/vehicle/sim.js:270-274; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-168 -->
+- **B-172** Tuning stays in the game. A game system before `VEHICLE_SYSTEM` calls `car.set()`. [src/kits/vehicle/sim.js:5-6; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-169 -->
+- **B-173** A game system after `VEHICLE_SYSTEM` and before `lh.physics.step` may read `car.wheels` and add impulses. [src/kits/vehicle/sim.js:5-6; test/kits/vehicle-lifecycle.test.mjs:43] <!-- C-169 -->
 - **B-175** A scene change leaves the vehicles of the scene with its World. [test/kits/vehicle-lifecycle.test.mjs:34] <!-- C-170 -->
 - **B-176** The sim kits are deterministic and keep no memory per step. A recorded drive replays to the same checksums. [test/kits/kits-sim.test.mjs:15; test/kits/kits-sim.test.mjs:20; test/kits/kits-sim.test.mjs:27] <!-- C-173 -->
+
+### Vehicle kit: raycast backend
+- **B-156** The raycast backend adds one Rapier wheel per spec. It uses the spec radius, a down ray and the axle for the forward axis. [src/kits/vehicle/sim.js:14; src/kits/vehicle/sim.js:16-17; src/kits/vehicle/sim.js:79-89] <!-- C-158 -->
+- **B-157** The suspension rest length is `suspension.rest`, with a default of 0.3. The spec `suspension` keys `stiffness`, `compression`, `relaxation`, `travel` and `maxForce` apply when set. [src/kits/vehicle/sim.js:83-89] <!-- C-158 -->
+- **B-158** Engine force greater than 0 drives the chassis along +x or +z, as `forward` is `x` or `z`. The kit sets the forward axis index of Rapier and the axle sign for that. [src/kits/vehicle/sim.js:14-16; src/kits/vehicle/sim.js:80; test/kits/vehicle.test.mjs:28] <!-- C-159 -->
+- **B-159** The `slip` and `side` values of a wheel start at the spec values, else the own defaults of Rapier. [src/kits/vehicle/sim.js:90-91] <!-- C-160 -->
+- **B-160** Each wheel has five controls: `steer`, `engine`, `brake`, `slip` and `side`. [src/kits/vehicle/sim.js:18; src/kits/vehicle/sim.js:90-91] <!-- C-160 -->
+- **B-161** `car.set(i, { steer, engine, brake, slip, side })` sets only the given controls of wheel `i` and returns the car. The new values reach the controller on the next update. [src/kits/vehicle/sim.js:111-120; test/kits/vehicle.test.mjs:44] <!-- C-161 -->
+- **B-162** `car.update(dt)` pushes the controls to the controller and runs `updateVehicle(dt)` with the ray mask. [src/kits/vehicle/sim.js:121-130; test/kits/vehicle.test.mjs:12] <!-- C-162 -->
+- **B-163** After `updateVehicle`, `car.update` reads `inContact`, the contact point, the normal, the suspension length, the steering and the suspension force for each wheel. [src/kits/vehicle/sim.js:128-133; test/kits/vehicle.test.mjs:12] <!-- C-162 -->
+- **B-164** `VEHICLE_SYSTEM` calls `update` once per step. Games do not call `update`. [src/kits/vehicle/sim.js:121-122] <!-- C-162 -->
+- **B-165** With `grip: true`, the `slip` and `side` values scale by the pair friction of the wheel from the previous step. Without `grip`, the factor is 1. [src/kits/vehicle/sim.js:124-126; test/kits/vehicle-material.test.mjs:32] <!-- C-163 -->
+- **B-174** When the entity despawns or the World clears, the raycast backend removes the car from the update list and frees the Rapier controller once. [src/kits/vehicle/sim.js:142-148; test/kits/vehicle-lifecycle.test.mjs:11; test/kits/vehicle-lifecycle.test.mjs:21] <!-- C-170 -->
+
+### Vehicle kit: tire backend
+- **B-182** A tire wheel `suspension` takes `rest` (default 0.3, must be > 0), `stiffness`, `bump` and `rebound`. A `rest` that is not > 0 throws `vehicle: wheel <i>: suspension.rest must be > 0`. [src/kits/vehicle/sim.js:175-178] <!-- C-183 -->
+- **B-183** Any other tire `suspension` key throws `vehicle: wheel <i>: the tire backend's suspension has no '<key>' (rest, stiffness, bump, rebound)`. [src/kits/vehicle/sim.js:178] <!-- C-183 -->
+- **B-184** The mass `mC` is the body mass divided by the wheel count. The default stiffness is `mC × 9.81 / (0.5 × rest)`. The default bump is `0.5 × sqrt(stiffness × mC)`. The default rebound is `1.5 × bump`. [src/kits/vehicle/sim.js:154; src/kits/vehicle/sim.js:173; src/kits/vehicle/sim.js:177; src/kits/vehicle/sim.js:182] <!-- C-184 -->
+- **B-185** A tire wheel spec may give `inertia` (default 1 kg m^2) and `apScale` (default 1). A value of `apScale` below 1 is a stiffer tire. [src/kits/vehicle/sim.js:167-170; src/kits/vehicle/sim.js:182] <!-- C-185 -->
+- **B-186** `car.set(i, controls)` accepts only `steer` (rad, positive is left), `engine` (drive torque at the wheel, N m) and `brake` (brake torque, N m, >= 0). [src/kits/vehicle/sim.js:165; src/kits/vehicle/sim.js:167; src/kits/vehicle/sim.js:195-202; test/kits/vehicle-tire.test.mjs:53] <!-- C-186 -->
+- **B-187** Any other control key throws `vehicle: the tire backend has no '<key>' control (steer, engine, brake)`. A brake that is not >= 0 throws `vehicle: wheel <i>: brake torque must be >= 0`. [src/kits/vehicle/sim.js:196-200; test/kits/vehicle-tire.test.mjs:53] <!-- C-186 -->
+- **B-188** An index outside the wheel range throws the same range error as the raycast backend. [src/kits/vehicle/sim.js:196] <!-- C-186 -->
+- **B-189** Each update casts one ray per wheel from the body-space point, along minus the chassis up axis. The ray length is the suspension rest plus the radius. [src/kits/vehicle/sim.js:204-210] <!-- C-189 -->
+- **B-190** The ray skips the own body of the car and uses the ray mask. [src/kits/vehicle/sim.js:210] <!-- C-189 -->
+- **B-191** The wheel compression `x` is rest minus (hit distance minus radius), or 0 without a hit. The suspension reading is rest minus `x`. The steering reading is the `steer` control. [src/kits/vehicle/sim.js:208; src/kits/vehicle/sim.js:212-216] <!-- C-190 -->
+- **B-192** The suspension force is `max(0, stiffness × x + damping × xd)`. The damping is `bump` while compressing and `rebound` otherwise. [src/kits/vehicle/sim.js:226] <!-- C-191 -->
+- **B-193** The load is the suspension force times `max(0, normal dot up)`. [src/kits/vehicle/sim.js:223; src/kits/vehicle/sim.js:227] <!-- C-191 -->
+- **B-194** The compression rate `xd` comes from the change of `x` over `dt` when the wheel touched the ground last step. [src/kits/vehicle/sim.js:211; src/kits/vehicle/sim.js:224-225] <!-- C-192 -->
+- **B-195** Otherwise `xd` is minus the contact point velocity along up, divided by `max(0.3, normal dot up)`. [src/kits/vehicle/sim.js:224] <!-- C-192 -->
+- **B-196** A wheel with no hit gets material null, pair null, friction 1, the default surface, load 0 and no force. [src/kits/vehicle/sim.js:217] <!-- C-193 -->
+- **B-197** A wheel in contact gets the surface `surfaceOf(pair.tire)` when its pair has a tire block, else the default surface. [src/kits/vehicle/sim.js:220-222] <!-- C-193 -->
+- **B-198** The contact frame is the steered heading on the ground plane (`cf`) and its left (`cl`). The kit rotates the chassis forward axis about up by the steer angle for the heading. [src/kits/vehicle/sim.js:158; src/kits/vehicle/sim.js:228-237] <!-- C-194 -->
+- **B-199** With substeps `auto`, the count is `max(1, ceil(dt / (1/1920)))` with a 1e-9 tolerance. A fixed `substeps` value is used as given. Each substep lasts `dt` divided by the count. [src/kits/vehicle/sim.js:155-156; src/kits/vehicle/sim.js:239] <!-- C-195 -->
+- **B-200** In each substep, a wheel in contact with load > 0 calls `tireStep`. The damper gains are `cy = 0.3 × mC / dt` and `cx = min(cy, 0.4 × inertia / (radius² × substep length))`. [src/kits/vehicle/sim.js:244-247] <!-- C-196 -->
+- **B-201** Otherwise the patch state `dx` and `dy` scale by 0.9, and `kappa` and `alpha` become 0. [src/kits/vehicle/sim.js:248] <!-- C-196 -->
+- **B-202** In contact, the rolling resistance torque is `crr × load × radius × tanh(2 × omega)`. [src/kits/vehicle/sim.js:249] <!-- C-197 -->
+- **B-203** The wheel `omega` changes by (engine torque minus `fx × radius` minus the rolling torque) × substep length / inertia. The brake torque removes up to its impulse and holds `omega` at 0 instead of reversing it. [src/kits/vehicle/sim.js:250-251] <!-- C-197 -->
+- **B-204** The wheel `fx` and `fy` are the means of the substep forces. The spin grows by `omega × dt`. [src/kits/vehicle/sim.js:252; src/kits/vehicle/sim.js:256] <!-- C-198 -->
+- **B-205** For a wheel in contact, the kit applies the impulse `(up × spring force + cf × fx + cl × fy) × dt` at the contact point to the body. [src/kits/vehicle/sim.js:257-259] <!-- C-198 -->
+- **B-206** The kit applies a second impulse against the horizontal point velocity. It does so only when the surface drag is non-zero, the load is > 0 and the ground speed `sp` is >= 1e-3. [src/kits/vehicle/sim.js:157; src/kits/vehicle/sim.js:260-264] <!-- C-199 -->
+- **B-207** The size of the drag impulse is `drag × load × tanh(sp / 2) × (1 + (sp / 18)²) × dt`. [src/kits/vehicle/sim.js:157; src/kits/vehicle/sim.js:263] <!-- C-199 -->
+- **B-208** The tire backend ignores the `grip` option. The pair friction only fills the wheel `friction` field. [src/kits/vehicle/sim.js:78; src/kits/vehicle/sim.js:221] <!-- C-200 -->
+- **B-209** When the entity despawns or the World clears, the tire backend removes the car from the update list and sets `removed`. No controller exists to free. [src/kits/vehicle/sim.js:273] <!-- C-201 -->
+- **B-210** On a flat terrain the tire car settles with every wheel loaded, with loads that add up to about the car weight. [test/kits/vehicle-tire.test.mjs:45] <!-- C-212 -->
+- **B-211** Drive torque moves the car forward and brake torque stops it. A steer above 0 turns it left. [test/kits/vehicle-tire.test.mjs:53] <!-- C-212 -->
+- **B-212** The grip follows the ground tire block. The same torque spins up on ice and pulls away on asphalt. [test/kits/vehicle-tire.test.mjs:68] <!-- C-212 -->
+
+### Tire model
+- **B-213** `mfNorm(rho, s)` is `sin(C × atan(B × rho))`. A surface has `B = tan(pi / (2C))`, so the peak value 1 falls at `rho = 1`. [src/kits/vehicle/tire.js:5-6; src/kits/vehicle/tire.js:23; test/kits/vehicle-tire.test.mjs:15] <!-- C-204 -->
+- **B-214** `surfaceOf(tire)` returns a frozen `{ mu, C, kp, ap, crr, drag, B }` and caches it per tire block object. [src/kits/vehicle/tire.js:19-25; test/kits/vehicle-tire.test.mjs:15] <!-- C-205 -->
+- **B-215** `tireStep` advances the patch state `dx` and `dy` with an exact exponential decay by `|vx|` over the relaxation lengths, plus the slip velocities times `h`. [src/kits/vehicle/tire.js:35-38] <!-- C-207 -->
+- **B-216** The slip ratio `kappa` is `dx / sigmaX`. [src/kits/vehicle/tire.js:39] <!-- C-207 -->
+- **B-217** The peak slip angle is `ap × apScale × clamp(load / loadRef, 0.6, 1.6)^apLoad`. The normalised slip `rho` is `hypot(kappa / kp, tan(slip angle) / tan(peak slip angle))`. [src/kits/vehicle/tire.js:40-42] <!-- C-208 -->
+- **B-218** A `rho` above `rhoMax` scales the patch state back to `rhoMax`. [src/kits/vehicle/tire.js:43-46] <!-- C-208 -->
+- **B-219** The force limit `D` is `mu × max(0.5, 1 − loadSens × (load / loadRef − 1)) × load`. For `rho` above 1e-9 the force is `D × mfNorm(rho) / rho` along the normalised slips. [src/kits/vehicle/tire.js:47-49] <!-- C-209 -->
+- **B-220** A low-speed damper has the weight `w = max(0, 1 − hypot(vx, vy) / lowSpeed)`. It applies when `w` > 0 and load > 0. [src/kits/vehicle/tire.js:50-51] <!-- C-210 -->
+- **B-221** The damper adds `cx × w × vsx` to `fx` and subtracts `cy × w × vy` from `fy`. The force then scales down to `D` when it exceeds `D`. [src/kits/vehicle/tire.js:52-55] <!-- C-210 -->
+- **B-222** `tireStep` writes `fx`, `fy`, `rho`, `kappa` and `alpha` (the atan of the lateral slip, in rad) into the `out` object of the caller. `tireStep` returns that object and allocates nothing. [src/kits/vehicle/tire.js:3; src/kits/vehicle/tire.js:29-30; src/kits/vehicle/tire.js:56-57] <!-- C-211 -->
 
 ## Data and state
 
@@ -288,8 +342,9 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 ### Terrain and vehicle state
 - `terrain.grid` is a frozen `{ nx, nz, cell, x0, z0, heights, materials }` for the view half. The `heights` value is the `Float32Array` copy. The `materials` value is a `Uint8Array` copy, or null when `materials` is a function. [src/kits/terrain/sim.js:25; src/kits/terrain/sim.js:53; test/kits/terrain.test.mjs:63] <!-- C-135 -->
 - `stats` of the terrain mesh holds `chunks`, `builds`, `buildMs`, `lastUpdateMs` and `pending`. Each chunk mesh is named `terrain-chunk`, receives shadows and has `matrixAutoUpdate` false. The group is named `terrain`. [src/kits/terrain/view.js:53; src/kits/terrain/view.js:61; src/kits/terrain/view.js:126] <!-- C-150 -->
-- Each `car.wheels` entry holds `front`, `radius`, `inContact`, `point`, `normal`, `material`, `pair`, `friction`, `suspension`, `steering` and `load`. [src/kits/vehicle/sim.js:85-86] <!-- C-165 -->
-- The wheel `pair` is `registry.pair(tyre, ground)`. The wheel `friction` is the pair friction, or 1 without a pair. [src/kits/vehicle/sim.js:96-98] <!-- C-165 -->
+- Each `car.wheels` entry of either backend holds `front`, `radius`, `inContact`, `point`, `normal`, `material`, `pair`, `friction`, `suspension`, `steering` and `load`. [src/kits/vehicle/sim.js:92-93; src/kits/vehicle/sim.js:179-180] <!-- C-165 -->
+- The wheel `pair` is `registry.pair(tyre, ground)`. The wheel `friction` is the pair friction, or 1 without a pair. [src/kits/vehicle/sim.js:103-105; src/kits/vehicle/sim.js:220-221] <!-- C-165 -->
+- Each tire backend wheel entry also holds `omega`, `kappa`, `alpha`, `fx`, `fy` and `surface`. The kit keeps further internal fields on the same entry. [src/kits/vehicle/sim.js:179-183; test/kits/vehicle-tire.test.mjs:53] <!-- C-188 -->
 - `GLYPH_FAMILIES` is the key list of `ICONS` in `src/kits/glyphs/icons.js`. `tools/glyphs/build.mjs` generates that file from Kenney Input Prompts 1.5A (CC0). The test names the families xbox, ps, deck, generic, keys, pointer and touch. [src/kits/glyphs/icons.js:1; src/kits/glyphs/view.js:8; test/kits/glyphs.test.mjs:8] <!-- C-115 -->
 - The wire encodings and the kind fields are in the Behavior section. [src/defs/fields.js:6-30] <!-- C-70 -->
 
@@ -309,8 +364,10 @@ See the [glossary](_meta/glossary.md). This spec uses these glossary terms: mate
 | `createMarks` options | `max` 400, `width` 0.45, `length` 0.9, `material` null, `heightAt` null, `lift` 0.06 | Mark settings. The default material is a transparent brown `MeshBasicMaterial` with opacity 0.4. | [src/kits/fx/view.js:86-90] <!-- C-110 --> |
 | `createTerrain` options | `nx`, `nz`, `cell`, `x0` 0, `z0` 0, `heights`, `materials`, `blend` null, `material`, `groups`, `fixInternalEdges` false | Heightfield and sampling settings. | [src/kits/terrain/sim.js:10] <!-- C-123 --> |
 | `createTerrainMesh` options | `compiler` null, `chunks` `[6, 6]`, `chunkCells` null, `lods` `[1]`, `lodFar` `[]`, `hysteresis` 12, `skirt` 2, `visFar` Infinity, `evict` null, `colorAt` null, `attributes` `{}`, `drop` null, `material` `grass`, `budgetMs` 3, `moveEps` 2, `now` `performance.now` | Chunk, LOD and build settings. | [src/kits/terrain/view.js:31-32] <!-- C-137 --> |
-| `createVehicle` options | `wheels`, `rayGroups`, `forward` `x`, `terrain` null, `tyre` `rubber`, `grip` false | Vehicle settings. | [src/kits/vehicle/sim.js:53] <!-- C-153 --> |
-| `suspension.rest` (in the vehicle spec) | 0.3 | Suspension rest length in metres. | [src/kits/vehicle/sim.js:76-77] <!-- C-158 --> |
+| `createVehicle` options | `wheels`, `rayGroups`, `forward` `x`, `terrain` null, `tyre` `rubber`, `grip` false, `backend` `raycast`, `substeps` `auto` | Vehicle settings. | [src/kits/vehicle/sim.js:57] <!-- C-153 --> |
+| `suspension.rest` (in the vehicle spec) | 0.3 | Suspension rest length in metres. Both backends use this default. | [src/kits/vehicle/sim.js:84; src/kits/vehicle/sim.js:175] <!-- C-158 C-183 --> |
+| `TIRE` | `sigmaX` 0.12 m, `sigmaY` 0.30 m, `loadRef` 3500 N, `loadSens` 0.12, `rhoMax` 4, `lowSpeed` 3 m/s, `apLoad` 0.5 | Frozen parameters that every tire shares. | [src/kits/vehicle/tire.js:9-17] <!-- C-203 --> |
+| `DEFAULT_SURFACE` | `mu` 0.9, `C` 1.4, `kp` 0.14, `ap` 0.15, `crr` 0.025, `drag` 0 | The surface for ground with no tire data. It matches dry asphalt of the base library. | [src/kits/vehicle/tire.js:26-27] <!-- C-206 --> |
 
 ## Errors and limits
 
@@ -341,6 +398,8 @@ All errors are thrown `Error` objects. The message prefixes vary by module: `mat
 - A collider key that its shape does not allow fails as `unknown field for a <shape>`. A collider that is not a plain object fails as `must be an object`. [src/defs/sidecar.js:32; src/defs/sidecar.js:34-35] <!-- C-49 -->
 - A hull outside 4 to 64 points fails. [src/defs/sidecar.js:7; src/defs/sidecar.js:55-58] <!-- C-54 -->
 - Sidecar messages start with `sidecar: <model>`. The `model` option defaults to `?`. [src/defs/sidecar.js:73-79] <!-- C-57 -->
+- An aero error names its path, such as `sidecar: <model>: aero.panels[<i>].a must be a number > 0 (got <value>)`. [src/defs/sidecar.js:77; src/defs/sidecar.js:112-125] <!-- C-180 -->
+- Aero panel errors read `must be a list`, `names an unknown part`, `must be a unit vector` and `must be 3 numbers`. [src/defs/sidecar.js:112-125] <!-- C-180 -->
 
 ### Net fields
 - `F.obj` throws `too many bools: <n>` above 8 bools. [src/defs/fields.js:14] <!-- C-67 -->
@@ -370,14 +429,16 @@ All errors are thrown `Error` objects. The message prefixes vary by module: `mat
 - `createTerrainMesh` also throws if `lods` is not a rising list of positive integers or `lodFar` does not hold one distance fewer than `lods`. [src/kits/terrain/view.js:34-39; test/kits/terrain-view.test.mjs:110] <!-- C-138 -->
 - `createTerrainMesh` throws if `chunks` is not two integers >= 1, if an attribute lacks `{ size >= 1, at() }`, or if neither `compiler` nor a three.js material is given. [src/kits/terrain/view.js:40-43; test/kits/terrain-view.test.mjs:110] <!-- C-139 -->
 - `createTerrainMesh` throws if `chunkCells` is not a positive multiple of the coarsest LOD step. [src/kits/terrain/view.js:46; test/kits/terrain-view.test.mjs:110] <!-- C-139 -->
-- `createVehicle` throws `vehicle: <message>` before it makes a controller if the World has no engine, the entity has no body, or the body is not dynamic. [src/kits/vehicle/sim.js:16; src/kits/vehicle/sim.js:49-57; test/kits/vehicle.test.mjs:72] <!-- C-154 -->
-- `createVehicle` also throws for an empty `wheels` list, a `forward` other than `x` or `z`, or an unknown `tyre` material. [src/kits/vehicle/sim.js:53-57; test/kits/vehicle-material.test.mjs:47] <!-- C-154 -->
-- `car.set` throws `vehicle: wheel <i> out of range 0..<n-1>` if `i` is outside the wheel range. [src/kits/vehicle/sim.js:104-106; test/kits/vehicle.test.mjs:44] <!-- C-161 -->
-- A `rayGroups` name that is undeclared, or is `mask`, throws `vehicle: rayGroups names undeclared group '<n>'`. [src/kits/vehicle/sim.js:38-46; test/kits/vehicle.test.mjs:96] <!-- C-166 -->
+- `createVehicle` throws `vehicle: <message>` before it makes a controller if the World has no engine, the entity has no body, or the body is not dynamic. [src/kits/vehicle/sim.js:20; src/kits/vehicle/sim.js:53-56; test/kits/vehicle.test.mjs:72] <!-- C-154 -->
+- `createVehicle` also throws for an empty `wheels` list, a `forward` other than `x` or `z`, or an unknown `tyre` material. [src/kits/vehicle/sim.js:60-63; test/kits/vehicle-material.test.mjs:47] <!-- C-154 -->
+- `createVehicle` throws `vehicle: backend must be 'raycast' or 'tire'` for any other `backend` value. [src/kits/vehicle/sim.js:58; test/kits/vehicle-tire.test.mjs:76] <!-- C-182 -->
+- `createVehicle` throws `vehicle: substeps must be 'auto' or an integer in 1..64` for a bad `substeps` value. The check applies only when the backend is `tire`. [src/kits/vehicle/sim.js:59; test/kits/vehicle-tire.test.mjs:76] <!-- C-182 -->
+- `car.set` throws `vehicle: wheel <i> out of range 0..<n-1>` if `i` is outside the wheel range. [src/kits/vehicle/sim.js:112; test/kits/vehicle.test.mjs:44] <!-- C-161 -->
+- A `rayGroups` name that is undeclared, or is `mask`, throws `vehicle: rayGroups names undeclared group '<n>'`. [src/kits/vehicle/sim.js:48; test/kits/vehicle.test.mjs:96] <!-- C-166 -->
 
 ## Dependencies
-- **Internal:** `src/core/rng.js` gives `fnv` for the registry hash (see the core spec). The kits call `world.materials`, `world.groups`, `world.rapier`, `world.engine`, `world.heightfield`, `world.materialOf`, `world.own`, `world.add`, `world.with` and `world.xfPrev`. The World belongs to a feature outside this spec. [src/defs/materials.js:4; src/kits/vehicle/sim.js:49-56; src/kits/vehicle/sim.js:95; src/kits/vehicle/sim.js:100; src/kits/vehicle/sim.js:137; src/kits/terrain/sim.js:33; src/kits/coverage/sim.js:30; src/kits/coverage/sim.js:42] <!-- C-171 C-172 -->
-- **External:** the view kits fx and terrain import three. The sim kits import no three.js and get Rapier as `world.rapier`. [src/kits/vehicle/sim.js:5; src/kits/terrain/sim.js:5; src/kits/fx/view.js:4; src/kits/terrain/view.js:5] <!-- C-171 -->
+- **Internal:** `src/core/rng.js` gives `fnv` for the registry hash (see the core spec). The kits call `world.materials`, `world.groups`, `world.rapier`, `world.engine`, `world.heightfield`, `world.materialOf`, `world.own`, `world.add`, `world.with` and `world.xfPrev`. The tire backend also calls `world.R`. The World belongs to a feature outside this spec. [src/defs/materials.js:4; src/kits/vehicle/sim.js:53-62; src/kits/vehicle/sim.js:102; src/kits/vehicle/sim.js:107; src/kits/vehicle/sim.js:144; src/kits/vehicle/sim.js:172; src/kits/terrain/sim.js:33; src/kits/coverage/sim.js:30; src/kits/coverage/sim.js:42] <!-- C-171 C-172 -->
+- **External:** the view kits fx and terrain import three. The sim kits import no three.js and get Rapier as `world.rapier`. [src/kits/vehicle/sim.js:7; src/kits/terrain/sim.js:5; src/kits/fx/view.js:4; src/kits/terrain/view.js:5] <!-- C-171 -->
 
 <!-- related-specs -->
 Related specs:
@@ -391,10 +452,7 @@ Related specs:
 - Imported by: [CLI, tools and package surface](tools-and-package.md)
 
 ## Open questions and discrepancies
-- `docs/spec.md` 3.2 says `phys.fill` is 0-1. The code accepts only values in (0, 1] and rejects 0. [docs/spec.md:140; src/defs/materials.js:24; src/defs/materials.js:51]
-- `docs/spec.md` 3.2 says the kit-vehicle tire backend reads the `tire` values. The vehicle kit reads only the pair friction. [docs/spec.md:141; src/kits/vehicle/sim.js:97-98]
-- `docs/spec.md` A-5 says a sidecar holds aero panels and a closed volume from phase 8. The sidecar validator accepts only `v`, `source`, `parts`, `colliders`, `mass`, `sockets` and `bounds`. [docs/spec.md:449-453; src/defs/sidecar.js:79]
-- `docs/spec.md` 3.1 gives the base library hash as `2f4f4f95`. This spec did not recompute the hash. A test pins it. [docs/spec.md:128; test/materials-hash.test.mjs:10]
+- `docs/design.md` 7.3 sketches the vehicle input as `{ throttle, brake, steer, handbrake, gear? }` and the wheel output with `slip`. The kit takes per-wheel controls through `car.set` and reports `kappa` and `alpha` on the tire backend. [docs/design.md:356-357; src/kits/vehicle/sim.js:165; src/kits/vehicle/sim.js:180]
 - Why do the base materials glass, mud, snow, water and air have no `coverage` block? No source states the reason.
 - Why does the particle landing threshold use `vy` < 1 with no named constant? No source states the reason.
 
@@ -403,7 +461,8 @@ Related specs:
 - `src/defs/materials.base.js`: the 18 base materials.
 - `src/defs/sidecar.js`: the sidecar and phys.json validators.
 - `src/defs/fields.js`: the net field builders and `kind`.
-- `src/kits/vehicle/sim.js`: the ray-cast vehicle kit.
+- `src/kits/vehicle/sim.js`: the raycast and tire vehicle backends.
+- `src/kits/vehicle/tire.js`: the tire model.
 - `src/kits/terrain/sim.js` and `src/kits/terrain/view.js`: the terrain kit.
 - `src/kits/coverage/sim.js` and `src/kits/coverage/view.js`: the coverage kit.
 - `src/kits/fx/view.js`: the particle and mark pools.

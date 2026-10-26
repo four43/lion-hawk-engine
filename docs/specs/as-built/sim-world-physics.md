@@ -1,25 +1,29 @@
 ---
 id: F03
-title: Simulation world and physics
+title: Simulation world, physics and fields
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/sim/world/**
   - src/sim/physics/**
+  - src/sim/fields/**
 generated: STE spec writer
 ---
 
-# Simulation world and physics
+# Simulation world, physics and fields
 
 ## Summary
-The World holds the entities of one main scene and, when the game gives a Rapier module, its `RAPIER.World`. The feature has the transform pool, `place`, the Rapier wrapper, colliders, collision groups, events and heightfields. Game code calls the World. The engine calls the World seat and its four systems. All code here is sim code. Rapier comes only by injection.
+The World holds the entities of one main scene and, when the game gives a Rapier module, its `RAPIER.World`. The feature has the transform pool, `place`, the Rapier wrapper, colliders, collision groups, events and heightfields. The feature also has the phase 8 fields: wind, aero, buoyancy and magnetism. Game code calls the World. The engine calls the World seat and its four systems. All code here is sim code. Rapier comes only by injection.
 
 ## Scope
-- **In scope:** `src/sim/world/**` and `src/sim/physics/**`: spawn, despawn, queries, parts, joints, material swap, step pieces, digest, heightfield and audit.
+- **In scope:** `src/sim/world/**`, `src/sim/physics/**` and `src/sim/fields/**`: spawn, despawn, queries, parts, joints, material swap, step pieces, digest, heightfield, audit and the fields.
 - **Out of scope:** the engine, stages and events in the [core spec](core.md). Materials and sidecars in the [defs and kits spec](defs-and-kits.md). Net guards (the World only calls them). View sync.
 
 ## Terms
-See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" means a function registered with `world.own`. "Sleeper" means a body spawned with `body.sleep: true`, until the first read.
+See the [glossary](_meta/glossary.md). In this spec, "owned free" means a function registered with `world.own`. "Sleeper" means a body spawned with `body.sleep: true`, until the first read.
+- **field set** — the object that `createFields` returns: the wind, aero, buoyancy and magnet settings of one World, with its `step`, `submerged` and `dispose` methods. [src/sim/fields/index.js:171-185]
+- **aero panel** — a baked sidecar entry `{ part, a, n, c }` with area, unit normal and centre in body space. [src/sim/fields/index.js:76-91]
+- **planform panel** — the aero panel of a part with the largest area. A tie goes to the panel with the larger `n[1]`. [src/sim/fields/index.js:86]
 
 ## Interfaces
 
@@ -58,6 +62,9 @@ See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" 
 | `createEventDrain({ emit, hz, entityOf, materialOf })` | in | returns `(world, queue)` drain function | [src/sim/physics/events.js:5-34] <!-- C-68 --> |
 | `createGroups(names)`, `ALL` | in | frozen group object, constant | [src/sim/physics/groups.js:4-25] <!-- C-77 C-78 --> |
 | `heightfieldDesc(R, opts)` | in | Rapier collider descriptor | [src/sim/physics/heightfield.js:5-14] <!-- C-84 --> |
+| `createWind({ base, gust, zones, seed })` | in | returns a frozen object with `at(p, t, out?)`. Exported from `src/index.sim.js`. | [src/sim/fields/index.js:12; src/sim/fields/index.js:27-35; src/index.sim.js:27] <!-- C-198 --> |
+| `createFields(world, { wind, aero, buoyancy, magnet, models })` | in | returns a field set `{ removed, step(dt, t), submerged(e), dispose() }` | [src/sim/fields/index.js:57; src/sim/fields/index.js:171-192] <!-- C-202 --> |
+| `FIELDS_SYSTEM` | out | the string `'lh.fields'`. Exported from `src/index.sim.js`. | [src/sim/fields/index.js:40; src/index.sim.js:27] <!-- C-202 --> |
 
 ### Events out
 | Interface | Direction | Format | Evidence |
@@ -65,6 +72,7 @@ See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" 
 | event `contact` | out | `{ a, b, materials: [ma, mb], impulse, point: [x, y, z] }` | [src/sim/physics/events.js:24] <!-- C-69 --> |
 | event `sensor` | out | `{ sensor, other, on }` | [src/sim/physics/events.js:26-29] <!-- C-73 --> |
 | systems `lh.world.swap`, `lh.physics.step`, `lh.physics.read`, `lh.physics.events` | out | engine systems | [src/sim/world/install.js:31-37] <!-- C-42 --> |
+| system `lh.fields` | out | engine system in stage `pre`, added by the first `createFields` call for an engine | [src/sim/fields/index.js:39-44] <!-- C-210 --> |
 
 ## Behavior
 
@@ -266,6 +274,77 @@ See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" 
 - **B-200** `createWorld(engine, opts)` needs `engine.game`. The World takes `hz` from `engine.game.sim.hz`. The World takes the physics block from `engine.game.physics`, which defaults to an empty object. [src/sim/world/world.js:47-48] <!-- C-87 -->
 - **B-201** `world.stats` has the getters `entities`, `bodies`, `colliders`, `stepMs` and `stepMsTotal`. The two step values come from the physics timer. The two step values are 0 without physics or after dispose. [src/sim/world/world.js:474-477; test/world-step.test.mjs:155] <!-- C-189 -->
 
+### Fields: wind
+- **B-202** `createWind` takes `{ base, gust, zones, seed }`. The defaults are `base` `[0, 0, 0]`, `gust` null, `zones` `[]` and `seed` 1. [src/sim/fields/index.js:12; test/fields.test.mjs:36] <!-- C-198 -->
+- **B-203** `wind.at(p, t, out)` writes the result into `out` and returns `out`. The default of `out` is a new `{ x, y, z }` object. [src/sim/fields/index.js:28-33] <!-- C-200 -->
+- **B-204** The wind value is the `base`, plus the gust, plus the `v` of each zone box that contains `p`. The box test includes the faces. [src/sim/fields/index.js:28-33; test/fields.test.mjs:36] <!-- C-200 -->
+- **B-205** A gust has `amp` (default 0), `scale` (default 20) and `period` (default 4). The gust value is `amp * (2 * noise(p.x / scale, p.z / scale, t / period) - 1)`. [src/sim/fields/index.js:15; src/sim/fields/index.js:30] <!-- C-201 -->
+- **B-206** The gust value stays between `-amp` and `amp`. The gust acts along the unit vector of `base`, or along `[1, 0, 0]` when `base` is zero. [src/sim/fields/index.js:16; src/sim/fields/index.js:30-31; test/fields.test.mjs:36] <!-- C-201 -->
+- **B-207** The noise is seeded value noise, so the same `seed` gives the same value. With `amp` 0 or no gust, the gust value is 0. [src/sim/fields/index.js:17-26; src/sim/fields/index.js:30; test/fields.test.mjs:36] <!-- C-201 -->
+
+### Fields: setup and system
+- **B-208** `createFields(world, opts)` accepts the options `wind`, `aero`, `buoyancy`, `magnet` and `models`. The default `wind` is a calm wind from `createWind()`. [src/sim/fields/index.js:38; src/sim/fields/index.js:55; src/sim/fields/index.js:61] <!-- C-205 -->
+- **B-209** The default of `aero` is false. The default of `buoyancy` is null. The default of `magnet` is null. [src/sim/fields/index.js:61] <!-- C-205 -->
+- **B-210** The sidecars are `opts.models`, otherwise `engine.game.defs.models`. The fields read their `models` field, or an empty object. [src/sim/fields/index.js:63] <!-- C-205 -->
+- **B-211** The first `createFields` call for an engine adds the system `lh.fields` in the stage `pre`. Later calls for the same engine add no system. [src/sim/fields/index.js:39-44; test/fields.test.mjs:91] <!-- C-210 -->
+- **B-212** Each step, `lh.fields` runs `step(dt, engine.time.sim)` of every field set of `engine.world`, in creation order. [src/sim/fields/index.js:43; src/sim/fields/index.js:187-191] <!-- C-210 -->
+- **B-213** `createFields` adds the field set to the list of its World. It also registers `world.own(() => set.dispose())`. [src/sim/fields/index.js:187-191] <!-- C-211 -->
+- **B-214** `set.dispose()` removes the field set from the list and sets `removed` to true. A World `clear` or `dispose` therefore removes the field set. [src/sim/fields/index.js:185; src/sim/fields/index.js:190; test/fields.test.mjs:91] <!-- C-211 -->
+- **B-215** When `aero` or a fluid is set, each step visits the entities of `world.with()` in id order. [src/sim/fields/index.js:175] <!-- C-212 -->
+- **B-216** The step skips an entity unless the entity has a dynamic body and a `model`. The step also skips an entity whose model has no sidecar `aero` block. [src/sim/fields/index.js:76-78; src/sim/fields/index.js:176-177] <!-- C-212 -->
+- **B-217** The magnet pass runs after the aero and buoyancy pass, and only when the option `magnet` is set. [src/sim/fields/index.js:182] <!-- C-224 -->
+
+### Fields: aero
+- **B-218** The option `aero` is true or `{ plate, density }`. The `plate` factor defaults to 1.1. [src/sim/fields/index.js:64; test/fields.test.mjs:46] <!-- C-206 -->
+- **B-219** The air density is `aero.density`, otherwise the fluid density of the registry material `'air'`, otherwise 1.225. [src/sim/fields/index.js:64] <!-- C-206 -->
+- **B-220** The fields group the sidecar aero panels by part and cache the result for each model. [src/sim/fields/index.js:76-91] <!-- C-213 -->
+- **B-221** The skin and the airfoil of a part come from the `aero` block of the material of the first collider with that part. If no collider has that part, they come from the first collider. [src/sim/fields/index.js:80-82] <!-- C-213 -->
+- **B-222** The skin defaults to 0. The airfoil defaults to null. [src/sim/fields/index.js:84] <!-- C-213 -->
+- **B-223** For each part, the fields keep a planform panel and an area-weighted centroid. For an area tie within 1e-9, the panel with the larger `n[1]` is the planform panel. [src/sim/fields/index.js:80-88] <!-- C-214 -->
+- **B-224** For a panel, aero finds the world centre and normal. It also finds the relative wind `u`, which is the wind minus the body velocity at the centre. [src/sim/fields/index.js:102-104] <!-- C-215 -->
+- **B-225** A panel gets force only when `n.u` is below 0 and `|u|^2` is at least 1e-12. [src/sim/fields/index.js:105; test/fields.test.mjs:46] <!-- C-215 -->
+- **B-226** The plate force is `0.5 * rho * |u|^2 * a * plate * c^2` along `-n`. The value `c` is `-n.u / |u|`. [src/sim/fields/index.js:106-107; test/fields.test.mjs:46] <!-- C-215 -->
+- **B-227** When the skin is not 0 and the flow tangent to the panel is above 1e-9, the panel also gets a skin force. The force is `0.5 * rho * |u|^2 * a * skin` along that tangent. [src/sim/fields/index.js:108] <!-- C-216 -->
+- **B-228** Aero applies each force as an impulse of `force * dt` with `applyImpulseAtPoint` and wake-up true. The plate force acts at the panel centre. [src/sim/fields/index.js:93-99; src/sim/fields/index.js:109] <!-- C-217 -->
+- **B-229** A part with an airfoil acts at its area-weighted centroid with the normal of its planform panel. [src/sim/fields/index.js:111-114] <!-- C-218 -->
+- **B-230** If `|u|^2` is below 1e-12, a part with an airfoil gets no force and no plate forces. Otherwise `aoa` is `asin(n.u / |u|)` in degrees. [src/sim/fields/index.js:113-115; src/sim/fields/index.js:179] <!-- C-218 -->
+- **B-231** When `|aoa|` is at most the airfoil `stall`, the part gets lift `q * cl(aoa)` and drag `q * cd(aoa)`. The value `q` is `0.5 * rho * |u|^2` times the planform area. [src/sim/fields/index.js:116-120; test/fields.test.mjs:54] <!-- C-219 -->
+- **B-232** The lift acts along the part of the normal that is across the flow, as a unit vector. The drag acts along the flow. [src/sim/fields/index.js:118-119] <!-- C-219 -->
+- **B-233** When `|aoa|` is above `stall`, each panel of the part is a plate instead. [src/sim/fields/index.js:116; src/sim/fields/index.js:179; test/fields.test.mjs:54] <!-- C-219 -->
+- **B-234** The `cl` and `cd` curves are lists `[[aoa, value], ...]`. The fields read them with linear interpolation. Outside the first and last `aoa`, the value is that of the end point. [src/sim/fields/index.js:45-50; test/fields.test.mjs:54] <!-- C-220 -->
+
+### Fields: buoyancy
+- **B-235** The option `buoyancy` is `{ fluids: [{ material, level, surfaceVel, damping }] }`. The `material` defaults to `'water'` and gives the fluid density. [src/sim/fields/index.js:65-70; test/fields.test.mjs:63] <!-- C-207 -->
+- **B-236** The `level` is a number or a function `(x, z, t)` that returns y. The default is 0. The `surfaceVel` is a function `(x, z, t)` with default 0. The `damping` defaults to 1. [src/sim/fields/index.js:68-70] <!-- C-207 -->
+- **B-237** The gravity for buoyancy is `-gravity[1]`. The value `gravity` is `engine.game.physics.gravity`, with default `[0, -9.81, 0]`. [src/sim/fields/index.js:71] <!-- C-208 -->
+- **B-238** Buoyancy runs only when the gravity value is above 0. [src/sim/fields/index.js:180] <!-- C-208 -->
+- **B-239** For each fluid and each panel, buoyancy gets the world centre and `d = centre.y - level(x, z, t)`. It skips the panel when `d` is 0 or more. [src/sim/fields/index.js:122-126; test/fields.test.mjs:63] <!-- C-221 -->
+- **B-240** For each other panel, buoyancy adds `d * n_y * a` to the submerged volume. It also adds the moments for the centre of buoyancy. [src/sim/fields/index.js:127-128; test/fields.test.mjs:63] <!-- C-221 -->
+- **B-241** When the submerged volume `V` is at most 1e-12, the fluid gives no force. [src/sim/fields/index.js:129] <!-- C-222 -->
+- **B-242** Otherwise the fluid applies an upward impulse of `force * dt` at the centre of buoyancy. The force is `rho * g * V - damping * rho * V * heave`. [src/sim/fields/index.js:130-132; test/fields.test.mjs:63] <!-- C-222 -->
+- **B-243** The value `heave` is the body velocity y at the centre of buoyancy minus `surfaceVel(x, z, t)`. [src/sim/fields/index.js:131] <!-- C-222 -->
+- **B-244** `submerged(e)` returns `min(1, total submerged volume / sidecar volume)` from the last step, summed over the fluids. [src/sim/fields/index.js:180; src/sim/fields/index.js:184; test/fields.test.mjs:63] <!-- C-223 -->
+- **B-245** `submerged(e)` returns 0 when the sidecar volume is not above 0. It also returns 0 for an entity that no step has handled. [src/sim/fields/index.js:92; src/sim/fields/index.js:180; src/sim/fields/index.js:184] <!-- C-223 -->
+
+### Fields: magnetism
+- **B-246** The option `magnet` is `{ radius, gain, rMin, maxForce }`. The defaults are `radius` 3, `gain` 1, `rMin` 0.1 and `maxForce` 1e5. [src/sim/fields/index.js:72; test/fields.test.mjs:73] <!-- C-209 -->
+- **B-247** The magnet pass lists, in World entity id order, each collider whose material has a `magnet` block with `strength` above 0 or `ferrous` above 0. [src/sim/fields/index.js:141-146] <!-- C-224 -->
+- **B-248** Each candidate A with `strength` above 0 acts on each other candidate B. The World entity list gives the candidates, with no Rapier query. [src/sim/fields/index.js:136-138; src/sim/fields/index.js:147-151] <!-- C-225 -->
+- **B-249** A pair of two magnets counts once. The pass skips a pair when both colliders are on the same body. [src/sim/fields/index.js:151-152; test/fields.test.mjs:85] <!-- C-225 -->
+- **B-250** The pass also skips a pair when B has no `strength` and no `ferrous` value. It skips a pair when the distance between the collider positions is above `radius`. [src/sim/fields/index.js:153-155; test/fields.test.mjs:73] <!-- C-225 -->
+- **B-251** The distance `r` is `max(d, rMin)`. The direction from A to B is `[0, 1, 0]` when `d` is 0. [src/sim/fields/index.js:156] <!-- C-226 -->
+- **B-252** The ferrous force runs only when B has no `strength`. The force on B is `gain * A.strength * B.ferrous / r^4` toward A. [src/sim/fields/index.js:158; src/sim/fields/index.js:163; test/fields.test.mjs:73] <!-- C-226 -->
+- **B-253** The dipole-dipole force runs whenever B has `strength` above 0, also when B has `ferrous`. The value `k` is `3 * gain / r^4`. [src/sim/fields/index.js:158-162; test/fields.test.mjs:85] <!-- C-226 -->
+- **B-266** The moment of each collider lies along its +y axis and has the size of its `strength`. [src/sim/fields/index.js:139; src/sim/fields/index.js:159] <!-- C-226 -->
+- **B-254** The pass caps the force at `maxForce`. It applies the impulse `force * dt` at the collider position of B on the body of B. [src/sim/fields/index.js:164-165; test/fields.test.mjs:73] <!-- C-227 -->
+- **B-255** The pass applies the opposite impulse on the body of A. A collider with no parent body gets no impulse. [src/sim/fields/index.js:165-166] <!-- C-227 -->
+
+### Fields: dependencies and checks
+- **B-256** The fields read `world.engine`, `world.materials`, `world.with`, `world.materialOf` and `world.own`. They read the sidecar block `aero` `{ panels, volume }`. [src/sim/fields/index.js:57-70; src/sim/fields/index.js:76-91; src/sim/fields/index.js:141-146; src/sim/fields/index.js:190] <!-- C-228 -->
+- **B-257** The registry blocks `aero`, `fluid` and `magnet` and the materials `'air'` and `'water'` supply the field values. [src/sim/fields/index.js:64-67; src/sim/fields/index.js:82-84; src/sim/fields/index.js:144] <!-- C-228 -->
+- **B-258** A cube face-on at 10 m/s gets one plate force `0.5 * 1.225 * 100 * 1 * 1.1`. A cube that moves with the wind gets no force. [test/fields.test.mjs:46] <!-- C-229 -->
+- **B-259** A half-density cube floats with half its volume under water, and `submerged(e)` is about 0.5. [test/fields.test.mjs:63] <!-- C-229 -->
+
 ## Data and state
 | Item | Description | Evidence |
 | --- | --- | --- |
@@ -299,6 +378,12 @@ See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" 
 | `heightfield` options `x0`, `z0`, `tags` | 0, 0, `['heightfield']` | Origin and tags of the ground entity. | [src/sim/world/world.js:442] <!-- C-183 --> |
 | `body` option keys | none | `type`, `lock`, `ccd`, `linearDamping`, `angularDamping`, `sleep`, `canSleep`, `mass`, `massProps`. Other keys throw 'body.<key> is not a body option'. A wrong type throws "body type must be 'dynamic', 'kinematic' or 'fixed' (got <type>)". A string means `{ type }`. | [src/sim/world/world.js:23-24; src/sim/world/world.js:113-118] <!-- C-100 --> |
 | `place` options | `keep` false, `local` `[0, 0, 0]` | `place(e, target, opts)` takes `{ at }` or `{ rel, local }`, with `{ yaw, q, keep }`. | [src/sim/world/place.js:8; src/sim/world/place.js:19-31] <!-- C-20 --> |
+| `createWind` options | `base` `[0, 0, 0]`, `gust` null, `zones` `[]`, `seed` 1 | Wind base, gust `{ amp, scale, period }`, zone boxes `{ min, max, v }` and noise seed. | [src/sim/fields/index.js:12; src/sim/fields/index.js:15] <!-- C-198 C-201 --> |
+| gust `amp`, `scale`, `period` | 0, 20, 4 | Gust size, space scale and time scale. | [src/sim/fields/index.js:15] <!-- C-201 --> |
+| `createFields` options | `wind` calm, `aero` false, `buoyancy` null, `magnet` null | The fields to run. The option `models` gives the sidecars. | [src/sim/fields/index.js:55; src/sim/fields/index.js:61; src/sim/fields/index.js:63] <!-- C-205 --> |
+| `aero` option | `plate` 1.1, `density` from material `'air'`, else 1.225 | `aero` is true or `{ plate, density }`. | [src/sim/fields/index.js:64] <!-- C-206 --> |
+| `buoyancy` option | `material` `'water'`, `level` 0, `surfaceVel` 0, `damping` 1 | `{ fluids: [{ material, level, surfaceVel, damping }] }`. | [src/sim/fields/index.js:65-70] <!-- C-207 --> |
+| `magnet` option | `radius` 3, `gain` 1, `rMin` 0.1, `maxForce` 1e5 | Magnet range, scale, smallest distance and force cap. | [src/sim/fields/index.js:72] <!-- C-209 --> |
 
 ## Errors and limits
 - **B-167** `world.spawn`, `clear`, `joint`, `heightfield`, `place` and the function-only form `own(fn)` throw 'world: disposed' after `dispose`. [src/sim/world/world.js:61; src/sim/world/world.js:102; src/sim/world/world.js:316; src/sim/world/world.js:253; src/sim/world/world.js:351; src/sim/world/world.js:443; test/world-entities.test.mjs:90] <!-- C-93 -->
@@ -334,11 +419,18 @@ See the [glossary](_meta/glossary.md). No new terms. In this spec, "owned free" 
 - **B-197** `createPhysics` throws 'physics: hz must be > 0 (got <hz>)' unless `hz` is greater than 0. [src/sim/physics/rapier.js:68; test/physics-rapier.test.mjs:39] <!-- C-49 -->
 - **B-198** `checkPhysics(p, fail)` fails in five cases. The cases are `physics` not an object, `gravity` not three finite numbers, `params` not an object, a `mergeParams` error and a `createGroups` error. [src/sim/world/install.js:9-14] <!-- C-37 -->
 - **B-199** `checkPhysics` changes the prefix 'physics: params.' to 'physics.params.' and the prefix 'physics: ' to 'physics.groups: ' in the error texts. [src/sim/world/install.js:13-14] <!-- C-37 -->
+- **B-260** `createWind` throws 'wind: base must be [x, y, z]' unless `base` is three finite numbers. [src/sim/fields/index.js:13; test/fields.test.mjs:36] <!-- C-199 -->
+- **B-261** `createWind` throws 'wind: a zone is { min, max, v }, each [x, y, z]' for a bad zone. A zone is bad when its `min`, `max` or `v` is not three finite numbers. [src/sim/fields/index.js:14] <!-- C-199 -->
+- **B-262** `createFields` throws "fields: the World has no engine (world.engine): create fields on a scene World" when the World has no engine. [src/sim/fields/index.js:7; src/sim/fields/index.js:58-59] <!-- C-203 -->
+- **B-263** `createFields` throws "fields: unknown option '<key>' (wind, aero, buoyancy, magnet, models)" for any other option key. [src/sim/fields/index.js:55; src/sim/fields/index.js:60; test/fields.test.mjs:91] <!-- C-203 -->
+- **B-264** `createFields` throws 'fields: wind must be a createWind() field' when `wind.at` is not a function. [src/sim/fields/index.js:62; test/fields.test.mjs:91] <!-- C-204 -->
+- **B-265** `createFields` throws "fields: fluid material '<id>' has no fluid block" when the fluid material is missing from the registry or has no fluid block. The default fluid material is 'water'. [src/sim/fields/index.js:65-67; test/fields.test.mjs:91] <!-- C-204 -->
 
 ## Dependencies
 - **Internal:** the [core spec](core.md) owns the engine, the stages, the events and `engine.netPart`. The core imports `installWorld` and `checkPhysics`. [src/sim/world/install.js:17-30] <!-- C-39 -->
 - **Internal:** the [defs and kits spec](defs-and-kits.md) owns `defineMaterials`, `validateCollider` and the registry methods `has` and `collider`. The World imports `defineMaterials` and `validateCollider`. The World calls `has` and `collider` on the registry. [src/sim/world/world.js:12-13; src/sim/world/world.js:153-154] <!-- C-89 C-115 -->
 - **Internal:** `world.js` imports `qFromYaw` and `qnorm` from `src/core/math.js`. `place.js` imports `rotate`, `qmul`, `qFromYaw` and `qnorm` from the same file. [src/sim/world/world.js:14; src/sim/world/place.js:6] <!-- C-24 -->
+- **Internal:** the fields read the registry blocks `aero`, `fluid` and `magnet` from the [defs and kits spec](defs-and-kits.md). They also read the sidecar block `aero`. The `src/index.sim.js` file exports `createWind`, `createFields` and `FIELDS_SYSTEM`. [src/sim/fields/index.js:57-91; src/index.sim.js:27] <!-- C-228 C-198 C-202 -->
 - **External:** `@dimforge/rapier3d-compat` 0.21.x, injected as `game.physics.rapier`. A test pins the 0.21.x version. [src/sim/physics/rapier.js:39; test/physics-fixtures.test.mjs:13] <!-- C-48 C-57 -->
 
 <!-- related-specs -->
@@ -350,10 +442,7 @@ Related specs:
 - Imported by: [CLI, tools and package surface](tools-and-package.md)
 
 ## Open questions and discrepancies
-- `docs/spec.md` section 2.2 lists the body options as `{ type, lock, ccd, linearDamping, angularDamping, sleep }`. The code also accepts `canSleep`, `mass` and `massProps`. [doc:docs/spec.md:89; src/sim/world/world.js:23]
-- `docs/spec.md` E-1 says an entity has an optional `tags` set. The code always makes a `tags` Set. [doc:docs/spec.md:79; src/sim/world/world.js:174]
-- `docs/spec.md` E-10 says the pool slots swap after every sim step. The code copies curr to prev at the start of the step in `lh.world.swap`. The clarification in the same doc agrees with the code. [doc:docs/spec.md:107-108; src/sim/world/install.js:31]
-- `docs/spec.md` E-7 says despawn removes the view object and the net record. The World code removes only the Rapier objects, the query membership and its own records. [doc:docs/spec.md:101; src/sim/world/world.js:227-240]
+- `docs/spec.md` M-14 says the fields allocate nothing. The fields reuse their own objects and arrays. Only the Rapier getter vectors (`translation`, `rotation`, `linvel`, `angvel`, `parent`) are fresh in each step. [doc:docs/spec.md:181; src/sim/fields/index.js:93-94; src/sim/fields/index.js:139-145; src/sim/fields/index.js:149; src/sim/fields/index.js:178]
 - Open question: why do the sleepers thresholds use 0.2 m/s and 0.5 rad/s? The code comment says only that they come from Rally. [src/sim/world/world.js:417-422]
 - Open question: field note 124 says no test guards the read of a body that fell asleep in the step that moved it. The status is open. [doc:docs/field-notes.md:833-837]
 
@@ -364,3 +453,5 @@ Related specs:
 - `src/sim/world/install.js`: the World seat, the four systems and `checkPhysics`.
 - `src/sim/physics/rapier.js`: pinned parameters, `checkRapier`, the step wrapper.
 - `src/sim/physics/colliders.js`, `events.js`, `groups.js`, `heightfield.js`: shapes and materials, event drain, groups, heightfield layout.
+- `src/sim/fields/index.js`: `createWind`, `createFields`, the `lh.fields` system, aero, buoyancy and magnetism.
+- `test/fields.test.mjs`: analytic checks of wind, aero, airfoil lift, buoyancy and magnet forces.

@@ -1,48 +1,48 @@
 {
   "repo": "lion-hawk-engine",
-  "source_commit": "7e239df",
+  "source_commit": "344159b",
   "totals": {
     "config": {
       "files": 1,
-      "lines": 44
+      "lines": 49
     },
     "doc": {
       "files": 62,
-      "lines": 53433
+      "lines": 53475
     },
     "other": {
-      "files": 23,
+      "files": 24,
       "lines": 0
     },
     "source": {
-      "files": 119,
-      "lines": 11155
+      "files": 127,
+      "lines": 12032
     },
     "test": {
-      "files": 242,
-      "lines": 16736
+      "files": 256,
+      "lines": 17657
     }
   },
   "top_level": {
     "test": {
-      "files": 242,
-      "lines": 16736
+      "files": 255,
+      "lines": 17622
     },
     "src": {
-      "files": 92,
-      "lines": 9197
+      "files": 96,
+      "lines": 9738
     },
     "testing": {
-      "files": 10,
-      "lines": 1007
+      "files": 11,
+      "lines": 1185
     },
     "tools": {
-      "files": 16,
-      "lines": 945
+      "files": 20,
+      "lines": 1138
     },
     ".": {
       "files": 1,
-      "lines": 44
+      "lines": 49
     },
     "bin": {
       "files": 1,
@@ -51,24 +51,24 @@
   },
   "hotspots": [
     {
-      "path": "docs/field-notes.md",
-      "commits": 60
+      "path": "CHANGELOG.md",
+      "commits": 62
     },
     {
-      "path": "CHANGELOG.md",
-      "commits": 49
+      "path": "docs/field-notes.md",
+      "commits": 61
+    },
+    {
+      "path": "docs/spec.md",
+      "commits": 53
     },
     {
       "path": "src/core/engine.js",
       "commits": 47
     },
     {
-      "path": "docs/spec.md",
-      "commits": 38
-    },
-    {
       "path": "package.json",
-      "commits": 33
+      "commits": 35
     },
     {
       "path": "src/version.js",
@@ -76,14 +76,18 @@
     },
     {
       "path": "src/view/boot.js",
-      "commits": 23
+      "commits": 24
+    },
+    {
+      "path": "testing/playwright.js",
+      "commits": 22
     },
     {
       "path": "test/engine.test.mjs",
       "commits": 21
     },
     {
-      "path": "testing/playwright.js",
+      "path": "testing/headless.js",
       "commits": 20
     },
     {
@@ -91,40 +95,40 @@
       "commits": 20
     },
     {
+      "path": "src/index.sim.js",
+      "commits": 16
+    },
+    {
+      "path": "package-lock.json",
+      "commits": 15
+    },
+    {
+      "path": "test/playwright.test.mjs",
+      "commits": 15
+    },
+    {
       "path": "src/sim/net/install.js",
       "commits": 15
     },
     {
-      "path": "src/index.sim.js",
-      "commits": 15
-    },
-    {
-      "path": "testing/headless.js",
-      "commits": 15
+      "path": "src/view/hook.js",
+      "commits": 14
     },
     {
       "path": "test/boot.test.mjs",
       "commits": 14
     },
     {
-      "path": "test/playwright.test.mjs",
-      "commits": 13
-    },
-    {
       "path": "src/view/seats.js",
-      "commits": 13
-    },
-    {
-      "path": "package-lock.json",
-      "commits": 13
-    },
-    {
-      "path": "src/view/hook.js",
       "commits": 13
     },
     {
       "path": "src/index.view.js",
       "commits": 12
+    },
+    {
+      "path": "testing/index.js",
+      "commits": 11
     },
     {
       "path": "src/sim/world/world.js",
@@ -151,12 +155,12 @@
       "commits": 9
     },
     {
-      "path": "testing/index.js",
+      "path": "test/touch.test.mjs",
       "commits": 9
     },
     {
-      "path": "test/touch.test.mjs",
-      "commits": 9
+      "path": "testing/replay.js",
+      "commits": 8
     },
     {
       "path": "src/core/actions.js",
@@ -164,10 +168,6 @@
     },
     {
       "path": "src/view/materials/compiler.js",
-      "commits": 8
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3m-integration-notes.md",
       "commits": 8
     }
   ],
@@ -180,7 +180,7 @@
     {
       "path": "CHANGELOG.md",
       "category": "doc",
-      "lines": 232
+      "lines": 252
     },
     {
       "path": "bin/lion-hawk.js",
@@ -190,7 +190,7 @@
     {
       "path": "docs/design.md",
       "category": "doc",
-      "lines": 427
+      "lines": 430
     },
     {
       "path": "docs/field-notes.md",
@@ -485,7 +485,7 @@
     {
       "path": "docs/spec.md",
       "category": "doc",
-      "lines": 729
+      "lines": 748
     },
     {
       "path": "package-lock.json",
@@ -495,12 +495,17 @@
     {
       "path": "package.json",
       "category": "config",
-      "lines": 44
+      "lines": 49
     },
     {
       "path": "src/core/actions.js",
       "category": "source",
       "lines": 109
+    },
+    {
+      "path": "src/core/checksum.js",
+      "category": "source",
+      "lines": 17
     },
     {
       "path": "src/core/controllers.js",
@@ -520,7 +525,7 @@
     {
       "path": "src/core/flags.js",
       "category": "source",
-      "lines": 18
+      "lines": 19
     },
     {
       "path": "src/core/loop.js",
@@ -563,6 +568,11 @@
       "lines": 65
     },
     {
+      "path": "src/core/tape.js",
+      "category": "source",
+      "lines": 62
+    },
+    {
       "path": "src/core/ui.js",
       "category": "source",
       "lines": 100
@@ -585,7 +595,7 @@
     {
       "path": "src/defs/sidecar.js",
       "category": "source",
-      "lines": 140
+      "lines": 157
     },
     {
       "path": "src/index.net.js",
@@ -595,7 +605,7 @@
     {
       "path": "src/index.sim.js",
       "category": "source",
-      "lines": 26
+      "lines": 27
     },
     {
       "path": "src/index.view.js",
@@ -645,7 +655,12 @@
     {
       "path": "src/kits/vehicle/sim.js",
       "category": "source",
-      "lines": 144
+      "lines": 276
+    },
+    {
+      "path": "src/kits/vehicle/tire.js",
+      "category": "source",
+      "lines": 58
     },
     {
       "path": "src/net/bridge.js",
@@ -666,6 +681,11 @@
       "path": "src/net/transport.js",
       "category": "source",
       "lines": 79
+    },
+    {
+      "path": "src/sim/fields/index.js",
+      "category": "source",
+      "lines": 193
     },
     {
       "path": "src/sim/forecast.js",
@@ -785,12 +805,12 @@
     {
       "path": "src/view/bench/pads.js",
       "category": "source",
-      "lines": 257
+      "lines": 258
     },
     {
       "path": "src/view/boot.js",
       "category": "source",
-      "lines": 168
+      "lines": 189
     },
     {
       "path": "src/view/camera/chase.js",
@@ -840,12 +860,12 @@
     {
       "path": "src/view/haptics.js",
       "category": "source",
-      "lines": 73
+      "lines": 75
     },
     {
       "path": "src/view/hook.js",
       "category": "source",
-      "lines": 50
+      "lines": 86
     },
     {
       "path": "src/view/instancing/crowd.js",
@@ -1008,6 +1028,11 @@
       "lines": 56
     },
     {
+      "path": "test/bake-aero.test.mjs",
+      "category": "test",
+      "lines": 59
+    },
+    {
       "path": "test/bake-anim.test.mjs",
       "category": "test",
       "lines": 54
@@ -1068,6 +1093,11 @@
       "lines": 14
     },
     {
+      "path": "test/bake-textures.test.mjs",
+      "category": "test",
+      "lines": 50
+    },
+    {
       "path": "test/bench-stats.test.mjs",
       "category": "test",
       "lines": 129
@@ -1075,7 +1105,7 @@
     {
       "path": "test/bench.test.mjs",
       "category": "test",
-      "lines": 211
+      "lines": 218
     },
     {
       "path": "test/boot-args.test.mjs",
@@ -1103,6 +1133,11 @@
       "lines": 53
     },
     {
+      "path": "test/build-manifest.test.mjs",
+      "category": "test",
+      "lines": 50
+    },
+    {
       "path": "test/build-page.test.mjs",
       "category": "test",
       "lines": 33
@@ -1111,6 +1146,11 @@
       "path": "test/build-run.test.mjs",
       "category": "test",
       "lines": 70
+    },
+    {
+      "path": "test/build-shared.test.mjs",
+      "category": "test",
+      "lines": 103
     },
     {
       "path": "test/build.test.mjs",
@@ -1156,6 +1196,11 @@
       "path": "test/checks-materials.test.mjs",
       "category": "test",
       "lines": 31
+    },
+    {
+      "path": "test/cli-test-release.test.mjs",
+      "category": "test",
+      "lines": 69
     },
     {
       "path": "test/cli.test.mjs",
@@ -1240,7 +1285,7 @@
     {
       "path": "test/e2e.test.mjs",
       "category": "test",
-      "lines": 56
+      "lines": 83
     },
     {
       "path": "test/engine.test.mjs",
@@ -1253,9 +1298,24 @@
       "lines": 54
     },
     {
+      "path": "test/expectEvents.test.mjs",
+      "category": "test",
+      "lines": 31
+    },
+    {
       "path": "test/field-notes.test.mjs",
       "category": "test",
       "lines": 22
+    },
+    {
+      "path": "test/fields.test.mjs",
+      "category": "test",
+      "lines": 98
+    },
+    {
+      "path": "test/fixtures-api.test.mjs",
+      "category": "test",
+      "lines": 32
     },
     {
       "path": "test/fixtures/countdown.html",
@@ -1485,7 +1545,7 @@
     {
       "path": "test/flags.test.mjs",
       "category": "test",
-      "lines": 36
+      "lines": 40
     },
     {
       "path": "test/forecast.test.mjs",
@@ -1613,6 +1673,11 @@
       "lines": 20
     },
     {
+      "path": "test/hook-state.test.mjs",
+      "category": "test",
+      "lines": 78
+    },
+    {
       "path": "test/hook.test.mjs",
       "category": "test",
       "lines": 59
@@ -1713,6 +1778,11 @@
       "lines": 47
     },
     {
+      "path": "test/kits/vehicle-tire.test.mjs",
+      "category": "test",
+      "lines": 82
+    },
+    {
       "path": "test/kits/vehicle.test.mjs",
       "category": "test",
       "lines": 107
@@ -1775,7 +1845,7 @@
     {
       "path": "test/mp.test.mjs",
       "category": "test",
-      "lines": 37
+      "lines": 44
     },
     {
       "path": "test/nav.test.mjs",
@@ -1815,7 +1885,7 @@
     {
       "path": "test/net-host.test.mjs",
       "category": "test",
-      "lines": 79
+      "lines": 80
     },
     {
       "path": "test/net-install.test.mjs",
@@ -1970,7 +2040,7 @@
     {
       "path": "test/playwright.test.mjs",
       "category": "test",
-      "lines": 142
+      "lines": 188
     },
     {
       "path": "test/pointer.test.mjs",
@@ -1991,6 +2061,11 @@
       "path": "test/purity.test.mjs",
       "category": "test",
       "lines": 58
+    },
+    {
+      "path": "test/record-on-fail.test.mjs",
+      "category": "test",
+      "lines": 38
     },
     {
       "path": "test/render-boot.test.mjs",
@@ -2111,6 +2186,16 @@
       "path": "test/sidecar.test.mjs",
       "category": "test",
       "lines": 80
+    },
+    {
+      "path": "test/snapshot.test.mjs",
+      "category": "test",
+      "lines": 46
+    },
+    {
+      "path": "test/spy-warnings.test.mjs",
+      "category": "test",
+      "lines": 58
     },
     {
       "path": "test/state.test.mjs",
@@ -2268,6 +2353,11 @@
       "lines": 99
     },
     {
+      "path": "testing/fixtures.js",
+      "category": "source",
+      "lines": 31
+    },
+    {
       "path": "testing/golden.js",
       "category": "source",
       "lines": 30
@@ -2275,12 +2365,12 @@
     {
       "path": "testing/headless.js",
       "category": "source",
-      "lines": 106
+      "lines": 234
     },
     {
       "path": "testing/index.js",
       "category": "source",
-      "lines": 9
+      "lines": 10
     },
     {
       "path": "testing/invariants.js",
@@ -2295,7 +2385,7 @@
     {
       "path": "testing/playwright.js",
       "category": "source",
-      "lines": 461
+      "lines": 530
     },
     {
       "path": "testing/purity.js",
@@ -2305,12 +2395,17 @@
     {
       "path": "testing/replay.js",
       "category": "source",
-      "lines": 54
+      "lines": 14
     },
     {
       "path": "testing/state.js",
       "category": "source",
-      "lines": 43
+      "lines": 32
+    },
+    {
+      "path": "tools/bake/aero.js",
+      "category": "source",
+      "lines": 39
     },
     {
       "path": "tools/bake/animTable.js",
@@ -2325,7 +2420,7 @@
     {
       "path": "tools/bake/config.js",
       "category": "source",
-      "lines": 70
+      "lines": 97
     },
     {
       "path": "tools/bake/conventions.js",
@@ -2340,7 +2435,7 @@
     {
       "path": "tools/bake/index.js",
       "category": "source",
-      "lines": 105
+      "lines": 110
     },
     {
       "path": "tools/bake/mass.js",
@@ -2368,6 +2463,11 @@
       "lines": 11
     },
     {
+      "path": "tools/bake/textures.js",
+      "category": "source",
+      "lines": 39
+    },
+    {
       "path": "tools/bake/write.js",
       "category": "source",
       "lines": 34
@@ -2388,9 +2488,14 @@
       "lines": 0
     },
     {
+      "path": "tools/build/shared.js",
+      "category": "other",
+      "lines": 0
+    },
+    {
       "path": "tools/cli.js",
       "category": "source",
-      "lines": 38
+      "lines": 46
     },
     {
       "path": "tools/dedupe.js",
@@ -2406,6 +2511,16 @@
       "path": "tools/glyphs/build.mjs",
       "category": "source",
       "lines": 33
+    },
+    {
+      "path": "tools/release/index.js",
+      "category": "source",
+      "lines": 40
+    },
+    {
+      "path": "tools/test/index.js",
+      "category": "test",
+      "lines": 35
     }
   ]
 }

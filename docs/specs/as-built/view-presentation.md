@@ -2,7 +2,7 @@
 id: F07
 title: View sync, camera, assets and audio
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/view/sync/**
   - src/view/camera/**
@@ -389,8 +389,5 @@ Related specs:
 - Imported by: [CLI, tools and package surface](tools-and-package.md)
 
 ## Open questions and discrepancies
-- `docs/spec.md` E-11 says the view writes slerp for rotations. View sync uses a normalised nlerp on the short arc. [docs/spec.md:110; src/view/sync/index.js:181-183]
-- `docs/spec.md` A-9 says the shared GLTFLoader has the meshopt and KTX2 decoders. The code sets only meshopt. KTX2 and Draco are both optional and injected. [docs/spec.md:470; src/view/assets/loader.js:1-3; src/view/assets/loader.js:9-11]
-- `docs/spec.md` A-10 says `preload` drives the loading scene. The code of `preload` only loads, compiles and warms. The code does not touch a scene. [docs/spec.md:471; src/view/assets/index.js:83-97]
 - Open question: why does view sync start each instanced part at 16 instances? No source states the reason.
 - Open question: why does the shake jitter move only x and y of the wanted camera position? No source states the reason.

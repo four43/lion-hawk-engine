@@ -2,7 +2,7 @@
 id: F04
 title: Networking and replication
 status: as-built
-source_commit: 7e239df
+source_commit: 7224d6b
 paths:
   - src/net/**
   - src/sim/net/**
@@ -511,11 +511,6 @@ Related specs:
 - The port warns through `onWarn` once per reason. The net part warns once per key text, for example `'net: no peer key'`, `'net: frame not sent'` and `"net: kind '<name>' not sent"`. [src/net/port.js:23-24; src/sim/net/install.js:318; src/sim/net/install.js:411-412; src/sim/net/install.js:649] <!-- C-55 C-185 C-228 -->
 
 ## Open questions and discrepancies
-- `docs/spec.md` 4.1 lists the `net.open` command as `{ role, id, hostId, at }`. The port also sends `key` (four uint32 words). [doc:docs/spec.md:199; src/net/port.js:67]
-- `docs/spec.md` 4.1 gives the `createPort` options without `key`. The code has a `key` option with the default `peerKey()`. [doc:docs/spec.md:199; src/net/port.js:11]
-- `docs/spec.md` N-19 lists `net.hello` as `{ key, seats }`. The code also sends `schema`. [doc:docs/spec.md:269; src/sim/net/install.js:319]
-- `docs/spec.md` N-24 says `net.self` is the first local number. The code sets `self` to 1 on a host, to seat 0's number when seat 0 is confirmed, and otherwise to 0. [doc:docs/spec.md:277; src/sim/net/install.js:61]
-- `docs/spec.md` N-12 says `driven` is the default remote mode for owner kinds with an `input` field. The code also needs a field named `body` made with `F.body()`. [doc:docs/spec.md:241; src/defs/fields.js:43]
 - Open question: why does a bridge guest `leave` emit `closed` to itself after its endpoint leaves the hub? No source states the reason.
 - Open question: why is `REPEAT` 3? Only the comment in `replica.js` says that it keeps one lost diff from hiding a change.
 
