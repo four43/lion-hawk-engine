@@ -71,7 +71,7 @@ test('H-6: on the tire backend it pulls away through the gears, deterministicall
 });
 test('H-6: step allocates nothing; the file is sim-pure', async () => {
   const pt = createPowertrain({ turbo: {} }); pt.shift(2); pt.throttle = 0.7;
-  const r = await allocRate(() => pt.step(DT, 40), 3000, { warm: 3000, top: 4 }); // warm: past the JIT's tiering
+  const r = await allocRate(() => pt.step(DT, 40), 3000, { warm: 20000, top: 4 }); // warm: past the JIT's tiering
   assert.ok(r.perCall < 64, `bytes per step ${r.perCall}: ${r.top.join('; ')}`); // the returned torque is a boxed number
   assert.deepEqual(scanPurity([fileURLToPath(new URL('../../src/kits/vehicle/powertrain.js', import.meta.url))]), []);
 });
@@ -121,4 +121,28 @@ test('H-6: on the tire backend, given the road torque, the clutch closes: engine
   let flips = 0, last = 0; worst = 0;
   drive(60, (o, T) => { worst = Math.max(worst, slipOf(o)); if (last && Math.sign(T) !== Math.sign(last)) flips++; last = T; });
   assert.ok(worst < 200, `2nd, part throttle: slip up to ${worst.toFixed(0)} rpm`); // about RPM_PER_RAD × dt × Tc / inertia (H-6) assert.equal(flips, 0, 'the drive torque does not flip sign');
+});
+test('H-6: bite sets where the launch clutch starts to grip: at 1.05 an idling engine in gear drives nothing, at the default 0.9 it creeps', () => {
+  const idleTorque = bite => { const pt = createPowertrain(bite === undefined ? {} : { bite }); pt.shift(1); run(pt, 1); return pt.step(DT, 0); };
+  assert.ok(idleTorque() > 0, 'the default bite pulls at idle');
+  assert.equal(idleTorque(1.05), 0);
+  assert.throws(() => createPowertrain({ bite: 0 }), /powertrain: bite must be a number > 0 \(got 0\)/);
+});
+test('H-6: with blip, a downshift matches the engine to the new gear before the clutch closes; without it the throttle stays cut', () => {
+  const omega = 60, road = omega * 2.1 * 3.9 * 60 / (2 * Math.PI); // 3rd → 2nd at ~4700 rpm of road speed
+  const shiftDown = blip => {
+    const pt = createPowertrain({ blip, shiftTime: 0.12 }); pt.shift(3); run(pt, 1, () => {}, () => omega);
+    pt.shift(2); let open = 0, peak = 0;
+    for (let i = 0; i < 60 && pt.state.shiftT > 0; i++) { assert.equal(pt.step(DT, omega), 0, 'the clutch is open during the shift'); open += DT; peak = Math.max(peak, pt.state.thrEff); }
+    return { gap: road - pt.state.rpm, open, peak };
+  };
+  const on = shiftDown(true), off = shiftDown(false);
+  assert.ok(Math.abs(on.gap) < 300, `blip: ${on.gap.toFixed(0)} rpm short of the road`); assert.ok(on.peak > 0.9, 'the blip opens the throttle');
+  assert.ok(on.open <= 0.24 + 1e-9, `held open ${on.open} s: at most twice shiftTime`);
+  assert.ok(off.gap > 1000, `no blip: ${off.gap.toFixed(0)} rpm short`); assert.equal(off.peak, 0);
+});
+test('H-6: with a turbo the clutch holds 1.6 x peak torque on full boost', () => {
+  const G = 3.5 * 3.9, slipTorque = turbo => { const pt = createPowertrain({ turbo, wheelInertia: 1e6 }); pt.shift(1); run(pt, 1); pt.state.rpm = 6000; return pt.step(DT, 0) / G; };
+  assert.ok(Math.abs(slipTorque(null) - 210 * 1.6) < 1e-6);
+  assert.ok(Math.abs(slipTorque({ maxBoost: 1 }) - 210 * 1.6 * 2) < 1e-6);
 });

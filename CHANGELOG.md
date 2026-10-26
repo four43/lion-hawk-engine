@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Kits: `createPowertrain({ blip: true })` rev-matches a shift: while the clutch is open the throttle brings the engine to the new gear's road rpm, and a blip still short of it holds the clutch open for up to another `shiftTime`, so a downshift no longer re-engages onto a slow engine and locks the driven wheels ([H-6]; Rally's sequential box). Off by default.
+- Kits: `createPowertrain({ bite })`: the launch clutch starts to grip at `bite` × idle (default 0.9, as before); above 1 an idling engine in gear no longer creeps the car ([H-6]).
+- Kits: with a turbo, the powertrain's clutch holds 1.6 × peak torque on full boost (`1 + maxBoost` times the old capacity), so it no longer slips under boost ([H-6]).
+
 ## 0.14.0 — 2026-10-26
 
 Audio and engine sound (spec §5.6 [H-1]–[H-7]): mixer buses, voices, cues, contact sounds and a DSP host in `lion-hawk/view`; a powertrain in `lion-hawk/kits/vehicle` and a procedural engine sound in `lion-hawk/kits/vehicle/view`. Also menu shoulders and buttons, as-built specs, `docs/agents.md`, and a build that writes to `<game>/build` by default (**breaking** for `--site`).

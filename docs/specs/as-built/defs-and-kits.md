@@ -616,7 +616,7 @@ The frame that `createEngineSound` sends starts with these values. [src/kits/veh
 | `suspension.rest` (in the vehicle spec) | 0.3 | Suspension rest length in metres. Both backends use this default. | [src/kits/vehicle/sim.js:85; src/kits/vehicle/sim.js:176] <!-- C-483 --> |
 | `TIRE` | `sigmaX` 0.12 m, `sigmaY` 0.30 m, `loadRef` 3500 N, `loadSens` 0.12, `rhoMax` 4, `lowSpeed` 3 m/s, `apLoad` 0.5 | Frozen parameters that every tire shares. | [src/kits/vehicle/tire.js:9-17] <!-- C-484 --> |
 | `DEFAULT_SURFACE` | `mu` 0.9, `C` 1.4, `kp` 0.14, `ap` 0.15, `crr` 0.025, `drag` 0 | The surface for ground with no tire data. The surface matches dry asphalt of the base library. | [src/kits/vehicle/tire.js:26-27] <!-- C-485 --> |
-| `createPowertrain` options | `engine` `i4`, `gears` `[3.5, 2.1, 1.45, 1.1, 0.88, 0.72]`, `reverse` 3.2, `final` 3.9, `shiftTime` 0.28, `wheelInertia` 2, `turbo` null, `running` true | Engine and gearbox settings. | [src/kits/vehicle/powertrain.js:23-24] <!-- C-224 --> |
+| `createPowertrain` options | `engine` `i4`, `gears` `[3.5, 2.1, 1.45, 1.1, 0.88, 0.72]`, `reverse` 3.2, `final` 3.9, `shiftTime` 0.28, `wheelInertia` 2, `turbo` null, `running` true, `blip` false, `bite` 0.9 | Engine and gearbox settings. `blip` rev-matches shifts; `bite` × idle is where the launch clutch starts to grip. | [src/kits/vehicle/powertrain.js:23-24] <!-- C-224 --> |
 | `createEngineSound` options | `mic` `behind`, `mix` `{}`, `muffler` `sport`, `pipe` undefined, `pops` false, `volume` 0.6, `bus` `sfx`, `follow` null, `seed` 1 | Listening position, mix, muffler and voice settings. | [src/kits/vehicle/view.js:20] <!-- C-343 --> |
 
 ## Errors and limits
@@ -692,6 +692,7 @@ All errors are thrown `Error` objects. The message prefixes vary by module: `mat
 - `createPowertrain` throws `powertrain: engine.stereo must be 0 or 1 (got <value>)` for another `stereo` value. [src/kits/vehicle/powertrain.js:30] <!-- C-377 -->
 - `createPowertrain` throws `powertrain: turbo.maxBoost must be a number > 0 (got <value>)` when a turbo `maxBoost` is not > 0. [src/kits/vehicle/powertrain.js:35] <!-- C-378 -->
 - `createPowertrain` throws `powertrain: turbo.size must be a number in 0..1 (got <value>)` when a turbo `size` is outside 0..1. [src/kits/vehicle/powertrain.js:36] <!-- C-379 -->
+- `createPowertrain` throws `powertrain: bite must be a number > 0 (got <value>)` when `bite` is not > 0. [src/kits/vehicle/powertrain.js:34; test/kits/powertrain.test.mjs:129]
 - `createPowertrain` throws `powertrain: gears must be a non-empty list of ratios > 0` unless `gears` is a non-empty array of numbers > 0. [src/kits/vehicle/powertrain.js:31; test/kits/powertrain.test.mjs:81] <!-- C-227 -->
 - `createPowertrain` throws `powertrain: <k> must be a number > 0 (got <value>)` when `reverse`, `final` or `wheelInertia` is not > 0. The call throws `powertrain: shiftTime must be a number >= 0 (got <value>)` when `shiftTime` is not >= 0. [src/kits/vehicle/powertrain.js:32-33; test/kits/powertrain.test.mjs:82] <!-- C-228 -->
 - `shift(g)` throws `powertrain: gear must be an integer in -1..<n> (got <g>)` for another value of `g`. [src/kits/vehicle/powertrain.js:84; test/kits/powertrain.test.mjs:84] <!-- C-235 -->

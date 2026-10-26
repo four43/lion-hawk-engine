@@ -21,7 +21,7 @@ export const ENGINE_PRESETS = Object.freeze({
 });
 
 export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 0.88, 0.72], reverse = 3.2, final = 3.9, shiftTime = 0.28,
-  wheelInertia = 2, turbo = null, running = true } = {}) {
+  wheelInertia = 2, turbo = null, running = true, blip = false, bite = 0.9 } = {}) {
   const E = typeof engine === 'string' ? ENGINE_PRESETS[engine] : engine;
   if (!E) fail(`unknown engine '${engine}' (${Object.keys(ENGINE_PRESETS).join(', ')})`);
   for (const k of ['idle', 'redline', 'limiter', 'torque', 'peakRpm', 'inertia', 'pipe', 'pulseDeg', 'gain']) if (!(E[k] > 0)) fail(`engine.${k} must be a number > 0 (got ${E[k]})`);
@@ -31,13 +31,16 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
   if (!Array.isArray(gears) || !gears.length || !gears.every(g => g > 0)) fail('gears must be a non-empty list of ratios > 0');
   for (const [k, v] of [['reverse', reverse], ['final', final], ['wheelInertia', wheelInertia]]) if (!(v > 0)) fail(`${k} must be a number > 0 (got ${v})`);
   if (!(shiftTime >= 0)) fail(`shiftTime must be a number >= 0 (got ${shiftTime})`);
+  if (!(bite > 0)) fail(`bite must be a number > 0 (got ${bite})`);
   const T = turbo ? Object.freeze({ maxBoost: turbo.maxBoost ?? 1, size: turbo.size ?? 0.4, bov: turbo.bov ?? true }) : null;
   if (T && !(T.maxBoost > 0)) fail(`turbo.maxBoost must be a number > 0 (got ${T.maxBoost})`);
   if (T && !(T.size >= 0 && T.size <= 1)) fail(`turbo.size must be a number in 0..1 (got ${T.size})`);
   const st = { rpm: running ? E.idle : 0, map: running ? 0.35 : 1, thrEff: 0, fuelCut: false, limiter: false, popWin: 0, running: !!running, starter: false,
     stalled: false, crankT: 0, gear: 0, shiftT: 0, shaft: 0, boost: 0, wg: 0, thrSlow: 0, bovCool: 0, bovVent: 0, bovId: 0, bovAmp: 0, bovMode: T?.bov ? 1 : 0, wheelTorque: 0 };
   // R-8: substep inputs go through this object, not arguments or return values, so no number is boxed per call
-  const k = { h: 0, Tc: 0, thrEff: 0, comb: false };
+  // blip: the shift's target rpm (0: none); held: s the shift ran over
+  const k = { h: 0, Tc: 0, thrEff: 0, comb: false, blip: 0, held: 0 };
+  const onBoost = T ? 1 + T.maxBoost : 1; // the clutch's capacity is 1.6 x peak torque on full boost
   function turboStep() { // the turbo
     const h = k.h, thrEff = k.thrEff, comb = k.comb;
     const flow = (st.rpm / E.redline) * st.map * (comb ? 1 : 0.3) * (1.35 - 0.5 * T.size), comp = 1.35 * T.maxBoost * st.shaft * st.shaft;
@@ -54,7 +57,8 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
   }
   function sub() { // manifold, fuel cut, limiter, torques for one substep of k.h; k.Tc is the clutch torque held for the step
     const h = k.h, Tc = k.Tc;
-    const t = pt.throttle, thr = st.shiftT > 0 || !(t > 0) ? 0 : t < 1 ? t : 1; // NaN or undefined counts as 0
+    const t = pt.throttle; // NaN or undefined counts as 0; a shift cuts it, or with blip matches the new gear's revs
+    const thr = st.shiftT > 0 ? (k.blip > 0 ? clamp((k.blip - st.rpm) / 300, 0, 1) : 0) : !(t > 0) ? 0 : t < 1 ? t : 1;
     if (st.starter) { st.crankT += h; if (st.crankT > 0.55 && st.rpm > 150) st.running = true; if ((st.running && st.rpm > E.idle * 0.7) || st.crankT > 4) st.starter = false; }
     const idleAir = st.running ? clamp(0.05 + (E.idle - st.rpm) * 0.00015, 0, 0.14) : 0, thrEff = Math.max(thr, idleAir);
     st.thrEff = thr;
@@ -82,30 +86,36 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
     stop() { st.running = false; st.starter = false; return pt; },
     shift(g) {
       if (!(Number.isInteger(g) && g >= -1 && g <= gears.length)) fail(`gear must be an integer in -1..${gears.length} (got ${g})`);
-      if (g !== st.gear) { st.gear = g; st.shiftT = shiftTime; }
+      if (g !== st.gear) { st.gear = g; st.shiftT = shiftTime; k.held = 0; }
       return pt;
     },
     // dt: the sim step; wheelOmega: the driven wheels' mean spin (rad/s, + forward); roadTorque: the torque the road put
     // back on the driven wheels last step (N m, + against forward drive; the tire backend's sum of fx × radius). Returns the
-    // drive torque (N m) for the driven wheels together. A shift opens the clutch and cuts the throttle for shiftTime.
+    // drive torque (N m) for the driven wheels together. A shift opens the clutch and cuts the throttle for shiftTime
+    // (with blip, the throttle matches the engine to the new gear's road rpm instead).
     step(dt, wheelOmega = 0, roadTorque = 0) {
       if (!(dt > 0)) fail(`dt must be a number > 0 (got ${dt})`);
       if (!Number.isFinite(wheelOmega)) fail(`wheelOmega must be a finite number (got ${wheelOmega})`);
       if (!Number.isFinite(roadTorque)) fail(`roadTorque must be a finite number (got ${roadTorque})`);
       const g = st.gear, G = st.shiftT > 0 || g === 0 ? 0 : g < 0 ? -reverse * final : gears[g - 1] * final;
       let Tc = 0;
-      if (G !== 0) { // launch slips at 0.6 N m per rpm engaging from 0.9 idle, else 8; capped by capacity and by one step's transfer
+      // blip: while the clutch is open the throttle brings the engine to the new gear's road rpm (0: no target)
+      k.blip = blip && st.shiftT > 0 && g !== 0 ? Math.abs(wheelOmega * (g < 0 ? reverse : gears[g - 1]) * final) * RPM_PER_RAD : 0;
+      if (G !== 0) { // launch slips at 0.6 N m per rpm engaging from bite x idle, else 8; capped by capacity and by one step's
+        // transfer
         const fromWheel = wheelOmega * G * RPM_PER_RAD, slip = st.rpm - fromWheel, launch = fromWheel < E.idle;
-        const engage = launch ? clamp((st.rpm - E.idle * 0.9) / 600, 0, 1) : 1;
+        const engage = launch ? clamp((st.rpm - E.idle * bite) / 600, 0, 1) : 1;
         // the step's transfer: what closes the slip without reversing it, counting what the road takes off the wheels
         const sg = slip < 0 ? -1 : 1, room = Math.abs(slip) / (RPM_PER_RAD * dt) + sg * G * roadTorque / wheelInertia;
-        const cap = Math.min(E.torque * 1.6, Math.max(0, room) / (G * G / wheelInertia + 1 / E.inertia));
+        const cap = Math.min(E.torque * 1.6 * onBoost, Math.max(0, room) / (G * G / wheelInertia + 1 / E.inertia));
         Tc = clamp(slip * (launch ? 0.6 : 8), -cap, cap) * engage;
       }
       const n = Math.max(1, Math.ceil(dt / H - 1e-9));
       k.h = dt / n; k.Tc = Tc;
       for (let i = 0; i < n; i++) sub();
       st.shiftT = Math.max(0, st.shiftT - dt);
+      // a blip still short of the new gear's revs holds the clutch open, for at most another shiftTime
+      if (st.shiftT === 0 && k.blip > st.rpm + 250 && k.held < shiftTime) { st.shiftT = dt; k.held += dt; }
       st.wheelTorque = Tc * G;
       return st.wheelTorque;
     },
