@@ -602,7 +602,7 @@ These run under `node:test`.
 - **[T-16] Presets.** iPhone SE, iPhone 15 Pro and 15 Pro Max (portrait and landscape), iPad Mini, iPad Pro 11 and desktop. Each preset has:
   - real iOS safe areas applied through `--lh-sa-*`;
   - a fixed DPR;
-  - SwiftShader and `channel: 'chromium'`;
+  - SwiftShader (`launch()` finds the Playwright Chromium build and starts it with `--use-angle=swiftshader`; no browser channel);
   - `serviceWorkers: 'block'`.
 
   The browser is located automatically.
