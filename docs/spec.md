@@ -190,6 +190,10 @@ Every block is optional.
   - Bodies with `magnet.strength` query a sphere around them.
   - Magnet → ferrous force falls off as `1/r⁴`; magnet ↔ magnet uses the dipole–dipole force.
   - `r` is clamped to a minimum and the force is capped.
+- *Clarification (built, post-0.13):* `createWind({ base = [0, 0, 0], gust: { amp, scale = 20, period = 4 }, zones: [{ min, max, v }], seed })` from `lion-hawk/sim` gives `wind.at(p, t, out?)`: the base, plus a seeded value-noise gust along it bounded by `amp`, plus every zone box containing `p`. `createFields(world, { wind, aero, buoyancy, magnet })` adds the World to one engine system, `lh.fields`, in `pre`, and returns `{ submerged(e), dispose() }` (the World's clear or dispose removes it).
+  - **Aero** (`aero: true | { plate = 1.1, density }`, density from the `air` material): for each dynamic entity whose model's sidecar has `aero` ([A-5]), each panel facing the relative wind `u = wind - v(point)` gets `½ρ|u|²A·plate·c²` along `-n` (`c` the cosine between `-n` and the flow) plus `½ρ|u|²A·aero.skin` along the flow's tangent, at the panel centroid. A part whose collider material has `aero.airfoil` uses its planform (the largest, most upward panel): below `stall`, lift `½ρ|u|²A·cl(aoa)` across the flow and drag `cd(aoa)` along it at the part's centroid, the curves read linearly; past stall it is plates again.
+  - **Buoyancy** (`buoyancy: { fluids: [{ material = 'water', level: y | (x, z, t) => y, surfaceVel?, damping = 1 }] }`): the submerged volume and its centre are `∮ min(y - h, 0) n_y dA` and its moments over the panels (exact for boxes), the force `ρ g V` up at the centre, heave damped by `damping ρ V (v_y - surfaceVel)`.
+  - **Magnetism** (`magnet: { radius = 3, gain = 1, rMin = 0.1, maxForce = 1e5 }`): each collider whose material has `magnet.strength` acts on the colliders with magnet data within `radius` (from the World's entities, not a Rapier query): ferrous ones by `gain S f / r⁴` toward it, magnets by the dipole–dipole force with moments along each collider's `+y`; `r` is clamped to `rMin`, the force capped at `maxForce`, and the reaction applied to the magnet.
 
 ---
 
@@ -454,7 +458,7 @@ Where state goes:
   - mass properties from volume × density;
   - sockets;
   - aero panels and the closed volume (from phase 8).
-    - *Clarification (built, post-0.13):* opt-in per model, `bake.models.<id>.aero: true`, so other sidecars and their option hashes are unchanged. `sidecar.aero = { panels: [{ part, a, n, c }], volume, centroid }` in body space: each part's triangles are bucketed by the nearest of 26 directions, a panel being the bucket's area, area-weighted unit normal and centroid; the volume and its centroid come from the divergence theorem (right for closed, outward-wound meshes). The fields that read them ([M-14]–[M-18]) are not built yet.
+    - *Clarification (built, post-0.13):* opt-in per model, `bake.models.<id>.aero: true`, so other sidecars and their option hashes are unchanged. `sidecar.aero = { panels: [{ part, a, n, c }], volume, centroid }` in body space: each part's triangles are bucketed by the nearest of 26 directions, a panel being the bucket's area, area-weighted unit normal and centroid; the volume and its centroid come from the divergence theorem (right for closed, outward-wound meshes). The fields that read them are [M-14]–[M-18].
 
   All of a game's sidecars live in `baked/phys.json`, `{ v, engine, materials: <registry hash>, models: { <id>: sidecar } }` (D2).
   *Clarification (phase 3, 0.7.4; 3b):* `<registry hash>` is the [M-3] hash (ids, order, effective `phys`, pair friction/restitution). `validatePhys` checks shape and material existence only; comparing the hash is the caller's job (`checks.materials`, `bake --check`), so a stale bake reads as stale, not malformed.

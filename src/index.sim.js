@@ -24,3 +24,4 @@ export { SIDECAR_VERSION, validateSidecar, validatePhys } from './defs/sidecar.j
 export { createWorld } from './sim/world/world.js';
 export { heightfieldDesc } from './sim/physics/heightfield.js';
 export { installNet } from './sim/net/install.js';
+export { createWind, createFields, FIELDS_SYSTEM } from './sim/fields/index.js';
