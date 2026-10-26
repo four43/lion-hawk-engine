@@ -20,6 +20,7 @@
 - **Breaking, build:** `--site`, the `site` key of `game.config.js` and the refusal to write under a `site/exp/` directory are gone. The output dir is `--out`, then `$<outEnv>`, then the new `build.out` (relative to the game dir), which defaults to `build`, so a build with no output setting writes `<game>/build/` instead of failing. Shared mode's `build.shared.base` now defaults to `../lion-hawk/<version>/`, relative to the page, which matches the default pack dir beside the game's output.
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.
+- Docs: `docs/agents.md`, an index for agents building games: each task's import, names and as-built spec section. A test checks its links and that each name is exported. `AGENTS.md` (and `CLAUDE.md`) for agents working on the engine.
 
 ## 0.13.0 — 2026-10-23
 
