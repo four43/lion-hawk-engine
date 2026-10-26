@@ -6,7 +6,7 @@ Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and s
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
 Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25]. Released in 0.13.0.
 Amended 2026-10-26: §5.6 Audio, [H-1]–[H-7] (buses, voices, cues, contact sounds, the DSP host, the powertrain and the engine sound), with clarifications under [U-6] and [R-8]. Built in 0.14.0.
-Amended 2026-10-26: [H-6] clarification (powertrain `blip`, `bite`, turbo clutch capacity). Built in 0.14.1.
+Amended 2026-10-26: [H-6] clarification (powertrain `blip`, `bite`, turbo clutch capacity). Built in 0.14.1. [M-11] clarification (wet coverage, mud and wet gloss, matted fur). Built in 0.15.0.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games.
 
@@ -142,7 +142,7 @@ Every block is optional.
 | `phys.fill` | solid fraction, above 0 and at most 1, default 1 (a car shell ≈ 0.02) | collider density |
 | `tire.{mu, C, kp, ap, crr, drag}` | Magic Formula surface params | `kit-vehicle` tire backend |
 | `dirtRate` | coverage gained per metre driven | `kit-coverage` |
-| `coverage` | `{ dirt, rust, snow, mud }`: which layers this material accepts, 0–1 | `kit-coverage`, material compiler |
+| `coverage` | `{ dirt, rust, snow, mud, wet }`: which layers this material accepts, 0–1 (wet: a hosed or rained-on surface; it darkens, shines and mats fur, then dries) | `kit-coverage`, material compiler |
 | `aero.skin` | skin-friction coefficient | aero field |
 | `aero.airfoil` | `{ cl: [[aoa, cl]...], cd: [[aoa, cd]...], stall }` | aero field |
 | `magnet.strength` | dipole moment, A·m² | magnet field |
@@ -174,7 +174,8 @@ Every block is optional.
 
 ### 3.6 View: material compiler
 
-- **[M-11]** `look` compiles to one base material per shading tier. The game sets `shading: 'physical' | 'standard' | 'lambert'` (default `physical`), which gives `MeshPhysicalMaterial`, `MeshStandardMaterial` or `MeshLambertMaterial`. Optional features are compile-time defines (`COVERAGE`, `COVERAGE_INSTANCED`, `FUR`, `SUBSURFACE`, `WIND`, `PAINT`), which keeps the number of shader programs small. Lambert and standard honour `COVERAGE` and `FUR`. `SUBSURFACE` is physical and standard only. Physical-only `look` fields are ignored below `physical`. Vertex colours, when a mesh has them, replace `look.color` (D5).
+- **[M-11]** `look` compiles to one base material per shading tier. The game sets `shading: 'physical' | 'standard' | 'lambert'` (default `physical`), which gives `MeshPhysicalMaterial`, `MeshStandardMaterial` or `MeshLambertMaterial`. Optional features are compile-time defines (`COVERAGE`, `COVERAGE_INSTANCED`, `COVERAGE_WET`, `FUR`, `SUBSURFACE`, `WIND`, `PAINT`), which keeps the number of shader programs small. Lambert and standard honour `COVERAGE` and `FUR`. `SUBSURFACE` is physical and standard only. Physical-only `look` fields are ignored below `physical`. Vertex colours, when a mesh has them, replace `look.color` (D5).
+  - *Clarification (0.15.0):* mud and wet are glossy and mat fur. `COVERAGE` adds a Blinn-Phong highlight per directional light where mud blotches lie (0.55) and, with `COVERAGE_WET`, everywhere by the wet level, in every tier (lambert adds it to the diffuse light, as it has no specular term). With `COVERAGE` on a `FUR` material, the strands shorten by up to 90% with the mud or wet level, so a coat lies flat when muddy or wet and fluffs up as it dries. The wet level rides beside `uCoverage` as `uWet.x` (plain) or `instanceWet` (instanced); `kit-coverage` soaks it in a wash and dries it at `1 / dryTime`.
 - **[M-12]** All materials in use are compiled while loading (`warm`).
 - **[M-13]** Instanced users and plain users get separate material clones (`matSplit`). Both are always on.
 

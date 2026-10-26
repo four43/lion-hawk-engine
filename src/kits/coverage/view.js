@@ -1,22 +1,26 @@
 // kit-coverage (view half): feeds each covered entity's levels (dirt, rust, snow, mud) to one uCoverage vector per
 // entity, shared by per-entity clones of every COVERAGE material in its object (compiler.coverage(m, { uCoverage }):
-// same program). Instanced meshes are skipped: they use COVERAGE_INSTANCED and an `instanceCoverage` attribute that
+// same program), and its wet level to each COVERAGE_WET clone's own uWet.x (uWet.y is that material's accept). Instanced meshes are skipped: they use COVERAGE_INSTANCED and an `instanceCoverage` attribute that
 // their instancing owner writes from the same e.coverage. frame() writes in place and allocates nothing.
 
 export function coverageView(sync, compiler, { match = e => e.coverage != null } = {}) {
-  const recs = new Map(); // entity id → { u, list: [{ mesh, base, material }] }
-  const write = (e, r) => { const c = e.coverage; r.u.set(c.dirt ?? 0, c.rust ?? 0, c.snow ?? 0, c.mud ?? 0); };
+  const recs = new Map(); // entity id → { u, wet: [uWet], list: [{ mesh, base, material }] }
+  const write = (e, r) => {
+    const c = e.coverage; r.u.set(c.dirt ?? 0, c.rust ?? 0, c.snow ?? 0, c.mud ?? 0);
+    for (let k = 0; k < r.wet.length; k++) r.wet[k].x = c.wet ?? 0;
+  };
   const release = r => { for (const x of r.list) { x.mesh.material = x.base; x.material.dispose(); } };
   const offSync = sync.on(match, {
     create(e, obj) {
       if (!obj) return;
-      const r = { u: null, list: [] };
+      const r = { u: null, wet: [], list: [] };
       obj.traverse(o => {
         if (!o.isMesh || o.isInstancedMesh) return;
         const m = o.material;
         if (!m || Array.isArray(m) || !m.defines || !('COVERAGE' in m.defines)) return;
         const c = compiler.coverage(m, r.u ? { uCoverage: r.u } : undefined);
         r.u ??= c.uniforms.uCoverage;
+        if (c.uniforms.uWet) r.wet.push(c.uniforms.uWet);
         r.list.push({ mesh: o, base: m, material: c.material });
         o.material = c.material;
       });

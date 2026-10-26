@@ -3,9 +3,10 @@
 // to) moves an instance (swap-remove), commit() flags for upload only what changed. Frustum culling is off: instances spread over
 // the whole map and the mesh's bounds would be its first instance's. With `colors` the colour buffer exists from the start, white.
 // With `coverage` (3f's COVERAGE_INSTANCED materials) the mesh gets a per-instance vec4 `instanceCoverage` (dirt, rust, snow,
-// mud; zero) written by cover(i, d, r, s, m). It lives on a geometry of the mesh's own that shares the source's attributes, so
-// the template and plain clones never see it. dispose() frees the wrapper holding only instanceCoverage (three frees every
-// attribute a disposed geometry lists, so the shared ones are detached first).
+// mud; zero) and a float `instanceWet` (read by COVERAGE_WET materials), written by cover(i, d, r, s, m, w). They live on a
+// geometry of the mesh's own that shares the source's attributes, so the template and plain clones never see them. dispose()
+// frees the wrapper holding only those two (three frees every attribute a disposed geometry lists, so the shared ones are
+// detached first).
 // Nothing is allocated after create (setting a colour from a CSS string parses it: do that at spawn, not per frame).
 import * as THREE from 'three';
 
@@ -15,13 +16,15 @@ export function createInstances({ geometry, material, max, castShadow = true, re
   if (!geometry?.isBufferGeometry) throw new Error('createInstances: geometry required');
   if (!material) throw new Error('createInstances: material required');
   if (!(Number.isInteger(max) && max >= 1)) throw new Error(`createInstances: max must be a whole number of at least 1 (got ${max})`);
-  let geo = geometry, cov = null;
+  let geo = geometry, cov = null, wet = null;
   if (coverage) {
     geo = new THREE.BufferGeometry(); geo.name = geometry.name;
     for (const k of Object.keys(geometry.attributes)) geo.setAttribute(k, geometry.attributes[k]);
     geo.setIndex(geometry.index); for (const g of geometry.groups) geo.addGroup(g.start, g.count, g.materialIndex);
     cov = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4); cov.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('instanceCoverage', cov);
+    wet = new THREE.InstancedBufferAttribute(new Float32Array(max), 1); wet.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceWet', wet);
   }
   const mesh = new THREE.InstancedMesh(geo, material, max);
   mesh.count = 0; mesh.castShadow = castShadow; mesh.receiveShadow = receiveShadow; mesh.frustumCulled = false;
@@ -29,7 +32,7 @@ export function createInstances({ geometry, material, max, castShadow = true, re
   if (colors) { mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3); mesh.instanceColor.setUsage(THREE.DynamicDrawUsage); }
   let dirtyM = false, dirtyC = false, dirtyV = false;
   return {
-    mesh, max, coverage: cov,
+    mesh, max, coverage: cov, wet,
     get count() { return mesh.count; },
     set count(n) { if (!(Number.isInteger(n) && n >= 0 && n <= max)) throw new RangeError(`instances: count ${n} outside 0..${max}`); mesh.count = n; },
     set(i, p, q, s = 1) {
@@ -40,23 +43,23 @@ export function createInstances({ geometry, material, max, castShadow = true, re
     setMatrix(i, m) { mesh.setMatrixAt(i, m); dirtyM = true; },
     getMatrix(i, out) { mesh.getMatrixAt(i, out); return out; },
     color(i, c) { mesh.setColorAt(i, c?.isColor ? c : _c.set(c)); dirtyC = true; },
-    cover(i, d, r, s, m) {
+    cover(i, d, r, s, m, w = 0) {
       if (!cov) throw new Error('instances: cover() needs coverage: true');
-      const a = cov.array, o = i * 4; a[o] = d; a[o + 1] = r; a[o + 2] = s; a[o + 3] = m; dirtyV = true;
+      const a = cov.array, o = i * 4; a[o] = d; a[o + 1] = r; a[o + 2] = s; a[o + 3] = m; wet.array[i] = w; dirtyV = true;
     },
     copy(from, to) {
       const a = mesh.instanceMatrix.array; a.copyWithin(to * 16, from * 16, from * 16 + 16); dirtyM = true;
       if (mesh.instanceColor) { mesh.instanceColor.array.copyWithin(to * 3, from * 3, from * 3 + 3); dirtyC = true; }
-      if (cov) { cov.array.copyWithin(to * 4, from * 4, from * 4 + 4); dirtyV = true; }
+      if (cov) { cov.array.copyWithin(to * 4, from * 4, from * 4 + 4); wet.array[to] = wet.array[from]; dirtyV = true; }
     },
     commit() {
       if (dirtyM) { mesh.instanceMatrix.needsUpdate = true; dirtyM = false; }
       if (dirtyC && mesh.instanceColor) { mesh.instanceColor.needsUpdate = true; dirtyC = false; }
-      if (dirtyV) { cov.needsUpdate = true; dirtyV = false; }
+      if (dirtyV) { cov.needsUpdate = true; wet.needsUpdate = true; dirtyV = false; }
     },
     dispose() { // geometry and material are shared: not disposed here (the coverage wrapper is ours)
       mesh.removeFromParent(); mesh.dispose();
-      if (cov) { for (const k of Object.keys(geo.attributes)) if (k !== 'instanceCoverage') geo.deleteAttribute(k); geo.setIndex(null); geo.dispose(); }
+      if (cov) { for (const k of Object.keys(geo.attributes)) if (k !== 'instanceCoverage' && k !== 'instanceWet') geo.deleteAttribute(k); geo.setIndex(null); geo.dispose(); }
     },
   };
 }

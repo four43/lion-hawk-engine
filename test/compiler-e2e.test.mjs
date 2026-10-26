@@ -69,6 +69,15 @@ for (const tier of ['physical', 'standard', 'lambert']) {
     assert.ok(hlr > hlg && hrg > hrr, `hue ramp: left ${r.hue[0]}, right ${r.hue[1]}`);
     assert.equal(r.keepDiff, 0, 'unpainted draws exactly the vertex colours');
   });
+  test(`${tier}: wet and mud mat the fur, wet shines (lambert too), instanceWet mats only its instance`, async t => {
+    if (skip) return t.skip(skip);
+    const r = await page.evaluate(tr => window.lhWet(tr), tier);
+    assert.deepEqual(r.errors, []);
+    assert.ok(r.wetLit < r.dryLit * 0.95, `wet fur ${r.wetLit} vs dry ${r.dryLit} lit pixels`);
+    assert.ok(r.mudLit < r.dryLit * 0.95, `muddy fur ${r.mudLit} vs dry ${r.dryLit} lit pixels`);
+    assert.ok(r.wetPeak > r.dryPeak + 20, `wet highlight: peak ${r.dryPeak} → ${r.wetPeak}`);
+    assert.ok(r.half[1] < r.half[0] * 0.95, `the wet instance (right) is flatter: ${r.half}`);
+  });
   test(`${tier}: depth twins (mc.depth) compile and cast shadows that move with the material`, async t => {
     if (skip) return t.skip(skip);
     const r = await page.evaluate(tr => window.lhDepth(tr), tier);

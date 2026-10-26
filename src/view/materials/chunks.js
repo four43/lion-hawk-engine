@@ -6,7 +6,7 @@ import { REVISION } from 'three';
 
 // The chunks each feature patches, per stage. The chunk-guard test walks this table for every tier.
 export const CHUNKS = Object.freeze({
-  COVERAGE: { vertex: ['common', 'worldpos_vertex'], fragment: ['common', 'color_fragment'] },
+  COVERAGE: { vertex: ['common', 'worldpos_vertex'], fragment: ['common', 'color_fragment', 'lights_fragment_end'] },
   FUR: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'clipping_planes_fragment', 'color_fragment', 'opaque_fragment'] },
   SUBSURFACE: { vertex: [], fragment: ['common', 'lights_fragment_end'] },
   WIND: { vertex: ['common', 'begin_vertex'], fragment: ['normal_fragment_begin'] },
@@ -29,10 +29,22 @@ float lhN( vec3 p ) { vec3 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2
 // COVERAGE: uCoverage = (dirt, rust, snow, mud), each scaled by the material's coverage block (uCoverageAccept). The noise
 // is taken in the mesh's own space, so spots ride with the vehicle or animal. COVERAGE_INSTANCED reads the per-instance
 // attribute instanceCoverage instead (plus uCoverage as a shared floor) and seeds the mud pattern by gl_InstanceID.
+// COVERAGE_WET (a coverage block with wet > 0) adds a fifth level, wet: uWet.x (plain) or uWet.x + instanceWet (instanced),
+// times uWet.y (the block's wet). Wet darkens the albedo a little. Mud and wet are glossy: lhGloss (mud where its blotches
+// lie, wet everywhere) adds a Blinn-Phong highlight per directional light in every tier, so a lambert material shines too.
+// The uniforms are declared in the vertex stage as well: FUR mats its strands by the same mud and wet levels.
+const COV_UNIFORMS = `uniform vec4 uCoverage; uniform vec4 uCoverageAccept;
+#ifdef COVERAGE_WET
+uniform vec2 uWet;
+#endif`;
+const GLOSS = { mud: 0.55, wet: 1, power: 40, gain: 0.6 }; // highlight strength per layer, Blinn-Phong exponent, overall gain
 function coverage(sh) {
-  sh.vertexShader = inject(sh.vertexShader, 'common', `varying vec3 vLhP; varying float vLhUp;
+  sh.vertexShader = inject(sh.vertexShader, 'common', `varying vec3 vLhP; varying float vLhUp; ${COV_UNIFORMS}
 #ifdef COVERAGE_INSTANCED
 attribute vec4 instanceCoverage; varying vec4 vLhCov; varying float vLhSeed;
+#ifdef COVERAGE_WET
+attribute float instanceWet; varying float vLhWet;
+#endif
 #endif`);
   sh.vertexShader = inject(sh.vertexShader, 'worldpos_vertex', `vLhP = transformed;
 #ifdef USE_INSTANCING
@@ -42,16 +54,33 @@ vLhUp = normalize( mat3( modelMatrix ) * objectNormal ).y;
 #endif
 #ifdef COVERAGE_INSTANCED
 vLhCov = instanceCoverage; vLhSeed = float( gl_InstanceID );
+#ifdef COVERAGE_WET
+vLhWet = instanceWet;
+#endif
 #endif`);
-  sh.fragmentShader = inject(sh.fragmentShader, 'common', `uniform vec4 uCoverage; uniform vec4 uCoverageAccept; varying vec3 vLhP; varying float vLhUp;
+  sh.fragmentShader = inject(sh.fragmentShader, 'common', `${COV_UNIFORMS}
+varying vec3 vLhP; varying float vLhUp;
 #ifdef COVERAGE_INSTANCED
 varying vec4 vLhCov; varying float vLhSeed;
+#ifdef COVERAGE_WET
+varying float vLhWet;
+#endif
 #endif${NOISE}`);
-  sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', `{
+  sh.fragmentShader = inject(sh.fragmentShader, 'color_fragment', `float lhGloss = 0.0;
+{
 #ifdef COVERAGE_INSTANCED
   vec4 lhCov = clamp( uCoverage + vLhCov, 0.0, 1.0 ) * uCoverageAccept; float lhSeed = vLhSeed;
 #else
   vec4 lhCov = uCoverage * uCoverageAccept; float lhSeed = 0.0;
+#endif
+#ifdef COVERAGE_WET
+#ifdef COVERAGE_INSTANCED
+  float lhWet = clamp( uWet.x + vLhWet, 0.0, 1.0 ) * uWet.y;
+#else
+  float lhWet = uWet.x * uWet.y;
+#endif
+  diffuseColor.rgb *= 1.0 - 0.25 * lhWet; // wet surfaces read darker
+  lhGloss = lhWet * ${GLOSS.wet.toFixed(2)};
 #endif
   if ( lhCov.x > 0.002 ) { // dirt: brown spots, more of them low down
     float n = lhN( vLhP * 2.7 ) * 0.65 + lhN( vLhP * 9.0 ) * 0.35;
@@ -75,18 +104,50 @@ varying vec4 vLhCov; varying float vLhSeed;
     float m = smoothstep( th, th + 0.07, n * 0.6 + ( 1.0 - h ) * 0.6 );
     vec3 mc = mix( vec3( 0.15, 0.072, 0.028 ), vec3( 0.26, 0.135, 0.058 ), lhN( mp * 4.0 ) ) * ( 0.75 + 0.25 * h );
     diffuseColor.rgb = mix( diffuseColor.rgb, mc, m );
+    lhGloss = max( lhGloss, m * ${GLOSS.mud.toFixed(2)} );
   }
 }`);
+  sh.fragmentShader = inject(sh.fragmentShader, 'lights_fragment_end', `#if NUM_DIR_LIGHTS > 0
+if ( lhGloss > 0.002 ) {
+  for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
+    vec3 lhL = directionalLights[ i ].direction;
+    float lhSpec = pow( saturate( dot( geometryNormal, normalize( lhL + geometryViewDir ) ) ), ${GLOSS.power.toFixed(1)} ) * saturate( dot( geometryNormal, lhL ) );
+    vec3 lhGl = ${GLOSS.gain.toFixed(2)} * lhGloss * lhSpec * directionalLights[ i ].color;
+#ifdef LAMBERT
+    reflectedLight.directDiffuse += lhGl; // lambert sums no specular term
+#else
+    reflectedLight.directSpecular += lhGl;
+#endif
+  }
+}
+#endif`);
 }
 
 // FUR: shells are copies of the mesh pushed out along a smoothed normal (furGeometry). Shell 0 is the
 // mesh itself and draws untouched; outer shells keep only fragments inside a strand of 3D cell noise. furMask (0..1)
 // scales strand length per vertex, so a 0 mask is bare skin and a soft mask fades the fur out.
+// With COVERAGE the coat mats: the mask shrinks by up to 90% with the mud level (instanceCoverage.w or uCoverage.w) or,
+// with COVERAGE_WET, the wet level, whichever is higher, so a muddy or wet coat lies flat and fluffs up again as it dries.
 function fur(sh) {
   sh.vertexShader = inject(sh.vertexShader, 'common', `attribute vec3 furNormal; attribute float furMask; attribute float furShell; uniform float furLen;
 varying vec3 vFurP; varying float vFurMask; varying float vFurShell;`);
-  sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', `vFurP = position; vFurMask = furMask; vFurShell = furShell;
-transformed += ( furNormal * furLen - vec3( 0.0, 0.25 * furLen * furShell, 0.0 ) ) * furShell * furMask; // tips droop a little`);
+  sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', `float lhMat = 0.0; // matted: mud and wet flatten the coat (with COVERAGE)
+#ifdef COVERAGE
+#ifdef COVERAGE_INSTANCED
+lhMat = clamp( uCoverage.w + instanceCoverage.w, 0.0, 1.0 ) * uCoverageAccept.w;
+#ifdef COVERAGE_WET
+lhMat = max( lhMat, clamp( uWet.x + instanceWet, 0.0, 1.0 ) * uWet.y );
+#endif
+#else
+lhMat = uCoverage.w * uCoverageAccept.w;
+#ifdef COVERAGE_WET
+lhMat = max( lhMat, uWet.x * uWet.y );
+#endif
+#endif
+#endif
+float lhFurMask = furMask * ( 1.0 - 0.9 * lhMat );
+vFurP = position; vFurMask = lhFurMask; vFurShell = furShell;
+transformed += ( furNormal * furLen - vec3( 0.0, 0.25 * furLen * furShell, 0.0 ) ) * furShell * lhFurMask; // tips droop a little`);
   sh.fragmentShader = inject(sh.fragmentShader, 'common', `uniform float furDensity; uniform vec3 furTint; varying vec3 vFurP; varying float vFurMask; varying float vFurShell;
 vec3 furHash( vec3 p ) { p = fract( p * vec3( 0.1031, 0.1030, 0.0973 ) ); p += dot( p, p.yxz + 33.33 ); return fract( ( p.xxy + p.yxx ) * p.zyx ); }`);
   sh.fragmentShader = inject(sh.fragmentShader, 'clipping_planes_fragment', `float furAA = length( fwidth( vFurP * furDensity ) ); // far away, strands fatten into soft shells rather than shimmer

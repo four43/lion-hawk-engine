@@ -2,7 +2,7 @@
 // flocks). asset is assets.get(key) with its decoded anim table (3f's decodeAnimTable). set(i, pose, clip, t, blend?) writes
 // instance i: pose is a Matrix4 or { p, q, s? }; each part's matrix is pose x 3f's sampleAnimTable(clip, t). With blend =
 // { clip, t, k } it is 3f's blendAnimTable(blend.clip, blend.t, clip, t, k): k is this clip's weight (1 = no blend), as an
-// element-wise lerp. Parts whose instanced material has COVERAGE_INSTANCED (3f) get instanceCoverage: cover(i, dirt, rust, snow, mud)
+// element-wise lerp. Parts whose instanced material has COVERAGE_INSTANCED (3f) get instanceCoverage: cover(i, dirt, rust, snow, mud, wet)
 // (per-animal mud). count sets how many draw; commit() uploads. parts[k].inst is the part's createInstances, for games
 // that add attributes. Nothing is allocated after create.
 import * as THREE from 'three';
@@ -50,7 +50,7 @@ export function createCrowd(asset, { max, compiler, castShadow = true, receiveSh
         parts[k].inst.setMatrix(i, _t.multiplyMatrices(_w, _a));
       }
     },
-    cover(i, d, r, s, m) { for (let k = 0; k < parts.length; k++) if (parts[k].coverage) parts[k].inst.cover(i, d, r, s, m); },
+    cover(i, d, r, s, m, w = 0) { for (let k = 0; k < parts.length; k++) if (parts[k].coverage) parts[k].inst.cover(i, d, r, s, m, w); },
     commit() { for (let k = 0; k < parts.length; k++) parts[k].inst.commit(); },
     dispose() { group.removeFromParent(); for (let k = 0; k < parts.length; k++) parts[k].inst.dispose(); },
   };

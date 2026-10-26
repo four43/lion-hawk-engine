@@ -69,7 +69,7 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
     next.mesh.name = old.mesh.name;
     next.mesh.instanceMatrix.array.set(old.mesh.instanceMatrix.array); next.mesh.instanceMatrix.needsUpdate = true;
     if (old.mesh.instanceColor) { next.mesh.instanceColor.array.set(old.mesh.instanceColor.array); next.mesh.instanceColor.needsUpdate = true; }
-    if (g.coverage) { next.coverage.array.set(old.coverage.array); next.coverage.needsUpdate = true; }
+    if (g.coverage) { next.coverage.array.set(old.coverage.array); next.coverage.needsUpdate = true; next.wet.array.set(old.wet.array); next.wet.needsUpdate = true; }
     next.count = old.count; next.mesh.customDepthMaterial = old.mesh.customDepthMaterial; instancedShadows(next.mesh); root.add(next.mesh); old.dispose(); g.inst = next;
   }
   function join(r) {
@@ -77,14 +77,14 @@ export function createViewSync(engine, { gfx, assets = null, compiler = null, vi
       const g = r.parts[k]; if (g.owners.length === g.inst.max) grow(g);
       const i = g.owners.length; g.owners.push(r); r.slots[k] = i; g.inst.count = i + 1;
       if (g.paint) g.inst.color(i, r.e.paint?.[g.paint] ?? '#ffffff');
-      if (g.coverage) { r.cov ??= [-1, -1, -1, -1]; r.cov[0] = -1; } // written on the next cover()
+      if (g.coverage) { r.cov ??= [-1, -1, -1, -1, -1]; r.cov[0] = -1; } // written on the next cover()
     }
   }
-  function cover(r) { // e.coverage -> instanceCoverage of every coverage part, only when it changed
-    const c = r.e.coverage, d = c?.dirt ?? 0, ru = c?.rust ?? 0, sn = c?.snow ?? 0, m = c?.mud ?? 0, v = r.cov;
-    if (v[0] === d && v[1] === ru && v[2] === sn && v[3] === m) return;
-    v[0] = d; v[1] = ru; v[2] = sn; v[3] = m;
-    for (let k = 0; k < r.parts.length; k++) if (r.parts[k].coverage) r.parts[k].inst.cover(r.slots[k], d, ru, sn, m);
+  function cover(r) { // e.coverage -> instanceCoverage and instanceWet of every coverage part, only when it changed
+    const c = r.e.coverage, d = c?.dirt ?? 0, ru = c?.rust ?? 0, sn = c?.snow ?? 0, m = c?.mud ?? 0, w = c?.wet ?? 0, v = r.cov;
+    if (v[0] === d && v[1] === ru && v[2] === sn && v[3] === m && v[4] === w) return;
+    v[0] = d; v[1] = ru; v[2] = sn; v[3] = m; v[4] = w;
+    for (let k = 0; k < r.parts.length; k++) if (r.parts[k].coverage) r.parts[k].inst.cover(r.slots[k], d, ru, sn, m, w);
   }
   function leave(r) {
     for (let k = 0; k < r.parts.length; k++) {

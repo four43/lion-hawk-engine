@@ -73,9 +73,11 @@ test('3g: a coverage material instanced gets instanceCoverage from e.coverage, w
   assert.deepEqual([...cov.array.slice(0, 8)], [0.5, 0, 0, 0.25, 0, 0, 0, 0]);
   const v = cov.version; s.sync.frame(1); assert.equal(cov.version, v); // unchanged: no upload
   e.coverage.snow = 0.75; s.sync.frame(1); assert.equal(cov.version, v + 1); assert.deepEqual([...cov.array.slice(0, 4)], [0.5, 0, 0.75, 0.25]);
+  e.coverage.wet = 0.5; s.sync.frame(1); assert.equal(body.geometry.attributes.instanceWet.array[0], 0.5); assert.equal(cov.version, v + 2);
   for (let i = 0; i < 20; i++) s.world.spawn({ model: 'pig', draw: 'instanced', coverage: { rust: 1 } });
   s.sync.frame(1); const grown = s.sync.root.children[0].geometry.attributes.instanceCoverage; // past 16: the mesh doubled
   assert.deepEqual([...grown.array.slice(0, 4)], [0.5, 0, 0.75, 0.25]); assert.deepEqual([...grown.array.slice(84, 88)], [0, 1, 0, 0]);
+  assert.equal(s.sync.root.children[0].geometry.attributes.instanceWet.array[0], 0.5, 'the wet level survives the doubling');
 });
 test('3g: a still instanced entity that is placed somewhere new is re-uploaded (place writes prev and curr together)', () => {
   const s = syncSetup(CRATE), e = s.world.spawn({ model: 'crate', draw: 'instanced' });

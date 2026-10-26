@@ -77,7 +77,7 @@ A kit is optional and imported per game. `lion-hawk/kits/<kit>` is the sim half 
 | A drivable vehicle (simple raycast, or a Magic Formula tire model) | `lion-hawk/kits/vehicle` | `createVehicle` | [Vehicle kit: both backends](specs/as-built/defs-and-kits.md#vehicle-kit-both-backends), [tire backend](specs/as-built/defs-and-kits.md#vehicle-kit-tire-backend) |
 | Chunked terrain with a ground lookup | `lion-hawk/kits/terrain` | `createTerrain` | [defs-and-kits: Terrain kit](specs/as-built/defs-and-kits.md#terrain-kit) |
 | Draw the terrain | `lion-hawk/kits/terrain/view` | `createTerrainMesh` | [defs-and-kits: Terrain kit](specs/as-built/defs-and-kits.md#terrain-kit) |
-| Mud, dirt and snow that builds up and washes off | `lion-hawk/kits/coverage` | `coverageKit` | [defs-and-kits: Coverage kit](specs/as-built/defs-and-kits.md#coverage-kit) |
+| Mud, dirt and snow that builds up and washes off; a wet layer that soaks in a wash and dries | `lion-hawk/kits/coverage` | `coverageKit` | [defs-and-kits: Coverage kit](specs/as-built/defs-and-kits.md#coverage-kit) |
 | Draw coverage on meshes | `lion-hawk/kits/coverage/view` | `coverageView` | [defs-and-kits: Coverage kit](specs/as-built/defs-and-kits.md#coverage-kit) |
 | Particles and tyre marks | `lion-hawk/kits/fx/view` | `createParticles`, `createMarks` | [defs-and-kits: Fx kit](specs/as-built/defs-and-kits.md#fx-kit) |
 | An engine and gearbox that drive the wheels and feed the engine sound | `lion-hawk/kits/vehicle` | `createPowertrain`, `ENGINE_PRESETS` | [spec §5.6](spec.md#56-audio) |

@@ -10,6 +10,7 @@ const REG = defineMaterials({
   testFur: { look: { color: '#ffffff', roughness: 1, fur: { length: 0.3, shells: 8, density: 6, tint: '#ffffff' } } },
   testWax: { look: { color: '#ffffff', roughness: 1, subsurface: { color: '#ff8866', strength: 1 } } },
   testBare: { look: { color: '#ffffff', roughness: 1 } },
+  testCoat: { look: { color: '#606060', roughness: 1, fur: { length: 0.3, shells: 8, density: 6, tint: '#ffffff' } }, coverage: { mud: 1, wet: 1 } },
 });
 const S = 64;
 
@@ -96,6 +97,31 @@ window.lhFeatures = tier => {
   r.done();
   return out;
 };
+// COVERAGE_WET and the coat: wet and mud mat the fur (fewer shell pixels), wet adds a highlight (a brighter peak, every tier,
+// lambert too), and an instance's instanceWet mats only that instance.
+window.lhWet = tier => {
+  const r = rig(tier), { mc, scene } = r, peak = px => { let m = 0; for (let i = 0; i < px.length; i += 4) m = Math.max(m, px[i] + px[i + 1] + px[i + 2]); return m; };
+  const fg = furGeometry(coloured(new THREE.BoxGeometry(1, 1, 1)), () => 1, { shells: 8 });
+  const c = mc.coverage(mc.get('testCoat', { vertexColors: true })), fur = new THREE.Mesh(fg, c.material); scene.add(fur);
+  const dryLit = lit(r.shot());
+  c.uniforms.uWet.x = 1; const wetLit = lit(r.shot());
+  c.uniforms.uWet.x = 0; c.uniforms.uCoverage.set(0, 0, 0, 1); const mudLit = lit(r.shot());
+  scene.remove(fur);
+  const g = mc.coverage(mc.get('testCoat', { vertexColors: true, fur: false })), ball = new THREE.Mesh(coloured(new THREE.SphereGeometry(1, 48, 24)), g.material); scene.add(ball);
+  const dryPeak = peak(r.shot());
+  g.uniforms.uWet.x = 1; const wetPeak = peak(r.shot());
+  scene.remove(ball);
+  const ig = fg.clone(); ig.setAttribute('instanceCoverage', new THREE.InstancedBufferAttribute(new Float32Array(8), 4));
+  ig.setAttribute('instanceWet', new THREE.InstancedBufferAttribute(new Float32Array([0, 1]), 1));
+  const im = new THREE.InstancedMesh(ig, mc.coverage(mc.get('testCoat', { instanced: true, vertexColors: true })).material, 2);
+  im.setMatrixAt(0, new THREE.Matrix4().makeTranslation(-1, 0, 0)); im.setMatrixAt(1, new THREE.Matrix4().makeTranslation(1, 0, 0)); scene.add(im);
+  const px = r.shot(), half = [0, 0];
+  for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 30) half[((i >> 2) % S) < S / 2 ? 0 : 1]++;
+  const out = { errors: r.errors, dryLit, wetLit, mudLit, dryPeak, wetPeak, half };
+  r.done();
+  return out;
+};
+
 // Task 8b: PAINT on the GPU. A plane, dark on the left and bright on the right: a solid paint keeps the bright side brighter in the
 // paint's hue; a hue ramp along x is red on the left and green on the right; no paint draws exactly the plain vertex colours; more
 // colours and hues add no programs.

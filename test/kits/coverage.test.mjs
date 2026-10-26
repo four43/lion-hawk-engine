@@ -30,6 +30,20 @@ test('washes clean every layer at 1 / washTime per second and never below 0', ()
   assert.equal(e.coverage.mud, 0);
 });
 
+test('a wash soaks wet at 1 / washTime per second; outside one it dries at 1 / dryTime; entities without wet stay without', () => {
+  const { h, mover } = rig({ washes: [x => x >= 20], dryTime: 2 }), e = mover({ coverage: { mud: 1, wet: 0 }, v: 0 }), dry = mover({ coverage: { mud: 1 }, v: 0 });
+  h.world.place(e, { at: [25, 0, 0] }); h.world.place(dry, { at: [25, 0, 0] });
+  h.step(45);                                   // 0.75 s of the 1.5 s wash
+  near(e.coverage.wet, 0.5, 1e-9); assert.equal('wet' in dry.coverage, false);
+  h.step(60);
+  assert.equal(e.coverage.wet, 1);
+  h.world.place(e, { at: [0, 0, 0] });
+  h.step(60);                                   // 1 s of the 2 s dry
+  near(e.coverage.wet, 0.5, 1e-9);
+  h.step(90);
+  assert.equal(e.coverage.wet, 0);
+});
+
 test('a wash entry { at, washTime } overrides the kit-wide washTime; the first wash that holds decides (3l request 5)', () => {
   const { h, mover } = rig({ washTime: 1.5, washes: [{ at: x => x >= 20 && x < 30, washTime: 0.5 }, x => x >= 20] });
   const fast = mover({ coverage: { mud: 1 }, v: 0 }), slow = mover({ coverage: { mud: 1 }, v: 0 });

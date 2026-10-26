@@ -1,7 +1,7 @@
 // M-11..M-13, D5: tiers, look → parameters, vertex colours, the cache key (matSplit), defines and program keys.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BoxGeometry, Color, DoubleSide, ShaderLib, Texture } from 'three';
+import { BoxGeometry, Color, DoubleSide, Mesh, MeshStandardMaterial, ShaderLib, Texture } from 'three';
 import { defineMaterials } from '../src/defs/materials.js';
 import { createMaterialCompiler } from '../src/view/materials/compiler.js';
 import { furGeometry } from '../src/view/materials/fur.js';
@@ -12,6 +12,7 @@ const REG = defineMaterials({
   testWax: { look: { color: '#ffffff', subsurface: { color: '#ff8866', strength: 0.6 } } },
   testWaxOff: { look: { color: '#ffffff', subsurface: { color: '#ff8866', strength: 0 } } },
   testBare: { look: { color: '#808080' } },
+  testCoat: { look: { color: '#ffffff', fur: { length: 0.05 } }, coverage: { mud: 1, wet: 0.75 } },
 });
 const LIB = { physical: ShaderLib.physical, standard: ShaderLib.standard, lambert: ShaderLib.lambert };
 const compile = (m, tier) => { const sh = { vertexShader: LIB[tier].vertexShader, fragmentShader: LIB[tier].fragmentShader, uniforms: {} }; m.onBeforeCompile(sh, null); return sh; };
@@ -93,6 +94,27 @@ test('onBeforeCompile hands the material its own uniform objects, with the regis
   const wax = compile(mc.get('testWax'), 'physical');
   assert.ok(wax.uniforms.uSubColor.value.equals(new Color('#ff8866'))); assert.equal(wax.uniforms.uSubStrength.value, 0.6);
   assert.notEqual(compile(mc.get('testMud', { instanced: true }), 'physical').uniforms.uCoverage, mud.uniforms.uCoverage, 'per material, not per program');
+});
+
+test('coverage.wet adds COVERAGE_WET: uWet (level, accept) per material, coverage() hands it out, fur mats by mud and wet', () => {
+  for (const tier of ['physical', 'standard', 'lambert']) {
+    const mc = createMaterialCompiler(REG, { shading: tier }), coat = mc.get('testCoat');
+    assert.equal(coat.defines.COVERAGE_WET, ''); assert.equal(coat.customProgramCacheKey(), 'lh:COVERAGE+COVERAGE_WET+FUR');
+    assert.equal(mc.get('testMud').defines.COVERAGE_WET, undefined, 'no wet in the block: no wet level');
+    const sh = compile(coat, tier);
+    assert.deepEqual(sh.uniforms.uWet.value.toArray(), [0, 0.75]);
+    assert.match(sh.fragmentShader, /reflectedLight\.direct(Diffuse|Specular) \+= lhGl/, 'a gloss highlight in every tier');
+    assert.match(sh.vertexShader, /float lhFurMask = furMask \* \( 1\.0 - 0\.9 \* lhMat \)/);
+    const a = mc.coverage(coat), b = mc.coverage(coat);
+    assert.notEqual(a.uniforms.uWet, b.uniforms.uWet, 'a per-entity clone has its own wet level');
+    assert.equal(compile(a.material, tier).uniforms.uWet.value, a.uniforms.uWet);
+    const inst = mc.coverage(mc.get('testCoat', { instanced: true }));
+    assert.equal(inst.material.customProgramCacheKey(), 'lh:COVERAGE+COVERAGE_INSTANCED+COVERAGE_WET+FUR');
+    assert.match(compile(inst.material, tier).vertexShader, /attribute float instanceWet;/);
+    assert.equal(mc.coverage(mc.get('testMud')).uniforms.uWet, null);
+    const { uWet } = mc.apply(new Mesh(new BoxGeometry(), new MeshStandardMaterial({ name: 'testCoat' })), { coverage: true });
+    assert.equal(uWet.length, 1); assert.deepEqual(uWet[0].toArray(), [0, 0.75]);
+  }
 });
 
 test('wind: one shared clock (mc.time), fade and amplitude in the key', () => {

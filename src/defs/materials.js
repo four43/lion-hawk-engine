@@ -51,7 +51,7 @@ const SCHEMA = {
   phys: { friction: range(0, 2), restitution: unit, sg: positive, fill: openUnit },
   tire: TIRE,
   dirtRate: nonneg,
-  coverage: { dirt: unit, rust: unit, snow: unit, mud: unit },
+  coverage: { dirt: unit, rust: unit, snow: unit, mud: unit, wet: unit },
   aero: { skin: nonneg, airfoil: { cl: curve, cd: curve, stall: range(0, 90) } },
   magnet: { strength: nonneg, ferrous: unit },
   fluid: { density: positive, viscosity: nonneg },

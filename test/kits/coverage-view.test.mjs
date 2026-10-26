@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { coverageView } from '../../src/kits/coverage/view.js';
 
 const fakeSync = () => { const s = { h: null, match: null, offs: 0, on(match, h) { s.match = match; s.h = h; return () => { s.offs++; }; } }; return s; };
-const fakeCompiler = () => { const c = { made: [], coverage(m, o) { const r = { material: m.clone(), uniforms: { uCoverage: o?.uCoverage ?? new THREE.Vector4() } }; c.made.push(r); return r; } }; return c; };
+const fakeCompiler = () => { const c = { made: [], coverage(m, o) { const r = { material: m.clone(), uniforms: { uCoverage: o?.uCoverage ?? new THREE.Vector4(), uWet: 'COVERAGE_WET' in m.defines ? new THREE.Vector2(0, 1) : null } }; c.made.push(r); return r; } }; return c; };
 const covMat = () => { const m = new THREE.MeshLambertMaterial(); m.defines = { COVERAGE: '' }; return m; };
 function model() {
   const g = new THREE.Group(), a = new THREE.Mesh(new THREE.BoxGeometry(), covMat()), b = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
@@ -24,6 +24,16 @@ test('create clones each COVERAGE mesh, sharing one uCoverage per entity, and wr
   assert.equal(m.inst.material, m.baseInst);         // instanced meshes use COVERAGE_INSTANCED, written by their owner
   assert.deepEqual(v4(mc.made[0].uniforms.uCoverage), [0.25, 0, 0, 0.5]);
   assert.equal(cv.size, 1);
+});
+
+test('each COVERAGE_WET clone gets the wet level in its own uWet.x, on create and every frame', () => {
+  const sync = fakeSync(), mc = fakeCompiler(), m = model(), e = { id: 5, coverage: { mud: 0.5, wet: 0.25 } };
+  m.a2.material.defines.COVERAGE_WET = '';
+  coverageView(sync, mc);
+  sync.h.create(e, m.g);
+  assert.equal(mc.made[0].uniforms.uWet, null); assert.equal(mc.made[1].uniforms.uWet.x, 0.25);
+  e.coverage.wet = 0.75; sync.h.frame(e, m.g, 0.5);
+  assert.equal(mc.made[1].uniforms.uWet.x, 0.75); assert.equal(mc.made[1].uniforms.uWet.y, 1, 'the accept stays the material\'s');
 });
 
 test('frame rewrites the levels in place, making nothing new', () => {

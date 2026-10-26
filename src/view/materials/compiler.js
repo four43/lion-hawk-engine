@@ -64,6 +64,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
   function featuresOf(def, o) {
     const look = def.look ?? {}, f = [];
     if (def.coverage) f.push('COVERAGE');
+    if (def.coverage?.wet > 0) f.push('COVERAGE_WET'); // a define only: the wet level, its darkening and gloss
     if (look.fur && o.fur) f.push('FUR');
     if (look.subsurface && look.subsurface.strength > 0 && shading !== 'lambert') f.push('SUBSURFACE'); // D5: physical and standard only; off at strength 0
     if (o.wind) f.push('WIND');
@@ -71,12 +72,13 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     return f;
   }
 
-  function uniformsFor(def, features, o, uCoverage = new Vector4(0, 0, 0, 0), coat = null) {
+  function uniformsFor(def, features, o, uCoverage = new Vector4(0, 0, 0, 0), coat = null, wet = 0) {
     const look = def.look ?? {}, u = {};
     if (features.includes('COVERAGE')) {
       const c = def.coverage;
       u.uCoverage = { value: uCoverage };
       u.uCoverageAccept = { value: new Vector4(c.dirt ?? 0, c.rust ?? 0, c.snow ?? 0, c.mud ?? 0) };
+      if (features.includes('COVERAGE_WET')) u.uWet = { value: new Vector2(wet, c.wet) }; // (level, accept); the level is per material
     }
     if (features.includes('FUR')) {
       const fu = look.fur;
@@ -129,7 +131,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
   function variant(material, key, { features, extras, uCoverage, coat } = {}) {
     const s = STATE.get(material), def = registry.get(s.id);
     const st = { ...s, features: features ?? s.features, extras: extras ?? s.extras, coat: coat !== undefined ? coat : s.coat };
-    st.uniforms = uniformsFor(def, st.features, s.o, uCoverage, st.coat);
+    st.uniforms = uniformsFor(def, st.features, s.o, uCoverage, st.coat, s.uniforms.uWet?.value.x);
     const m = material.clone();
     m.userData.lh = { ...material.userData.lh, key: key ?? material.userData.lh.key, features: st.features };
     m.userData.lhShared = key !== null; // per-entity clones are the entity's to dispose
@@ -154,7 +156,8 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     const m = material.userData.lh.instanced
       ? cache.get(covi) ?? variant(material, covi, { features: [...s.features.slice(0, 1), 'COVERAGE_INSTANCED', ...s.features.slice(1)], uCoverage })
       : variant(material, null, { uCoverage: uCoverage ?? new Vector4(0, 0, 0, 0) }); // plain: a per-entity clone
-    return { material: m, uniforms: { uCoverage: STATE.get(m).uniforms.uCoverage.value } };
+    const u = STATE.get(m).uniforms; // uWet: this material's own (level, accept), null without COVERAGE_WET
+    return { material: m, uniforms: { uCoverage: u.uCoverage.value, uWet: u.uWet?.value ?? null } };
   }
 
   function extend(material, name, patch) {
@@ -199,6 +202,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
   function apply(root, { instanced = false, paint: colors = null, coverage: cov = false } = {}) {
     paintAttributes(root);
     const uCoverage = cov ? new Vector4(0, 0, 0, 0) : null; // one vec4 per call: one entity's (dirt, rust, snow, mud)
+    const uWet = cov ? [] : null;                              // each COVERAGE_WET clone's (level, accept): set every .x to the wet level
     root.traverse(o => {
       if (!o.isMesh) return;
       const list = Array.isArray(o.material) ? o.material : [o.material];
@@ -214,7 +218,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
           m = c != null && !inst ? paint(paintBase, c, opts) : get(paintBase, opts); // instanced paint: instanceColor on the base
         } else if (registry.has(name)) m = get(name, opts);
         else throw new Error(`compiler: mesh '${o.name}' uses material '${name}', which is neither a registry id nor paint-<slot>`);
-        if (uCoverage && STATE.get(m).features.includes('COVERAGE')) m = coverage(m, { uCoverage }).material;
+        if (uCoverage && STATE.get(m).features.includes('COVERAGE')) { const c = coverage(m, { uCoverage }); m = c.material; if (c.uniforms.uWet) uWet.push(c.uniforms.uWet); }
         return m;
       });
       o.material = Array.isArray(o.material) ? out : out[0];
@@ -222,7 +226,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
       const moving = out.find(m => STATE.get(m).features.some(f => f === 'FUR' || f === 'WIND'));
       if (moving) o.customDepthMaterial = depth(moving);
     });
-    return { uCoverage };
+    return { uCoverage, uWet };
   }
 
   // Task 8b: point a compiled tree's paint slots at new values (create time or on a paint change, never per frame). Shared

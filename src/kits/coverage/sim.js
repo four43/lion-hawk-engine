@@ -2,17 +2,19 @@
 // An entity opts in with a `coverage` part; only the layers it carries change. Each step it gains the ground material's
 // dirtRate × metres moved (the pool's prev → curr pose, so a place() teleport counts nothing) on that ground's layer,
 // scaled by what its own material accepts (`coverageMaterial`, else its first collider's). Washes clean every layer at
-// 1 / washTime per second (a wash entry { at, washTime } at its own time). Sim-pure (L-3); the view half feeds the same levels to the compiler's uCoverage.
+// 1 / washTime per second (a wash entry { at, washTime } at its own time) and soak a `wet` level at the same rate, which
+// dries at 1 / dryTime per second everywhere else. Sim-pure (L-3); the view half feeds the same levels to the compiler's uCoverage and uWet.
 
 export const COVERAGE_SYSTEM = 'lh.kit.coverage';
 const LAYERS = ['dirt', 'rust', 'snow', 'mud'];
 const fail = m => { throw new Error(`coverage: ${m}`); };
 export const coverageLayer = id => (id === 'mud' ? 'mud' : id === 'snow' ? 'snow' : 'dirt');
 
-export function coverageKit(host, { materialAt, washes = [], washTime = 1.5, layer = coverageLayer } = {}) {
+export function coverageKit(host, { materialAt, washes = [], washTime = 1.5, dryTime = 30, layer = coverageLayer } = {}) {
   if (typeof host?.system !== 'function') fail('coverageKit needs the engine or a scene ctx (anything with .system)');
   if (typeof materialAt !== 'function') fail('coverageKit needs materialAt: (x, z) => material id');
   if (!(washTime > 0)) fail(`washTime must be > 0 (got ${washTime})`);
+  if (!(dryTime > 0)) fail(`dryTime must be > 0 (got ${dryTime})`);
   if (!Array.isArray(washes)) fail('washes must be an array');
   // made once: washAt[k](x, z) and its washTimes[k] (the entry's own, else the kit-wide one)
   const washAt = [], washTimes = [];
@@ -37,8 +39,10 @@ export function coverageKit(host, { materialAt, washes = [], washTime = 1.5, lay
       if (wash > 0) {
         const d = dt / wash;
         for (let k = 0; k < LAYERS.length; k++) { const L = LAYERS[k], v = c[L]; if (v !== undefined) c[L] = v > d ? v - d : 0; }
+        if (c.wet !== undefined) c.wet = c.wet + d < 1 ? c.wet + d : 1;
         continue;
       }
+      if (c.wet > 0) { const d = dt / dryTime; c.wet = c.wet > d ? c.wet - d : 0; }
       world.xfPrev(e, prev);
       const dx = x - prev.p.x, dz = z - prev.p.z, m = Math.sqrt(dx * dx + dz * dz);
       if (m === 0) continue;

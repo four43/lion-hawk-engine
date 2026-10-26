@@ -44,9 +44,10 @@ test('3g: coverage adds a per-instance vec4 instanceCoverage on a geometry of it
   assert.notEqual(g, src); assert.equal(src.attributes.instanceCoverage, undefined); // the template never sees it
   assert.equal(g.attributes.position, src.attributes.position); assert.equal(g.index, src.index);
   assert.equal(inst.coverage, g.attributes.instanceCoverage); assert.equal(inst.coverage.itemSize, 4); assert.equal(inst.coverage.isInstancedBufferAttribute, true);
-  const v = inst.coverage.version; inst.cover(1, 0.5, 0, 0.25, 1); inst.commit();
-  assert.deepEqual([...inst.coverage.array.slice(4, 8)], [0.5, 0, 0.25, 1]); assert.equal(inst.coverage.version, v + 1);
-  inst.copy(1, 0); assert.deepEqual([...inst.coverage.array.slice(0, 4)], [0.5, 0, 0.25, 1]);
+  assert.equal(inst.wet, g.attributes.instanceWet); assert.equal(inst.wet.itemSize, 1); assert.equal(src.attributes.instanceWet, undefined);
+  const v = inst.coverage.version; inst.cover(1, 0.5, 0, 0.25, 1, 0.75); inst.commit();
+  assert.deepEqual([...inst.coverage.array.slice(4, 8)], [0.5, 0, 0.25, 1]); assert.equal(inst.coverage.version, v + 1); assert.equal(inst.wet.array[1], 0.75);
+  inst.copy(1, 0); assert.deepEqual([...inst.coverage.array.slice(0, 4)], [0.5, 0, 0.25, 1]); assert.equal(inst.wet.array[0], 0.75);
   assert.throws(() => createInstances({ geometry: geo, material: mat, max: 1 }).cover(0, 1, 0, 0, 0), /cover\(\) needs coverage: true/);
 });
 test('3g: dispose frees the coverage wrapper geometry with only instanceCoverage on it (three frees every attribute listed on a disposed geometry)', () => {
@@ -54,6 +55,6 @@ test('3g: dispose frees the coverage wrapper geometry with only instanceCoverage
   const wrapper = inst.mesh.geometry; let freed = null;
   wrapper.addEventListener('dispose', () => { freed = [...Object.keys(wrapper.attributes), ...(wrapper.index ? ['index'] : [])]; });
   inst.dispose();
-  assert.deepEqual(freed, ['instanceCoverage'], 'the wrapper is disposed, holding only its own buffer');
+  assert.deepEqual(freed, ['instanceCoverage', 'instanceWet'], 'the wrapper is disposed, holding only its own buffers');
   assert.ok(src.attributes.position && src.index, 'the shared template geometry keeps its attributes');
 });

@@ -48,7 +48,7 @@ The glossary lacks these terms. The terms are specific to the engine sound.
 
 | Interface | Direction | Format | Evidence |
 | --- | --- | --- | --- |
-| `coverageKit(host, { materialAt, washes, washTime, layer })`, `COVERAGE_SYSTEM` (`lh.kit.coverage`), `coverageLayer` | in, returns `{ off }` | sim half | [src/kits/coverage/sim.js:7-12; src/kits/coverage/sim.js:55] <!-- C-407 --> |
+| `coverageKit(host, { materialAt, washes, washTime, dryTime, layer })`, `COVERAGE_SYSTEM` (`lh.kit.coverage`), `coverageLayer` | in, returns `{ off }` | sim half | [src/kits/coverage/sim.js:7-12; src/kits/coverage/sim.js:55] <!-- C-407 --> |
 | `coverageView(sync, compiler, { match })`. The default `match` is `e => e.coverage != null`. | in, returns `{ off, size }` | view half | [src/kits/coverage/view.js:6; src/kits/coverage/view.js:38-41] <!-- C-408 --> |
 | `createParticles(opts)` | in, returns `{ emit, update, mesh, color, dispose, live }` | view half | [src/kits/fx/view.js:12; src/kits/fx/view.js:81] <!-- C-409 --> |
 | `createMarks(opts)` | in, returns `{ add, update, mesh, dispose }` | view half | [src/kits/fx/view.js:86; src/kits/fx/view.js:120] <!-- C-410 --> |
@@ -161,6 +161,7 @@ The glossary lacks these terms. The terms are specific to the engine sound.
 - **B-77** The first wash entry whose `at(x, z)` is true decides the wash time. [src/kits/coverage/sim.js:35-36] <!-- C-77 -->
 - **B-78** Each washes entry is a function `(x, z) => boolean` or `{ at, washTime }`. A function entry uses the kit-wide `washTime`. [src/kits/coverage/sim.js:17-24; test/kits/coverage.test.mjs:33] <!-- C-78 -->
 - **B-79** In a wash, each layer among dirt, rust, snow and mud that the entity carries drops by `dt / washTime`, with a floor of 0. The entity gains nothing that step. [src/kits/coverage/sim.js:8; src/kits/coverage/sim.js:37-41; test/kits/coverage.test.mjs:24] <!-- C-79 -->
+- **B-345** In a wash, an entity that carries `wet` gains `dt / washTime` of it, capped at 1. Outside a wash, `wet` drops by `dt / dryTime` each step, with a floor of 0, before the ground gain. Washes never lower `wet`. [src/kits/coverage/sim.js:4-6; src/kits/coverage/sim.js:42-45; test/kits/coverage.test.mjs:33] <!-- C-wet-9 -->
 - **B-80** Outside a wash, the entity gains `dirtRate × metres moved` on the ground layer, capped at 1. [src/kits/coverage/sim.js:42-52; test/kits/coverage.test.mjs:16] <!-- C-80 -->
 - **B-81** Metres moved is the horizontal distance from the pool prev pose to the curr pose. A `place()` adds nothing. [src/kits/coverage/sim.js:42-43; test/kits/coverage.test.mjs:50] <!-- C-81 -->
 - **B-82** The gain is skipped when the entity did not move or when `materialAt` returns null or undefined. The gain is also skipped when the ground `dirtRate` is 0 or absent, or when the entity lacks the layer. [src/kits/coverage/sim.js:44-50; test/kits/coverage.test.mjs:50] <!-- C-82 -->
@@ -171,6 +172,7 @@ The glossary lacks these terms. The terms are specific to the engine sound.
 - **B-87** All clones of one entity share one `uCoverage` vector. An entity with no object or no such mesh is skipped. [src/kits/coverage/view.js:12-23; test/kits/coverage-view.test.mjs:47] <!-- C-87 -->
 - **B-88** `coverageView` skips instanced meshes and array materials. Instanced meshes use `COVERAGE_INSTANCED` and an `instanceCoverage` attribute that the instancing owner writes. [src/kits/coverage/view.js:2-4; src/kits/coverage/view.js:15-17] <!-- C-88 -->
 - **B-89** On create and on each frame, `coverageView` writes (dirt, rust, snow, mud) into `uCoverage` in place, with 0 for a missing layer. A frame allocates nothing. [src/kits/coverage/view.js:4; src/kits/coverage/view.js:8; src/kits/coverage/view.js:25; src/kits/coverage/view.js:27-30; test/kits/coverage-view.test.mjs:29] <!-- C-89 -->
+- **B-346** `coverageView` also writes `e.coverage.wet` (0 when missing) into `uWet.x` of each clone that has `COVERAGE_WET`, on create and on each frame. [src/kits/coverage/view.js:7-10; src/kits/coverage/view.js:23; test/kits/coverage-view.test.mjs:29] <!-- C-wet-10 -->
 - **B-90** On remove, `coverageView` restores the base material of each mesh and disposes the clone. [src/kits/coverage/view.js:9; src/kits/coverage/view.js:31-36; test/kits/coverage-view.test.mjs:39] <!-- C-90 -->
 - **B-91** `off()` unsubscribes from sync and releases every entity. [src/kits/coverage/view.js:39; test/kits/coverage-view.test.mjs:47] <!-- C-91 -->
 
@@ -460,7 +462,7 @@ The glossary lacks these terms. The terms are specific to the engine sound.
 | `phys` | `friction` 0..2, `restitution` 0..1, `sg` > 0, `fill` in (0, 1] | [src/defs/materials.js:24; src/defs/materials.js:51] <!-- C-437 --> |
 | `tire` | `mu` >= 0, `C` > 0, `kp` > 0, `ap` > 0, `crr` >= 0, `drag` >= 0 | [src/defs/materials.js:40] <!-- C-438 --> |
 | `dirtRate` | number >= 0 | [src/defs/materials.js:53] <!-- C-439 --> |
-| `coverage` | `dirt`, `rust`, `snow`, `mud`, each 0..1 | [src/defs/materials.js:54] <!-- C-440 --> |
+| `coverage` | `dirt`, `rust`, `snow`, `mud`, `wet`, each 0..1 | [src/defs/materials.js:54] <!-- C-440 --> |
 | `aero` | `skin` >= 0, `airfoil` `{ cl, cd, stall }`. A `cl` or `cd` curve needs at least 2 `[angle, value]` pairs of finite numbers. `stall` 0..90. | [src/defs/materials.js:30; src/defs/materials.js:55] <!-- C-441 --> |
 | `magnet` | `strength` >= 0, `ferrous` 0..1 | [src/defs/materials.js:56] <!-- C-442 --> |
 | `fluid` | `density` > 0, `viscosity` >= 0 | [src/defs/materials.js:57] <!-- C-443 --> |
@@ -607,7 +609,7 @@ The frame that `createEngineSound` sends starts with these values. [src/kits/veh
 | `REMOTES`, `FOLLOWS` | `driven`, `proxy`, `view` and `interp`, `forecast` | The allowed values of `remote` and `follow`. | [src/defs/fields.js:31] <!-- C-474 --> |
 | `INPUT_BATCH` | 8 | The base count of inputs in a driven record. | [src/defs/fields.js:34] <!-- C-475 --> |
 | `INPUT_WIRE_MAX` | 64 | The most inputs one record may carry. | [src/defs/fields.js:35] <!-- C-476 --> |
-| `coverageKit` options | `washes` `[]`, `washTime` 1.5, `layer` `coverageLayer` | `materialAt` has no default and is required. | [src/kits/coverage/sim.js:12] <!-- C-477 --> |
+| `coverageKit` options | `washes` `[]`, `washTime` 1.5, `dryTime` 30, `layer` `coverageLayer` | `materialAt` has no default and is required. | [src/kits/coverage/sim.js:12] <!-- C-477 --> |
 | `createParticles` options | `max` 1200, `shape` `cube`, `geometry` null, `material` null, `gravity` 9.8, `drag` 0.5, `floor` null, `bounce` 0, `friction` 1 | Pool and physics settings. | [src/kits/fx/view.js:12-13] <!-- C-478 --> |
 | `createMarks` options | `max` 400, `width` 0.45, `length` 0.9, `material` null, `heightAt` null, `lift` 0.06 | Mark settings. The default material is a transparent brown `MeshBasicMaterial` with opacity 0.4. | [src/kits/fx/view.js:86-90] <!-- C-479 --> |
 | `createTerrain` options | `nx`, `nz`, `cell`, `x0` 0, `z0` 0, `heights`, `materials`, `blend` null, `material`, `groups`, `fixInternalEdges` false | Heightfield and sampling settings. | [src/kits/terrain/sim.js:10] <!-- C-480 --> |
@@ -667,7 +669,7 @@ All errors are thrown `Error` objects. The message prefixes vary by module: `mat
 - `INPUT_WIRE_MAX` limits one driven record to 64 inputs. [src/defs/fields.js:35; src/defs/fields.js:60] <!-- C-526 -->
 
 ### Kits
-- `coverageKit` throws `coverage: <message>` if `host` has no `.system` function or `materialAt` is not a function. The call also throws if `washTime` is not > 0, `washes` is not an array or `layer` is not a function. [src/kits/coverage/sim.js:9; src/kits/coverage/sim.js:13-16; src/kits/coverage/sim.js:25; test/kits/coverage.test.mjs:69] <!-- C-527 -->
+- `coverageKit` throws `coverage: <message>` if `host` has no `.system` function or `materialAt` is not a function. The call also throws if `washTime` or `dryTime` is not > 0, `washes` is not an array or `layer` is not a function. [src/kits/coverage/sim.js:9; src/kits/coverage/sim.js:13-16; src/kits/coverage/sim.js:25; test/kits/coverage.test.mjs:69] <!-- C-527 -->
 - A bad `washes` entry throws `coverage: washes[<k>] ...`. An entry `washTime` must be > 0. [src/kits/coverage/sim.js:17-24] <!-- C-528 -->
 - `createParticles` throws `fx: max must be a positive integer (got <max>)` and `fx: shape must be 'cube' or 'quad' (got <shape>)`. `createMarks` throws the same `max` error. [src/kits/fx/view.js:6; src/kits/fx/view.js:14-15; src/kits/fx/view.js:87; test/kits/fx-particles.test.mjs:78] <!-- C-529 -->
 - `glyphFor` throws `glyphs: unknown role '<role>'` or `glyphs: unknown family '<family>'`. [src/kits/glyphs/view.js:13-17; test/kits/glyphs.test.mjs:10] <!-- C-530 -->
