@@ -56,3 +56,14 @@ test('expected', () => { const h = headless(g); h.command('yell', {}).step(1); h
   assert.match(r.stdout, /headless: unexpected warning \(call h.expectWarning\(re\) if it is expected\):\n\s*warn: loud/);
   assert.match(r.stdout, /error: boom/);
 });
+test('a fork replays without repeating its warnings into either handle, and a nested handle keeps its own warnings (T-8, T-7)', () => {
+  const h = headless(noisy, { record: true });
+  h.command('yell', { n: 3 }).step(1); h.expectWarning(/yell: 3/);
+  const f = h.fork();
+  assert.equal(h.warnings.length, 1, 'nothing new on h'); assert.deepEqual(f.warnings, [], 'the replay repeated what h already saw');
+  const g = headless(noisy), outer = headless(noisy);
+  outer.until(() => { g.command('yell', { n: 4 }).step(1); return true; }); // a call of g inside a call of outer
+  assert.equal(g.warnings.length, 1); assert.equal(g.warnings[0].expected, false, 'g records it as its own');
+  g.expectWarning(/yell: 4/);
+  assert.equal(outer.warnings.length, 0, 'outer does not');
+});

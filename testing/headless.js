@@ -55,16 +55,16 @@ if (process.env.NODE_TEST_CONTEXT) afterEach(t => {
   if (lines.length) throw new AssertionError({ message: `headless: unexpected warning (call h.expectWarning(re) if it is expected):\n${lines.join('\n')}` });
 });
 let sink = null; // the handle whose call is running (the innermost one)
-const native = { warn: console.warn, error: console.error };
+const native = { warn: console.warn, error: console.error }, puts = new WeakSet(); // puts: this file's capture functions
 const capture = (h, fn) => function (...args) {
   if (sink === h) return fn.apply(this, args);
   const prev = sink, { warn, error } = console, was = { warn, error };
   const put = level => (...a) => {
-    const listening = was[level] !== native[level];
+    const listening = was[level] !== native[level] && !puts.has(was[level]); // a handle call inside another's is not a listener
     h.warnings.push({ level, text: format(...a), expected: listening, reported: false });
     if (listening) was[level](...a); else unchecked.add(h);
   };
-  sink = h; console.warn = put('warn'); console.error = put('error');
+  sink = h; console.warn = put('warn'); console.error = put('error'); puts.add(console.warn); puts.add(console.error);
   try { return fn.apply(this, args); } finally { sink = prev; console.warn = warn; console.error = error; }
 };
 
@@ -158,7 +158,9 @@ export function headless(game, { seed = 1, scene, args, invariants = [], record:
     fork() {
       if (!sums) throw new Error('headless: fork needs record: true');
       const tape = h.tape(), sum = h.checksum();
-      return matches('fork', drive(headless(game, { ...tapeStart(tape), invariants, record: true }), tape), sum);
+      const f = matches('fork', drive(headless(game, { ...tapeStart(tape), invariants, record: true }), tape), sum);
+      f.warnings.length = 0; // the replay repeats warnings h already saw
+      return f;
     },
     get world() { return engine.world; }, // [T-5]
     find(name, where) { // a bare name matches a tag or a net kind; where: predicate or partial object (===)
