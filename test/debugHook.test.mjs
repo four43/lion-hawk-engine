@@ -5,13 +5,13 @@ import { ENGINE_VERSION } from '../src/version.js';
 
 test('installs engine + game ids and the game api on the target', () => {
   const target = {}; let n = 0;
-  const hook = installEngineHook({ stepN(k) { n += k; } }, { game: 'pig-pens', target });
-  assert.equal(target.engine, hook); assert.equal(hook.version, ENGINE_VERSION); assert.equal('engine' in hook, false); assert.equal(hook.game, 'pig-pens');
+  const hook = installEngineHook({ stepN(k) { n += k; } }, { game: 'kart', target });
+  assert.equal(target.engine, hook); assert.equal(hook.version, ENGINE_VERSION); assert.equal('engine' in hook, false); assert.equal(hook.game, 'kart');
   hook.stepN(3); assert.equal(n, 3);
 });
 test('getters stay live', () => {
   const target = {}; let seed = 1;
-  installEngineHook({ get seed() { return seed; } }, { game: 'tractor-pickup', target });
+  installEngineHook({ get seed() { return seed; } }, { game: 'kart', target });
   seed = 9; assert.equal(target.engine.seed, 9);
 });
 test('the property cannot be overwritten by assignment but can be reinstalled', () => {
@@ -21,9 +21,9 @@ test('the property cannot be overwritten by assignment but can be reinstalled', 
   installEngineHook({}, { game: 'b', target }); assert.equal(target.engine.game, 'b');
 });
 test('requires a game id and leaves old hooks alone', () => {
-  const target = { piggies: { old: true } };
+  const target = { oldHook: { old: true } };
   assert.throws(() => installEngineHook({}, { target }), /game id required/);
-  installEngineHook({}, { game: 'pig-pens', target }); assert.deepEqual(target.piggies, { old: true });
+  installEngineHook({}, { game: 'kart', target }); assert.deepEqual(target.oldHook, { old: true });
 });
 test('version and game are reserved: the api cannot override them', () => {
   const target = {};

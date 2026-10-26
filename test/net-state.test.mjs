@@ -47,7 +47,7 @@ test('going solo keeps this page\'s players and drops the others (N-25)', () => 
 
 test('a manual join replicates no lh.player or lh.game: the game\'s own registry reads every host frame (B3, N-22)', () => {
   const w = mp(carts, { peers: 2, argsOf: i => ({ n: i + 1 }) });
-  const own = createRegistry([CART, CRATE, FLAG], { maxSender: 4 }), frames = [], send = w.host.net.send.bind(w.host.net); // Tractor's way (game/net.js:41)
+  const own = createRegistry([CART, CRATE, FLAG], { maxSender: 4 }), frames = [], send = w.host.net.send.bind(w.host.net); // a game sending its own frames
   w.host.net.send = (to, d, r) => { if (d instanceof ArrayBuffer) frames.push(decodeFrame(d, own)); return send(to, d, r); };
   w.seconds(2.5); // past a second keyframe
   assert.deepEqual(carts.net.kinds.map(k => k.name), ['cart', 'crate', 'flag']);

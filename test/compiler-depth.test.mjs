@@ -1,4 +1,4 @@
-// mc.depth(material): the shadow-pass twin that moves vertices as the material does (Rally's snow, wind, fur).
+// mc.depth(material): the shadow-pass twin that moves vertices as the material does (snow, wind, fur).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ShaderLib, BoxGeometry, BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';

@@ -1,4 +1,4 @@
-// test/transport.test.mjs: Tractor Pickup's test/link.test.mjs, run against lion-hawk/net (2f T-E6: the move changes no behaviour)
+// test/transport.test.mjs: the transports of lion-hawk/net (N-1, N-2)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryHub, parseLag, withLag, roomLink, emitter } from '../src/index.net.js';

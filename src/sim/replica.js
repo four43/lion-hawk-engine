@@ -1,5 +1,5 @@
 // src/sim/replica.js
-// Moved from Tractor Pickup's src/net/replica.js with no behaviour change (N-8, N-11, #78); the field types and kinds live in ../defs/fields.js.
+// The replica frame codec, trackers and stores (N-8, N-11, #78); the field types and kinds live in ../defs/fields.js.
 // Replicated objects (14.4, M-22, M-23, M-26, M-50). A kind lists the fields of one sort of shared object, how each field is packed, and the
 // authority: the host, or the owner (the player whose number is the object's id). Game objects stay plain objects: kinds.js reads records
 // from them and the sync code writes records back. A frame is binary, little-endian: a keyframe (every object of one authority) or a diff

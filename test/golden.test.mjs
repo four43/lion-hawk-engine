@@ -16,10 +16,10 @@ test('first run writes, second run matches', () => {
 });
 test('a change throws with the diff and the bless hint; bless rewrites', () => {
   const f = join(dir, 'b.json');
-  golden(f, { tractor: { x: 1 } }, { bless: false, ci: false });
-  assert.throws(() => golden(f, { tractor: { x: 2 } }, { bless: false, ci: false }), e => /tractor\.x: 1 → 2/.test(e.message) && /LH_BLESS=1/.test(e.message));
-  assert.deepEqual(golden(f, { tractor: { x: 2 } }, { bless: true, ci: false }), { written: true });
-  assert.deepEqual(golden(f, { tractor: { x: 2 } }, { bless: false, ci: false }), { written: false });
+  golden(f, { truck: { x: 1 } }, { bless: false, ci: false });
+  assert.throws(() => golden(f, { truck: { x: 2 } }, { bless: false, ci: false }), e => /truck\.x: 1 → 2/.test(e.message) && /LH_BLESS=1/.test(e.message));
+  assert.deepEqual(golden(f, { truck: { x: 2 } }, { bless: true, ci: false }), { written: true });
+  assert.deepEqual(golden(f, { truck: { x: 2 } }, { bless: false, ci: false }), { written: false });
 });
 test('accepts file URLs', () => {
   const u = new URL(`file://${join(dir, 'c.json')}`);

@@ -44,9 +44,9 @@ test('2d: h.untilLoaded', () => {
   const { steps } = h.untilLoaded({ maxSteps: 10 }); assert.equal(steps, 3); // 0.05 s at 60 Hz
 });
 
-// Rally 2c's workaround (games/rally src/game/stage.js): phase 'loading', `t += dt` in the step hook, build once
+// The hand-written way to hold a load: phase 'loading', `t += dt` in the step hook, build once
 // t >= LOAD_HOLD - 1e-9 (then return). ctx.load must build in exactly the same step, wherever the request comes from.
-const rallyLike = viaLoad => defineGame({ id: 'rl', sim: { hz: 240, maxCatchUp: 12 }, start: 'stage', commands: { reload: e => e.scene.state.request() }, scenes: { stage: {
+const stageLike = viaLoad => defineGame({ id: 'rl', sim: { hz: 240, maxCatchUp: 12 }, start: 'stage', commands: { reload: e => e.scene.state.request() }, scenes: { stage: {
   enter(e, ctx) {
     const s = ctx.state; s.builds = [];
     s.request = () => viaLoad ? ctx.load({ hold: 0.05, build: en => s.builds.push(en.time.step) }) : (s.load = { t: 0 });
@@ -58,10 +58,10 @@ const rallyLike = viaLoad => defineGame({ id: 'rl', sim: { hz: 240, maxCatchUp: 
     if (s.inStep) { s.inStep = false; s.request(); }
   },
 } } });
-test('2d: ctx.load({ hold }) builds in the same step as Rally 2c LOAD_HOLD counter (#21)', () => {
+test('2d: ctx.load({ hold }) builds in the same step as a hand-written LOAD_HOLD counter (#21)', () => {
   for (const from of ['outside', 'command', 'system', 'step']) {
     const run = viaLoad => {
-      const e = createEngine(rallyLike(viaLoad)); e.stepN(5); const s = e.scene.state;
+      const e = createEngine(stageLike(viaLoad)); e.stepN(5); const s = e.scene.state;
       if (from === 'outside') s.request(); else if (from === 'command') e.command('reload'); else if (from === 'system') s.inSystem = true; else s.inStep = true;
       e.stepN(30); return s.builds;
     };

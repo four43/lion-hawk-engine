@@ -67,7 +67,7 @@ test('a null colour keeps the shared colour; uploads cover only the rows written
   assert.deepEqual(fx.mesh.instanceColor.updateRanges, [{ start: 0, count: 9 }]);
 });
 
-test('emit overrides gravity and drag per particle (Tractor dust: g < 0 floats up) (CI-14)', () => {
+test('emit overrides gravity and drag per particle (dust: g < 0 floats up) (CI-14)', () => {
   const fx = createParticles({ max: 2, gravity: 10, drag: 0 });
   fx.emit(0, 0, 0, 1, 0, 0, 5, 1, null, -2, 1); fx.emit(0, 0, 0, 1, 0, 0, 5, 1, null);
   fx.update(0.5);                                   // 0: vy +1, vx × 0.5; 1: the pool's g 10 and drag 0

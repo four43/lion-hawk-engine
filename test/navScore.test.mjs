@@ -46,7 +46,7 @@ test('among lined-up candidates the nearest wins; equal ones go to document orde
   assert.equal(pickNeighbour(0, 'down', twins), 1);
 });
 
-test("Rally's title: full-width choice rows above a footer (Settings, a best-time text, Drive)", () => {
+test("a title screen: full-width choice rows above a footer (Settings, a best-time text, Drive)", () => {
   // segmented rows fill the sheet's width; the footer has Settings on the left and Drive on the right, the best time
   // (text, not a candidate) between them
   const rects = [

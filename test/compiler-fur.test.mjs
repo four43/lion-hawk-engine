@@ -1,4 +1,4 @@
-// furGeometry: Pig Pens' shell geometry, made generic (any attributes, indexed or not, a 0..1 mask).
+// furGeometry: shell geometry (any attributes, indexed or not, a 0..1 mask).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BoxGeometry, BufferAttribute, BufferGeometry } from 'three';

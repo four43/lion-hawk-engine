@@ -1,17 +1,17 @@
 // Chase camera, two styles.
-// - 'heading' (default; Tractor Pickup's render/camera.js, V-1..V-3): `distance` behind and `height` above the target, turning
+// - 'heading' (default, V-1..V-3): `distance` behind and `height` above the target, turning
 //   with `lag`, looking at a point `lookAhead` in front and `lookHeight` up; the position eases in at `ease` per second. In a
 //   slide (pose.fwd > `slide` m/s) it looks along the travel (pose.velYaw), otherwise along the nose (pose.yaw). Portrait
 //   (aspect < `portraitAspect`) moves it `portrait` times back and up (X-12). pose = { x, y, z, yaw, fwd?, velYaw? }.
-// - 'travel' (Rally's render.js:152-187): the look direction is the body's heading blended toward its velocity above `blendFrom`
+// - 'travel': the look direction is the body's heading blended toward its velocity above `blendFrom`
 //   m/s (up to `blendMax`), smoothed exponentially (`lag` per second); the position eases at `ease`, the look point at `lookEase`.
 //   The field of view widens with speed: base + fovAdd + min(fovMax, speed x fovSpeed), the base being camera.userData.lhFov
-//   (3e's portrait FOV rule) or the camera's fov at create. orbit(pose, dt) is Rally's title shot (a slow turntable round the car,
+//   (3e's portrait FOV rule) or the camera's fov at create. orbit(pose, dt) is a title shot (a slow turntable round the target,
 //   base + orbitFovAdd), after which the chase starts afresh behind. pose = { p, q, v } (positions, quaternion, velocity).
 // opts is the object passed in, filled with the style's defaults and kept live (?tune may write rig.opts.distance). rig.yaw is
 // the view heading a stick reads against (C-2, #81; heading style), null before the first follow or snap. shake(a) jitters the
 // position for `shakeTime` s, fading, from a hash (no Math.random). blendFrom(q, time = 1) turns the camera from rotation q back to
-// the chase over `time` s, smoothstep (Tractor's F-10 hand-back from the show camera); snap cancels a blend and a shake.
+// the chase over `time` s, smoothstep (F-10: a hand-back from another camera); snap cancels a blend and a shake.
 // Nothing is allocated per frame.
 import * as THREE from 'three';
 
@@ -79,7 +79,7 @@ export function createChaseRig(camera, opts = {}) {
       shakeT = 0; shakeA = 0; blendK = 1;
       if (style === 'travel') travel(pose, 0, true); else { yaw = null; heading(pose, 1, 1, 0); }
     },
-    orbit(pose, dt) { // travel style: Rally's title turntable
+    orbit(pose, dt) { // travel style: a title turntable
       if (style !== 'travel') throw new Error("chase.orbit: needs style 'travel'");
       body(pose);
       orbitA = (orbitA ?? Math.atan2(-dir.x, -dir.z) + opts.orbitStart) + dt * opts.orbitSpeed;

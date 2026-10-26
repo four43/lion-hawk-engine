@@ -1,5 +1,5 @@
-// kit-fx (view half): pooled particles and ground marks, one InstancedMesh each (Tractor's fx.js and gibs.js, Pig Pens'
-// feathers). State lives in typed arrays; nothing is allocated per emit or per frame, and uploads cover only the rows
+// kit-fx (view half): pooled particles and ground marks, one InstancedMesh each (dust, debris,
+// feathers, skid marks). State lives in typed arrays; nothing is allocated per emit or per frame, and uploads cover only the rows
 // written. No randomness here (U-6): callers pass velocities drawn from engine.rng('fx'); start spins come from the slot.
 import * as THREE from 'three';
 

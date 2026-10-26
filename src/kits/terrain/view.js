@@ -1,5 +1,5 @@
-// kit-terrain (view half): the terrain as chunked meshes with distance LODs and skirts (Rally's trackView chunks,
-// generalised; Tractor's 6×6 farm chunks are chunks: [6, 6] with one LOD). Each chunk builds lazily per LOD; after the
+// kit-terrain (view half): the terrain as chunked meshes with distance LODs and skirts (a long track
+// uses chunkCells; a small map can be chunks: [6, 6] with one LOD). Each chunk builds lazily per LOD; after the
 // first update, building spends at most budgetMs per call, and a chunk shows any LOD it already has meanwhile (or its
 // coarsest, never a hole). Heights come from terrain.grid, so LOD 0 vertices sit exactly on the samples.
 import * as THREE from 'three';
@@ -44,7 +44,7 @@ export function createTerrainMesh(terrain, opts = {}) {
 
   const top = lods[lods.length - 1];
   if (chunkCells !== null && !(Number.isInteger(chunkCells) && chunkCells > 0 && chunkCells % top === 0)) fail(`chunkCells must be a multiple of the coarsest LOD step ${top} (got ${chunkCells})`);
-  // chunkCells (Rally's CHUNK) fixes the chunk side; otherwise chunks counts set it, rounded up to the coarsest step
+  // chunkCells fixes the chunk side; otherwise chunks counts set it, rounded up to the coarsest step
   const csx = chunkCells ?? Math.ceil(Math.ceil((nx - 1) / chunks[0]) / top) * top, csz = chunkCells ?? Math.ceil(Math.ceil((nz - 1) / chunks[1]) / top) * top;
   const ncx = chunkCells ? Math.ceil((nx - 1) / chunkCells) : chunks[0], ncz = chunkCells ? Math.ceil((nz - 1) / chunkCells) : chunks[1];
   const clx = g => (g < 0 ? 0 : g > nx - 1 ? nx - 1 : g), clz = g => (g < 0 ? 0 : g > nz - 1 ? nz - 1 : g);

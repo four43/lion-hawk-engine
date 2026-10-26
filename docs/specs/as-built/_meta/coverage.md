@@ -176,7 +176,7 @@ Totals: 2546 claims, 2253 B- statements.
 - F01: Why does an engine without physics.rapier still make a World with bodiless entities? test/world-engine.test.mjs:151 shows it, but no comment states the reason.
 - F02: Why do the base materials glass, mud, snow, water and air have no coverage block? No source states the reason.
 - F02: Why does the particle landing threshold use vy < 1 with no named constant? No source states the reason.
-- F03: Why do the sleepers thresholds use 0.2 m/s and 0.5 rad/s? The code comment only says they come from Rally's afterStep.
+- F03: Why do the sleepers thresholds use 0.2 m/s and 0.5 rad/s? The code comment calls them wake thresholds and gives no source.
 - F03: Field note 124 says no test guards one read: a body that fell asleep in the step that moved it (the r.awake check). Status is open.
 - F04: Why does a bridge guest leave emit closed to itself after its endpoint is removed from the hub? No source states the reason.
 - F04: Why is REPEAT 3? Only the comment states that it keeps one lost diff from hiding a change.

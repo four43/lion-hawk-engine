@@ -1,7 +1,7 @@
-// view.project for a camera on a canvas (S-1, #73; Tractor's rig.project and toNdc): world -> client px with the canvas
+// view.project for a camera on a canvas (S-1, #73): world -> client px with the canvas
 // offset added, z the NDC depth, onScreen false behind the camera or outside the viewport. The camera's matrices are refreshed
 // first, so a camera moved since the last render projects where it is now. project([x, y, z], out?) fills out (a fresh object
-// without one: game.point may keep it); project.ndc(x, y, z, out?) gives the raw NDC { nx, ny, nz, behind } (Tractor's M-77 HUD).
+// without one: game.point may keep it); project.ndc(x, y, z, out?) gives the raw NDC { nx, ny, nz, behind } (for HUD markers, M-77).
 import * as THREE from 'three';
 
 export function makeProject(camera, canvas) {

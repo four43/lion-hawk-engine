@@ -1,6 +1,6 @@
 // D-4: window.engine is always present, so Playwright scripts and the console drive every game the same way.
-// Old per-game hooks (window.piggies, window.tp) stay until their game reaches phase 2 (D-5). Rally (phase 2) has no
-// window.rally any more: its debug helpers live on its game definition (`game.debug(engine)`) and drive this hook.
+// A game adds its own debug helpers through its definition (`game.debug(engine)`, D-5), and they drive this hook; there
+// are no per-game window globals.
 import { ENGINE_VERSION } from '../version.js';
 
 export function installEngineHook(api, { game, target = globalThis } = {}) {

@@ -13,7 +13,7 @@ const PARAMS = { lambert: BASIC, standard: [...BASIC, 'metalness', 'roughness'] 
 PARAMS.physical = [...PARAMS.standard, 'clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'transmission', 'ior', 'thickness'];
 const COLORS = new Set(['color', 'emissive', 'sheenColor']);
 const WIND_AMP = [0.12, 0.08];
-const PAINT_SHADE = [0.25, 0.85, 1.1]; // [floor, gain, max] of k: Tractor 1.8's paintable
+const PAINT_SHADE = [0.25, 0.85, 1.1]; // [floor, gain, max] of k
 const WHITE = new Color(1, 1, 1);
 const KEEP = Object.freeze({ mode: 0, axis: [0, 0, 0, 0], s: 0, l: 0, color: null, key: 'keep' });  // unpainted: the vertex colours
 const SOLID = Object.freeze({ mode: 1, axis: [0, 0, 0, 0], s: 0, l: 0, color: null, key: 'solid' }); // instanced: instanceColor
@@ -166,7 +166,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
   }
 
   // Task 8b: lhPaint for each vertex-coloured paint-<slot> mesh that lacks it: model-space xyz (relative to root) and the vertex's
-  // brightness (0.3 r + 0.6 g + 0.1 b, linear) over the brightest vertex of the same slot in this tree (Tractor's trim spans the
+  // brightness (0.3 r + 0.6 g + 0.1 b, linear) over the brightest vertex of the same slot in this tree (a trim that spans the
   // fenders and the roof). Written once onto the shared template geometry; clones and re-applies find it there.
   const toRoot = new Matrix4(), toMesh = new Matrix4(), pv = new Vector3();
   function paintAttributes(root) {

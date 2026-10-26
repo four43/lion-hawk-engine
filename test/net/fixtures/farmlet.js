@@ -1,5 +1,5 @@
 // test/net/fixtures/farmlet.js
-// Tractor Pickup's four kinds in miniature (3i): can the net part host them? animal: a bodiless host kind whose game fields are
+// A small farm game's four kinds (3i): can the net part host them? animal: a bodiless host kind whose game fields are
 // interpolated by the kind's own apply (s = the interp sample); tree and player: data-only host kinds; train: an owner kind,
 // driven, with a second jointed body (trailer: F.body() on a linked entity) and a rider list. Run as mp(farmlet, { argsOf: i => ({ n: i + 1 }) }).
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -9,12 +9,12 @@ import { installNet } from '../../../src/sim/net/install.js';
 const XZ = F.fixed(-400, 400, 1 / 64), Y = F.fixed(-50, 50, 1 / 256);
 export const ACT = actions({ thr: axis(), steer: axis(), horn: button() });
 const box = (half, material) => ({ shape: 'box', half, p: [0, 0, 0], q: [0, 0, 0, 1], material });
-export const tractorDesc = () => ({ body: { type: 'dynamic', mass: 1400 }, colliders: [box([0.8, 0.6, 1.2], 'steel')] });
+export const truckDesc = () => ({ body: { type: 'dynamic', mass: 1400 }, colliders: [box([0.8, 0.6, 1.2], 'steel')] });
 export const trailerDesc = () => ({ body: { type: 'dynamic', mass: 300 }, colliders: [box([0.8, 0.4, 1.0], 'wood')] });
 const hitch = (world, e) => world.joint(e, e.trailer, RAPIER.JointData.spherical({ x: 0, y: 0, z: -1.6 }, { x: 0, y: 0, z: 1.6 }));
 export const TRAIN = kind({ name: 'train', code: 4, authority: 'owner', max: 1, idMin: 1, idMax: 4,
   fields: { body: F.body(), trailer: F.body(), mode: F.oneOf(['drive', 'show']), riders: F.list(F.obj({ id: F.uint(2), x: XZ, y: Y, z: XZ, yaw: F.angle() }), 16), input: F.actions(ACT) },
-  spawn: () => ({ ...tractorDesc(), trailer: trailerDesc() }), spawned: (e, world) => { hitch(world, e); } });
+  spawn: () => ({ ...truckDesc(), trailer: trailerDesc() }), spawned: (e, world) => { hitch(world, e); } });
 export const ANIMAL = kind({ name: 'animal', code: 1, authority: 'host', remote: 'view', max: 64, idMax: 0xfffe,
   fields: { x: XZ, z: XZ, yaw: F.angle(), anim: F.oneOf(['idle', 'walk']), owner: F.uint(1, 4) },
   spawn: () => ({ tags: ['animal'] }),
@@ -23,7 +23,7 @@ export const TREE = kind({ name: 'tree', code: 2, authority: 'host', max: 1024, 
 export const PLAYER = kind({ name: 'player', code: 3, authority: 'host', max: 4, idMin: 1, idMax: 4, fields: { paint: F.oneOf(['red', 'blue']), away: F.bool() } });
 export function spawnTrain(world, n) {
   const x = n === 1 ? -6 : 6;
-  const e = world.spawn({ ...tractorDesc(), net: 'train', netId: n, owner: n, at: [x, 0.6, 0], input: { thr: 0, steer: 0, horn: false }, mode: 'drive', riders: [] });
+  const e = world.spawn({ ...truckDesc(), net: 'train', netId: n, owner: n, at: [x, 0.6, 0], input: { thr: 0, steer: 0, horn: false }, mode: 'drive', riders: [] });
   world.add(e, 'trailer', world.spawn({ ...trailerDesc(), at: [x, 0.4, -3.2] })); hitch(world, e); return e;
 }
 const N = { n: F.uint(2) }, IMP = { x: 0, y: 0, z: 0 };

@@ -211,7 +211,7 @@
         "test/net-remote.test.mjs",
         "test/net-replay.test.mjs",
         "test/net-state.test.mjs",
-        "test/net-tractor.test.mjs",
+        "test/net-train.test.mjs",
         "test/port.test.mjs",
         "test/replica.test.mjs",
         "test/schema.test.mjs",

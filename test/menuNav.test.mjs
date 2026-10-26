@@ -29,7 +29,7 @@ const game = defineGame({
   },
 });
 
-// markup: adopted slots with rects, plus plain buttons in a nav scope (Tractor's swatches)
+// markup: adopted slots with rects, plus plain buttons in a nav scope (colour swatches)
 const MARKUP = `
   <div id="title"><button data-lh-slot="title.car.awd" data-r="0 0 100 30">AWD</button><button data-lh-slot="title.car.rwd" data-r="110 0 100 30">RWD</button><button data-lh-slot="title.car.fwd" data-r="220 0 100 30">FWD</button>
     <input data-lh-slot="title.seed" data-r="0 40 320 30">

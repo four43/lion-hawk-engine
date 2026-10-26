@@ -28,7 +28,7 @@ test('3g: createCrowd makes one instanced mesh per anim-table part; set poses ea
   assert.ok(pos(c.parts[1].inst, 0).distanceTo(new THREE.Vector3(1, 6, -2)) < 1e-5);
   assert.ok(pos(c.parts[0].inst, 0).distanceTo(new THREE.Vector3(1, 6, 0)) < 1e-5);
 });
-test('3g: blend = { clip, t, k } weighs this clip by k (3f blendAnimTable, Pig Pens lerpM); a Matrix4 pose is taken as is', () => {
+test('3g: blend = { clip, t, k } weighs this clip by k (3f blendAnimTable); a Matrix4 pose is taken as is', () => {
   const c = setup().crowd; c.count = 2;
   c.set(0, new THREE.Matrix4(), 'walk', 0, { clip: 'idle', t: 0, k: 0.25 });
   assert.ok(pos(c.parts[1].inst, 0).distanceTo(new THREE.Vector3(1, 0.75, 0)) < 1e-6);
@@ -36,7 +36,7 @@ test('3g: blend = { clip, t, k } weighs this clip by k (3f blendAnimTable, Pig P
   assert.ok(pos(c.parts[0].inst, 1).distanceTo(new THREE.Vector3(0, 10, 0)) < 1e-6);
   const v = c.parts[0].inst.mesh.instanceMatrix.version; c.commit(); assert.equal(c.parts[0].inst.mesh.instanceMatrix.version, v + 1);
 });
-test('3g: cover writes instanceCoverage on the coverage parts only (Pig Pens per-pig mud, 3f COVERAGE_INSTANCED)', () => {
+test('3g: cover writes instanceCoverage on the coverage parts only (per-animal mud, 3f COVERAGE_INSTANCED)', () => {
   const c = setup().crowd; c.cover(3, 0, 0, 0, 0.8);
   const [body, head] = c.parts;
   assert.equal(body.coverage, true); assert.equal(head.coverage, false); assert.equal(head.inst.mesh.geometry.attributes.instanceCoverage, undefined);

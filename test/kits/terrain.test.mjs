@@ -71,7 +71,7 @@ test('grid holds float32 copies of the heights for the view half', () => {
 
 test('material, groups and fixInternalEdges reach world.heightfield unchanged (3j #4, CI-11)', () => {
   const w = world(), descs = [], spy = { materials: w.materials, groups: w.groups, heightfield: d => (descs.push(d), { colliders: [] }) };
-  plane(spy, { material: 'ice', fixInternalEdges: true, groups: { member: ['static'] } }); // Rally: material 'rally-ground'
+  plane(spy, { material: 'ice', fixInternalEdges: true, groups: { member: ['static'] } }); // a game's own ground material goes here
   plane(spy);
   assert.equal(descs[0].material, 'ice'); assert.equal(descs[0].fixInternalEdges, true); assert.deepEqual(descs[0].groups, { member: ['static'] });
   assert.equal(descs[1].fixInternalEdges, false);

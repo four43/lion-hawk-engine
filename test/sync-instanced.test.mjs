@@ -23,7 +23,7 @@ test('3g: draw "instanced" joins one InstancedMesh per (model, part), with the p
   assert.deepEqual([...lid.instanceColor.array.slice(3, 6)], [1, 0, 0]); assert.deepEqual([...lid.instanceColor.array.slice(0, 3)], [1, 1, 1]);
   assert.equal(body.instanceColor, null); // no paint slot on the body
   assert.equal(lid.material.userData.instanced, true); assert.equal(lid.material.name, 'steel'); // compiled for instancing
-  assert.equal(body.customDepthMaterial?.isMeshDepthMaterial, true); // 3e's instancedShadows (Tractor's shadows.js) ran
+  assert.equal(body.customDepthMaterial?.isMeshDepthMaterial, true); // 3e's instancedShadows ran
   assert.deepEqual(s.log.filter(l => l[0] === 'clone'), []); // never cloned
 });
 test('3g: despawning the middle instance moves the last one into its slot, matrix and colour (§4.9)', () => {

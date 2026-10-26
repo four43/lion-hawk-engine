@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createOrbitRig } from '../src/view/camera/orbit.js';
 
-// games/pig-pens/src/view/rig.js at e03ed71: applyCam, panBy and chase (rig.gesture null), on a local cam object
-function pigPensRig(camera) {
+// a reference orbit rig: applyCam, panBy and chase (rig.gesture null), on a local cam object
+function orbitRef(camera) {
   const cam = { tx: 0, tz: 1, yaw: 0, pitch: 0.92, dist: 46 }, o = { chaseOff: 0 };
   const applyCam = () => {
     cam.pitch = Math.max(0.28, Math.min(1.48, cam.pitch)); cam.dist = Math.max(2.5, Math.min(80, cam.dist));
@@ -27,14 +27,14 @@ function pigPensRig(camera) {
   const afterDrive = () => { cam.pitch = Math.max(cam.pitch, 0.7); cam.dist = Math.max(cam.dist, 18); o.chaseOff = 0; };
   return { cam, o, applyCam, panBy, chase, afterDrive };
 }
-const PIG_PENS = { target: { x: 0, y: 0.5, z: 1 }, distance: 46, pitch: 0.92, bounds: { x: [-34, 34], z: [-30, 30] } };
+const ORBIT_OPTS = { target: { x: 0, y: 0.5, z: 1 }, distance: 46, pitch: 0.92, bounds: { x: [-34, 34], z: [-30, 30] } };
 const same = (a, b, what) => {
   assert.ok(a.position.distanceTo(b.position) < 1e-9, `${what}: position`);
   assert.ok(1 - Math.abs(a.quaternion.dot(b.quaternion)) < 1e-12, `${what}: rotation`);
 };
 
-test('3g: createOrbitRig matches Pig Pens\' orbit, pan, drive chase, release and clamps (port of view/rig.js)', () => {
-  const a = new THREE.PerspectiveCamera(50, 1.5), b = new THREE.PerspectiveCamera(50, 1.5), rig = createOrbitRig(a, PIG_PENS), ref = pigPensRig(b);
+test('3g: createOrbitRig matches the reference orbit, pan, drive chase, release and clamps', () => {
+  const a = new THREE.PerspectiveCamera(50, 1.5), b = new THREE.PerspectiveCamera(50, 1.5), rig = createOrbitRig(a, ORBIT_OPTS), ref = orbitRef(b);
   rig.update(); ref.applyCam(); same(a, b, 'start');
   rig.state.yaw = ref.cam.yaw = 0.4; rig.panBy(30, -12); ref.panBy(30, -12); rig.update(); ref.applyCam(); same(a, b, 'pan');
   rig.state.chaseOff = ref.o.chaseOff = 0.3;
@@ -44,7 +44,7 @@ test('3g: createOrbitRig matches Pig Pens\' orbit, pan, drive chase, release and
   rig.state.pitch = ref.cam.pitch = 3; rig.state.dist = ref.cam.dist = 500; rig.state.tx = ref.cam.tx = 100; rig.state.tz = ref.cam.tz = -100;
   rig.update(); ref.applyCam(); same(a, b, 'clamps'); assert.deepEqual([rig.state.pitch, rig.state.dist, rig.state.tx, rig.state.tz], [1.48, 80, 34, -30]);
 });
-test('3g: a held chase drag keeps the chase offset; let go, it recentres (Pig Pens drive)', () => {
+test('3g: a held chase drag keeps the chase offset; let go, it recentres', () => {
   const rig = createOrbitRig(new THREE.PerspectiveCamera()), t = { x: 0, z: 0, yaw: 0, fwd: 0 };
   rig.state.chaseOff = 0.5; rig.gesture = 'chase'; rig.chase(t, 0.5); assert.equal(rig.state.chaseOff, 0.5);
   rig.gesture = null; rig.chase(t, 0.5); assert.ok(Math.abs(rig.state.chaseOff - 0.3) < 1e-12);
@@ -60,9 +60,9 @@ test('3g: ray through the canvas centre runs from the camera along its view; a f
   assert.throws(() => createOrbitRig(c).ray(0, 0), /orbit\.ray: no element/);
   assert.throws(() => createOrbitRig({}), /camera required/);
 });
-test('3g: fit frames by aspect (Pig Pens\' fitCam); limits are live (Pig Pens framing)', () => {
+test('3g: fit frames by aspect; limits are live', () => {
   const fit = { portrait: { yaw: Math.PI / 2, dist: 60, tx: -3, tz: -9 }, landscape: { yaw: 0, dist: 46, tx: -1, tz: -4 } };
-  const c = new THREE.PerspectiveCamera(50, 0.5), rig = createOrbitRig(c, { ...PIG_PENS, fit });
+  const c = new THREE.PerspectiveCamera(50, 0.5), rig = createOrbitRig(c, { ...ORBIT_OPTS, fit });
   rig.fit(); assert.deepEqual([rig.state.yaw, rig.state.dist, rig.state.tx, rig.state.tz], [Math.PI / 2, 60, -3, -9]);
   rig.fit(1.5); assert.deepEqual([rig.state.yaw, rig.state.dist, rig.state.tx, rig.state.tz], [0, 46, -1, -4]);
   rig.limits.max = 30; rig.update(); assert.equal(rig.state.dist, 30);

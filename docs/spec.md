@@ -1,12 +1,12 @@
 # Lion Hawk Engine: specification
 
 Version 0.1 (2026-10-11). Status: draft for review.
-Amended 2026-10-13: phase 3 deltas D1–D9 (docs/plans/2026-10-13-phase-3-overview.md §2) and the 0.7.3 carry-overs.
+Amended 2026-10-13: phase 3 deltas D1–D9 and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
-Amended 2026-10-21: local players, controllers, player and game state (docs/plans/2026-10-21-local-players-spec.md): §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25] in Tractor Pickup, Rally and Pig Pens. Released in 0.13.0.
+Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25]. Released in 0.13.0.
 
-Lion Hawk is an opinionated 3D web physics engine for browser games, extracted from Pig Pens, Rally and Tractor Pickup and designed to carry games beyond them.
+Lion Hawk is an opinionated 3D web physics engine for browser games.
 
 Background:
 - `design.md`: the original layered design and material system, plus code survey findings.
@@ -15,7 +15,7 @@ Background:
 
 This spec decides; those files explain.
 
-Requirement IDs (`[L-1]`, `[E-3]`, …) are referenced by the per-phase plans in `docs/plans/`.
+Requirement IDs (`[L-1]`, `[E-3]`, …) are cited by code comments, tests, commits and the changelog.
 
 ---
 
@@ -85,7 +85,7 @@ Because the stack is fixed, the engine can join the five parts automatically.
 
 | Part | Declared as | Sim side | View side |
 |---|---|---|---|
-| `model` | asset key, e.g. `'tractor'` | reads the physics sidecar (§6.2) | `Object3D` cloned from the cached glTF |
+| `model` | asset key, e.g. `'truck'` | reads the physics sidecar (§6.2) | `Object3D` cloned from the cached glTF |
 | `body` | `'dynamic' \| 'kinematic' \| 'fixed'` or `{ type, lock, ccd, linearDamping, angularDamping, sleep, canSleep, mass, massProps }` | one Rapier rigid body; one collider per sidecar collider | none |
 | `material` | taken per collider from the sidecar; `material: { '*': 'rubber', wheel: 'rubber' }` overrides by part name | collider friction, restitution and density (§3.3) | compiled material (§3.6) |
 | `net` | kind name, e.g. `'vehicle'` | record build and apply (§4.3) | remote smoothing (§4.4) |
@@ -148,7 +148,7 @@ Every block is optional.
 | `fluid.{density, viscosity}` | kg/m³, Pa·s | buoyancy, fluid drag |
 | `sound`, `fx` | cue IDs | audio and fx, from contact events |
 
-*Clarification (built, post-0.13):* `createVehicle(world, e, { backend: 'tire', substeps = 'auto' })` is Rally's model (`src/kits/vehicle/tire.js`): the kit casts each wheel's ray and runs its spring and damper (`suspension: { rest = 0.3, stiffness, bump, rebound }`, defaults from the chassis mass), then steps the tire (brush patch with relaxation lengths, combined-slip Magic Formula with `B = tan(π / 2C)`, load sensitivity, low-speed damper), rolling resistance (`crr`) and the wheel's spin (`inertia = 1`) `substeps` times per step; `'auto'` keeps each substep at 1/1920 s or less, where the explicit integration is stable. Surface drag (`drag`) and the tire and spring forces are applied as impulses at the contact points. Controls are `steer`, `engine` (drive torque at the wheel, N m) and `brake` (torque, ≥ 0). The surface is the pair's `tire` block (`pair(tyre, ground).tire`), else dry asphalt. Each wheel also reports `omega`, `kappa`, `alpha`, `fx`, `fy` and `surface`. Rally-only parts (plow, snow, anti-roll bars, aero drag, assists) stay in the game.
+*Clarification (built, post-0.13):* `createVehicle(world, e, { backend: 'tire', substeps = 'auto' })` is a racing tire model (`src/kits/vehicle/tire.js`): the kit casts each wheel's ray and runs its spring and damper (`suspension: { rest = 0.3, stiffness, bump, rebound }`, defaults from the chassis mass), then steps the tire (brush patch with relaxation lengths, combined-slip Magic Formula with `B = tan(π / 2C)`, load sensitivity, low-speed damper), rolling resistance (`crr`) and the wheel's spin (`inertia = 1`) `substeps` times per step; `'auto'` keeps each substep at 1/1920 s or less, where the explicit integration is stable. Surface drag (`drag`) and the tire and spring forces are applied as impulses at the contact points. Controls are `steer`, `engine` (drive torque at the wheel, N m) and `brake` (torque, ≥ 0). The surface is the pair's `tire` block (`pair(tyre, ground).tire`), else dry asphalt. Each wheel also reports `omega`, `kappa`, `alpha`, `fx`, `fy` and `surface`. Game-specific parts (plows, anti-roll bars, aero drag, driver assists) stay in the game.
 
 ### 3.3 Materials on colliders
 
@@ -168,7 +168,7 @@ Every block is optional.
 
 ### 3.5 Ground lookup
 
-- **[M-10]** Terrain provides `materialAt(x, z) → materialId`. Wheel contacts, feet and particles use it. It replaces Rally `SURFACES` and Tractor Pickup `DIRT`.
+- **[M-10]** Terrain provides `materialAt(x, z) → materialId`. Wheel contacts, feet and particles use it. Games use it instead of their own surface tables.
 
 ### 3.6 View: material compiler
 
@@ -221,10 +221,10 @@ Every block is optional.
 ### 4.3 Replication
 
 - **[N-8]** Kinds are declared with `kind({ name, code, authority, remote, max, idMin, idMax, fields, record?, apply?, newer? })`. They use the field types `F.fixed`, `F.uint`, `F.bool`, `F.angle`, `F.quat`, `F.oneOf`, `F.obj`, `F.list` and `F.id`, plus:
-  - `F.body()`: position, rotation, linear velocity and spin, at Tractor Pickup's current precision. A replicated entity's kind range applies to `e.netId`, not `e.id` (D7);
+  - `F.body()`: position, rotation, linear velocity and spin, at fixed precision (position 1/64 m across, 1/256 m up). A replicated entity's kind range applies to `e.netId`, not `e.id` (D7);
   - `F.actions(map)`: an action snapshot (§5.3); `F.uint(bytes, max, min = 0)` takes a lower bound.
 
-  The codec lives in `lion-hawk/sim` (moved from Tractor Pickup's `replica.js`, `interp.js` and `forecast.js` with no behaviour change): `F`, `kind`, `createRegistry`, `encodeRecord`, `encodeFrame`, `decodeFrame`, `isFrame`, `createTracker`, `createStore`, `frameToJson` / `frameFromJson` (a decoded frame as plain JSON, for `net.frame` commands and tapes), `createInterp`, `createForecast` and `createRate` / `createWarnOnce`.
+  The codec lives in `lion-hawk/sim`: `F`, `kind`, `createRegistry`, `encodeRecord`, `encodeFrame`, `decodeFrame`, `isFrame`, `createTracker`, `createStore`, `frameToJson` / `frameFromJson` (a decoded frame as plain JSON, for `net.frame` commands and tapes), `createInterp`, `createForecast` and `createRate` / `createWarnOnce`.
   - **Wire messages.** `checkSchema(fields, data)` returns a checked copy (unknown keys dropped) or null; `wireCodec(table, { codec })` encodes a tag and its fields as `{ t: tag, ...fields }` (`json`) or an `ArrayBuffer` `[0x20, tag index, fields packed as replica fields]` (`binary`). Binary `fixed`, `angle` and `quat` quantise exactly like the replica, so their round-trip is lossy (`angle` comes back in [0, 2π)).
 - **[N-9]** An entity with a `net` part is replicated automatically:
   - The default record is the kind's fields read from the entity, with `body` taken from Rapier.
@@ -282,7 +282,7 @@ A peer is a page; a player is a person. A peer carries one or more players, one 
 - **[N-23] Away, leave and rejoin.** (built, plan 3) `peerAway`/`peerBack` set and clear `away` on the peer's players and keep everything. `peerLeft` despawns the peer's owner entities (as before) and moves its players to an inactive list for `rejoinSeconds` (`defineGame({ net: { rejoinSeconds } })`, default 60). A `net.hello` whose key and seat match an inactive player gets the same number and `lh.player` record back (Unreal `FindInactivePlayer` + `OverridePlayerState`). On expiry the number is freed; reusing it starts fresh (relay clock and store entry cleared).
 - **[N-24] Several numbers per peer.** (built, plan 3) `net.locals` is the set of this page's numbers; `net.self` is seat 0's number: 1 on the host, a guest's seat 0 number once that seat is confirmed, else 0. The spawn guard accepts an owner entity whose `netId` is in `net.locals`. The host accepts a guest frame only if every owner record in it belongs to a number bound to the frame's `from`. A peer sends one frame per send tick carrying every local seat's records; rate windows stay per peer ([N-3]). The host relays and clocks each record by its owner number.
 - **[N-25] Going online.** (built, plan 3) When a page joins as a guest, its seats are renumbered by `net.welcome`, each controller's `player` changes, and `player.renumbered` fires per seat so the game can rekey or respawn pawns. On `closed` (going solo), local seats keep their numbers.
-- **Rulings (plan 3, 2026-10-21).** The key reaches the sim in `net.open` from `createPort({ key })`, as four uint32 words, made by `crypto.randomUUID` or, off a secure context, `getRandomValues` (S4). The game state is `defineGame({ gameState })` (not `state`, which stays [D-4]), and player and game state field names may not be entity parts (N7). `net.join: 'engine' | 'manual'` defaults to `'engine'`; a manual-join game (Tractor today) must set `join: 'manual'`. `lh.player` and `lh.game` exist and replicate only with `'engine'` (a manual join's frames are the game's alone and `engine.players` is host-local, B3). Every online `lh.seat` is numbered by the net part from the controllers and the roster together (B1); a host-assigned number that clashes with another of this page's seats moves that seat to a free number first. `net.reasons` extends the built-in reasons (`full`, `seats`, `schema`, `admit`, `busy`, `taken`); `net.refused { seat, reason }` reaches the guest's game as `player.refused`. A hello without seat 0 is refused `'seats'` (S5); a seat that joins after the hello is asked for after the welcome (S1). A guest-originated admit failure (a throwing `admit` or a broken admit contract) is refused `'admit'` and warned, and never halts the host; the host's own seats still throw, so `net.admit: player <n> is taken` throws mid-step on a local seat by design (N9). `net.seat` ops have a 0.5 s per-peer cooldown (sim time), refused `'busy'`; the guest asks again. Guest records that make game hooks (spawn, spawned, apply, the kind contract) throw are dropped with a warning once per sender and kind, on the host and on other guests, and the host never relays them. A removal of a free number in a guest frame is ignored (S2); a number given again is relayed only after its old object's removals (S3). `lh.player`'s engine fields are `seat, away, active, join`. `maxSeats` applies with a custom `admit` and to the host's seats. A hello whose key and seat match a player bound to another peer takes that player over (same number and record, `away` cleared) only while the old peer is away (`peerAway`); while the old peer is live it is refused `'taken'` and the new page's hellos keep asking (a peer that knows another's key never steals a live seat); once the old peer has left, the player is inactive and rejoins as [N-23]. A rejoin clears `away` and fires `player.joined { rejoined: true }`, not `player.back`. `net.schema` is the [N-6] hash, carried in `net.hello`. `world.net.players` is replaced by `world.net.bindings`. Solo, `net.self` is seat 0's number (1 at start, was 0) and its setter is ignored (N5). The relay is per owner number, so host-to-guest frames scale with seats (N3, accepted: batch later if rates bite).
+- **Rulings (plan 3, 2026-10-21).** The key reaches the sim in `net.open` from `createPort({ key })`, as four uint32 words, made by `crypto.randomUUID` or, off a secure context, `getRandomValues` (S4). The game state is `defineGame({ gameState })` (not `state`, which stays [D-4]), and player and game state field names may not be entity parts (N7). `net.join: 'engine' | 'manual'` defaults to `'engine'`; a manual-join game must set `join: 'manual'`. `lh.player` and `lh.game` exist and replicate only with `'engine'` (a manual join's frames are the game's alone and `engine.players` is host-local, B3). Every online `lh.seat` is numbered by the net part from the controllers and the roster together (B1); a host-assigned number that clashes with another of this page's seats moves that seat to a free number first. `net.reasons` extends the built-in reasons (`full`, `seats`, `schema`, `admit`, `busy`, `taken`); `net.refused { seat, reason }` reaches the guest's game as `player.refused`. A hello without seat 0 is refused `'seats'` (S5); a seat that joins after the hello is asked for after the welcome (S1). A guest-originated admit failure (a throwing `admit` or a broken admit contract) is refused `'admit'` and warned, and never halts the host; the host's own seats still throw, so `net.admit: player <n> is taken` throws mid-step on a local seat by design (N9). `net.seat` ops have a 0.5 s per-peer cooldown (sim time), refused `'busy'`; the guest asks again. Guest records that make game hooks (spawn, spawned, apply, the kind contract) throw are dropped with a warning once per sender and kind, on the host and on other guests, and the host never relays them. A removal of a free number in a guest frame is ignored (S2); a number given again is relayed only after its old object's removals (S3). `lh.player`'s engine fields are `seat, away, active, join`. `maxSeats` applies with a custom `admit` and to the host's seats. A hello whose key and seat match a player bound to another peer takes that player over (same number and record, `away` cleared) only while the old peer is away (`peerAway`); while the old peer is live it is refused `'taken'` and the new page's hellos keep asking (a peer that knows another's key never steals a live seat); once the old peer has left, the player is inactive and rejoins as [N-23]. A rejoin clears `away` and fires `player.joined { rejoined: true }`, not `player.back`. `net.schema` is the [N-6] hash, carried in `net.hello`. `world.net.players` is replaced by `world.net.bindings`. Solo, `net.self` is seat 0's number (1 at start, was 0) and its setter is ignored (N5). The relay is per owner number, so host-to-guest frames scale with seats (N3, accepted: batch later if rates bite).
 
 ---
 
@@ -293,7 +293,7 @@ A peer is a page; a player is a person. A peer carries one or more players, one 
 - **[R-1]** In the browser, the view's driver (`createDriver`, started by `boot`) runs `requestAnimationFrame` and feeds the engine its timestamp. The engine loop has no rAF of its own. Frame time is clamped to `sim.maxFrame` (default 0.25 s).
 - **[R-2] Fixed steps.** The sim runs fixed steps of `1/hz` from an accumulator, at most `maxCatchUp` per frame. Leftover time beyond the cap is dropped and counted as a clamped frame.
 - **[R-3]** The view draws with `alpha = acc / dt`.
-- **[R-4]** Each game sets its own rate: `sim: { hz, maxCatchUp }`. Defaults are `{ hz: 60, maxCatchUp: 3 }`; Rally uses `{ hz: 240, maxCatchUp: 12 }`. Substeps belong to kits.
+- **[R-4]** Each game sets its own rate: `sim: { hz, maxCatchUp }`. Defaults are `{ hz: 60, maxCatchUp: 3 }`; a racing game may use `{ hz: 240, maxCatchUp: 12 }`. Substeps belong to kits.
 - **[R-5] Hidden tab.** While the tab is hidden the loop pauses and resets its clock on return. A host keeps sending net state from a timer while hidden.
 - **[R-6]** Stages run in this order:
   ```
@@ -338,14 +338,14 @@ A peer is a page; a player is a person. A peer carries one or more players, one 
     - The stick takes `origin: 'thumb' | 'centre'` (#53): `'centre'` is a fixed adopted pad that deflects from its centre on pointerdown and is never hidden or moved. A floating stick with a 24 px left-edge guard and a radial dead zone (or a one-axis slider mode), plus hold buttons. `bindStick` calls `preventDefault` on the pointerdown it accepts (option `preventDefault`, default on), guards a non-positive or non-finite `radius()` (falls back to 70) and a knob-less adopted base. `bindHold(engine, el, action, { source, value, focus = false })` stops the button taking focus on pointerdown/mousedown unless `focus: true` (#42); Space and Enter stay the game's.
     - `bindPointer(engine, { surface, type, at, filter, ignore, edge, tap, press, doc })` turns pointer gestures into commands ([I-7]) of the given `type` with data `{ phase: 'down' | 'move' | 'up' | 'cancel' | 'tap' | 'press', pointer, button, kind, ...at(clientX, clientY, event, phase) }` (#5, #8, #52; `at()` gets the phase being built, so a game can silence moves but keep the press). It owns the gesture: filters (`filter.pointerType`, `filter.button`), an `ignore` selector (UI controls by default), an `edge` guard, pointer capture, window routing of move/up/cancel, a second finger cancelling the active gesture (and blocking until all lift), cancel on blur, pagehide and a hidden tab, moves coalesced to one per `update(dt)`, a tap (up within `tap.move` px, default 12, and `tap.seconds`, default 0.45, with no `press`) and an optional long press after `press` seconds. The reserved keys cannot be overridden by `at()`; if `at()` returns null on down the gesture is silent, and a null on move or press sends nothing. `at()` supplies the payload (a ground hit, a ray, an entity hint) so the sim does the picking and a replay reproduces it; `bindPointer` never sees three.js. Time counts only `update(dt, raw)` (`raw` with `uncapped: true`), never wall-clock timers.
     - Devices get frame time capped at the loop's `maxFrame` (#44), so ramps do not jump after a long frame: the driver calls `device.update(dt, raw)`, `raw` the uncapped frame time (#56). `bindPointer({ uncapped: true })` counts its long press on `raw`, so it takes `press` seconds at any frame rate.
-    - **The map hook (#8, #81).** `bindStick`, `bindKeyboard` and `bindGamepad` all take the option `map: { from: [nx, ny], to(x, y, out), radial = 0 }` (`bindGamepad(engine, bindings, { getGamepads, source, map })`, the same `(engine, bindings, opts)` shape as `bindKeyboard`). The device's bindings may target the virtual names `nx`, `ny` instead of actions; on every write and every `update` the device feeds its virtual pair, after a radial dead zone `radial`, to `to` with a reused `out` and writes `out`'s keys (actions) in place of the virtual names, which never reach `engine.input`. `to()` writes into the passed `out`; its return value is ignored. The device's own dead zone (the stick's `deadZone`, the pad's per-axis `deadZone`) applies **before** `map.radial`, so a Tractor-style radial dead zone needs the device's `deadZone: 0`. With paired actions ([I-1]) the merge across devices picks the longest vector, a tie going to the first registered source. `bindStick` returns `{ update, dispose }`; `update()` re-applies the map while a finger is down (the camera may turn under a still thumb) and is a no-op without a map.
+    - **The map hook (#8, #81).** `bindStick`, `bindKeyboard` and `bindGamepad` all take the option `map: { from: [nx, ny], to(x, y, out), radial = 0 }` (`bindGamepad(engine, bindings, { getGamepads, source, map })`, the same `(engine, bindings, opts)` shape as `bindKeyboard`). The device's bindings may target the virtual names `nx`, `ny` instead of actions; on every write and every `update` the device feeds its virtual pair, after a radial dead zone `radial`, to `to` with a reused `out` and writes `out`'s keys (actions) in place of the virtual names, which never reach `engine.input`. `to()` writes into the passed `out`; its return value is ignored. The device's own dead zone (the stick's `deadZone`, the pad's per-axis `deadZone`) applies **before** `map.radial`, so a radial dead zone needs the device's `deadZone: 0`. With paired actions ([I-1]) the merge across devices picks the longest vector, a tie going to the first registered source. `bindStick` returns `{ update, dispose }`; `update()` re-applies the map while a finger is down (the camera may turn under a still thumb) and is a no-op without a map.
     - **Gestures (#59).** `bindGesture(engine, el, { tap, hold: { seconds, fire }, drag, pinch, tapMove = 12, tapSeconds = 0.45, ignore, doc, now })` → `{ update(dt, raw), dispose() }` is a view-only gesture reader (no commands) with `bindPointer`'s routing. `tap(e)`; `hold.fire(e)` once per press, on the first `update` at least `hold.seconds` after the down event's `timeStamp` (read on `now()`, default `performance.now`, the same clock; an injected `now` must read the clock of `event.timeStamp`), within `tapMove` px. A lift taps when `up.timeStamp − down.timeStamp < tapSeconds`. Summed frame time is not used, so a tap stays a tap at any frame rate (#109); `uncapped` is accepted and ignored, and `now` is injectable for tests; `drag({ dx, dy, phase })` for one finger past `tapMove`; `pinch({ scale, rotate, panX, panY, phase })` for two fingers. Values are cumulative from the gesture's start; phases are `start | move | end`, with at most one `move` per `update`; a second finger ends a one-finger gesture (no tap, no hold), a lift ends either, and the payload objects are reused.
     - Fingers are tracked by `pointerId`. `pointerdown` (and `lostpointercapture`) listen on the surface element. Moves, `pointerup` and `pointercancel` are routed by `pointerId` on the window, because iOS does not reliably retarget captured moves.
     - `pointercancel` and `lostpointercapture` count as a release.
     - The root has `touch-action: none`.
 - **[I-3]** On `blur` and `visibilitychange`, every held action is released.
 - **[I-4]** Once per step (`input.apply`), each controller's snapshot is copied into the pawn it possesses as `e.input` ([C-3]). Systems read only `e.input`. (Rewritten 2026-10-21: the single "local player's actor" became per-controller possession.)
-- **[I-5]** Game-specific interpretation (for example Tractor Pickup's point-to-go stick) is a system in `input.apply` that the game registers.
+- **[I-5]** Game-specific interpretation (for example a point-to-go stick) is a system in `input.apply` that the game registers.
 - **[I-6]** `engine.input.set(snapshot)`, `hold(snapshot)` and `release()` override device input for tests and bots.
 - **[I-8] Pad edges.** `createPadEdges({ getGamepads })` (view) reads every pad on the standard mapping (`PAD_BUTTONS`) once per `update()`, without allocating: `dir` is one direction per push of the D-pad or of the left stick (a push crosses 0.5 on its main axis; the stick re-arms when both axes are under 0.3), `pressed`/`released`/`down` per button, `active` when something was pressed or pushed, and `family` of the pad in use (`familyOf`: Sony `054c` → `ps`, Valve `28de` → `deck`, Microsoft or a standard mapping → `xbox`, else `generic`).
 - **[I-7] Commands.** `engine.command(type, data = {})` queues a typed message for the sim: positional input, network messages, view acks (#5). It is the third input layer, after the action snapshot.
@@ -432,8 +432,8 @@ Where state goes:
 - **Rulings (plan 2, 2026-10-21).** Context entries are `pads: [{ match, bindings, map, mappable }]` and `keys: { [scheme]: { bindings, ramps, map, mappable } }`, where `bindings` is exactly `bindGamepad`'s or `bindKeyboard`'s object, and `touch: engine => devices`. `mappable` is `{ [name]: defaultInput }`; inputs are `'button:<i>'` / `'axis:<i>'` on a pad and the lower-case key on a keyboard; `map()` moves a binding within its kind and replaces what the target input held. Only the highest context with `touch` binds touch. The default `join` gives a pad seat 0 while seat 0 holds no pad, then `'new'`. Every keyboard scheme and the touch device start on seat 0; a released scheme joins on its next key; touch moves only by `claim`. Pads are polled: an empty slot, `connected: false` or another `id` at the index is a loss; "oldest" for regain is the device lost first. A pad's buttons held when it is paired (join, regain, claim) are masked until let go; axes are not. A pending seat binds the frame after `engine.controllerOf(seat)` returns its controller. Seat events go to `view.onSeat(fn)` (which returns its off function; a scene that registers in `enter` calls it in `exit`), never `engine.events`; `seat.device` carries `op: 'add' | 'remove'`, `seat.joined` and `seat.left` carry `device: null`. `view.unpaired()` lists devices no seat holds. `boot({ storage })` injects the profile store (`null` turns saving off; the default is `window.localStorage`). Offline `lh.seat` takes effect at the next step (commands deliver only in `lh.commands`). A game kind's `read()` that throws is reported once, its paired units' input is cleared each failing frame, and they are not marked lost. `capture()` answers with pad and keyboard inputs only; a game kind binds its own values. An axis edge is a move of more than `JOIN_AXIS` (0.5) from the axis's anchor that is not a move back toward centre (`|v − anchor| > 0.5 && !(v·anchor ≥ 0 && |v| < |anchor|)`, plan 4): it anchors at its first reading (an axis that appears later, at its first) and wherever it has been still (under 0.02 per poll) for 10 polls, never on a first non-zero reading. An axis that reads exactly 0 until touched (a d-pad on axes, Firefox) presses on its first push, and letting a held axis go is never a press. A trigger first seen held at +1 and then released to −1 counts as an edge, because the move crosses centre. Two consequences are accepted: a pedal resting at −1 presses only once it passes centre, and an axis pushed again within 10 polls of releasing a long hold is not a press. The first `view.seats()` call leaves seat 0 only its last-used pad (else its first); every other pad is released, its input cleared, and joins through `join` on its next press. With a custom `join`, a lost seat is regained directly only by a device with the same `id`; another `id` goes through `join` (the default `join` keeps the oldest-loss rule). Adding or removing a context drops held keys and touch (S1).
 
 **Haptics (view).**
-- **[C-14] Haptics.** (built, plan 4) Games call `lp.pad.vibrationActuator.playEffect(...)` and `reset()` themselves, after checking `effects`. The engine only stops rumble it would otherwise leave running: on page hide, blur or a pausing overlay, each affected seat's pads get a zero effect plus `reset()` every frame for 20 frames (a zero `trigger-rumble` on a pad whose `effects` lists it, so a trigger effect sent a frame earlier is cleared too; otherwise a zero `dual-rumble`); a pad seen for the first time gets the same stop once (a zero effect plus `reset()`, as Rally's `rumbleOut.js` does, so a refresh does not leave the previous page's rumble running). Limits: the bench code ships inline in every bundle and is evaluated only behind `?debug=pads`; a pause stops pad rumble for its first 20 frames, so a pause menu's own rumble is cancelled in that window and can start after it. `defineView({ haptics: { autoStop: false } })` turns this off. A game must stop sending rumble while a pausing overlay is open (`view.haptics.paused`); the engine's pause stop runs 20 frames and a game that keeps re-sending would rumble under the menu. `view.haptics.stop(reason)` is the engine's stop for game moments like menus, a finish or a scene exit. Rumble for a remote player is the game's own command to that player's page.
-- **Rulings (plan 4, 2026-10-21).** A stop is a zero effect then `reset()`: `playEffect('trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 })` on a pad whose `effects` lists `trigger-rumble`, else `playEffect('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })`. The pad bench's own stops use the same zero effect. It is sent at once (on `blur`, `pagehide`, a `visibilitychange` to hidden, or the frame a pausing overlay opens) and on each of the next 19 driver frames, 20 rounds in all; a new trigger restarts the count. Hide, blur and pause are page-wide, so every seat is affected; the stops go to every connected pad the seats module knows, seated (`lp.pads`, live pads only) or unpaired. While the page is hidden the driver does not tick, so the remaining rounds run on the frames after it returns. A pausing overlay (any open overlay whose scene has `pauses`) stops once as it opens, not while it stays open, but that stop runs 20 rounds (about 1/3 s): a game's rumble in the 20 frames after a pausing overlay opens is cancelled by design, so a pause menu's own rumble is heard only after its first 20 frames. A game that keeps sending effects after a blur overrides the stop on its next frame. The first-sight stop follows `seat.seen` (once per index and `id` for the page's life) and is a full stop round (zero effect plus `reset()`), as Rally does, clearing what a previous page left playing. Actuators without `playEffect`, and calls that throw or reject, are skipped silently. `defineView({ haptics })` accepts only `{ autoStop: boolean }`; with `autoStop: false` boot builds no haptics device at all.
+- **[C-14] Haptics.** (built, plan 4) Games call `lp.pad.vibrationActuator.playEffect(...)` and `reset()` themselves, after checking `effects`. The engine only stops rumble it would otherwise leave running: on page hide, blur or a pausing overlay, each affected seat's pads get a zero effect plus `reset()` every frame for 20 frames (a zero `trigger-rumble` on a pad whose `effects` lists it, so a trigger effect sent a frame earlier is cleared too; otherwise a zero `dual-rumble`); a pad seen for the first time gets the same stop once (a zero effect plus `reset()`, so a refresh does not leave the previous page's rumble running). Limits: the bench code ships inline in every bundle and is evaluated only behind `?debug=pads`; a pause stops pad rumble for its first 20 frames, so a pause menu's own rumble is cancelled in that window and can start after it. `defineView({ haptics: { autoStop: false } })` turns this off. A game must stop sending rumble while a pausing overlay is open (`view.haptics.paused`); the engine's pause stop runs 20 frames and a game that keeps re-sending would rumble under the menu. `view.haptics.stop(reason)` is the engine's stop for game moments like menus, a finish or a scene exit. Rumble for a remote player is the game's own command to that player's page.
+- **Rulings (plan 4, 2026-10-21).** A stop is a zero effect then `reset()`: `playEffect('trigger-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0, leftTrigger: 0, rightTrigger: 0 })` on a pad whose `effects` lists `trigger-rumble`, else `playEffect('dual-rumble', { startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 })`. The pad bench's own stops use the same zero effect. It is sent at once (on `blur`, `pagehide`, a `visibilitychange` to hidden, or the frame a pausing overlay opens) and on each of the next 19 driver frames, 20 rounds in all; a new trigger restarts the count. Hide, blur and pause are page-wide, so every seat is affected; the stops go to every connected pad the seats module knows, seated (`lp.pads`, live pads only) or unpaired. While the page is hidden the driver does not tick, so the remaining rounds run on the frames after it returns. A pausing overlay (any open overlay whose scene has `pauses`) stops once as it opens, not while it stays open, but that stop runs 20 rounds (about 1/3 s): a game's rumble in the 20 frames after a pausing overlay opens is cancelled by design, so a pause menu's own rumble is heard only after its first 20 frames. A game that keeps sending effects after a blur overrides the stop on its next frame. The first-sight stop follows `seat.seen` (once per index and `id` for the page's life) and is a full stop round (zero effect plus `reset()`), clearing what a previous page left playing. Actuators without `playEffect`, and calls that throw or reject, are skipped silently. `defineView({ haptics })` accepts only `{ autoStop: boolean }`; with `autoStop: false` boot builds no haptics device at all.
 
 ---
 
@@ -490,16 +490,16 @@ Where state goes:
 |---|---|
 | `lion-hawk dev` | esbuild watch + live reload server; rebakes changed models |
 | `lion-hawk bake` | §6 |
-| `lion-hawk build [--mode single\|shared]` | bundles the game, writes `--out` (else `$<outEnv>`; with `--site`, the default `site/exp/<site>/`), stamps the PWA |
+| `lion-hawk build [--mode single\|shared]` | bundles the game, writes `--out` (else `$<outEnv>`, else `build.out`, default `build/` in the game dir), stamps the PWA |
 | `lion-hawk test [--visual]` | `node --test` for the game + engine checks; `--visual` adds `@visual` Playwright tests |
 | `lion-hawk release` | bump version → bake → build → test → commit; push stays manual |
 
-- *Clarification (built, post-0.13):* `lion-hawk test [--game] [--visual]` runs `node --test` over the game's `test.dir` (default `test`) and, when `game.config.js` names `test.game` (the module whose default export is the game), a generated file with the engine checks: `determinism`, `materials`, `simPurity` over `test.roots` when given, and `zeroAlloc` with `test.zeroAlloc: true`. Tests whose names contain `@visual` are skipped unless `--visual` (`$LH_VISUAL` is `1` then). `lion-hawk release [--game] [--bump patch|minor|major] (--out | $<outEnv>) [--site]` needs a clean git tree; it bumps `package.json`, bakes, builds and tests, then commits `release: <id> <version>`. A failing step restores `package.json` and commits nothing. It never pushes or tags.
+- *Clarification (built, post-0.13):* `lion-hawk test [--game] [--visual]` runs `node --test` over the game's `test.dir` (default `test`) and, when `game.config.js` names `test.game` (the module whose default export is the game), a generated file with the engine checks: `determinism`, `materials`, `simPurity` over `test.roots` when given, and `zeroAlloc` with `test.zeroAlloc: true`. Tests whose names contain `@visual` are skipped unless `--visual` (`$LH_VISUAL` is `1` then). `lion-hawk release [--game] [--bump patch|minor|major] [--out]` needs a clean git tree; it bumps `package.json`, bakes, builds and tests, then commits `release: <id> <version>`. A failing step restores `package.json` and commits nothing. It never pushes or tags.
 - **[B-1]** The CLI is Node only; it replaces `build.py`, `bake.mjs` and `dev.mjs`.
-- **[B-2]** Game-specific build steps (for example Tractor Pickup's voice and animal audio embedding) are hooks declared in `game.config.js`.
+- **[B-2]** Game-specific build steps (for example embedding generated audio) are hooks declared in `game.config.js`.
 - **[B-3] Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page: the build writes the bundle at the template's bare `<!--APP-->` marker as an inline `<script type="module">` (D1).
-- **[B-4] Shared mode** (phase 9) serves the engine, three.js, Rapier and shared models from `/exp/lion-hawk/<version>/`.
-  - *Clarification (built, post-0.13: the engine side):* `lion-hawk build --mode shared` keeps `lion-hawk/*`, `three`, `three/*` and `@dimforge/rapier3d-compat` out of the game's bundle and writes a `<script type="importmap">` into `<head>` that maps each one the game (or the engine) imports to the pack. The pack, by default `<out>/../lion-hawk/<engine version>/` served at `/exp/lion-hawk/<version>/` (`build.shared: { dir, base }`; a dir under `site/exp/` needs `--site`), holds every lion-hawk browser entry (`sim`, `view`, `net`, each kit's sim and view) built in one call with code splitting, so they share one engine core, plus three, each three subpath and Rapier, one file each. File names carry content hashes, so a second game reuses the same files and adds none. Each game's own service worker precaches every pack file its build wrote or reused (the lion-hawk entries and chunks, and the three and Rapier files it needs), and `build()` returns them as `shared: { dir, base, files, imports }`. Not built yet: one service worker across `/exp/` and a shared model pack.
+- **[B-4] Shared mode** (phase 9) serves the engine, three.js, Rapier and shared models from one versioned pack that several games share.
+  - *Clarification (built, post-0.13: the engine side):* `lion-hawk build --mode shared` keeps `lion-hawk/*`, `three`, `three/*` and `@dimforge/rapier3d-compat` out of the game's bundle and writes a `<script type="importmap">` into `<head>` that maps each one the game (or the engine) imports to the pack. The pack, by default `<out>/../lion-hawk/<engine version>/` and mapped at `../lion-hawk/<version>/` relative to the page (`build.shared: { dir, base }`), holds every lion-hawk browser entry (`sim`, `view`, `net`, each kit's sim and view) built in one call with code splitting, so they share one engine core, plus three, each three subpath and Rapier, one file each. File names carry content hashes, so a second game reuses the same files and adds none. Each game's own service worker precaches every pack file its build wrote or reused (the lion-hawk entries and chunks, and the three and Rapier files it needs), and `build()` returns them as `shared: { dir, base, files, imports }`. Not built yet: one service worker across the games and a shared model pack.
 - **[B-5]** Every build stamps the game version, the engine version and a content hash into the page and the service worker.
   - *Clarification (phase 3, 0.8.0; 3d C8):* the page gets a `lion-hawk-build` meta; the service worker's `__VERSION__` becomes `<gameVersion>+lh<engine>-<hash>` and its `__PRECACHE__` the file list. `--e2e` builds are unminified and write no `sw.js`. `build({ game, out, e2e })` from `lion-hawk/build` returns `{ out, version, hash, files, sizes }`, plus `shared` in shared mode ([B-4]). `lion-hawk dev` also takes `--host` (default `0.0.0.0`).
 
@@ -535,7 +535,7 @@ Where state goes:
   - **settling:** `settled()`;
   - **view:** `view.project` (set by the game's view half; world targets call it), `ui.tree()`;
   - **other:** `rng(name)`, `policies`, and the game's `debug()` extras.
-- **[D-5]** `window.rally` is removed (Rally has migrated). `window.piggies` and `window.tp` remain as aliases until their games finish phase 2.
+- **[D-5]** A game's debug helpers come from its definition (`game.debug(engine)`) and drive `window.engine`. The engine adds no per-game window globals.
 - **[D-6]** `settled()` is true when:
   - no asset, font or shader loads are pending (including promises handed to `view.wait`);
   - no scene load is active (`engine.loading.active`, [S-6]);
@@ -635,7 +635,7 @@ Local players (draft 2026-10-21):
 - **[T-24] Fake pads.** (built, plan 4) The Playwright fake pads ([T-20]'s `pads: 'fake'`) hold any number of pads: `game.pad(index, state)` plugs or updates one (with optional `id` and `mapping`), `game.unplug(index)` removes it and fires `gamepaddisconnected`. Each fake pad has a `vibrationActuator` with a settable `effects` list that records every `playEffect` and `reset` call, read with `game.haptics(index)`. Rulings (plan 4): `game.pad(state)` is `game.pad(0, state)`; `game.pad(null)` and `game.pad(index, null)` unplug like `game.unplug(index)`; plugging an empty slot fires `gamepadconnected`; indexes are integers 0..15; `navigator.getGamepads()` returns a new array each call with `null` in empty slots (trailing ones trimmed). The actuator lists `['dual-rumble', 'trigger-rumble']` unless `effects` is given; `effects: null` gives that state no `vibrationActuator`; an unlisted effect rejects `NotSupportedError`; the actuator and its call log stay with the index until a pad with another `id` plugs in there. `game.haptics(index)` is `{ effects, calls }` (`{ op: 'playEffect', type, params }` / `{ op: 'reset' }`) or `null`.
   - *Note (plan 5):* a bare `game.pad()` or `game.pad(undefined)` is `game.pad(null)` (pad 0 unplugged), as in 0.12; `'1'`, `true`, `NaN`, and `undefined` with a state, still throw.
 - **[T-25] State homes.** (built, plan 5) Each migrated game has headless tests that player state survives a respawn and a rejoin, and that game state reaches a late joiner.
-  - *Ruling (plan 5):* a game with no net part (Rally, Pig Pens) tests the offline half: player 1's record outlives the pawn changing and game state follows the sim; the rejoin and late-joiner halves apply to networked games (Tractor Pickup).
+  - *Ruling (plan 5):* a game with no net part tests the offline half: player 1's record outlives the pawn changing and game state follows the sim; the rejoin and late-joiner halves apply to networked games.
 
 ### 7.6 Deferred
 
@@ -651,28 +651,27 @@ Both build on §7.4–7.5 and are added once enough flows exist to shape them.
 ### 8.1 Layout
 
 ```
-games/
-├── package.json              # npm workspaces: lion-hawk-engine, pig-pens, rally, tractor-pickup
-├── lion-hawk-engine/         # package "lion-hawk"
-│   ├── package.json          # peerDependencies: three ^0.186, @dimforge/rapier3d-compat ^0.21
-│   ├── src/
-│   │   ├── core/             # loop clock, rng, math, events, flags, scenes, engine object   (sim)
-│   │   ├── defs/             # materials, kinds, field types                               (sim)
-│   │   ├── sim/              # world/entities, physics wrapper, fields, replication        (sim)
-│   │   ├── view/             # rAF driver, renderer, material compiler, assets, audio,
-│   │   │                     # input devices, ui helpers, debug overlays, pwa client       (view)
-│   │   ├── net/              # lion-hawk/net: transport.js (hub, lag, room link), port.js;
-│   │   │                     # rtc (the game's vendored handshake.js), bridge                (net)
-│   │   └── kits/<kit>/       # vehicle, terrain, herd, coverage, fx — each sim/ + view/
-│   ├── testing/              # lion-hawk/test (headless, replay, mp), lion-hawk/playwright
-│   ├── tools/                # lion-hawk CLI
-│   ├── test/                 # engine tests
-│   └── docs/                 # design.md, research*.md, spec.md, plans/
-└── <game>/
-    ├── game.config.js        # id, version, netVersion, sim, build hooks, PWA, model settings
-    ├── src/game.sim.js       # defineGame sim half: defs, actions, kits, scenes (sim), policies
-    ├── src/game.view.js      # view half: scene views, camera rigs, HUD
-    ├── assets/  test/
+lion-hawk-engine/             # package "lion-hawk"
+├── package.json              # peerDependencies: three ^0.186, @dimforge/rapier3d-compat ^0.21
+├── src/
+│   ├── core/                 # loop clock, rng, math, events, flags, scenes, engine object   (sim)
+│   ├── defs/                 # materials, kinds, field types                               (sim)
+│   ├── sim/                  # world/entities, physics wrapper, fields, replication        (sim)
+│   ├── view/                 # rAF driver, renderer, material compiler, assets, audio,
+│   │                         # input devices, ui helpers, debug overlays, pwa client       (view)
+│   ├── net/                  # lion-hawk/net: transport.js (hub, lag, room link), port.js,
+│   │                         # bridge                                                      (net)
+│   └── kits/<kit>/           # vehicle, terrain, coverage, fx, glyphs: sim.js and/or view.js
+├── testing/                  # lion-hawk/test (headless, replay, mp), lion-hawk/playwright
+├── tools/                    # lion-hawk CLI
+├── test/                     # engine tests
+└── docs/                     # agents.md, spec.md, specs/as-built/, design.md, research*.md, field-notes.md
+
+<game>/                       # any game, in its own repo, with lion-hawk as a dependency
+├── game.config.js            # id, version, netVersion, sim, build hooks, PWA, model settings
+├── src/game.sim.js           # defineGame sim half: defs, actions, kits, scenes (sim), policies
+├── src/game.view.js          # view half: scene views, camera rigs, HUD
+├── assets/  test/
 ```
 
 ### 8.2 Game contract
@@ -680,7 +679,7 @@ games/
 ```js
 // src/game.sim.js — headless-safe
 export default defineGame({
-  id: 'tractor-pickup',
+  id: 'farm-run',
   sim: { hz: 60, maxCatchUp: 3 },
   defs: { materials: MATERIALS, kinds: KINDS },
   actions: actions({ steer: axis(), throttle: axis(), horn: button(), pause: button() }),
@@ -707,26 +706,25 @@ export default defineView({ scenes: { title, farm, show, reward } }); // view ha
   - three.js and Rapier are peer dependencies, and the esbuild config forces one copy of each. `lion-hawk/build` exports `dedupe({ root, packages = ['three', '@dimforge/rapier3d-compat'] })`, an esbuild plugin that re-resolves those packages (and their subpaths) from the game's `root`, so the engine and the game share one copy (#11). It lives in `tools/`, not `src/`: engine sim source imports neither three nor Rapier, and engine view source imports three directly (D9). `lion-hawk build` calls the esbuild API with this plugin.
   - Each game build bundles a snapshot of the engine.
 - **[G-3]** The engine has its own semver version (0.x until migration ends) and a `CHANGELOG.md`.
-- **[G-4]** `npm test` in `games/` runs every workspace's tests. An engine change ships only when all of them pass.
+- **[G-4]** `npm test` runs the engine's tests. An engine change ships only when they pass.
 
 ### 8.4 Migration phases
 
 | # | Phase | Done when |
 |---|---|---|
 | 0 | Workspace; engine skeleton (`rng`, `math`, `events`, `flags`, `window.engine` with aliases); first headless helpers; **one golden/replay test per game written against today's code** | every game builds from the workspace; goldens pass |
-| 1 | Version alignment: Pig Pens and Rally → three 0.186; Rally → Rapier 0.21 | goldens pass or are re-blessed with a written reason |
-| 2 | Loop, scenes, input actions and UI helpers in all three games. Rally `Game` → scenes; Tractor Pickup trip flow → scenes ([S-4]); Pig Pens `main()` split. Playwright helpers land | each game runs on the engine loop; a headless end-to-end flow test per game |
+| 1 | Version alignment: three 0.186 and Rapier 0.21 | goldens pass or are re-blessed with a written reason |
+| 2 | Loop, scenes ([S-4]), input actions and UI helpers. Playwright helpers land | a game runs on the engine loop; a headless end-to-end flow test |
 | 3 | Tooling: CLI, glTF bake + sidecars, runtime glTF loading; `assets.json`, `build.py`, `bake.mjs` retired | builds are equal in behaviour; size measured against today |
 | 4 | Entities and materials: `World`, parts, registry, pairs, ground lookup; hard-coded friction, `SURFACES` and `DIRT` replaced | no literal friction/density in game code |
-| 5 | Netcode in the engine, driven by `net` parts, including driven remote actors ([N-12]–[N-17]); Tractor Pickup first; `test.peers` | the bump test (§4.4) passes under 80 ms latency and 2% loss |
-| 6 | `kit-vehicle` (both tractors merged; Rally tire model as a second backend) and `kit-terrain` | three games on the kits |
+| 5 | Netcode in the engine, driven by `net` parts, including driven remote actors ([N-12]–[N-17]); `test.peers` | the bump test (§4.4) passes under 80 ms latency and 2% loss |
+| 6 | `kit-vehicle` (raycast backend; tire model as a second backend) and `kit-terrain` | games on the kits |
 | 7 | `kit-coverage`, `kit-herd`, `kit-fx` | mud, dirt and snow on one system |
 | 8 | Fields: wind, aero, buoyancy, magnet; panel bake | field tests with analytic expectations |
-| 9 | Shared build mode and one service worker across `/exp/` | second game loads only its own files |
+| 9 | Shared build mode and one service worker across games | a second game loads only its own files |
 
-- **[G-5]** Each phase gets its own plan in `docs/plans/`.
+- **[G-5]** Each phase gets its own plan.
 - **[G-6]** A phase is done when every game's tests, the goldens and the Playwright smoke tests pass, and each changed game is version-bumped and deployed.
-- **[G-7]** Work happens on a `feat/lion-hawk` worktree. Rally's uncommitted game-loop work is committed before phase 0.
 
 ---
 
@@ -742,7 +740,6 @@ export default defineView({ scenes: { title, farm, show, reward } }); // view ha
 
 ## 10. Still open
 
-- **Skerry Island and other sources.** The plane sims, jet ski and Surface booth (referenced in `design.md`) have no code in this repo. Before phase 8, locate them or treat their lessons as requirements only.
 - **CI.** Nothing runs the game tests automatically today; GitHub Actions only deploys the site. Decide whether `npm test` (and `--visual` in a pinned container) runs on push.
-- **Pad text entry.** The menu navigator skips text inputs (Rally's track seed, Tractor Pickup's seed and room code), so a pad can't type: decide between a digit picker, an on-screen keyboard or skip-only (#138).
+- **Pad text entry.** The menu navigator skips text inputs (a seed or a room code), so a pad can't type: decide between a digit picker, an on-screen keyboard or skip-only (#138).
 - **Handshake vendoring.** How `handshake.js` updates flow from the Handshake repo into `lion-hawk-engine/src/net/transport/rtc/` (copy script plus version stamp is the default).

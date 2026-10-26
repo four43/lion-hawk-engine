@@ -24,7 +24,7 @@ const name = v => typeof v === 'string' && v.length > 0;
 const SHAPE_FIELDS = { box: ['half', 'round'], sphere: ['r'], capsule: ['halfHeight', 'r'], cylinder: ['halfHeight', 'r'], hull: ['points'], mesh: ['vertices', 'indices'] };
 const COMMON = ['shape', 'p', 'q', 'part', 'material'];
 
-// One collider entry. where: the message prefix ('sidecar: tractor', "spawn 'pig'"); path: 'colliders[2]'.
+// One collider entry. where: the message prefix ('sidecar: truck', "spawn 'crate'"); path: 'colliders[2]'.
 // materials: a registry (optional) whose has() every material must pass; parts: the model's part names (optional).
 // inline: true for spawn({ colliders }) entries, where p, q and part may be left out.
 export function validateCollider(c, { where = 'collider', path = 'collider', materials, parts, inline = false } = {}) {
@@ -46,8 +46,8 @@ export function validateCollider(c, { where = 'collider', path = 'collider', mat
   switch (c.shape) {
     case 'box':
       if (!vec3(c.half) || !Array.prototype.every.call(c.half, x => x > 0)) fail('half', 'must be 3 numbers > 0', c.half);
-      // round: optional border radius, Rapier roundCuboid (3c; Rally's hull, 3j #1). Rapier adds it OUTSIDE half, so it may
-      // exceed half (Rally: half y 0.04, round 0.2).
+      // round: optional border radius, Rapier roundCuboid (3c; a car hull, 3j #1). Rapier adds it OUTSIDE half, so it may
+      // exceed half (e.g. half y 0.04, round 0.2).
       if (c.round !== undefined && (!finite(c.round) || c.round <= 0)) fail('round', 'must be a number > 0', c.round);
       break;
     case 'sphere': pos('r'); break;

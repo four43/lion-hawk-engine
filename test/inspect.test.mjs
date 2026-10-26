@@ -12,7 +12,7 @@ const createEngine = (...a) => { const e = makeEngine(...a); engines.push(e); re
 afterEach(() => { for (const e of engines.splice(0)) e.world?.dispose(); });
 
 const boot = n => createEngine(physGame({ build: (e, ctx) => {
-  ctx.world.spawn({ model: 'crate', body: 'dynamic', at: [0, 10, 0], tags: ['crate', 'tractor'], net: 'train', netId: 2 });
+  ctx.world.spawn({ model: 'crate', body: 'dynamic', at: [0, 10, 0], tags: ['crate', 'truck'], net: 'train', netId: 2 });
   for (let i = 1; i < n; i++) ctx.world.spawn({ model: 'crate', body: 'dynamic', at: [i, 10, 0], tags: ['crate'] });
 } }), { seed: 1 });
 
@@ -34,7 +34,7 @@ const pawned = e => { const c = e.controllerOf(0); c.possess(e.world.get(1)); re
 test('an entity with a Rapier body prints as Entity#id [tags, net:kind#id]', () => {
   const ent = boot(1).world.get(1);
   assert.ok(ent.body && ent.colliders.length, 'has a Rapier body');
-  assert.equal(util.inspect(ent), 'Entity#1 [crate, tractor, net:train#2]');
+  assert.equal(util.inspect(ent), 'Entity#1 [crate, truck, net:train#2]');
 });
 test('an entity failing assert does not grow with the World (1 vs 200 entities)', () => bounded(e => e.world.get(1), 20000));
 test('a controller with a pawn: bounded', () => {

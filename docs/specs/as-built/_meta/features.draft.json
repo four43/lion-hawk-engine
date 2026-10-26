@@ -306,7 +306,7 @@
         "test/net-rejoin.test.mjs",
         "test/net-replay.test.mjs",
         "test/net-state.test.mjs",
-        "test/net-tractor.test.mjs",
+        "test/net-train.test.mjs",
         "test/pads-e2e.test.mjs",
         "test/port.test.mjs",
         "test/seats-net.test.mjs",

@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
 import { F, kind, createRegistry, encodeFrame, decodeFrame, encodeRecord, createTracker, createStore, isFrame, FRAME, MAX_FRAME, REPEAT, frameToJson, frameFromJson, axis, button, actions, createRate, createWarnOnce } from '../src/index.sim.js';
 
 const POS = F.fixed(-400, 400, 1 / 64);
@@ -103,29 +102,6 @@ test('the encoder normalizes quaternions and falls back to identity, so our own 
   }
 });
 
-// Byte cross-check (N-8): the engine codec encodes exactly what Tractor Pickup's replica.js encodes. Skipped where the game is not checked out.
-const TRACTOR = new URL('../../four43-lion-hawk/games/tractor-pickup/src/net/replica.js', import.meta.url);
-test('2f: the engine codec encodes the same bytes as Tractor Pickup\'s replica.js', { skip: !existsSync(TRACTOR) && 'tractor-pickup not checked out' }, async () => {
-  const T = await import(TRACTOR.href), E = { F, kind, encodeFrame, encodeRecord, createRegistry, decodeFrame };
-  const mkKinds = L => {
-    const { F: f, kind: k } = L, XZ = f.fixed(-400, 400, 1 / 64), Y = f.fixed(-50, 50, 1 / 256), V = f.fixed(-32, 32, 1 / 1000), W = f.fixed(-16, 16, 1 / 2000);
-    const body = f.obj({ p: f.obj({ x: XZ, y: Y, z: XZ }), q: f.quat(), v: f.obj({ x: V, y: V, z: V }), w: f.obj({ x: W, y: W, z: W }), dirt: f.fixed(0, 1, 1 / 100) });
-    return [
-      k({ name: 'animal', code: 1, authority: 'host', max: 256, idMax: 65000, fields: { type: f.oneOf(['pig', 'cow', 'hen']), golden: f.bool(), hidden: f.bool(), state: f.oneOf(['free', 'busy', 'carried']), owner: f.uint(1, 4), epoch: f.uint(4), x: XZ, y: Y, z: XZ, yaw: f.angle(), leader: f.id(), line: f.uint(1) } }),
-      k({ name: 'train', code: 4, authority: 'owner', max: 1, idMin: 1, idMax: 4, fields: { mode: f.oneOf(['drive', 'show']), full: f.bool(), bodies: f.list(body, 3, 3), riders: f.list(f.obj({ id: f.uint(2, 65000), slot: f.uint(1, 11), flying: f.bool(), x: XZ, yaw: f.angle() }), 16) } }),
-    ];
-  };
-  const [eA, eT] = mkKinds(E), [tA, tT] = mkKinds(T), q = a => ({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) });
-  const animals = [[3, { type: 'cow', golden: true, hidden: false, state: 'carried', owner: 3, epoch: 4000000000, x: 10.5, y: 0.25, z: -7.25, yaw: 500, leader: null, line: 2 }], [65000, { type: 'hen', golden: false, hidden: true, state: 'free', owner: 0, epoch: 7, x: NaN, y: 99, z: 9999, yaw: -1.5, leader: 7, line: 0 }]];
-  const bd = (x, a) => ({ p: { x, y: 0.8, z: -3 }, q: q(a), v: { x: 5.25, y: -0.5, z: 1 }, w: { x: 0, y: 0.75, z: -0.1 }, dirt: 0.4 });
-  const train = { mode: 'show', full: true, bodies: [bd(10, 0.3), bd(7, 0.2), bd(4, 0.1)], riders: [{ id: 30, slot: 0, flying: false, x: 5, yaw: 1.5 }, { id: 31, slot: 11, flying: true, x: -5.5, yaw: 6 }] };
-  const same = (a, b, msg) => assert.deepEqual(Buffer.from(a), Buffer.from(b), msg);
-  same(E.encodeFrame({ key: true, sender: 1, time: 123456, groups: [{ kind: eA, records: animals }] }), T.encodeFrame({ key: true, sender: 1, time: 123456, groups: [{ kind: tA, records: animals }] }), 'key frame');
-  same(E.encodeFrame({ key: false, sender: 2, time: 2 ** 32 + 5, groups: [{ kind: eT, records: [[2, train]], removed: [] }, { kind: eA, records: [], removed: [] }] }), T.encodeFrame({ key: false, sender: 2, time: 2 ** 32 + 5, groups: [{ kind: tT, records: [[2, train]], removed: [] }, { kind: tA, records: [], removed: [] }] }), 'diff with a train');
-  same(E.encodeRecord(eT, 2, train), T.encodeRecord(tT, 2, train), 'record');
-  const buf = T.encodeFrame({ key: true, sender: 1, time: 9, groups: [{ kind: tA, records: animals }] });
-  assert.deepEqual(E.decodeFrame(buf, E.createRegistry([eA, eT], { maxSender: 4 })), T.decodeFrame(buf, T.createRegistry([tA, tT], { maxSender: 4 })), 'decode agrees');
-});
 test('F.uint rejects a bad range', () => {
   assert.throws(() => F.uint(1, 5, 6), /bad uint range/); assert.throws(() => F.uint(1, 5.5), /bad uint range/); assert.throws(() => F.uint(1, 5, 0.5), /bad uint range/);
 });

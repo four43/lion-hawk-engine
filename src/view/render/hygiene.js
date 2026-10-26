@@ -1,8 +1,8 @@
-// lion-hawk/view GPU hygiene (M-12, S-3, design §6.6), from Tractor Pickup src/render/{warm,shadows,dispose}.js, generalised.
+// lion-hawk/view GPU hygiene (M-12, S-3, design §6.6): warm-up, shared shadow depth materials and disposal.
 // matSplit (M-13) is the material compiler's cache key (3f), not a helper here.
 import * as THREE from 'three';
 
-// X-4 (Tractor review 3): three.js draws every shadow caster with one shared depth material. Instanced and plain casters
+// X-4: three.js draws every shadow caster with one shared depth material. Instanced and plain casters
 // take turns in the shadow pass, so that material keeps switching programs: garbage every frame and a GC pause on an
 // iPad. Instanced casters get a depth material of their own, so neither ever changes kind. A caster that already has one
 // (the compiler's FUR or WIND depth twin) keeps it.
@@ -45,7 +45,7 @@ function depthEntries(renderer, scene, materials, depth) {
 }
 const disposeWarm = list => { for (const c of list) { if (c.isInstancedMesh) c.dispose(); else if (c.isSkinnedMesh) c.skeleton.dispose(); } };
 
-// B-2 (Tractor X-4): compile every program while loading, not the first time a mesh comes into view. An iPad compile
+// B-2 (X-4): compile every program while loading, not the first time a mesh comes into view. An iPad compile
 // through ANGLE to Metal takes 50-400 ms. three.js compiles only visible objects, so hidden ones are shown for the
 // synchronous part of compileAsync and hidden again before any frame draws. Hidden lights stay hidden: a light count the
 // frame will not have compiles the wrong program variants. Materials not in the scene yet (the compiler's)

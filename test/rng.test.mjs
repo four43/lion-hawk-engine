@@ -2,24 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, fnv } from '../src/core/rng.js';
 
-// Reference copies of today's game implementations (pig-pens layout.js, rally gen/rng.js, tractor sim/rng.js).
+// Reference implementations: mulberry32, FNV-1a and a Fisher-Yates shuffle, written out independently.
 function mulberry32(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const refFnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };
 const refShuffle = (next, arr) => { const o = arr.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(next() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return o; };
 
-test('numeric seeds match the games bit for bit', () => {
+test('numeric seeds match mulberry32 bit for bit', () => {
   for (const seed of [0, 1, 3, 14, 2 ** 32 - 1, -5, 1.9]) {
     const r = rng(seed), ref = mulberry32(seed);
     for (let i = 0; i < 1000; i++) assert.equal(r.next(), ref());
   }
 });
-test('string seeds hash with FNV-1a, as rally does', () => {
+test('string seeds hash with FNV-1a', () => {
   assert.equal(fnv('mobile12'), refFnv('mobile12'));
   const r = rng('mobile12'), ref = mulberry32(refFnv('mobile12'));
   assert.equal(r.seed, refFnv('mobile12'));
   for (let i = 0; i < 100; i++) assert.equal(r.next(), ref());
 });
-test('fork(label) is the rally sub-stream and does not disturb the parent', () => {
+test('fork(label) is the <seed>:<label> sub-stream and does not disturb the parent', () => {
   const r = rng(7), before = rng(7);
   const f = r.fork('terrain'), ref = mulberry32(refFnv('7:terrain'));
   for (let i = 0; i < 50; i++) assert.equal(f.next(), ref());

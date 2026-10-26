@@ -13,7 +13,7 @@ test('3g: no context before a gesture; the first pointerup makes one, resumes it
   s.fire('keydown'); s.fire('click'); await flush();
   assert.equal(s.fa.made.length, 1); assert.equal(s.fa.made[0].resumes, 1); assert.deepEqual(got, ['running']); // not listening once running
 });
-test('3g: master -> mute gain -> limiter -> destination, with Tractor\'s limiter and the game volume (#67, R-8)', async () => {
+test('3g: master -> mute gain -> limiter -> destination, with the R-8 limiter and the game volume (#67, R-8)', async () => {
   const s = audioPage({ opts: { volume: 0.4 } }); s.fire(); await flush();
   const m = s.audio.master; assert.equal(m.kind, 'gain'); assert.equal(m.gain.value, 0.4);
   const mg = m.out[0]; assert.equal(mg.kind, 'gain'); assert.equal(mg.gain.value, 1);

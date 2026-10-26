@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createEngine, defineGame } from '../src/index.sim.js';
 import { headless, replay } from '../testing/index.js';
 
-const T = { speed: 1 }; // a game's module-level feel constants, as Tractor's P/PILOT/TP
+const T = { speed: 1 }; // a game's module-level feel constants
 const tuned = () => defineGame({
   id: 'tune', start: 's',
   reset() { T.speed = 1; },

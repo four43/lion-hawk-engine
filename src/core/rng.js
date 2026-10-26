@@ -1,6 +1,6 @@
 // Seeded random numbers: mulberry32 over a 32-bit state, the same sequence the three games use today.
 // String seeds hash with FNV-1a; fork(label) gives an independent, repeatable sub-stream, so a new draw
-// in one system never shifts another system's numbers (rally tracks T-2).
+// in one system never shifts another system's numbers (T-2).
 export const fnv = str => {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }

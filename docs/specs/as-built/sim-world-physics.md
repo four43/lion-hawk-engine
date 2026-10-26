@@ -443,7 +443,7 @@ Related specs:
 
 ## Open questions and discrepancies
 - `docs/spec.md` M-14 says the fields allocate nothing. The fields reuse their own objects and arrays. Only the Rapier getter vectors (`translation`, `rotation`, `linvel`, `angvel`, `parent`) are fresh in each step. [doc:docs/spec.md:181; src/sim/fields/index.js:93-94; src/sim/fields/index.js:139-145; src/sim/fields/index.js:149; src/sim/fields/index.js:178]
-- Open question: why do the sleepers thresholds use 0.2 m/s and 0.5 rad/s? The code comment says only that they come from Rally. [src/sim/world/world.js:417-422]
+- Open question: why do the sleepers thresholds use 0.2 m/s and 0.5 rad/s? The code comment calls them wake thresholds and gives no source. [src/sim/world/world.js:417-422]
 - Open question: field note 124 says no test guards the read of a body that fell asleep in the step that moved it. The status is open. [doc:docs/field-notes.md:833-837]
 
 ## Evidence index

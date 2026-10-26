@@ -1,7 +1,7 @@
-// Orbit camera (Pig Pens' view/rig.js, #59): yaw, pitch and distance round a ground target. rig.state is the live pose
+// Orbit camera (#59): yaw, pitch and distance round a ground target. rig.state is the live pose
 // { tx, ty, tz, yaw, pitch, dist, chaseOff }, readable and writable; rig.limits the live clamps { pitchMin, pitchMax, min, max,
-// bounds: { x: [lo, hi], z: [lo, hi] } | null }. fit(aspect?) applies the `fit` framing for the aspect (Pig Pens' fitCam:
-// fit.portrait below 0.9, else fit.landscape; each a partial state). update(dt, raw) drives the bound gestures, then apply()
+// bounds: { x: [lo, hi], z: [lo, hi] } | null }. fit(aspect?) applies the `fit` framing for the aspect
+// (fit.portrait below 0.9, else fit.landscape; each a partial state). update(dt, raw) drives the bound gestures, then apply()
 // clamps and places the camera.
 // bindGesture(engine, el, { mode, tapMove }) adds the view-only camera gestures (lion-hawk bindGesture): one finger drags by
 // mode() ('orbit' | 'chase' | 'none' | null, asked when the drag starts; 'orbit' sets rig.orbiting for the game's tool picker, #52;
@@ -9,7 +9,7 @@
 // two fingers pinch-zoom, turn and pan (turn the chase offset instead while mode() is 'chase', asked on every move),
 // mouse right-drag orbits, middle-drag pans,
 // the wheel zooms, no context menu. Do not also add it to boot's devices: rig.update drives it.
-// chase(pose, dt) is Pig Pens' drive camera (pose { x, z, yaw, fwd }); release() lifts it back over the farm.
+// chase(pose, dt) follows a driven body (pose { x, z, yaw, fwd }); release() lifts it back to the orbit.
 // ray(cx, cy, out?) is the camera ray through a client point, [ox, oy, oz, dx, dy, dz] (a fresh array without out, #72).
 import * as THREE from 'three';
 import { bindGesture as bindViewGesture } from '../gesture.js';
@@ -41,7 +41,7 @@ export function createOrbitRig(camera, { target = { x: 0, y: 0.5, z: 0 }, distan
       camera.updateMatrixWorld(); // ray() and project() use the camera as drawn
     },
     update(dt = 0, raw = dt) { for (let i = 0; i < devices.length; i++) devices[i].update(dt, raw); rig.apply(); },
-    panBy(dx, dy) { // screen px -> ground metres, Pig Pens' feel
+    panBy(dx, dy) { // screen px -> ground metres
       const k = state.dist * 0.0016, s = Math.max(0.5, Math.sin(state.pitch));
       const fx = -Math.sin(state.yaw), fz = -Math.cos(state.yaw), rx = Math.cos(state.yaw), rz = -Math.sin(state.yaw);
       state.tx -= (dx * rx - dy * fx / s) * k; state.tz -= (dx * rz - dy * fz / s) * k;
@@ -73,7 +73,7 @@ export function createOrbitRig(camera, { target = { x: 0, y: 0.5, z: 0 }, distan
       const drag = d => { // cumulative from the down point; apply the change since the last call
         if (d.phase === 'start') { one = mode(); lx = 0; ly = 0; if (one === 'orbit') rig.orbiting = true; rig.gesture = one === 'orbit' || one === 'chase' ? one : null; return; }
         const ix = d.dx - lx, iy = d.dy - ly; lx = d.dx; ly = d.dy;
-        if (one === 'orbit' && mode() !== 'orbit') { one = null; rig.gesture = null; } // Pig Pens: a Hand drag begun before a drive must not orbit it
+        if (one === 'orbit' && mode() !== 'orbit') { one = null; rig.gesture = null; } // a drag begun before a drive must not orbit it
         if (one === 'orbit') { state.yaw -= ix * 0.006; state.pitch += iy * 0.005; }
         else if (one === 'chase') { state.chaseOff -= ix * 0.006; state.pitch += iy * 0.004; }
         if (d.phase === 'end') { one = null; rig.gesture = null; }

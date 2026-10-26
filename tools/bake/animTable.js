@@ -1,7 +1,7 @@
 // Baked animation tables (A-11, overview §4.3): every clip sampled at `fps` into model-space matrices of each row node (the
 // parts, then the sockets as `sock-<name>`). Row layout: 12 floats, the column-major 4x4 without its last row
 // [m0 m1 m2  m4 m5 m6  m8 m9 m10  m12 m13 m14]. Frame f is at t = f / frames × dur (loops; the end pose is frame 0).
-// Ported from Tractor's and Pig Pens' bake.mjs `bakePet`; rotations now slerp (as AnimationMixer) where bakePet used nlerp.
+// Rotations slerp, as AnimationMixer does.
 import { compose, mul } from './math.js';
 
 // shortest-arc slerp, as three's QuaternionLinearInterpolant (the runtime AnimationMixer)

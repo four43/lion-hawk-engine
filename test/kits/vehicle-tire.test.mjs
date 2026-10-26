@@ -1,4 +1,4 @@
-// kit-vehicle's tire backend (design §3.5, §7.3; spec §3.2 tire.*): Rally's tire model as a second backend. The model
+// kit-vehicle's tire backend (design §3.5, §7.3; spec §3.2 tire.*): the tire model as a second backend. The model
 // itself, then the backend on a flat terrain: it settles, drives, brakes, steers, and its grip follows the ground's
 // tire block.
 import test from 'node:test';

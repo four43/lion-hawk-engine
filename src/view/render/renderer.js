@@ -1,12 +1,12 @@
 // lion-hawk/view renderer (overview §4.6, design §6.6): one WebGLRenderer per page, the DPR cap by touch, PCF shadows, tone
-// mapping, and a resize with the portrait FOV rule. Merges the bootstraps of Rally (src/render.js), Pig Pens
-// (src/game.view.js) and Tractor Pickup (src/render/scene.js).
+// mapping, and a resize with the portrait FOV rule. A game gets one ready renderer instead of writing its own
+// bootstrap.
 import * as THREE from 'three';
 
 export const SHADOWS = Object.freeze({ pcf: THREE.PCFShadowMap, vsm: THREE.VSMShadowMap, basic: THREE.BasicShadowMap });
 export const TONE = Object.freeze({ none: THREE.NoToneMapping, aces: THREE.ACESFilmicToneMapping, agx: THREE.AgXToneMapping, neutral: THREE.NeutralToneMapping });
-export const PORTRAIT_BELOW = 0.9; // aspect below this: the portrait FOV (Tractor X-12, Pig Pens)
-export const DEFAULT_DPR = Object.freeze({ touch: 1.5, desktop: 2 }); // an iPad at 1.5 holds 60 fps (Tractor X-4)
+export const PORTRAIT_BELOW = 0.9; // aspect below this: the portrait FOV (X-12)
+export const DEFAULT_DPR = Object.freeze({ touch: 1.5, desktop: 2 }); // an iPad at 1.5 holds 60 fps (X-4)
 export const DEFAULT_CAMERA = Object.freeze({ fov: 60, fovPortrait: 64, near: 0.3, far: 500 });
 const names = o => Object.keys(o).map(k => `'${k}'`).join(' | ');
 export function checkShadows(v) { if (v !== false && !Object.hasOwn(SHADOWS, v)) throw new Error(`render: shadows must be ${names(SHADOWS)} | false (got ${JSON.stringify(v)})`); }
@@ -62,7 +62,7 @@ export function createRenderer({ canvas, dpr = DEFAULT_DPR, antialias = true, sh
   }
   const onResize = () => resize();
   target.addEventListener?.('resize', onResize);
-  const ro = typeof target.ResizeObserver === 'function' ? new target.ResizeObserver(onResize) : null; // the canvas can change size without a window resize (Tractor X-11)
+  const ro = typeof target.ResizeObserver === 'function' ? new target.ResizeObserver(onResize) : null; // the canvas can change size without a window resize (X-11)
   ro?.observe(canvas);
   const onCtxLost = e => { e.preventDefault?.(); gfx.lost = true; onLost?.(); }; // preventDefault: the browser may restore it
   const onCtxRestored = () => { gfx.lost = false; onRestored?.(); };

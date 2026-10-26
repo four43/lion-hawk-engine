@@ -1,4 +1,4 @@
-// #105: the args an overlay opened with are readable from engine.scene (its view half needs them: Tractor's quiet sleep).
+// #105: the args an overlay opened with are readable from engine.scene (its view half needs them).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine, defineGame } from '../src/index.sim.js';

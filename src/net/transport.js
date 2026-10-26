@@ -1,4 +1,4 @@
-// src/net/transport.js: transports (N-1, N-2), moved from Tractor Pickup's src/net/link.js with no behaviour change (lion-hawk 2f T-E6)
+// src/net/transport.js: transports (N-1, N-2)
 import { createWarnOnce } from '../sim/limits.js';
 // The game-level link (M-20, M-21). Sync code (host.js, guest.js) talks only to a "net", never to handshake.js, so a host and guests
 // run in one Node process over the in-memory hub (M-52). A net: { isHost, id, hostId, send(to, data, reliable), on, off, leave }.

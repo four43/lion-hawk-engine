@@ -1,4 +1,4 @@
-// createTiltShift (overview §4.6): Pig Pens' src/tiltshift.js, generic.
+// createTiltShift (overview §4.6).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -7,7 +7,7 @@ import { fakeRenderer } from './helpers/fakeRenderer.mjs';
 
 const HOT = /\bnew\s|\.clone\(|\.\.\.|\.slice\(|\.map\(|\.concat\(|\bArray\.from\b/;
 
-test('defaults are Pig Pens\' tiltshift.js; unknown options throw', () => {
+test('the defaults; unknown options throw', () => {
   assert.deepEqual({ ...createTiltShift(fakeRenderer()).params }, { on: true, band: 0.06, scale: 3.2, nearScale: 1.6, blur: 0.011, sat: 1.05, vig: 0.2, fullAt: 10, offAt: 24, focus: 10, samples: 4 });
   assert.throws(() => createTiltShift(fakeRenderer(), { strength: 1 }), /tiltShift: strength is unknown/);
 });

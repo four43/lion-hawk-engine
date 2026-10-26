@@ -1,4 +1,4 @@
-// Shell fur geometry (Pig Pens' fur.js, made generic): the mesh is repeated `shells` more times in one geometry, and the
+// Shell fur geometry: the mesh is repeated `shells` more times in one geometry, and the
 // FUR program pushes copy c out by c/shells of the fur length along a smoothed normal. Copy 0 is the mesh itself.
 // One index buffer, so an InstancedMesh draws base and shells with one set of instance matrices and colours.
 import { BufferGeometry, BufferAttribute } from 'three';

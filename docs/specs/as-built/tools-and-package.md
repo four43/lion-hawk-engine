@@ -35,10 +35,10 @@ See the [glossary](_meta/glossary.md). This spec adds three terms that the gloss
 | Interface | Direction | Format | Evidence |
 | --- | --- | --- | --- |
 | `lion-hawk bake [--game <dir>] [--check] [ids...]` | in | exit code 0, 1 or 2 | [tools/cli.js:10-15; tools/cli.js:34] <!-- C-3 C-11 --> |
-| `lion-hawk build [--game <dir>] (--out <dir> or $<outEnv>) [--site] [--mode single or shared] [--e2e]` | in | exit code 0, 1 or 2 | [tools/cli.js:10-15; tools/cli.js:35] <!-- C-3 C-12 --> |
+| `lion-hawk build [--game <dir>] [--out <dir>] [--mode single or shared] [--e2e]` | in | exit code 0, 1 or 2 | [tools/cli.js:10-15; tools/cli.js:35] <!-- C-3 C-12 --> |
 | `lion-hawk dev [--game <dir>] [--port 8740] [--host 0.0.0.0]` | in | HTTP server, no exit code while it serves | [tools/cli.js:10-15; tools/cli.js:38-41] <!-- C-3 C-14 --> |
 | `lion-hawk test [--game <dir>] [--visual]` | in | exit code 0, 1 or 2 | [tools/cli.js:14; tools/cli.js:36] <!-- C-3 C-224 --> |
-| `lion-hawk release [--game <dir>] [--bump patch, minor or major] (--out <dir> or $<outEnv>) [--site]` | in | exit code 0, 1 or 2 | [tools/cli.js:15; tools/cli.js:37] <!-- C-3 C-225 --> |
+| `lion-hawk release [--game <dir>] [--bump patch, minor or major] [--out <dir>]` | in | exit code 0, 1 or 2 | [tools/cli.js:15; tools/cli.js:37] <!-- C-3 C-225 --> |
 | `lion-hawk --help`, `-h`, `help` | in | USAGE text on the log sink, exit code 0 | [tools/cli.js:28] <!-- C-4 --> |
 | `main(argv, { env, log, error })` | in | returns an exit code or `null` | [tools/cli.js:1-2; tools/cli.js:26] <!-- C-16 --> |
 | `bin/lion-hawk.js` | in | Node script, bin name `lion-hawk` | [bin/lion-hawk.js:3-6; package.json:19-21] <!-- C-1 C-2 --> |
@@ -101,19 +101,18 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 | `bake({ game = '.', ids = [], check = false, log = console.log })` | `{ ok, baked, stale }` | [tools/bake/index.js:1-4; tools/bake/index.js:80] <!-- C-42 C-53 C-65 --> |
 | `bakeModel(cfg, registry, id, { file, rel, opts }, log)` | `{ id, sidecar, glb, anim, options }` | [tools/bake/index.js:55; tools/bake/index.js:77] <!-- C-73 --> |
 | `sources(cfg)` | Map from id to `{ file, rel, opts }`. `opts` is the `bake.models` entry or `null`. | [tools/bake/index.js:30; tools/bake/index.js:37-41] <!-- C-49 --> |
-| `loadConfig(dir = '.')` | `dir`, `version`, `id`, `site`, `outEnv`, `bake`, `build`, `test` | [tools/bake/config.js:46; tools/bake/config.js:84-96] <!-- C-91 --> |
-| `build({ game = '.', out, env, site = false, mode = 'single', e2e = false, entry, log })` | `{ out, version, hash, files, sizes }`, plus `shared` in shared mode | [tools/build/index.js:4-9; tools/build/index.js:48; tools/build/index.js:112] <!-- C-164 C-232 --> |
+| `loadConfig(dir = '.')` | `dir`, `version`, `id`, `outEnv`, `bake`, `build`, `test` | [tools/bake/config.js:46; tools/bake/config.js:85-97] <!-- C-91 --> |
+| `build({ game = '.', out, env, mode = 'single', e2e = false, entry, log })` | `{ out, version, hash, files, sizes }`, plus `shared` in shared mode | [tools/build/index.js:4-9; tools/build/index.js:48; tools/build/index.js:112] <!-- C-164 C-232 --> |
 | `bundleGame(cfg, { entry, e2e = false })` | `{ js, needs }` | [tools/build/shared.js:32-39] <!-- C-233 --> |
 | `buildPack(cfg, { dir, base, needs, e2e = false })` | `{ imports, files }` | [tools/build/shared.js:41-42; tools/build/shared.js:69] <!-- C-238 --> |
 | `engineEntries()` | object from specifier to source file | [tools/build/shared.js:18-26] <!-- C-234 --> |
 | `addImportMap(html, imports)` | the page HTML with an import map | [tools/build/shared.js:72-76] <!-- C-240 --> |
-| `guardSite(abs, site)` | the absolute path, or a `UsageError` | [tools/build/out.js:14-18] <!-- C-190 --> |
 | `makeManifest(m, iconName)` | the web manifest object | [tools/build/page.js:20-33] <!-- C-264 --> |
 | `linkManifest(html, m)` | the page HTML with the manifest link | [tools/build/page.js:34-41] <!-- C-266 --> |
 | `compressTextures(doc, t)` | the document | [tools/bake/textures.js:14-15; tools/bake/textures.js:38] <!-- C-245 --> |
 | `aeroOf(parts)` | `{ panels, volume, centroid }` | [tools/bake/aero.js:10; tools/bake/aero.js:38] <!-- C-256 C-258 --> |
 | `runTests({ game = '.', visual = false, log })` | the exit code of `node --test` | [tools/test/index.js:22; tools/test/index.js:33] <!-- C-267 C-271 --> |
-| `release({ game = '.', bump = 'patch', out, site = false, env, log })` | exit code 0, or a thrown error | [tools/release/index.js:19; tools/release/index.js:39] <!-- C-279 C-281 --> |
+| `release({ game = '.', bump = 'patch', out, env, log })` | exit code 0, or a thrown error | [tools/release/index.js:19; tools/release/index.js:39] <!-- C-279 C-281 --> |
 | `bumpVersion(v, bump)` | the new `x.y.z` version string | [tools/release/index.js:13-17] <!-- C-277 --> |
 | `dev({ game = '.', port = 8740, host = '0.0.0.0', log })` | `{ url, port, close }` | [tools/dev/index.js:17; tools/dev/index.js:83-84] <!-- C-195 --> |
 | `dedupe({ root, packages })` | esbuild plugin | [tools/dedupe.js:4] <!-- C-194 --> |
@@ -143,15 +142,15 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-4** If option parsing fails, `main` writes `lion-hawk <cmd>: <message>` and `USAGE` to the error sink and returns 2. Parsing is strict. [tools/cli.js:31-32] <!-- C-6 -->
 - **B-5** Only the `bake` command accepts positional arguments. Each positional argument is a model id. [tools/cli.js:31] <!-- C-7 -->
 - **B-6** The `bake` command calls `bake` with `game`, the positional ids, `check` and `log`. `main` returns 0 if the result is ok and 1 if not. [tools/cli.js:34] <!-- C-11 -->
-- **B-7** Tests pin the `bake` exit codes: 0 when current, 1 when stale, and 1 on a bake error. [test/cli.test.mjs:38] <!-- C-17 -->
-- **B-8** The `build` command calls `build` with `game`, `out`, `env`, `site`, `mode`, `e2e` and `log`. `main` returns 0 when `build` finishes. [tools/cli.js:35] <!-- C-12 -->
-- **B-9** Tests pin that a `build` with no `--out` and no `outEnv` variable exits 2 with the contract message. A path under `site/exp` also exits 2 and writes nothing. An unknown `--mode` exits 2. [test/cli.test.mjs:25] <!-- C-18 -->
+- **B-7** Tests pin the `bake` exit codes: 0 when current, 1 when stale, and 1 on a bake error. [test/cli.test.mjs:35] <!-- C-17 -->
+- **B-8** The `build` command calls `build` with `game`, `out`, `env`, `mode`, `e2e` and `log`. `main` returns 0 when `build` finishes. [tools/cli.js:35] <!-- C-12 -->
+- **B-9** Tests pin that a `build` with no `--out` and no `outEnv` variable exits 0 and writes `<game>/build/`, and that the `outEnv` variable moves the output. An unknown `--mode` exits 2. [test/cli.test.mjs:25-33] <!-- C-18 -->
 - **B-10** If `--port` is not an integer from 0 to 65535, `main` writes `lion-hawk dev: --port must be 0..65535 (got <value>)` and returns 2. [tools/cli.js:38-39] <!-- C-13 -->
-- **B-11** After `dev` starts, `main` returns `null`. The bin script then sets no exit code, and the process keeps serving until it is stopped. [tools/cli.js:40-41; bin/lion-hawk.js:6; test/cli.test.mjs:48] <!-- C-14 -->
+- **B-11** After `dev` starts, `main` returns `null`. The bin script then sets no exit code, and the process keeps serving until it is stopped. [tools/cli.js:40-41; bin/lion-hawk.js:6; test/cli.test.mjs:45] <!-- C-14 -->
 - **B-12** If a command throws, `main` writes `lion-hawk: <message>` to the error sink. `main` returns 2 for a `UsageError` or for an error whose `usage` property is truthy. `main` returns 1 for any other error. [tools/cli.js:42-45] <!-- C-15 C-191 -->
 - **B-13** Tests pin that the bin file is executable and that usage errors exit 2. [test/cli.test.mjs:17] <!-- C-19 -->
 - **B-152** The `test` command calls `runTests` with `game`, `visual` and `log`. `main` returns 0 if `runTests` returns 0 and 1 for any other code. [tools/cli.js:36] <!-- C-224 -->
-- **B-153** The `release` command calls `release` with `game`, `bump`, `out`, `site`, `env` and `log`. `main` returns the value that `release` returns. [tools/cli.js:37] <!-- C-225 -->
+- **B-153** The `release` command calls `release` with `game`, `bump`, `out`, `env` and `log`. `main` returns the value that `release` returns. [tools/cli.js:37] <!-- C-225 -->
 
 ### Bake: command flow
 - **B-14** If `game` is a string, `bake` loads game.config.js with `loadConfig`. Otherwise `bake` uses `game` as the loaded game.config.js. [tools/bake/index.js:80-81] <!-- C-42 -->
@@ -288,8 +287,8 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-170** `bake.textures.resize` must be `[width, height]` with two positive integers, or `'nearest-pot'`, `'ceil-pot'` or `'floor-pot'`. [tools/bake/config.js:62-63] <!-- C-243 -->
 
 ### Bake: aero
-- **B-171** If `bake.models.<id>.aero` is set, it must be true or false. Else `loadConfig` throws `config: 'bake.models.<id>.aero' must be true or false`. [tools/bake/config.js:82] <!-- C-254 -->
-- **B-172** The normalised model entry has an `aero` key only when `aero` is true, so the option hashes of other models stay the same. [tools/bake/config.js:81; test/bake-aero.test.mjs:42] <!-- C-254 -->
+- **B-171** If `bake.models.<id>.aero` is set, it must be true or false. Else `loadConfig` throws `config: 'bake.models.<id>.aero' must be true or false`. [tools/bake/config.js:83] <!-- C-254 -->
+- **B-172** The normalised model entry has an `aero` key only when `aero` is true, so the option hashes of other models stay the same. [tools/bake/config.js:82; test/bake-aero.test.mjs:42] <!-- C-254 -->
 - **B-173** If a model sets `aero` true, `bakeModel` adds `sidecar.aero` from `aeroOf` over the parts of the model. [tools/bake/index.js:68; test/bake-aero.test.mjs:21] <!-- C-255 -->
 - **B-174** `aeroOf` puts each triangle of each part, in body space, into the bucket of the nearest of 26 directions. The directions are the faces, edges and corners of a cube. [tools/bake/aero.js:1-4; tools/bake/aero.js:7-8; tools/bake/aero.js:19-26] <!-- C-256 -->
 - **B-175** Each non-empty bucket becomes one panel `{ part, a, n, c }`. The panel has the total area, the area-weighted unit normal and the area-weighted centroid, rounded to 6 decimals. [tools/bake/aero.js:27-34] <!-- C-256 -->
@@ -319,17 +318,15 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-122** `build` logs `build: <id> <version> (lion-hawk <engine>, <hash>) → <dir>`. It then logs one size line each for html, assets and total, with bytes and gzip bytes in KB (1 decimal). [tools/build/index.js:106-110] <!-- C-181 -->
 - **B-123** The returned `version` string is `<gameVersion>+lh<engineVersion>-<hash>`. [tools/build/index.js:112] <!-- C-182 -->
 - **B-124** The single-mode bundle runs through the dedupe plugin, so one copy of three and Rapier from the game root serves both engine and game code. [tools/build/index.js:29; tools/dedupe.js:1; test/build.test.mjs:9] <!-- C-218 -->
-- **B-125** `fillTemplate` replaces the first `<!--APP-->` marker with `<script type="module">`, the bundle and `</script>`. It escapes each `</script` in the bundle as `<\/script`. [tools/build/page.js:1-6; test/build-page.test.mjs:22] <!-- C-183 -->
-- **B-126** `stampPage` inserts `<meta name="lion-hawk-build" content="<id> <version> lion-hawk <engine> <hash>">` on a new line after the `<head>` tag. If there is no `<head>`, `stampPage` puts the tag before the page. [tools/build/page.js:8-12; test/build-page.test.mjs:27] <!-- C-185 -->
-- **B-127** `stampWorker` replaces every `__VERSION__` with `<version>+lh<engine>-<hash>`. `stampWorker` replaces the first `__PRECACHE__` with a JSON array of the precache list. [tools/build/page.js:13-18; test/build-page.test.mjs:27] <!-- C-186 -->
-- **B-128** `resolveOut` picks `--out` first, then the variable that `cfg.outEnv` names in `env`. If both are empty and `site` is true, `resolveOut` uses `<game dir>/../../site/exp/<cfg.site>`. [tools/build/out.js:1-3; tools/build/out.js:9-10; test/build-page.test.mjs:9; test/build-page.test.mjs:15] <!-- C-188 -->
+- **B-125** `fillTemplate` replaces the first `<!--APP-->` marker with `<script type="module">`, the bundle and `</script>`. It escapes each `</script` in the bundle as `<\/script`. [tools/build/page.js:1-6; test/build-page.test.mjs:17] <!-- C-183 -->
+- **B-126** `stampPage` inserts `<meta name="lion-hawk-build" content="<id> <version> lion-hawk <engine> <hash>">` on a new line after the `<head>` tag. If there is no `<head>`, `stampPage` puts the tag before the page. [tools/build/page.js:8-12; test/build-page.test.mjs:22] <!-- C-185 -->
+- **B-127** `stampWorker` replaces every `__VERSION__` with `<version>+lh<engine>-<hash>`. `stampWorker` replaces the first `__PRECACHE__` with a JSON array of the precache list. [tools/build/page.js:13-18; test/build-page.test.mjs:22] <!-- C-186 -->
+- **B-128** `resolveOut` picks `--out` first, then the variable that `cfg.outEnv` names in `env`, then `cfg.build.out` resolved against the game directory, and otherwise `<game dir>/build`. It never throws. [tools/build/out.js:1-9; test/build-page.test.mjs:9-16; test/build-run.test.mjs:68] <!-- C-188 -->
 
 ### Build: shared mode
 - **B-180** If `mode` is neither `single` nor `shared`, `build` throws a `UsageError`: `build: mode must be 'single' or 'shared' (got '<mode>')`. [tools/build/index.js:49; test/build-run.test.mjs:60] <!-- C-165 -->
 - **B-181** In shared mode, if the base does not end with `/`, `build` throws a `UsageError`: `build: build.shared.base must end with '/' (got '<base>')`. Single mode does not check the base. [tools/build/index.js:53; test/build-shared.test.mjs:53] <!-- C-227 -->
 - **B-182** In shared mode, the pack directory is `build.shared.dir` resolved against the game directory. Without it, the directory is `<out>/../lion-hawk/<ENGINE_VERSION>`. [tools/build/index.js:54; test/build-shared.test.mjs:53] <!-- C-228 -->
-- **B-183** `build` passes the pack directory through `guardSite`, so a pack directory under `site/exp/` needs `--site`. [tools/build/index.js:54; tools/build/out.js:14-18] <!-- C-228 C-190 -->
-- **B-184** `guardSite` throws a `UsageError` `build: <path> is under site/exp/; only a deploy passes --site` if `site` is false. The path must be under a `site/exp/` directory. `resolveOut` applies `guardSite` to the output directory. [tools/build/out.js:12; tools/build/out.js:14-18; test/build-page.test.mjs:15] <!-- C-190 -->
 - **B-185** In shared mode, `build` calls `bundleGame` for the game bundle. `build` then calls `buildPack` with the pack directory, the base, the `needs` set and `e2e`. [tools/build/index.js:57-61] <!-- C-229 -->
 - **B-186** In shared mode, after `fillTemplate`, `build` inserts an import map from the pack imports. The insert happens before `hooks.page` runs. [tools/build/index.js:65-67] <!-- C-230 -->
 - **B-187** In shared mode, `build` logs `  shared <n> files in <packDir> at <base>` after the size lines. [tools/build/index.js:111] <!-- C-231 -->
@@ -347,7 +344,7 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-199** File names in the pack carry a content hash, so a second game built later reuses the same files and adds none. [tools/build/shared.js:7-8; test/build-shared.test.mjs:53] <!-- C-239 -->
 - **B-200** `addImportMap` inserts a `<script type="importmap">` tag with the imports on a new line after the `<head>` tag. If there is no `<head>`, the tag goes before the page. [tools/build/shared.js:72-76; test/build-shared.test.mjs:37] <!-- C-240 -->
 - **B-201** `addImportMap` escapes `</` in the JSON as `<\/`. [tools/build/shared.js:74] <!-- C-240 -->
-- **B-202** Tests pin that a shared-mode page boots in Chromium from the pack and that two games load the same engine URLs. A test also pins that the page holds no engine copy. [test/build-shared.test.mjs:37; test/build-shared.test.mjs:89] <!-- C-241 -->
+- **B-202** Tests pin that a shared-mode page boots in Chromium from the pack and that two games load the same engine URLs. A test also pins that the page holds no engine copy. [test/build-shared.test.mjs:37; test/build-shared.test.mjs:86] <!-- C-241 -->
 
 ### Build: web manifest
 - **B-203** If `build.manifest` is set, its `name` must be a non-empty string, else `loadConfig` throws `config: 'build.manifest.name' must be a non-empty string`. [tools/bake/config.js:66-68; test/build-manifest.test.mjs:43] <!-- C-260 -->
@@ -399,8 +396,8 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-222** `runTests` logs `test: <id> (with @visual)` or `test: <id> (@visual skipped)`. [tools/test/index.js:30] <!-- C-271 -->
 - **B-223** `runTests` passes the child output through and resolves with the child exit code, or 1 if there is none. `runTests` removes the temporary directory. [tools/test/index.js:33-34] <!-- C-271 -->
 - **B-224** Tests pin that `lion-hawk test` runs the game tests and the three engine checks. It skips `@visual` tests, runs them with `--visual`, and exits 1 for a failing test. [test/cli-test-release.test.mjs:28; test/cli-test-release.test.mjs:34] <!-- C-272 -->
-- **B-225** If `test.roots` is set and is not an array of strings, `loadConfig` throws `config: 'test.roots' must be an array of paths`. [tools/bake/config.js:74] <!-- C-274 -->
-- **B-226** If `test.game` is set and is not a string, `loadConfig` throws `config: 'test.game' must be a path`. [tools/bake/config.js:75] <!-- C-274 -->
+- **B-225** If `test.roots` is set and is not an array of strings, `loadConfig` throws `config: 'test.roots' must be an array of paths`. [tools/bake/config.js:75] <!-- C-274 -->
+- **B-226** If `test.game` is set and is not a string, `loadConfig` throws `config: 'test.game' must be a path`. [tools/bake/config.js:76] <!-- C-274 -->
 
 ### Release command
 - **B-227** If `--bump` is not `patch`, `minor` or `major`, `release` throws a `UsageError`: `release: --bump must be patch, minor or major`. The CLI then exits 2. [tools/release/index.js:12; tools/release/index.js:20; test/cli-test-release.test.mjs:58] <!-- C-275 -->
@@ -409,7 +406,7 @@ The exports map has no entry for the dev server, the glyph script, the test runn
 - **B-230** A `package.json` without a version counts as `0.0.0`. [tools/release/index.js:24] <!-- C-277 -->
 - **B-231** If the `package.json` version is not `x.y.z`, `bumpVersion` throws `release: package.json version '<v>' is not x.y.z`. [tools/release/index.js:14] <!-- C-278 -->
 - **B-232** `release` writes the new version into the `version` field of the game `package.json`. `release` logs `release: <old> → <new>`. [tools/release/index.js:25-28] <!-- C-279 -->
-- **B-233** `release` then runs `bake`, which must return ok, else the step fails with `bake failed`. `release` then runs `build` with `game`, `out`, `env`, `site` and `log`. [tools/release/index.js:29-30] <!-- C-279 -->
+- **B-233** `release` then runs `bake`, which must return ok, else the step fails with `bake failed`. `release` then runs `build` with `game`, `out`, `env` and `log`. [tools/release/index.js:29-30] <!-- C-279 -->
 - **B-234** `release` then runs `runTests`. A non-zero code gives `tests failed`. The test step runs without `--visual`. [tools/release/index.js:31] <!-- C-279 -->
 - **B-235** If a step fails, `release` writes the old `package.json` text back. It throws `release: <step> failed; package.json is back at <old>, nothing committed (<message>)`. [tools/release/index.js:32-34; test/cli-test-release.test.mjs:58] <!-- C-280 -->
 - **B-236** The thrown error has `usage` true when the cause is a `UsageError`, so the CLI then exits 2. [tools/release/index.js:34; tools/cli.js:44] <!-- C-280 -->
@@ -449,7 +446,6 @@ The config loader `importFresh(file)` imports the module with a query `?v=<first
 | `--game` | bake, build, dev, test, release | `'.'` | [tools/cli.js:18-23] <!-- C-8 C-9 C-10 C-222 C-223 --> |
 | `--check` | bake | false | [tools/cli.js:18] <!-- C-8 --> |
 | `--out` | build, release | none | [tools/cli.js:19; tools/cli.js:23] <!-- C-9 C-223 --> |
-| `--site` | build, release | false | [tools/cli.js:19; tools/cli.js:23] <!-- C-9 C-223 --> |
 | `--mode` | build | `'single'` | [tools/cli.js:20] <!-- C-9 --> |
 | `--e2e` | build | false | [tools/cli.js:20] <!-- C-9 --> |
 | `--port` | dev | `'8740'` (a string, then parsed) | [tools/cli.js:21; tools/cli.js:38] <!-- C-10 C-13 --> |
@@ -462,7 +458,7 @@ The allowed keys are: [tools/bake/config.js:12-26] <!-- C-81 -->
 
 | Section | Allowed keys |
 | --- | --- |
-| top level | `id`, `site`, `outEnv`, `bake`, `build`, `test` |
+| top level | `id`, `outEnv`, `bake`, `build`, `test` |
 | `bake` | `src`, `out`, `materials`, `rename`, `palette`, `paint`, `models`, `optimise`, `textures` |
 | `bake.textures` | `format`, `quality`, `resize`, `mode` |
 | `bake.rename`, `bake.models.*.rename` | `materials`, `nodes` |
@@ -478,35 +474,35 @@ The allowed keys are: [tools/bake/config.js:12-26] <!-- C-81 -->
 | Key | Default | Effect | Evidence |
 | --- | --- | --- | --- |
 | `id` | none, required | Game id. A non-empty string. | [tools/bake/config.js:52] <!-- C-83 --> |
-| `site` | the `id` | Site directory name for `--site`. | [tools/bake/config.js:85; tools/build/out.js:10] <!-- C-88 C-188 --> |
-| `outEnv` | `null` | Name of the variable that holds the output directory. | [tools/bake/config.js:85; tools/build/out.js:9] <!-- C-88 C-188 --> |
-| `bake.src` | `'assets/models'` | Directory of model sources. | [tools/bake/config.js:87] <!-- C-88 --> |
-| `bake.out` | `'baked'` | Directory of baked output. | [tools/bake/config.js:87] <!-- C-88 --> |
-| `bake.materials` | `null` | Module whose default export is the material registry. Required by `bake`. | [tools/bake/config.js:87; tools/bake/index.js:47] <!-- C-88 C-50 --> |
-| `bake.palette` | `null` | `'vertex'` or absent. | [tools/bake/config.js:65; tools/bake/config.js:87] <!-- C-85 C-88 --> |
-| `bake.paint.base` | `'steel'` | Base material for `paint-*` colliders. | [tools/bake/config.js:88] <!-- C-88 --> |
-| `bake.rename` | empty maps | Global material and node renames. | [tools/bake/config.js:89] <!-- C-88 --> |
-| `bake.optimise` | `meshopt`, `quantize`, `weld`, `prune`, `dedupe` all true | A partial block overrides only the keys it names. | [tools/bake/config.js:90; test/bake-config.test.mjs:38] <!-- C-89 --> |
-| `bake.textures` | `null` | `{ format: 'webp' or 'ktx2', quality, resize, mode }`. A given block passes through unchanged. | [tools/bake/config.js:56-63; tools/bake/config.js:91] <!-- C-242 C-243 C-244 --> |
-| `bake.models.<id>.static` | false | With no col-* nodes, one welded mesh collider per part. | [tools/bake/config.js:79] <!-- C-86 --> |
-| `bake.models.<id>.keepTextures` | false | If true, the model skips the palette conversion and `prune` keeps all attributes. Without `bake.palette` set to `'vertex'`, textures stay either way. | [tools/bake/config.js:79; tools/bake/index.js:59; tools/bake/index.js:75] <!-- C-86 C-72 --> |
-| `bake.models.<id>.sockets` | `[]` | Required socket names. | [tools/bake/config.js:79; tools/bake/conventions.js:66] <!-- C-86 C-105 --> |
-| `bake.models.<id>.file` | `null` | Source file name in `bake.src`. | [tools/bake/config.js:79] <!-- C-86 C-46 --> |
-| `bake.models.<id>.colliders` | true (false only when set to false) | If false, the model has no colliders. | [tools/bake/config.js:80; tools/bake/index.js:61] <!-- C-86 C-77 --> |
-| `bake.models.<id>.animTable` | `null` | `true` gives `{ fps: 30, clips: null }`. An object gets `fps` default 30 and `clips` default null. | [tools/bake/config.js:78; test/bake-config.test.mjs:38] <!-- C-87 --> |
-| `bake.models.<id>.rename` | empty maps | Per-model renames. These override the global renames. | [tools/bake/config.js:80; tools/bake/index.js:58] <!-- C-86 C-67 --> |
-| `bake.models.<id>.aero` | absent (no aero block) | If true, the sidecar gets an aero block. The value must be true or false. | [tools/bake/config.js:81-82] <!-- C-254 --> |
-| `build.entry` | `'src/main.js'` | Bundle entry file. | [tools/bake/config.js:94] <!-- C-89 --> |
-| `build.template` | `'template.html'` | Page template with the `<!--APP-->` marker. | [tools/bake/config.js:94] <!-- C-89 --> |
-| `build.pwa` | `'pwa'` | Directory of PWA files. | [tools/bake/config.js:94] <!-- C-89 --> |
-| `build.hooks` | `null` | Module whose default export holds `beforePage` and `page` hooks. | [tools/bake/config.js:94; tools/build/index.js:55] <!-- C-89 C-167 --> |
-| `build.manifest` | `null` | Settings for the generated web manifest. `name` is required. `display` defaults to `fullscreen`. | [tools/bake/config.js:66-72; tools/bake/config.js:94] <!-- C-89 C-260 --> |
-| `build.shared.base` | `'/exp/lion-hawk/<ENGINE_VERSION>/'` | URL prefix of the pack in shared mode. It must end with `/`. | [tools/build/index.js:52-53] <!-- C-226 C-227 --> |
+| `outEnv` | `null` | Name of the variable that holds the output directory. | [tools/bake/config.js:86; tools/build/out.js:8] <!-- C-88 C-188 --> |
+| `bake.src` | `'assets/models'` | Directory of model sources. | [tools/bake/config.js:88] <!-- C-88 --> |
+| `bake.out` | `'baked'` | Directory of baked output. | [tools/bake/config.js:88] <!-- C-88 --> |
+| `bake.materials` | `null` | Module whose default export is the material registry. Required by `bake`. | [tools/bake/config.js:88; tools/bake/index.js:47] <!-- C-88 C-50 --> |
+| `bake.palette` | `null` | `'vertex'` or absent. | [tools/bake/config.js:65; tools/bake/config.js:88] <!-- C-85 C-88 --> |
+| `bake.paint.base` | `'steel'` | Base material for `paint-*` colliders. | [tools/bake/config.js:89] <!-- C-88 --> |
+| `bake.rename` | empty maps | Global material and node renames. | [tools/bake/config.js:90] <!-- C-88 --> |
+| `bake.optimise` | `meshopt`, `quantize`, `weld`, `prune`, `dedupe` all true | A partial block overrides only the keys it names. | [tools/bake/config.js:91; test/bake-config.test.mjs:40] <!-- C-89 --> |
+| `bake.textures` | `null` | `{ format: 'webp' or 'ktx2', quality, resize, mode }`. A given block passes through unchanged. | [tools/bake/config.js:56-63; tools/bake/config.js:92] <!-- C-242 C-243 C-244 --> |
+| `bake.models.<id>.static` | false | With no col-* nodes, one welded mesh collider per part. | [tools/bake/config.js:80] <!-- C-86 --> |
+| `bake.models.<id>.keepTextures` | false | If true, the model skips the palette conversion and `prune` keeps all attributes. Without `bake.palette` set to `'vertex'`, textures stay either way. | [tools/bake/config.js:80; tools/bake/index.js:59; tools/bake/index.js:75] <!-- C-86 C-72 --> |
+| `bake.models.<id>.sockets` | `[]` | Required socket names. | [tools/bake/config.js:80; tools/bake/conventions.js:66] <!-- C-86 C-105 --> |
+| `bake.models.<id>.file` | `null` | Source file name in `bake.src`. | [tools/bake/config.js:80] <!-- C-86 C-46 --> |
+| `bake.models.<id>.colliders` | true (false only when set to false) | If false, the model has no colliders. | [tools/bake/config.js:81; tools/bake/index.js:61] <!-- C-86 C-77 --> |
+| `bake.models.<id>.animTable` | `null` | `true` gives `{ fps: 30, clips: null }`. An object gets `fps` default 30 and `clips` default null. | [tools/bake/config.js:79; test/bake-config.test.mjs:40] <!-- C-87 --> |
+| `bake.models.<id>.rename` | empty maps | Per-model renames. These override the global renames. | [tools/bake/config.js:81; tools/bake/index.js:58] <!-- C-86 C-67 --> |
+| `bake.models.<id>.aero` | absent (no aero block) | If true, the sidecar gets an aero block. The value must be true or false. | [tools/bake/config.js:82-83] <!-- C-254 --> |
+| `build.entry` | `'src/main.js'` | Bundle entry file. | [tools/bake/config.js:95] <!-- C-89 --> |
+| `build.template` | `'template.html'` | Page template with the `<!--APP-->` marker. | [tools/bake/config.js:95] <!-- C-89 --> |
+| `build.pwa` | `'pwa'` | Directory of PWA files. | [tools/bake/config.js:95] <!-- C-89 --> |
+| `build.hooks` | `null` | Module whose default export holds `beforePage` and `page` hooks. | [tools/bake/config.js:95; tools/build/index.js:55] <!-- C-89 C-167 --> |
+| `build.manifest` | `null` | Settings for the generated web manifest. `name` is required. `display` defaults to `fullscreen`. | [tools/bake/config.js:66-72; tools/bake/config.js:95] <!-- C-89 C-260 --> |
+| `build.shared.base` | `'../lion-hawk/<ENGINE_VERSION>/'` | URL prefix of the pack in shared mode, relative to the page by default. It must end with `/`. | [tools/build/index.js:52-53] <!-- C-226 C-227 --> |
+| `build.out` | `'build'` | Output directory relative to the game directory, used when there is no `--out` and no `outEnv` variable. It must be a non-empty string. | [tools/bake/config.js:22; tools/bake/config.js:73; tools/build/out.js:8; test/bake-config.test.mjs:37] |
 | `build.shared.dir` | none | Pack directory in shared mode, resolved against the game directory. | [tools/build/index.js:54] <!-- C-226 C-228 --> |
-| `test.dir` | `'test'` | Directory of game tests, resolved against the game directory. | [tools/bake/config.js:95; tools/test/index.js:24] <!-- C-273 C-267 --> |
-| `test.game` | `null` | Module whose default export is the game, for the engine checks. | [tools/bake/config.js:75; tools/bake/config.js:95] <!-- C-273 C-274 --> |
-| `test.roots` | `null` | Paths for the `simPurity` check. | [tools/bake/config.js:74; tools/bake/config.js:95] <!-- C-273 C-274 --> |
-| `test.zeroAlloc` | false | If true, the engine checks include `zeroAlloc`. | [tools/bake/config.js:95; tools/test/index.js:20] <!-- C-273 C-269 --> |
+| `test.dir` | `'test'` | Directory of game tests, resolved against the game directory. | [tools/bake/config.js:96; tools/test/index.js:24] <!-- C-273 C-267 --> |
+| `test.game` | `null` | Module whose default export is the game, for the engine checks. | [tools/bake/config.js:76; tools/bake/config.js:96] <!-- C-273 C-274 --> |
+| `test.roots` | `null` | Paths for the `simPurity` check. | [tools/bake/config.js:75; tools/bake/config.js:96] <!-- C-273 C-274 --> |
+| `test.zeroAlloc` | false | If true, the engine checks include `zeroAlloc`. | [tools/bake/config.js:96; tools/test/index.js:20] <!-- C-273 C-269 --> |
 
 ### Other settings
 - The package is named `lion-hawk`, version 0.13.0, type `module`, and private. [package.json:2-3; package.json:5-6] <!-- C-22 -->
@@ -523,10 +519,8 @@ The allowed keys are: [tools/bake/config.js:12-26] <!-- C-81 -->
 | `--mode` neither `single` nor `shared` | `UsageError`: `build: mode must be 'single' or 'shared' (got '<mode>')` | [tools/build/index.js:49] <!-- C-165 --> |
 | `build.shared.base` without a final `/` in shared mode | `UsageError`: `build: build.shared.base must end with '/' (got '<base>')` | [tools/build/index.js:53] <!-- C-227 --> |
 | Lion-hawk specifier that is not an engine entry | `build: '<spec>' is not a lion-hawk browser entry (shared mode packs <entries>)` | [tools/build/shared.js:58] <!-- C-237 --> |
-| No output directory | `UsageError`: `build: pass --out or set $<outEnv>`, with the real variable name when `cfg.outEnv` is set | [tools/build/out.js:11; test/build-page.test.mjs:9] <!-- C-189 --> |
-| Output or pack path under `site/exp/` without `--site` | `UsageError`: `build: <path> is under site/exp/; only a deploy passes --site` | [tools/build/out.js:16; test/build-page.test.mjs:15] <!-- C-190 --> |
 | Template has no marker | `build: the template has no <!--APP--> marker` | [tools/build/page.js:4] <!-- C-184 --> |
-| Marker right after a `<script>` tag | `build: <!--APP--> sits inside a <script>; remove that tag (the build writes <script type="module">)` | [tools/build/page.js:5; test/build-page.test.mjs:22] <!-- C-184 --> |
+| Marker right after a `<script>` tag | `build: <!--APP--> sits inside a <script>; remove that tag (the build writes <script type="module">)` | [tools/build/page.js:5; test/build-page.test.mjs:17] <!-- C-184 --> |
 | `hooks.page` returns a non-string | `build: hooks.page must return the html string` | [tools/build/index.js:67-68] <!-- C-173 --> |
 | GLB missing or sha256 differs from manifest | `build: <glb> does not match baked/manifest.json (run lion-hawk bake)` | [tools/build/index.js:41] <!-- C-175 --> |
 | `sw.js` lacks `__PRECACHE__` | `build: pwa/sw.js has no __PRECACHE__ (const PRECACHE = __PRECACHE__;)` | [tools/build/page.js:15] <!-- C-187 --> |
@@ -545,9 +539,9 @@ The allowed keys are: [tools/bake/config.js:12-26] <!-- C-81 -->
 | Bad `bake.textures.mode` or `resize` | `config: 'bake.textures.mode' is for ktx2 only`, a mode error, or a resize error | [tools/bake/config.js:60-63] <!-- C-243 --> |
 | `ktx2` format without `toktx` on `PATH` | `bake: textures.format 'ktx2' needs toktx (KTX-Software) on PATH: <url>` | [tools/bake/textures.js:21] <!-- C-247 --> |
 | `toktx` fails on a texture | `bake: toktx failed on texture '<name or index>': <output>` | [tools/bake/textures.js:32] <!-- C-250 --> |
-| Bad `bake.models.<id>.aero` | `config: 'bake.models.<id>.aero' must be true or false` | [tools/bake/config.js:82] <!-- C-254 --> |
+| Bad `bake.models.<id>.aero` | `config: 'bake.models.<id>.aero' must be true or false` | [tools/bake/config.js:83] <!-- C-254 --> |
 | Bad `build.manifest` value | `config: 'build.manifest.name' must be a non-empty string`, a display error, or a string-type error | [tools/bake/config.js:68-71; test/build-manifest.test.mjs:43] <!-- C-260 --> |
-| Bad `test.roots` or `test.game` | `config: 'test.roots' must be an array of paths` or `config: 'test.game' must be a path` | [tools/bake/config.js:74-75] <!-- C-274 --> |
+| Bad `test.roots` or `test.game` | `config: 'test.roots' must be an array of paths` or `config: 'test.game' must be a path` | [tools/bake/config.js:75-76] <!-- C-274 --> |
 | No tests and no `test.game` | `test: nothing to run (no test/ directory and no test.game)`, exit 1 | [tools/test/index.js:28] <!-- C-268 --> |
 | Bad `--bump` | `UsageError`: `release: --bump must be patch, minor or major`, exit 2 | [tools/release/index.js:20] <!-- C-275 --> |
 | Git tree not clean | `release: the git tree is not clean (commit or stash first)`, exit 1 | [tools/release/index.js:22] <!-- C-276 --> |

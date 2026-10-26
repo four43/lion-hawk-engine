@@ -7,7 +7,7 @@
 import { F, kind } from '../defs/fields.js';
 
 export const PLAYER_KIND = 'lh.player', GAME_KIND = 'lh.game', PLAYER_CODE = 255, GAME_CODE = 254;
-// the engine's replicated player fields (two of an F.obj's eight bools); join: which joining of this number (Tractor's counter)
+// the engine's replicated player fields (two of an F.obj's eight bools); join: which joining of this number (a rejoin counter)
 export const PLAYER_BASE = Object.freeze({ seat: F.uint(1, 15), away: F.bool(), active: F.bool(), join: F.uint(1) });
 export const PLAYER_RESERVED = Object.freeze(['number', 'local', ...Object.keys(PLAYER_BASE)]);
 export const SEATS = Symbol('lh.seats'); // engine[SEATS] = { controllers, roster, route, changed }: the net part's seam, not public API

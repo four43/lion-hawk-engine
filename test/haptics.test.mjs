@@ -15,7 +15,7 @@ const rig = (opts = {}) => {
   return { ...t, h, tick };
 };
 
-// ruling S3: a first sight is a full stop (zero effect plus reset), as Rally's rumbleOut does
+// ruling S3: a first sight is a full stop (zero effect plus reset), as playtests showed it must
 test('a pad seen for the first time gets one full stop; the same pad again, or later frames, get none (C-14)', () => {
   const { slots, tick } = rig(), a = actuator(), b = actuator();
   slots[0] = pad(0, { act: a }); tick(3);

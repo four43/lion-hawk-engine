@@ -7,8 +7,8 @@
       "lines": 49
     },
     "doc": {
-      "files": 62,
-      "lines": 53475
+      "files": 9,
+      "lines": 3272
     },
     "other": {
       "files": 24,
@@ -88,10 +88,6 @@
     },
     {
       "path": "testing/headless.js",
-      "commits": 20
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3c-world-notes.md",
       "commits": 20
     },
     {
@@ -196,271 +192,6 @@
       "path": "docs/field-notes.md",
       "category": "doc",
       "lines": 933
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-0-notes.md",
-      "category": "doc",
-      "lines": 80
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-0.md",
-      "category": "doc",
-      "lines": 1262
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-1-notes.md",
-      "category": "doc",
-      "lines": 26
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-1.md",
-      "category": "doc",
-      "lines": 285
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2a-notes.md",
-      "category": "doc",
-      "lines": 69
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2a.md",
-      "category": "doc",
-      "lines": 923
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2b-notes.md",
-      "category": "doc",
-      "lines": 69
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2b.md",
-      "category": "doc",
-      "lines": 373
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2c-rally-notes.md",
-      "category": "doc",
-      "lines": 69
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2c-rally.md",
-      "category": "doc",
-      "lines": 854
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2d-notes.md",
-      "category": "doc",
-      "lines": 76
-    },
-    {
-      "path": "docs/plans/2026-10-11-phase-2d.md",
-      "category": "doc",
-      "lines": 961
-    },
-    {
-      "path": "docs/plans/2026-10-11-rally-catch-up-notes.md",
-      "category": "doc",
-      "lines": 40
-    },
-    {
-      "path": "docs/plans/2026-10-11-rally-catch-up.md",
-      "category": "doc",
-      "lines": 124
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2e-notes.md",
-      "category": "doc",
-      "lines": 61
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2e-pigpens.md",
-      "category": "doc",
-      "lines": 1038
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2f-notes.md",
-      "category": "doc",
-      "lines": 79
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2f-tractor.md",
-      "category": "doc",
-      "lines": 1250
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2g-notes.md",
-      "category": "doc",
-      "lines": 170
-    },
-    {
-      "path": "docs/plans/2026-10-12-phase-2g-tractor-view.md",
-      "category": "doc",
-      "lines": 427
-    },
-    {
-      "path": "docs/plans/2026-10-12-progress.md",
-      "category": "doc",
-      "lines": 93
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3-contract-issues.md",
-      "category": "doc",
-      "lines": 186
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3-overview.md",
-      "category": "doc",
-      "lines": 849
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3-plan-writers.md",
-      "category": "doc",
-      "lines": 50
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3-survey.md",
-      "category": "doc",
-      "lines": 54
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3a-carryovers-notes.md",
-      "category": "doc",
-      "lines": 119
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3a-carryovers.md",
-      "category": "doc",
-      "lines": 1124
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3b-materials-notes.md",
-      "category": "doc",
-      "lines": 147
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3b-materials.md",
-      "category": "doc",
-      "lines": 1364
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3c-world-notes.md",
-      "category": "doc",
-      "lines": 157
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3c-world.md",
-      "category": "doc",
-      "lines": 3793
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3d-bake-notes.md",
-      "category": "doc",
-      "lines": 184
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3d-bake.md",
-      "category": "doc",
-      "lines": 2499
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3e-render-notes.md",
-      "category": "doc",
-      "lines": 118
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3e-render.md",
-      "category": "doc",
-      "lines": 2122
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3f-assets.md",
-      "category": "doc",
-      "lines": 2334
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3g-viewsync.md",
-      "category": "doc",
-      "lines": 3272
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3h-kits-notes.md",
-      "category": "doc",
-      "lines": 121
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3h-kits.md",
-      "category": "doc",
-      "lines": 2640
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3i-net.md",
-      "category": "doc",
-      "lines": 1980
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3j-rally.md",
-      "category": "doc",
-      "lines": 2575
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3k-pigpens.md",
-      "category": "doc",
-      "lines": 2635
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3l-tractor.md",
-      "category": "doc",
-      "lines": 2881
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3m-integration-notes.md",
-      "category": "doc",
-      "lines": 281
-    },
-    {
-      "path": "docs/plans/2026-10-13-phase-3m-integration.md",
-      "category": "doc",
-      "lines": 1884
-    },
-    {
-      "path": "docs/plans/2026-10-18-menu-nav.md",
-      "category": "doc",
-      "lines": 150
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-1-controllers.md",
-      "category": "doc",
-      "lines": 546
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-2-seats.md",
-      "category": "doc",
-      "lines": 1714
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-3-net.md",
-      "category": "doc",
-      "lines": 1843
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-4-haptics.md",
-      "category": "doc",
-      "lines": 1817
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-5-migrate.md",
-      "category": "doc",
-      "lines": 2079
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-rulings.md",
-      "category": "doc",
-      "lines": 144
-    },
-    {
-      "path": "docs/plans/2026-10-21-local-players-spec.md",
-      "category": "doc",
-      "lines": 212
     },
     {
       "path": "docs/research-menu-navigation.md",
@@ -1943,7 +1674,7 @@
       "lines": 154
     },
     {
-      "path": "test/net-tractor.test.mjs",
+      "path": "test/net-train.test.mjs",
       "category": "test",
       "lines": 75
     },

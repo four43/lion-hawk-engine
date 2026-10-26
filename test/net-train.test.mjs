@@ -1,4 +1,4 @@
-// test/net-tractor.test.mjs
+// test/net-train.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -9,7 +9,7 @@ await RAPIER.init();
 const argsOf = i => ({ n: i + 1 });
 const pose = () => ({ p: { x: 1, y: 0.6, z: 2 }, q: { x: 0, y: 0, z: 0, w: 1 }, v: { x: 0, y: 0, z: 3 }, w: { x: 0, y: 0, z: 0 } });
 
-test('3i: a Tractor-shaped train record: two F.body() fields, a rider list and 8 batched inputs is 101 bytes', () => {
+test('3i: a train record: two F.body() fields, a rider list and 8 batched inputs is 101 bytes', () => {
   const rec = { body: pose(), trailer: pose(), mode: 'drive', riders: [], input: { s: 9, list: Array(8).fill({ thr: 0, steer: 0, horn: false }) } };
   assert.equal(encodeRecord(TRAIN, 2, rec).length, 2 + 26 + 26 + 1 + 1 + (4 + 1 + 8 * 5));
   assert.equal(TRAIN.remote, 'driven'); assert.deepEqual(TRAIN.bodies, ['body', 'trailer']);

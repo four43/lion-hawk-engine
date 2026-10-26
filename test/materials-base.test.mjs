@@ -12,9 +12,9 @@ test('3b: the base library is frozen all the way down', () => {
   assert.ok(frozen(BASE_MATERIALS));
   assert.throws(() => { BASE_MATERIALS.steel.phys.friction = 9; }, TypeError);
 });
-test('3b: ground materials carry Rally\'s tyre surfaces and a dirt rate (M-10 inputs)', () => {
-  // games/rally/src/tire.js SURFACES (e03ed71): tarmac, hardpack, gravel, grass, mud, packed, ice
-  const rally = {
+test('3b: ground materials carry tyre surfaces and a dirt rate (M-10 inputs)', () => {
+  // tarmac, hardpack, gravel, grass, mud, packed snow, ice
+  const surfaces = {
     asphalt: { mu: 1.15, C: 1.5, kp: 0.1, ap: 0.12, crr: 0.015, drag: 0 },
     dirt: { mu: 0.9, C: 1.4, kp: 0.14, ap: 0.15, crr: 0.025, drag: 0 },
     gravel: { mu: 0.8, C: 1.25, kp: 0.18, ap: 0.18, crr: 0.035, drag: 0 },
@@ -23,12 +23,12 @@ test('3b: ground materials carry Rally\'s tyre surfaces and a dirt rate (M-10 in
     snow: { mu: 0.75, C: 1.25, kp: 0.2, ap: 0.2, crr: 0.03, drag: 0 },
     ice: { mu: 0.55, C: 1.4, kp: 0.08, ap: 0.08, crr: 0.015, drag: 0 },
   };
-  for (const [id, tire] of Object.entries(rally)) {
+  for (const [id, tire] of Object.entries(surfaces)) {
     assert.deepEqual({ ...BASE_MATERIALS[id].tire }, tire, id);
     assert.equal(typeof BASE_MATERIALS[id].dirtRate, 'number', id);
   }
   const grounds = Object.keys(BASE_MATERIALS).filter(id => BASE_MATERIALS[id].tire);
-  assert.deepEqual(grounds.sort(), Object.keys(rally).sort(), 'only ground materials have tyre data');
+  assert.deepEqual(grounds.sort(), Object.keys(surfaces).sort(), 'only ground materials have tyre data');
 });
 test('3b: fluids have a fluid block and no phys; solids all have friction, restitution and sg', () => {
   for (const id of ['water', 'air']) { assert.ok(BASE_MATERIALS[id].fluid, id); assert.equal(BASE_MATERIALS[id].phys, undefined, id); }

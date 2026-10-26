@@ -1,9 +1,9 @@
-// src/sim/forecast.js (moved from Tractor Pickup src/net/forecast.js, N-11)
+// src/sim/forecast.js: extrapolated remote poses (N-11)
 // M-65, M-66: another player's train bodies as this device draws them: forecast from the newest record with its velocity (dead reckoning, the way
 // a local physics body moves on between steps), not played back 100-300 ms late. A new record that disagrees with the forecast never makes the
 // train jump: the difference is kept as a correction that fades out (FORECAST.blend). Everything is reused: nothing is allocated per frame.
 export const FORECAST = { horizon: 250, blend: 0.1, snap: 4 }; // ms: forecast at most this far past the newest record (then it holds); s: a correction fades with this time constant; m: a bigger one jumps (a new farm, a respawn)
-import { qmul, rotate } from '../core/math.js'; // identical to the versions Tractor had here
+import { qmul, rotate } from '../core/math.js'; // the shared math helpers
 export { qmul, rotate };
 const v3 = () => ({ x: 0, y: 0, z: 0 }), q4 = () => ({ x: 0, y: 0, z: 0, w: 1 });
 export const newPose = () => ({ p: v3(), q: q4() });

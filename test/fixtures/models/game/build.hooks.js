@@ -1,4 +1,4 @@
-// Fixture build hooks (B-2): beforePage records the context; page fills <!--HOOK--> as Tractor's voice embedding does.
+// Fixture build hooks (B-2): beforePage records the context; page fills <!--HOOK--> as a game embedding generated data would.
 import { existsSync } from 'node:fs';
 let seen = null;
 export default {

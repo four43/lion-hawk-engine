@@ -78,7 +78,7 @@ function netConfig(n, schemas, fail, state) {
   if (!Number.isInteger(c.maxSender) || c.maxSender < 1 || c.maxSender > 255) fail('net.maxSender must be an integer in 1..255');
   for (const k of c.kinds) if (k?.code === PLAYER_CODE || k?.code === GAME_CODE || String(k?.name).startsWith('lh.')) fail(`net.kinds: '${k.name}' (code ${k.code}): codes ${GAME_CODE} and ${PLAYER_CODE} and names starting 'lh.' are the engine's (N-22)`);
   if (c.join !== 'engine' && c.join !== 'manual') fail("net.join must be 'engine' or 'manual'");
-  // B3: the engine's kinds only with the engine join; a manual join's frames stay the game's (Tractor reads them with its own registry)
+  // B3: the engine's kinds only with the engine join; a manual join's frames stay the game's (it reads them with its own registry)
   c.kinds = Object.freeze(c.join === 'engine' ? [...c.kinds, ...stateKinds(state, c.maxSender)] : [...c.kinds]);
   try { createRegistry(c.kinds, { maxSender: c.maxSender }); } catch (err) { fail(`net.kinds: ${err.message}`); }
   pos(c.maxJson, 'net.maxJson', true); pos(c.maxFrame, 'net.maxFrame', true);

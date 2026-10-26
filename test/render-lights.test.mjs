@@ -1,4 +1,4 @@
-// createLightRig (overview §4.6): Tractor Pickup's rig as defaults, a following shadow box, presets that never change shaders.
+// createLightRig (overview §4.6): the defaults, a following shadow box, presets that never change shaders.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -8,7 +8,7 @@ const HOT = /\bnew\s|\.clone\(|\.\.\.|\.slice\(|\.map\(|\.concat\(|\bArray\.from
 const hex = c => '#' + c.getHexString();
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg}: ${a} vs ${b}`);
 
-test('defaults are Tractor Pickup render/scene.js', () => {
+test('the defaults', () => {
   const scene = new THREE.Scene(), rig = createLightRig(scene);
   assert.equal(hex(scene.background), '#bfe6f5'); assert.equal(hex(scene.fog.color), '#bfe6f5'); assert.deepEqual([scene.fog.near, scene.fog.far], [90, 220]);
   assert.equal(hex(rig.hemi.color), '#eef7ff'); assert.equal(hex(rig.hemi.groundColor), '#b9a27c'); assert.equal(rig.hemi.intensity, 1.3);
@@ -19,20 +19,20 @@ test('defaults are Tractor Pickup render/scene.js', () => {
   assert.ok(scene.children.includes(rig.hemi) && scene.children.includes(rig.sun) && scene.children.includes(rig.sun.target));
 });
 const TEXEL = 60 / 2048; // the default box (±30) over the default map
-test('the shadow box follows a point: the sun at the point plus the offset, aimed at the point (Tractor follow)', () => {
+test('the shadow box follows a point: the sun at the point plus the offset, aimed at the point', () => {
   const rig = createLightRig(new THREE.Scene()), near = (v, a) => v.distanceTo(new THREE.Vector3(...a)) < TEXEL; rig.follow(10, -4);
   assert.ok(near(rig.sun.position, [-16, 46, 18])); assert.ok(near(rig.sun.target.position, [10, 0, -4])); // within a texel (snapped below)
   assert.ok(rig.sun.position.clone().sub(rig.sun.target.position).distanceTo(new THREE.Vector3(-26, 46, 22)) < 1e-9, 'the offset is exact');
-  rig.follow(10, -4, 30); // Rally: the shadow box rises with the car (3j request 6)
+  rig.follow(10, -4, 30); // the shadow box rises with the target (3j request 6)
   assert.ok(near(rig.sun.position, [-16, 76, 18])); assert.ok(near(rig.sun.target.position, [10, 30, -4]));
   rig.set('dusk'); assert.ok(Math.abs(rig.sun.target.position.y - 30) < TEXEL, 'a preset change keeps the followed height');
 });
-test('box: [x, z] gives Pig Pens\' uneven shadow box', () => {
+test('box: [x, z] gives an uneven shadow box', () => {
   const c = createLightRig(new THREE.Scene(), { sun: { box: [38, 36] } }).sun.shadow.camera;
   assert.deepEqual([c.left, c.right, c.top, c.bottom], [-38, 38, 36, -36]);
 });
-test('set(k) reproduces Tractor setNight(k) through day, dusk and night', () => {
-  // Tractor Pickup src/render/scene.js, copied as the reference
+test('set(k) matches the reference night blend through day, dusk and night', () => {
+  // the reference night blend, written out
   const SKY = new THREE.Color('#bfe6f5'), DAY = SKY.clone(), DUSK = new THREE.Color('#f4a76b'), NIGHT = new THREE.Color('#1b2440');
   const SUN = [new THREE.Color('#fff3dc'), new THREE.Color('#ffa860'), new THREE.Color('#9fb4ff')], sunC = new THREE.Color();
   const mix = (cols, k, out) => k < 0.5 ? out.copy(cols[0]).lerp(cols[1], k * 2) : out.copy(cols[1]).lerp(cols[2], k * 2 - 1);
@@ -53,7 +53,7 @@ test('a preset change touches no shader-affecting state (fog object, shadows, li
   rig.set('night'); rig.lerp('day', 'dusk', 0.3); rig.set(0.8);
   assert.ok(scene.fog === fog && scene.background === bg, 'the same Fog and background objects'); assert.deepEqual(shape(), before);
 });
-test('lerp blends named presets; a game preset can move the sun (Rally snow) and the fog', () => {
+test('lerp blends named presets; a game preset can move the sun (a snow look) and the fog', () => {
   const scene = new THREE.Scene(), rig = createLightRig(scene, { presets: { snow: { sky: '#b7c6cc', hemi: 0.85, sun: { intensity: 3.6, offset: [34, 15, 22] }, fog: [60, 330] } } });
   rig.set('snow'); rig.follow(0, 0);
   assert.deepEqual(rig.sun.position.toArray(), [34, 15, 22]); assert.equal(rig.sun.intensity, 3.6); assert.deepEqual([scene.fog.near, scene.fog.far], [60, 330]);

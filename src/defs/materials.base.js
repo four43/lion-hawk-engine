@@ -1,6 +1,6 @@
 // src/defs/materials.base.js
 // The base material library (M-2): the spec's 18 entries, in spec order. Plain data; defineMaterials validates and
-// resolves it. Tyre surfaces are Rally's SURFACES (games/rally/src/tire.js): asphalt = tarmac, dirt = hardpack,
+// resolves it. Tyre surfaces follow the usual racing names: asphalt = tarmac, dirt = hardpack,
 // snow = packed snow. Fluids (water, air) carry no phys.sg, so their collider density is 0 (overview §4.2).
 const freeze = o => { for (const v of Object.values(o)) if (v && typeof v === 'object') freeze(v); return Object.freeze(o); };
 

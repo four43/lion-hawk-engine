@@ -1,7 +1,7 @@
 // Baked animation tables (A-11), for instanced crowds that cannot use AnimationMixer. `<model>.anim.json` holds, per
 // clip, frames × parts × 12 floats: each part's model-space matrix as Matrix4.elements without the bottom row
 // (indices 0,1,2, 4,5,6, 8,9,10, 12,13,14). Sampling loops the clip and lerps element-wise between frames, exactly as
-// Pig Pens' and Tractor's sampleAnim did. Sampling allocates nothing.
+// a hand-written sampler would. Sampling allocates nothing.
 const COLS = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14];
 
 export function decodeAnimTable(json) {
@@ -33,7 +33,7 @@ export function sampleAnimTable(table, clip, t, partIndex, out) {
 }
 
 const TMP = { elements: new Array(16).fill(0) };
-// A·(1 − k) + B·k, element-wise (Pig Pens' lerpM blend from the previous clip A to the current clip B)
+// A·(1 − k) + B·k, element-wise (a blend from the previous clip A to the current clip B)
 export function blendAnimTable(table, clipA, tA, clipB, tB, k, partIndex, out) {
   sampleAnimTable(table, clipA, tA, partIndex, TMP);
   sampleAnimTable(table, clipB, tB, partIndex, out);

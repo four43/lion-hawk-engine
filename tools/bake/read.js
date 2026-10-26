@@ -1,5 +1,5 @@
 // Reading sources (A-1): one NodeIO with every extension and the meshopt codecs, the rename maps, and the palette → vertex
-// colour step (`palette: 'vertex'`, Tractor's tools/glb.mjs logic moved here).
+// colour step (`palette: 'vertex'`).
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
@@ -22,7 +22,7 @@ export function applyRenames(doc, rename) {
 
 const s2l = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
 // Every primitive with a base-colour texture and TEXCOORD_0 but no COLOR_0 gets COLOR_0 (linear floats) = texel at the vertex
-// UV × base colour factor (Kenney writes sRGB-looking values into the factor; used as they are, as Tractor's bake did). Its
+// UV × base colour factor (Kenney writes sRGB-looking values into the factor; used as they are). Its
 // texture, TEXCOORD_0 and TANGENT go; the factor becomes white. Untextured primitives (baseColorFactor only) get COLOR_0 = the
 // factor at every vertex the same way, and their material's factor becomes white when all its users got one. Textures left unused
 // are disposed.

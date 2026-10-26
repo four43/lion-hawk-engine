@@ -1,8 +1,8 @@
 // Audio service (#67, overview §4.9): one AudioContext per page, made and resumed inside a user gesture (iOS starts audio only
 // there), suspended while the tab is hidden and resumed on return; after an interruption (a call, Siri) the next gesture
-// resumes it. Games connect their synths to `master`: master -> mute gain -> compressor limiter (Tractor's R-8 settings) ->
-// speakers. load(url) fetches at once and decodes once a context exists (Tractor's B-8: never mid-drive); play(buffer, opts)
-// plays a decoded buffer, optionally placed in the world (`at`, against the object given to listen(): Pig Pens' distance
+// resumes it. Games connect their synths to `master`: master -> mute gain -> compressor limiter (R-8 settings) ->
+// speakers. load(url) fetches at once and decodes once a context exists (B-8: never mid-game); play(buffer, opts)
+// plays a decoded buffer, optionally placed in the world (`at`, against the object given to listen(): distance
 // volume). ctx and master stay null until the first gesture. View-only: sim code never imports this.
 const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']; // iOS activates on pointerup/touchend/click, not a touch pointerdown
 const LIMITER = Object.freeze({ threshold: -14, knee: 24, ratio: 4, attack: 0.005, release: 0.2 });
@@ -51,7 +51,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
   }
   function onGesture() {
     if (disposed) return;
-    for (const fn of gestureFns.slice()) call(fn); // inside the gesture: speech priming and the like (Tractor's voice.prime)
+    for (const fn of gestureFns.slice()) call(fn); // inside the gesture: speech priming and the like
     if (!make()) return;
     if (ctx.state === 'running') settle(); else tryResume();
   }

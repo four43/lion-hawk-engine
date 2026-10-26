@@ -1,8 +1,8 @@
 // lion-hawk/view light rig (overview §4.6): a hemisphere light, a shadowed sun whose shadow box follows a point, fog in the
 // sky colour, and named looks (presets) blended by k. A preset changes colours, intensities, the sun's offset and the fog
-// distances, never state that selects a shader program: fog on/off, shadow casting, map size (Tractor X-4 stutters).
-// Defaults are Tractor Pickup's src/render/scene.js. The default dusk and night presets reproduce its setNight(k) exactly.
-// Pig Pens (src/view/world.js) and Rally (src/render.js setLook) map onto options and presets.
+// distances, never state that selects a shader program: fog on/off, shadow casting, map size (they stutter, X-4).
+// The defaults are a clear daylight scene; the default dusk and night presets blend it to night as k goes 0.5 to 1.
+// A game with its own look sets options and presets.
 import * as THREE from 'three';
 
 export const LIGHT_DEFAULTS = Object.freeze({
@@ -10,7 +10,7 @@ export const LIGHT_DEFAULTS = Object.freeze({
   sun: Object.freeze({ color: '#fff3dc', intensity: 2.1, map: 2048, box: 30, offset: Object.freeze([-26, 46, 22]), near: 5, far: 120, bias: -0.0006, normalBias: 0.03 }),
   fog: Object.freeze([90, 220]),
 });
-export const DEFAULT_PRESETS = Object.freeze({ // Tractor E-5 bedtime: k 0.5 = sunset, 1 = night (hemi 1.3 - k, sun 2.1 - 1.95 k)
+export const DEFAULT_PRESETS = Object.freeze({ // E-5: k 0.5 = sunset, 1 = night (hemi 1.3 - k, sun 2.1 - 1.95 k)
   dusk: Object.freeze({ sky: '#f4a76b', hemi: 0.8, sun: Object.freeze({ color: '#ffa860', intensity: 1.125 }) }),
   night: Object.freeze({ sky: '#1b2440', hemi: 0.3, sun: Object.freeze({ color: '#9fb4ff', intensity: 0.15 }) }),
 });
@@ -66,7 +66,7 @@ export function createLightRig(scene, opts = {}) {
   let fx = 0, fy = 0, fz = 0;
   const fail = name => { throw Error(`lights: unknown preset '${name}' (known: ${names.join(', ')})`); };
   const get = name => presets[name] ?? fail(name);
-  // y: the followed point's height (Rally's stages climb; 3j request 6). Default 0 keeps Tractor and Pig Pens unchanged.
+  // y: the followed point's height (for terrain that climbs). Default 0 keeps the box at ground level.
   // The box moves in whole shadow-map texels across the light (its x and y), so a moving point does not make shadow edges
   // shimmer; along the light it moves freely. The drawn box is within a texel of the point.
   const tx = sun.castShadow ? (sun.shadow.camera.right - sun.shadow.camera.left) / s.map : 0, ty = sun.castShadow ? (sun.shadow.camera.top - sun.shadow.camera.bottom) / s.map : 0;

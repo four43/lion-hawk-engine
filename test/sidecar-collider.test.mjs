@@ -22,7 +22,7 @@ test('3b: every collider shape validates and is returned unchanged (overview §4
   assert.deepEqual([...SHAPES], ['box', 'sphere', 'capsule', 'cylinder', 'hull', 'mesh']);
   const m = defineMaterials();
   for (const c of EVERY) assert.equal(validateCollider(c, { ...opts, materials: m }), c, c.shape);
-  const rounded = { ...EVERY[0], half: [1, 0.04, 2], round: 0.2 }; // Rally's thin core: round may exceed half
+  const rounded = { ...EVERY[0], half: [1, 0.04, 2], round: 0.2 }; // a thin core: round may exceed half
   assert.equal(validateCollider(rounded, { ...opts, materials: m }), rounded, 'a box may carry round (roundCuboid, 3j #1)');
 });
 test('3b: collider errors name the prefix, the path and the field', () => {

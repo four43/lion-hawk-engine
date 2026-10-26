@@ -1,4 +1,4 @@
-// partXf: per-part poses with prev/curr, swapped by lh.world.swap (3g Integrator request 7: Rally's wheels drawn by view sync).
+// partXf: per-part poses with prev/curr, swapped by lh.world.swap (3g Integrator request 7: wheels drawn by view sync).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../src/sim/world/world.js';

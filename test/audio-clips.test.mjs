@@ -5,7 +5,7 @@ import { createAudio } from '../src/view/audio/index.js';
 import { dom } from './helpers/dom.mjs';
 import { audioPage, fakeFetch, flush } from './helpers/fakeAudio.mjs';
 
-test('3g: load fetches at once, decodes once a context exists, and caches by url (#67, Tractor B-8)', async () => {
+test('3g: load fetches at once, decodes once a context exists, and caches by url (#67, B-8)', async () => {
   const f = fakeFetch({ 'moo.mp3': 300 }), s = audioPage({ fetch: f });
   const p = s.audio.load('moo.mp3'); assert.deepEqual(f.calls, ['moo.mp3']);
   assert.equal(s.audio.load('moo.mp3'), p);
@@ -38,7 +38,7 @@ test('3g: pan adds a stereo panner, clamped to -1..1 (#67)', async () => {
   assert.equal(pn.kind, 'panner'); assert.equal(pn.pan.value, 1); assert.equal(pn.out[0], s.audio.master);
   h.source.onended(); assert.equal(pn.disconnected, true);
 });
-test('3g: positional: Pig Pens\' distance volume from the listener (planar); optional pan from the listener\'s right (#67)', async () => {
+test('3g: positional: distance volume from the listener (planar); optional pan from the listener\'s right (#67)', async () => {
   const s = audioPage({ opts: { positional: { pan: 1 } } }); s.fire(); await flush();
   const cam = new THREE.PerspectiveCamera(); cam.position.set(0, 30, 0); cam.updateMatrixWorld();
   assert.equal(s.audio.distanceGain(80, 0, 0), 0.6); // no listener: the cap

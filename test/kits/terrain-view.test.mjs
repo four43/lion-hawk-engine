@@ -79,7 +79,7 @@ test('after the first update building is budgeted: a chunk shows what it has, or
   assert.equal(u.stats.pending, true);
 });
 
-test('pending builds drain on later updates while the camera stands still (Rally streaming), then updates idle', () => {
+test('pending builds drain on later updates while the camera stands still (streaming), then updates idle', () => {
   let t = 0;
   const now = () => (t += 2);                           // every clock read costs 2 ms: one build fits a 3 ms budget
   const m = createTerrainMesh(T, { compiler: compiler(), chunks: [2, 1], lods: [1, 2, 4], lodFar: [10, 30], budgetMs: 3, now });
@@ -118,7 +118,7 @@ test('a three.js material passes straight through; bad options throw', () => {
   assert.throws(() => createTerrainMesh(T, { chunks: [1, 1] }), /terrain view: pass compiler/);
 });
 
-test('evict drops far fine geometry (Rally EVICT) and it is rebuilt on return', () => {
+test('evict drops far fine geometry and it is rebuilt on return', () => {
   const t = createTerrainMesh(T, { compiler: compiler(), chunks: [1, 1], lods: [1, 2, 4], lodFar: [10, 30], evict: [20, 50] });
   const real = THREE.BufferGeometry.prototype.dispose; let freed = 0;
   THREE.BufferGeometry.prototype.dispose = function () { freed++; return real.call(this); };
@@ -132,7 +132,7 @@ test('evict drops far fine geometry (Rally EVICT) and it is rebuilt on return', 
   } finally { THREE.BufferGeometry.prototype.dispose = real; }
 });
 
-test("Rally's settings: chunkCells fixes the chunk grid; colorAt gets the normal's y; uv rides on attributes (3j #9)", () => {
+test("a long track's settings: chunkCells fixes the chunk grid; colorAt gets the normal's y; uv rides on attributes (3j #9)", () => {
   const R = grid(901, 65, 1, 0, 0, (ix, iz) => 0.05 * ix + 0.02 * iz);
   const t = createTerrainMesh(R, { compiler: compiler(), chunkCells: 64, lods: [1, 2, 4], lodFar: [150, 400], hysteresis: 12, visFar: 760,
     evict: [300, 720], skirt: 2, budgetMs: 3, drop: (x, z, lod) => [0, 0.35, 0.9][lod],

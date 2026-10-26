@@ -32,7 +32,7 @@ test('3g: mode() picks the one-finger drag: chase turns the chase offset, none l
   s.ev(s.el, 'pointerdown', 2, 100, 100); s.ev(s.window, 'pointermove', 2, 180, 150); s.rig.update(0.016); s.ev(s.window, 'pointerup', 2, 180, 150);
   assert.deepEqual({ ...st }, before);
 });
-test('3g: two fingers pinch-zoom, turn and pan (Pig Pens\' two-pointer gesture) (#59)', () => {
+test('3g: two fingers pinch-zoom, turn and pan (#59)', () => {
   const s = setup(), st = s.rig.state;
   s.ev(s.el, 'pointerdown', 1, 100, 100); s.ev(s.el, 'pointerdown', 2, 200, 100); assert.equal(s.rig.gesture, 'pinch');
   s.ev(s.window, 'pointermove', 2, 300, 100); s.rig.update(0.016);

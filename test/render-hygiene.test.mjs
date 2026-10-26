@@ -1,4 +1,4 @@
-// GPU hygiene (M-12, S-3; Tractor Pickup render/{warm,shadows,dispose}.js): warm compiles hidden objects and given materials;
+// GPU hygiene (M-12, S-3): warm compiles hidden objects and given materials;
 // instanced casters get their own depth material; disposeTree frees each resource once and keeps shared ones.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,7 +46,7 @@ test('keepShared may be a predicate', () => {
   root.add(new THREE.Mesh(g, a), new THREE.Mesh(g, b));
   assert.equal(disposeTree(root, { keepShared: r => r === a }), 1); assert.deepEqual(Object.fromEntries(hits), { b: 1 });
 });
-test('warm compiles hidden objects too, then hides them again before any frame (Tractor warmShaders)', async () => {
+test('warm compiles hidden objects too, then hides them again before any frame', async () => {
   const r = fakeRenderer(), scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera();
   const shown = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial()), hat = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial());
   const holder = new THREE.Group(); holder.visible = false; hat.visible = false; holder.add(hat); scene.add(shown, holder);

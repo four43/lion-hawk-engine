@@ -1,5 +1,5 @@
 // Task 8b (3l Integrator request 6): paint that keeps each vertex's shading, a hue-ramp paint and repaint, on one program per
-// feature set. The look's oracle is Tractor Pickup 1.8's paintable (games/tractor-pickup/src/render/vehicles3d.js), copied below.
+// feature set. The look's oracle is a reference paintable, written out below.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BoxGeometry, BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshStandardMaterial, ShaderLib } from 'three';
@@ -17,14 +17,14 @@ function strip(n, scale = 1) {
   return g;
 }
 const mesh = (name, geo, p = [0, 0, 0]) => { const m = new Mesh(geo, new MeshStandardMaterial({ name })); m.name = name; m.position.fromArray(p); m.receiveShadow = true; return m; };
-// a little tractor: body (paint-body, z from -1.5), fenders at z + 2 and the darker roof on them (both paint-trim), glass (testMud)
+// a little vehicle: body (paint-body, z from -1.5), fenders at z + 2 and the darker roof on them (both paint-trim), glass (testMud)
 function model() {
   const root = new Group(), body = mesh('paint-body', strip(8), [0, 0, -0.5]), fenders = mesh('paint-trim', strip(6), [0, 0, 2]);
   const roof = mesh('paint-trim', strip(4, 0.5), [0, 1, 0]), glass = mesh('testMud', strip(4));
   root.add(body, fenders, glass); fenders.add(roof);
   return { root, body, fenders, roof, glass };
 }
-// Tractor 1.8's paintable over rows { area 1 | 2, pos (model space), col (linear) }: the paint, or the rainbow hue at z, times
+// the reference paintable over rows { area 1 | 2, pos (model space), col (linear) }: the paint, or the rainbow hue at z, times
 // 0.25 + 0.85 × the vertex's brightness over its area's brightest, capped at 1.1
 const PAINTS = { blue: '#2f6fd6', yellow: '#f2c230' };
 function paintable18(rows, { body, trim }) {
@@ -87,7 +87,7 @@ test('paint values: a colour (mode 1) and a hue ramp (mode 2) are uniforms of on
   assert.deepEqual(compile(own.get('testMud', { paint: true })).uniforms.uPaintShade.value.toArray(), [0, 1, 1]);
 });
 
-test('the drawn colours match Tractor 1.8\'s paintable at every paint vertex, rainbow included', () => {
+test('the drawn colours match the reference paintable at every paint vertex, rainbow included', () => {
   const mc = createMaterialCompiler(REG, { paint: { base: 'testMud' } }), { root, body, fenders, roof } = model();
   mc.apply(root);
   const rows = [[body, 1], [fenders, 2], [roof, 2]].map(([m, area]) => {

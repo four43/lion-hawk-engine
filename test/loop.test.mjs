@@ -23,7 +23,7 @@ test('frame time is clamped to maxFrame and negative time is ignored (R-1)', () 
   assert.equal(loop.frame(10), 15);
   assert.equal(loop.frame(-1), 0);
 });
-test('rally rate: 240 Hz, 12 catch-up', () => {
+test('240 Hz with 12 catch-up steps', () => {
   const { loop } = make({ hz: 240, maxCatchUp: 12 });
   assert.equal(loop.frame(1 / 60), 4);
 });

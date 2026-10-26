@@ -320,7 +320,7 @@ export function createWorld(engine, opts = {}) {
     return () => { const i = r.own ? r.own.indexOf(fn) : -1; if (i >= 0) r.own.splice(i, 1); };
   }
   // §4.5 joints: a descriptor { type, a, b, axis?, limits? } built from the injected Rapier, or raw Rapier joint data (L-1);
-  // freed when either entity despawns (Tractor's hitch)
+  // freed when either entity despawns (a hitch, say)
   const JOINT_TYPES = ['spherical', 'revolute', 'fixed', 'prismatic'];
   const vec3 = (v, what) => {
     if (!isVec(v, 3) || !v.every(Number.isFinite)) throw new Error(`world.joint: ${what} must be [x, y, z] of finite numbers, got ${JSON.stringify(v)}`);
@@ -359,7 +359,7 @@ export function createWorld(engine, opts = {}) {
     offA = own(a, free); offB = own(b, free);
     return j;
   }
-  // §4.5 runtime material swap (Pig Pens' slide/grip): friction and restitution always; density (and so mass) when it changes
+  // §4.5 runtime material swap (e.g. slide and grip): friction and restitution always; density (and so mass) when it changes
   function setMaterial(e, part, id) {
     const r = mine(e, 'setMaterial');
     if (!registry || typeof id !== 'string' || !registry.has(id)) throw new Error(`world.setMaterial: unknown material '${id}'`);
@@ -415,7 +415,7 @@ export function createWorld(engine, opts = {}) {
         r.awake = asleep ? 0 : 1;
       }
       // #2: Rapier 0.21 wakes a body inserted asleep on its first step. Put it back to sleep unless something really
-      // set it moving (Rally's afterStep thresholds, moved; one step of gravity is 0.04 m/s).
+      // set it moving (wake thresholds; one step of gravity is 0.04 m/s).
       for (let i = 0; i < sleepers.length; i++) {
         const body = sleepers[i].body, v = body.linvel(_T), w = body.angvel(_W);
         if (Math.hypot(v.x, v.y, v.z) < 0.2 && Math.hypot(w.x, w.y, w.z) < 0.5) body.sleep();

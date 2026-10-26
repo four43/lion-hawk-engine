@@ -1,9 +1,9 @@
-// Crowds (overview §4.9, A-11): one InstancedMesh per animated part, posed from a baked animation table (Pig Pens' pigs and
-// chickens). asset is assets.get(key) with its decoded anim table (3f's decodeAnimTable). set(i, pose, clip, t, blend?) writes
+// Crowds (overview §4.9, A-11): one InstancedMesh per animated part, posed from a baked animation table (herds,
+// flocks). asset is assets.get(key) with its decoded anim table (3f's decodeAnimTable). set(i, pose, clip, t, blend?) writes
 // instance i: pose is a Matrix4 or { p, q, s? }; each part's matrix is pose x 3f's sampleAnimTable(clip, t). With blend =
-// { clip, t, k } it is 3f's blendAnimTable(blend.clip, blend.t, clip, t, k): k is this clip's weight (1 = no blend), as Pig
-// Pens' lerpM. Parts whose instanced material has COVERAGE_INSTANCED (3f) get instanceCoverage: cover(i, dirt, rust, snow, mud)
-// (Pig Pens' per-pig mud). count sets how many draw; commit() uploads. parts[k].inst is the part's createInstances, for games
+// { clip, t, k } it is 3f's blendAnimTable(blend.clip, blend.t, clip, t, k): k is this clip's weight (1 = no blend), as an
+// element-wise lerp. Parts whose instanced material has COVERAGE_INSTANCED (3f) get instanceCoverage: cover(i, dirt, rust, snow, mud)
+// (per-animal mud). count sets how many draw; commit() uploads. parts[k].inst is the part's createInstances, for games
 // that add attributes. Nothing is allocated after create.
 import * as THREE from 'three';
 import { sampleAnimTable, blendAnimTable } from '../assets/animTable.js';

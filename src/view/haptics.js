@@ -1,7 +1,7 @@
 // src/view/haptics.js
 // [C-14] (spec §5.5): the haptics lifecycle. Games drive lp.pad.vibrationActuator themselves (after checking `effects`);
-// the engine only stops rumble it would otherwise leave running. From Rally's playtests (games/rally/src/rumbleOut.js,
-// 2026-10-19): Chromium queues each playEffect on a task but runs reset() at once, so a reset alone can be overtaken by an
+// the engine only stops rumble it would otherwise leave running. From playtests
+// (2026-10-19): Chromium queues each playEffect on a task but runs reset() at once, so a reset alone can be overtaken by an
 // effect sent a frame earlier. A stop is therefore a zero effect (queued behind any late one) plus reset(),
 // sent at once and on each of the next frames, STOP_FRAMES rounds in all. A pad this page sees for the first time gets one
 // full stop round, clearing what the previous page left playing.
@@ -9,7 +9,7 @@
 export const STOP_FRAMES = 20;
 const ZERO = Object.freeze({ startDelay: 0, duration: 1, strongMagnitude: 0, weakMagnitude: 0 });
 // A pad with trigger motors gets a zero trigger-rumble: a dual-rumble says nothing about the triggers, and a trigger effect a
-// game sent a frame earlier must not outlive the stop (Rally's brake and traction aid, rally-spec R9-4).
+// game sent a frame earlier must not outlive the stop (a brake or traction-aid buzz).
 const ZERO_TRIGGERS = Object.freeze({ ...ZERO, leftTrigger: 0, rightTrigger: 0 });
 const quiet = () => {}; // a stop's promises resolve 'preempted' or reject on a pad that went away: nothing to handle
 

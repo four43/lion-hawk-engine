@@ -1,11 +1,11 @@
-// kit-vehicle's tire model (spec §3.2 `tire.*`, design §3.5 and §7.3), ported from Rally (games/rally/src/tire.js and
-// surface.js, 2026-10): brush-style contact patch deflection with relaxation lengths, feeding a normalised combined-slip
+// kit-vehicle's tire model (spec §3.2 `tire.*`, design §3.5 and §7.3), from a
+// playtested racing model: brush-style contact patch deflection with relaxation lengths, feeding a normalised combined-slip
 // Magic Formula. Pure maths, sim-pure, allocation-free per call (the result object is the caller's).
 
 // Normalised Magic Formula: F/D for normalised slip rho >= 0 (E = 0). With B = tan(pi / 2C) the peak (1) is at rho = 1.
 export const mfNorm = (rho, s) => Math.sin(s.C * Math.atan(s.B * rho));
 
-// The parameters every tire shares (Rally's TIRE, playtested on both its cars).
+// The parameters every tire shares (playtested on two cars).
 export const TIRE = Object.freeze({
   sigmaX: 0.12,    // longitudinal relaxation length (m)
   sigmaY: 0.30,    // lateral relaxation length (m)

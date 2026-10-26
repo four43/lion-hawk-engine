@@ -1,4 +1,4 @@
-// snapshot (overview §4.6): Tractor Pickup's thumbnail copies (ui/icons.js, ui/stickerArt.js) as one engine helper.
+// snapshot (overview §4.6): thumbnails, pictures and die-cut stickers from one helper.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';

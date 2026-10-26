@@ -1,10 +1,10 @@
-// Tilt-shift "miniature" post pass (overview §4.6), from Pig Pens src/tiltshift.js, made generic: a very shallow depth of
+// Tilt-shift "miniature" post pass (overview §4.6): a very shallow depth of
 // field focused at `focus` (the camera-to-target distance). Blur grows with depth away from the focus, relative to it.
 //   1. scene -> full-res MSAA target with a depth texture
 //   2. half-res prefilter: colour + signed circle of confusion (CoC) packed in alpha
 //   3. half-res gather blur: golden-angle spiral; a sample lands only if its own CoC reaches the centre (no halos)
 //   4. full-res composite: sharp where CoC ~ 0, blurred elsewhere, a little saturation and vignette, then tone mapping and
-//      the output colour space (tone mapping is a no-op for toneMapping 'none', so Pig Pens' pixels are unchanged)
+//      the output colour space (tone mapping is a no-op for toneMapping 'none')
 // The look fades in as the camera zooms in (full at fullAt, gone by offAt); zoomed out it is one plain render.
 import * as THREE from 'three';
 

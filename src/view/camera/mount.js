@@ -1,4 +1,4 @@
-// Mounted camera (Rally's bumper and bonnet views, render.js:173-180): fixed to a body at socket.p (body space), looking at
+// Mounted camera (bumper and bonnet views): fixed to a body at socket.p (body space), looking at
 // socket.look (body space; default 20 m ahead and 0.3 m up) and rolling with the body. follow(pose) takes { p, q } or an
 // Object3D (the synced object, so the camera rides the interpolated pose). set(socket) swaps the mount (bumper <-> bonnet).
 // With `fovAdd` the field of view is the base plus that many degrees: the base is camera.userData.lhFov (3e's portrait FOV

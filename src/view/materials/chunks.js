@@ -19,7 +19,7 @@ export function inject(src, chunk, text, where = 'after') {
   return src.replace(tag, where === 'before' ? `${text}\n${tag}` : `${tag}\n${text}`);
 }
 
-// Value noise shared by the coverage layers (Tractor's dirtMat.js hash and Pig Pens' mud noise, one copy).
+// Value noise shared by the coverage layers (one copy for dirt and mud).
 const NOISE = `
 float lhH( vec3 p ) { return fract( sin( dot( p, vec3( 12.9898, 78.233, 37.719 ) ) ) * 43758.5453 ); }
 float lhN( vec3 p ) { vec3 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
@@ -53,7 +53,7 @@ varying vec4 vLhCov; varying float vLhSeed;
 #else
   vec4 lhCov = uCoverage * uCoverageAccept; float lhSeed = 0.0;
 #endif
-  if ( lhCov.x > 0.002 ) { // dirt (Tractor's dirtMat.js): brown spots, more of them low down
+  if ( lhCov.x > 0.002 ) { // dirt: brown spots, more of them low down
     float n = lhN( vLhP * 2.7 ) * 0.65 + lhN( vLhP * 9.0 ) * 0.35;
     float low = clamp( 1.2 - vLhP.y * 0.45, 0.0, 1.0 );
     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.30, 0.19, 0.10 ), step( n, lhCov.x * 0.8 * low ) * 0.9 );
@@ -67,7 +67,7 @@ varying vec4 vLhCov; varying float vLhSeed;
     float n = lhN( vLhP * 6.0 );
     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.93, 0.95, 1.0 ), smoothstep( 1.0 - lhCov.z, 1.15 - lhCov.z, vLhUp * 0.85 + n * 0.15 ) );
   }
-  if ( lhCov.w > 0.002 ) { // mud (Pig Pens' pigs): blotches that creep up from the feet as the level rises
+  if ( lhCov.w > 0.002 ) { // mud: blotches that creep up from the feet as the level rises
     vec3 mp = vLhP * 2.3 + vec3( lhSeed * 31.7, lhSeed * 17.3, lhSeed * 7.1 );
     float h = clamp( vLhP.y / 1.5, 0.0, 1.0 );
     float n = lhN( mp ) * 0.75 + lhN( mp * 2.4 ) * 0.25;
@@ -79,7 +79,7 @@ varying vec4 vLhCov; varying float vLhSeed;
 }`);
 }
 
-// FUR (Pig Pens' fur.js): shells are copies of the mesh pushed out along a smoothed normal (furGeometry). Shell 0 is the
+// FUR: shells are copies of the mesh pushed out along a smoothed normal (furGeometry). Shell 0 is the
 // mesh itself and draws untouched; outer shells keep only fragments inside a strand of 3D cell noise. furMask (0..1)
 // scales strand length per vertex, so a 0 mask is bare skin and a soft mask fades the fur out.
 function fur(sh) {
@@ -130,7 +130,7 @@ for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
 #endif`);
 }
 
-// WIND (Rally's verge grass, trackView.js): blades sway by height squared, phase from the instance's world position, and
+// WIND (grass and foliage): blades sway by height squared, phase from the instance's world position, and
 // shrink to nothing between uWindFade.x and .y metres from the camera (off when y <= x). Lit as facing their normal from
 // both sides, so double-sided blades have no black undersides.
 function wind(sh) {
@@ -149,7 +149,7 @@ normal = normalize( vNormal );
 #endif`);
 }
 
-// PAINT (Task 8b; Tractor 1.8's paintable): a paint slot that keeps its vertex shading. lhPaint = (model-space xyz, brightness b over
+// PAINT (Task 8b): a paint slot that keeps its vertex shading. lhPaint = (model-space xyz, brightness b over
 // the slot's brightest vertex, written by mc.apply). k = min(max, floor + gain × b) from uPaintShade. uPaintMode.x: 0 keeps the vertex
 // colours, 1 paints diffuse × k (× instanceColor), 2 paints a hue ramp hsl(fract(dot(xyz, axis) + w), s, l) × k. Worked out per
 // vertex, as 1.8's vertex colours were, so triangles blend the same RGB. Injected last, so it runs before the coverage layers.

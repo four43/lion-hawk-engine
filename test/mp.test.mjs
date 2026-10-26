@@ -15,7 +15,7 @@ test('2f: mp() latency, drop and settle', () => {
   w.seconds(0.1); assert.equal(w.guests[0].engine.scene.state.log.some(c => c.type === 'guest.say'), false, 'nothing within 200 ms');
   const left = w.settle(x => x.guests[0].engine.scene.state.log.some(c => c.type === 'guest.say') ? [] : ['no say'], { maxSeconds: 1 });
   assert.deepEqual(left, []);
-  // the hub drops at send time (N-2, M-53, unchanged from Tractor's link.js): what was already on the wire lands within the 200 ms delay
+  // the hub drops at send time (N-2, M-53): what was already on the wire lands within the 200 ms delay
   const len = () => w.guests[0].engine.scene.state.log.length;
   w.hub.drop = () => true; const n0 = len(); w.seconds(0.25); assert.ok(len() > n0, 'in flight before the drop');
   const n = len(); w.seconds(0.5); assert.equal(len(), n);

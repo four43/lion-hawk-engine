@@ -26,7 +26,7 @@ test('decode keeps fps, parts and clips; a frame samples back to the matrix the 
   close(sampleAnimTable(T, 'walk', 1, 1, out).elements, at(100).elements, 'frame 1 part 1');
 });
 
-test('sampling lerps between frames and loops from the last frame back to the first (Pig Pens sampleAnim)', () => {
+test('sampling lerps between frames and loops from the last frame back to the first', () => {
   const out = new Matrix4(), x = t => sampleAnimTable(T, 'walk', t, 0, out).elements[12];
   assert.ok(Math.abs(x(0.5) - 5) < 1e-5);
   assert.ok(Math.abs(x(2.5) - 10) < 1e-5, 'frame 2 (20) → frame 0 (0)');

@@ -1,6 +1,6 @@
 // kit-vehicle (sim half, design §7.3): two backends on a World entity with the same wheel specs and contact readback;
 // their controls differ (raycast: steer, engine, brake, slip, side; tire: steer, engine and brake as torques). 'raycast' (the default) is Rapier's ray-cast vehicle controller (L-1: car.controller is the real one).
-// 'tire' (design §3.5) is Rally's: the kit casts each wheel's ray, runs its spring and damper, and steps the tire model
+// 'tire' (design §3.5): the kit casts each wheel's ray, runs its spring and damper, and steps the tire model
 // (./tire.js, Magic Formula from the ground's tire block) and the wheel's spin `substeps` times per step. The kit owns the wiring: wheels from body-space points or sockets, per-wheel controls, one update per
 // step before 'lh.physics.step', and contact readback. Tuning stays game-side: a game system before VEHICLE_SYSTEM calls
 // car.set(); one after it (and before 'lh.physics.step') may read car.wheels and add its own impulses.
@@ -152,7 +152,7 @@ export function createVehicle(world, e, opts = {}) {
 
 // ---- the tire backend ----
 const G = 9.81;
-// the tire and spin integration is explicit: stable at Rally's 1/1920 s (240 Hz x 8 substeps), so 'auto' substeps keep h there
+// the tire and spin integration is explicit: stable at 1/1920 s (240 Hz x 8 substeps), so 'auto' substeps keep h there
 const MAX_H = 1 / 1920;
 const DRAG = { fade: 2, v: 18 }; // surface drag (grass, snow, sand): drag Fz tanh(v / 2) (1 + (v / 18)^2) against the ground speed
 const UP = { x: 0, y: 1, z: 0 }, FWD = { x: { x: 1, y: 0, z: 0 }, z: { x: 0, y: 0, z: 1 } };

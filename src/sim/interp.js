@@ -1,4 +1,4 @@
-// src/sim/interp.js (moved from Tractor Pickup src/net/interp.js, N-11)
+// src/sim/interp.js: buffered remote snapshots and their sampling (N-11)
 // M-25: remote things show about 100 ms behind their sender's time stamps and move smoothly between two messages; when messages
 // arrive unevenly the delay grows, up to 300 ms. M-26: a message not newer than the last one is ignored.
 // The clock offset (receiver minus sender) follows the least-delayed message, and creeps up slowly so clock drift cannot freeze it.

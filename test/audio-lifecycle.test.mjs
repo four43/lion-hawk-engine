@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { audioPage, flush } from './helpers/fakeAudio.mjs';
 
-test('3g: a hidden tab suspends the running context; coming back resumes it (#67, Tractor D-1)', async () => {
+test('3g: a hidden tab suspends the running context; coming back resumes it (#67, D-1)', async () => {
   const s = audioPage(); s.fire(); await flush(); const c = s.fa.made[0];
   s.setVisibility('hidden'); await flush();
   assert.equal(c.suspends, 1); assert.equal(c.state, 'suspended'); assert.equal(s.audio.unlocked, false);
@@ -23,7 +23,7 @@ test('3g: pageshow (back-forward cache) resumes a stopped context (#67)', async 
   s.fa.AudioContext.refuse = false; s.window.dispatchEvent(new s.window.Event('pageshow')); await flush();
   assert.equal(c.state, 'running'); assert.equal(c.resumes, 2);
 });
-test('3g: an interruption while visible (iOS "interrupted") re-arms the gesture listeners (#67, Tractor D-1)', async () => {
+test('3g: an interruption while visible (iOS "interrupted") re-arms the gesture listeners (#67, D-1)', async () => {
   const s = audioPage(); s.fire(); await flush(); const c = s.fa.made[0];
   c.to('interrupted'); await flush();
   assert.equal(c.resumes, 1);

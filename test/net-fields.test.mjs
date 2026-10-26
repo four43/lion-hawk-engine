@@ -5,12 +5,12 @@ import { F, kind, encodeRecord, encodeFrame, decodeFrame, createRegistry, action
 import { TUNE, SEND, INPUT_BATCH, INPUT_WIRE_MAX } from '../src/defs/fields.js';
 
 const ACT = actions({ thr: axis(), honk: button() });
-// Tractor Pickup 1.8.0's BODY (games/tractor-pickup/src/net/kinds.js) without dirt: F.body() must pack the same bytes (R5)
+// a reference BODY field written out, without dirt: F.body() must pack the same bytes (R5)
 const XZ = F.fixed(-400, 400, 1 / 64), Y = F.fixed(-50, 50, 1 / 256), VEL = F.fixed(-32, 32, 1 / 1000), SPIN = F.fixed(-16, 16, 1 / 2000);
 const OLD = F.obj({ p: F.obj({ x: XZ, y: Y, z: XZ }), q: F.quat(), v: F.obj({ x: VEL, y: VEL, z: VEL }), w: F.obj({ x: SPIN, y: SPIN, z: SPIN }) });
 const pose = (x, y, z) => ({ p: { x, y, z }, q: { x: 0, y: Math.sin(0.3), z: 0, w: Math.cos(0.3) }, v: { x: 1.234, y: -0.5, z: 3 }, w: { x: 0, y: 2.5, z: 0.001 } });
 
-test('3i: F.body() packs exactly what Tractor 1.8.0 packed for a body, without dirt (N-8, R5)', () => {
+test('3i: F.body() packs exactly what the reference packs for a body, without dirt (N-8, R5)', () => {
   const A = kind({ name: 'a', code: 1, authority: 'host', max: 4, idMax: 9, fields: { body: F.body() } });
   const B = kind({ name: 'b', code: 2, authority: 'host', max: 4, idMax: 9, fields: { body: OLD } });
   const rec = { body: pose(12.3, 1.7, -88.01) };

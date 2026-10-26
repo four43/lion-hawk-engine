@@ -1,8 +1,8 @@
 // lion-hawk/view thumbnails (overview §4.6): an object rendered alone in a studio light, on a clear background, to a PNG data
-// URL. Replaces Tractor Pickup's three copies (src/ui/icons.js renderIcons and tractorPicture, src/ui/stickerArt.js), with
+// URL, for icons, pictures and stickers, with
 // auto-framing by yaw and pitch (stickerArt), an optional crop to the drawn pixels and a die-cut outline. The object is put
 // back under its parent afterwards (its index there may change); its own transform is never written. colorSpace 'linear'
-// (default) is what Tractor ships today; 'srgb' encodes the target.
+// (default) writes linear values; 'srgb' encodes the target.
 import * as THREE from 'three';
 
 export const STUDIO = Object.freeze({ sky: '#ffffff', ground: '#b9a27c', hemi: 2.2, sun: 1.6, sunAt: Object.freeze([2, 5, 4]) });

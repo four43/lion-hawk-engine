@@ -6,7 +6,7 @@ import { INPUT_BATCH } from '../../defs/fields.js';
 
 const v3 = () => ({ x: 0, y: 0, z: 0 });
 // Contract issue 1: the entity an F.body() field reads. 'body' is the entity itself; any other field names a linked entity e[field]
-// (Tractor's trailer and wagon), spawned with it and despawned with it.
+// (a trailer, say), spawned with it and despawned with it.
 export const bodyEntity = (e, field) => field === 'body' ? e : e[field];
 export const zeroActions = f => { const o = {}; for (const n of f.axes) o[n] = 0; for (const n of f.buttons) o[n] = false; return o; };
 // axes as numbers, buttons as booleans; a missing source value is 0 / false

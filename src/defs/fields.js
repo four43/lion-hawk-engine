@@ -1,5 +1,5 @@
 // src/defs/fields.js
-// Field types and kinds for replicated objects (N-8, N-11), moved from Tractor Pickup's src/net/replica.js (M-22). Plain data: src/sim/replica.js packs them.
+// Field types and kinds for replicated objects (N-8, N-11, M-22). Plain data: src/sim/replica.js packs them.
 // Phase 3i: F.body() (N-8) and the kind's net-part options (N-9, N-12..N-17, D8): remote, follow, tune, send and the spawn hooks.
 // Existing kinds keep their wire bytes; only a driven kind sends its `input` as { s, list } (N-13).
 const boolsOf = fields => Object.keys(fields).filter(k => fields[k].t === 'bool');
@@ -19,7 +19,7 @@ export const F = {
     if (axes.length + buttons.length !== names.length) throw new Error('F.actions: every action must be axis() or button()');
     return { t: 'actions', names, axes, buttons };
   },
-  // N-8: one body's { p, q, v, w } at Tractor Pickup 1.8.0's precision: p.x/p.z in 1/64 m over ±range, p.y in 1/256 m over ±height,
+  // N-8: one body's { p, q, v, w } at this precision: p.x/p.z in 1/64 m over ±range, p.y in 1/256 m over ±height,
   // v in 1/1000 m/s over ±32, w in 1/2000 rad/s over ±16 (26 bytes). An obj field, so replica.js packs it unchanged; `body: true` marks it.
   body: ({ range = 400, height = 50 } = {}) => {
     if (!(range > 0 && range * 2 * 64 <= 65535)) throw new Error(`F.body: range must be in (0, 511] (got ${range})`);

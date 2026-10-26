@@ -18,10 +18,10 @@ const withManifest = (manifest, { keepHandWritten = false } = {}) => {
 };
 
 test('P-3: build writes manifest.webmanifest from build.manifest, copies the icon, links and precaches it', async () => {
-  const game = withManifest({ name: 'Fixture Rally', shortName: 'Rally', themeColor: '#102030', backgroundColor: '#000000', icon: 'pwa/icon.svg', orientation: 'landscape' });
+  const game = withManifest({ name: 'Fixture Kart', shortName: 'Kart', themeColor: '#102030', backgroundColor: '#000000', icon: 'pwa/icon.svg', orientation: 'landscape' });
   const out = tmp('lh-out-'), r = await build({ game, out, env: {}, log: quiet });
   const m = JSON.parse(readFileSync(join(out, 'manifest.webmanifest'), 'utf8'));
-  assert.deepEqual(m, { name: 'Fixture Rally', short_name: 'Rally', start_url: './', scope: './', display: 'fullscreen', orientation: 'landscape',
+  assert.deepEqual(m, { name: 'Fixture Kart', short_name: 'Kart', start_url: './', scope: './', display: 'fullscreen', orientation: 'landscape',
     theme_color: '#102030', background_color: '#000000', icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] });
   const html = readFileSync(join(out, 'index.html'), 'utf8');
   assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
