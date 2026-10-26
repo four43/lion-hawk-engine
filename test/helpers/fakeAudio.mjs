@@ -1,15 +1,20 @@
 // A fake Web Audio for the audio service's unit tests (no sound, no browser). Contexts record their graph (node.out), param
 // writes (param.set), resumes and suspends; AudioContext.refuse keeps resume() from running a context (iOS outside a gesture).
+// worklet: false leaves out ctx.audioWorklet; workletFails makes addModule reject. AudioWorkletNode records its name and
+// options, and its port keeps what was posted (port.sent); createScriptProcessor makes a 'script' node.
 // audioPage() is a happy-dom page with createAudio on it and fire(type) for a user gesture.
 import { dom } from './dom.mjs';
 import { createAudio } from '../../src/view/audio/index.js';
 export const flush = () => new Promise(r => setImmediate(r));
-export function fakeAudio({ refuse = false } = {}) {
+export function fakeAudio({ refuse = false, worklet = true, workletFails = false } = {}) {
   const made = [];
   const param = value => ({ value, set: [], setTargetAtTime(v, t, tc) { this.value = v; this.set.push([v, t, tc]); return this; } });
   const node = (kind, extra) => Object.assign({ kind, out: [], disconnected: false, connect(n) { this.out.push(n); return n; }, disconnect() { this.out.length = 0; this.disconnected = true; } }, extra);
   class AudioContext {
-    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = node('destination'); this.onstatechange = null; this.resumes = 0; this.suspends = 0; made.push(this); }
+    constructor() {
+      this.state = 'suspended'; this.currentTime = 0; this.sampleRate = 48000; this.destination = node('destination'); this.onstatechange = null; this.resumes = 0; this.suspends = 0; made.push(this);
+      if (worklet) this.audioWorklet = { modules: [], addModule: url => { this.audioWorklet.modules.push(url); return workletFails ? Promise.reject(new Error('SyntaxError')) : Promise.resolve(); } };
+    }
     to(state) { if (this.state === state) return; this.state = state; queueMicrotask(() => this.onstatechange?.()); }
     resume() { this.resumes++; if (!AudioContext.refuse) this.to('running'); return Promise.resolve(); }
     suspend() { this.suspends++; this.to('suspended'); return Promise.resolve(); }
@@ -17,14 +22,18 @@ export function fakeAudio({ refuse = false } = {}) {
     createGain() { return node('gain', { gain: param(1) }); }
     createDynamicsCompressor() { return node('compressor', { threshold: param(-24), knee: param(30), ratio: param(12), attack: param(0.003), release: param(0.25) }); }
     createStereoPanner() { return node('panner', { pan: param(0) }); }
+    createScriptProcessor(size, ins, outs) { return node('script', { size, ins, outs, onaudioprocess: null }); }
     createBufferSource() {
       return node('source', { buffer: null, loop: false, playbackRate: param(1), onended: null, started: null, stopped: null,
         start(t, o) { this.started = [t, o]; }, stop(t) { if (this.stopped !== null) throw new Error('InvalidStateError'); this.stopped = t; } });
     }
     decodeAudioData(ab) { return ab.byteLength ? Promise.resolve({ duration: ab.byteLength / 1000, length: ab.byteLength }) : Promise.reject(new Error('EncodingError')); }
   }
+  class AudioWorkletNode {
+    constructor(ctx, name, opts) { Object.assign(this, node('worklet', { ctx, name, opts })); const sent = []; this.port = { sent, postMessage: m => sent.push(m) }; }
+  }
   AudioContext.refuse = refuse;
-  return { AudioContext, made };
+  return { AudioContext, AudioWorkletNode, made };
 }
 // fetch over a table of { url: byteLength }; anything else is a 404. f.calls lists the urls asked for.
 export function fakeFetch(files) {
