@@ -416,7 +416,7 @@ The glossary lacks these terms. The terms are specific to the engine sound.
 - **B-316** With a mono engine, left and right are both `0.62 × (e0 + e1) × exhaust gain + center`. [src/kits/vehicle/engineDsp.js:222] <!-- C-336 -->
 - **B-317** With the cabin position, each channel passes the cabin low-pass and is multiplied by 1.5. [src/kits/vehicle/engineDsp.js:223] <!-- C-337 -->
 - **B-318** The output of each channel is `tanh(x × vol × gate × 1.2)`. [src/kits/vehicle/engineDsp.js:224-226] <!-- C-338 -->
-- **B-319** In a test, the levels at idle and on coast at 2000, 4000 and 6000 rpm match the engine-sound spec section 7 targets. The tolerance is 1.5 dB at every listening position. [test/kits/engine-dsp.test.mjs:23-31] <!-- C-339 -->
+- **B-319** In a test, the levels at idle and on coast at 2000, 4000 and 6000 rpm match the reference model's level targets. The tolerance is 1.5 dB at every listening position. [test/kits/engine-dsp.test.mjs:23-31] <!-- C-339 -->
 - **B-320** In a test, every preset at every listening position stays finite within [-1, 1]. The test covers idle, the limiter, coast, boost and cranking. [test/kits/engine-dsp.test.mjs:32-40] <!-- C-340 -->
 - **B-321** A test runs `EngineDSP` from its own source as a worklet processor and gets finite non-silent output. [test/kits/engine-dsp.test.mjs:50-58] <!-- C-341 -->
 
@@ -726,11 +726,6 @@ Related specs:
 
 ## Open questions and discrepancies
 - `docs/design.md` 7.3 sketches the vehicle input as `{ throttle, brake, steer, handbrake, gear? }` and the wheel output with `slip`. The kit takes per-wheel controls through `car.set` and reports `kappa` and `alpha` on the tire backend. [docs/design.md:356-359; src/kits/vehicle/sim.js:166; src/kits/vehicle/sim.js:181]
-- `docs/research-engine-sound.md` section 3.5 says the prototype automatic clutch slips at 2.0 N m per rpm when not launching. The powertrain uses 8, and `docs/spec.md` H-6 also says 8. [docs/research-engine-sound.md:148; src/kits/vehicle/powertrain.js:103; docs/spec.md:449]
-- `docs/research-engine-sound.md` section 3.5 says the clutch locks when the slip falls below 120 rpm. The powertrain has no locked state, and `docs/spec.md` H-6 gives a residual slip of about `RPM_PER_RAD × dt × Tc / inertia`. [docs/research-engine-sound.md:148; src/kits/vehicle/powertrain.js:100-103; docs/spec.md:450]
-- `docs/research-engine-sound.md` section 5 names the second listening position `engineBay`. The code names it `bay` in the `mic` option and in `MIX_DB`. [docs/research-engine-sound.md:367; src/kits/vehicle/view.js:8; src/kits/vehicle/view.js:13]
-- `docs/research-engine-sound.md` section 2.1 gives the default of `pops` as 0. The `EngineDSP` frame starts with `pops` 1, and `createEngineSound` sends `pops` 0 unless the `pops` option is true. [docs/research-engine-sound.md:46; src/kits/vehicle/engineDsp.js:25; src/kits/vehicle/view.js:24]
-- `docs/research-engine-sound.md` section 2.2 says the engine message is sent when the engine changes. `createEngineSound` sends it once after the synth is ready and has no call that sends another. [docs/research-engine-sound.md:64; src/kits/vehicle/view.js:42]
 - Why do the base materials glass, mud, snow, water and air have no `coverage` block? No source states the reason.
 - Why does the particle landing threshold use `vy` < 1 with no named constant? No source states the reason.
 - Why does `createEngineSound` send no new engine message when the powertrain `spec` changes? No source states the reason.

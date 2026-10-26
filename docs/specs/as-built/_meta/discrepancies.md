@@ -1,18 +1,10 @@
 # Discrepancies
 
-Places where docs disagree with the code at commit `7224d6b` (F02 and F07: `4cd5a94`). The `docs/research-engine-sound.md` items compare the reference prototype with the port, which changed some names and constants on purpose. The code is the source of truth. Each entry gives evidence on both sides. Each spec lists the same items under "Open questions and discrepancies".
+Places where docs disagree with the code at commit `7224d6b` (F02 and F07: `4cd5a94`). The code is the source of truth. Each entry gives evidence on both sides. Each spec lists the same items under "Open questions and discrepancies".
 
 ## F02 Definitions and kits ([defs-and-kits.md](../defs-and-kits.md))
 
 - docs/design.md 7.3 sketches the vehicle input as { throttle, brake, steer, handbrake, gear? } and the per-wheel output with slip. The kit takes per-wheel controls through car.set and reports kappa and alpha on the tire backend. Evidence: `docs/design.md:356-357`, `src/kits/vehicle/sim.js:165`, `src/kits/vehicle/sim.js:180`
-
-- `docs/research-engine-sound.md` section 3.5 says the prototype automatic clutch slips at 2.0 N m per rpm when not launching. The powertrain uses 8, and `docs/spec.md` H-6 also says 8. [docs/research-engine-sound.md:148; src/kits/vehicle/powertrain.js:93; docs/spec.md:449]
-- `docs/research-engine-sound.md` section 5 names the second listening position `engineBay`. The code names it `bay` in the `mic` option and in `MIX_DB`. [docs/research-engine-sound.md:367; src/kits/vehicle/view.js:8; src/kits/vehicle/view.js:13]
-- `docs/research-engine-sound.md` section 2.1 gives the default of `pops` as 0. The `EngineDSP` frame starts with `pops` 1, and `createEngineSound` sends `pops` 0 unless the `pops` option is true. [docs/research-engine-sound.md:46; src/kits/vehicle/engineDsp.js:25; src/kits/vehicle/view.js:24]
-- `docs/research-engine-sound.md` section 2.2 says the engine message is sent when the engine changes. `createEngineSound` sends it once after the synth is ready and has no call that sends another. [docs/research-engine-sound.md:64; src/kits/vehicle/view.js:42]
-
-- `docs/research-engine-sound.md` section 3.5 says the prototype automatic clutch slips at 2.0 N m per rpm when not launching. The powertrain uses 8, and `docs/spec.md` H-6 also says 8. [docs/research-engine-sound.md:148; src/kits/vehicle/powertrain.js:103; docs/spec.md:449]
-- `docs/research-engine-sound.md` section 3.5 says the clutch locks when the slip falls below 120 rpm. The powertrain has no locked state, and `docs/spec.md` H-6 gives a residual slip of about `RPM_PER_RAD × dt × Tc / inertia`. [docs/research-engine-sound.md:148; src/kits/vehicle/powertrain.js:100-103; docs/spec.md:450]
 
 ## F03 Simulation world, physics and fields ([sim-world-physics.md](../sim-world-physics.md))
 

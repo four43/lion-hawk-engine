@@ -1,4 +1,4 @@
-// The engine synthesizer (H-7): engine-sound spec §4 / Appendix A (docs/research-engine-sound.md), ported with three
+// The engine synthesizer (H-7): a reference engine-sound prototype's synthesizer, ported with three
 // changes: noise comes from a per-instance mulberry32 PRNG seeded by options.seed (U-6 clarification, H-5); the MIC and
 // muffler tables are instance fields, not static ones; and with `on` 0 and the output gate closed, a block renders zeros
 // without running the model. The class names nothing outside itself: createDsp runs it from its own source text in an
@@ -229,5 +229,5 @@ export class EngineDSP {
   }
 }
 
-// The configuration message for a powertrain preset (engine-sound spec §2.2).
+// The configuration message for a powertrain preset.
 export const engineConfig = s => ({ type: 'engine', angles: s.angles, banks: s.banks, header: s.header, pulseDeg: s.pulseDeg, gain: s.gain, stereo: s.stereo });

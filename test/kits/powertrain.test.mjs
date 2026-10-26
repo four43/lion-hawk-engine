@@ -1,4 +1,4 @@
-// kit-vehicle powertrain (H-6; engine-sound spec §3): the engine model alone, against a fake wheel, and on the tire backend.
+// kit-vehicle powertrain (H-6): the engine model alone, against a fake wheel, and on the tire backend.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';

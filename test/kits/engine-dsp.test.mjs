@@ -1,4 +1,4 @@
-// The engine synthesizer (H-7; engine-sound spec §4, Appendix A): the spec's level targets (§7), stability on every preset,
+// The engine synthesizer (H-7): the reference prototype's level targets, stability on every preset,
 // seeded determinism, the silent fast path, and that its source runs as a worklet processor on its own.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,10 +21,10 @@ const levelA = (frame, mic) => { // A-weighted dB over the second second
 };
 const WOT4K = { rpm: 4000, charge: 1, throttle: 1, fuelCut: 0 }, IDLE = { rpm: 850, charge: 0.34, throttle: 0, fuelCut: 0 };
 const coast = rpm => ({ rpm, charge: 0.18, throttle: 0, fuelCut: 1 });
-// spec §7: Inline-4, sport muffler, 2.1 m pipe, mixer at 0 dB; dB relative to full throttle at 4000 rpm
+// the prototype's level targets: Inline-4, sport muffler, 2.1 m pipe, mixer at 0 dB; dB relative to full throttle at 4000 rpm
 const TARGETS = [[IDLE, [-17.3, -25.2, -17.1]], [coast(2000), [-18.9, -17.6, -19.6]], [coast(4000), [-12.0, -10.0, -13.8]], [coast(6000), [-8.2, -6.0, -10.8]]];
 
-test('H-7: the spec §7 level targets hold within 1.5 dB at every listening position', () => {
+test('H-7: the reference level targets hold within 1.5 dB at every listening position', () => {
   for (const mic of [0, 1, 2]) {
     const ref = levelA(WOT4K, mic);
     for (const [frame, want] of TARGETS) { const got = levelA(frame, mic) - ref; assert.ok(Math.abs(got - want[mic]) <= 1.5, `mic ${mic} ${JSON.stringify(frame)}: ${got.toFixed(1)} dB vs ${want[mic]}`); }

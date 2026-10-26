@@ -1,15 +1,15 @@
-// kit-vehicle powertrain (H-6; engine-sound spec §3, docs/research-engine-sound.md): an engine and gearbox for the sim.
+// kit-vehicle powertrain (H-6; a reference engine-sound prototype's engine state model): an engine and gearbox for the sim.
 // Throttle and the driven wheels' spin give engine rpm, manifold pressure (`map`, the sound's load axis), fuel cut, the
 // rev limiter and an optional turbo; step() returns the drive torque for the driven wheels, held for the step. The
 // clutch is a viscous coupling capped so that one step's torque cannot reverse the slip, which keeps a torque held for a
 // whole step stable against light wheels. Sim-pure (L-3): no randomness or clock; nothing allocated per step.
-const RPM_PER_RAD = 60 / (2 * Math.PI), H = 0.002; // engine substep: §3 asks for 2 ms or less
+const RPM_PER_RAD = 60 / (2 * Math.PI), H = 0.002; // engine substep: the model wants 2 ms or less
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const fail = m => { throw new Error(`powertrain: ${m}`); };
 const preset = (angles, banks, header, stereo, idle, redline, limiter, torque, peakRpm, inertia, pipe, pulseDeg, gain) =>
   Object.freeze({ angles: Object.freeze(angles), banks: Object.freeze(banks), header: Object.freeze(header), stereo, idle, redline, limiter, torque, peakRpm, inertia, pipe, pulseDeg, gain });
 const zeros = n => Array(n).fill(0), alt = n => Array.from({ length: n }, (_, i) => i % 2), every = (n, d) => Array.from({ length: n }, (_, i) => i * d);
-// engine-sound spec §2.3: firing angles over 720°, exhaust bank per cylinder, header delays (ms), then the model's numbers
+// the prototype's engines: firing angles over 720°, exhaust bank per cylinder, header delays (ms), then the model's numbers
 export const ENGINE_PRESETS = Object.freeze({
   i4: preset([0, 180, 360, 540], [0, 1, 0, 1], zeros(4), 0, 850, 7000, 7200, 210, 4800, 0.13, 2.1, 230, 1.0),
   flat4: preset([0, 180, 360, 540], [0, 1, 0, 1], [0, 2.6, 0, 2.6], 0, 800, 6800, 7000, 250, 4200, 0.14, 2.3, 240, 1.05),
@@ -38,7 +38,7 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
     stalled: false, crankT: 0, gear: 0, shiftT: 0, shaft: 0, boost: 0, wg: 0, thrSlow: 0, bovCool: 0, bovVent: 0, bovId: 0, bovAmp: 0, bovMode: T?.bov ? 1 : 0, wheelTorque: 0 };
   // R-8: substep inputs go through this object, not arguments or return values, so no number is boxed per call
   const k = { h: 0, Tc: 0, thrEff: 0, comb: false };
-  function turboStep() { // §3.4
+  function turboStep() { // the turbo
     const h = k.h, thrEff = k.thrEff, comb = k.comb;
     const flow = (st.rpm / E.redline) * st.map * (comb ? 1 : 0.3) * (1.35 - 0.5 * T.size), comp = 1.35 * T.maxBoost * st.shaft * st.shaft;
     st.wg = clamp((comp - T.maxBoost) / (0.35 * T.maxBoost), 0, 1);
@@ -52,7 +52,7 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
     st.bovCool -= h; st.bovVent -= h;
     if (st.thrSlow - thrEff > 0.3 && st.boost > 0.15 && st.bovCool <= 0) { st.bovId++; st.bovAmp = clamp(st.boost / 1.2, 0.2, 1.3); st.bovMode = T.bov ? 1 : 0; st.bovCool = 0.6; st.bovVent = 0.4; }
   }
-  function sub() { // §3.1–3.3 for one substep of k.h; k.Tc is the clutch torque held for the step
+  function sub() { // manifold, fuel cut, limiter, torques for one substep of k.h; k.Tc is the clutch torque held for the step
     const h = k.h, Tc = k.Tc;
     const t = pt.throttle, thr = st.shiftT > 0 || !(t > 0) ? 0 : t < 1 ? t : 1; // NaN or undefined counts as 0
     if (st.starter) { st.crankT += h; if (st.crankT > 0.55 && st.rpm > 150) st.running = true; if ((st.running && st.rpm > E.idle * 0.7) || st.crankT > 4) st.starter = false; }

@@ -112,8 +112,7 @@
         "docs/spec.md",
         "docs/design.md",
         "docs/field-notes.md",
-        "CHANGELOG.md",
-        "docs/research-engine-sound.md"
+        "CHANGELOG.md"
       ],
       "tickets": [],
       "depends_manual": [],
@@ -428,8 +427,7 @@
         "docs/spec.md",
         "docs/design.md",
         "docs/field-notes.md",
-        "CHANGELOG.md",
-        "docs/research-engine-sound.md"
+        "CHANGELOG.md"
       ],
       "tickets": [],
       "depends_manual": [],

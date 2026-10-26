@@ -1,13 +1,13 @@
 // kit-vehicle (view half): engine sound (H-7). createEngineSound runs the EngineDSP synth (./engineDsp.js) through
 // createDsp (H-5) into a voice (H-2), and update() sends it the powertrain's state as one reused parameter frame, once
-// per frame. The listening position picks the built-in balance and the spec §5 mix; `mix` adds dB on top. A voice beyond
+// per frame. The listening position picks the built-in balance and the prototype's tuned mix; `mix` adds dB on top. A voice beyond
 // positional.cull sends on 0, so its synth goes silent and stops running its model.
 import { createDsp } from '../../view/audio/dsp.js';
 import { EngineDSP, engineConfig } from './engineDsp.js';
 
 const MICS = Object.freeze({ behind: 0, bay: 1, cabin: 2 });
 const MUFFLERS = Object.freeze({ stock: 0, sport: 1, straight: 2 });
-// engine-sound spec §5: dB on top of each position's built-in balance
+// the prototype's tuned mix: dB on top of each position's built-in balance
 const MIX_DB = Object.freeze({
   behind: { exhaust: 4.1, coast: 4.1, intake: 2.7, turbo: 0, engineBody: -8.2, starter: 0 },
   bay: { exhaust: 6.4, coast: 7.5, intake: 0, turbo: 3.4, engineBody: -4.7, starter: 8.7 },

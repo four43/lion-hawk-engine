@@ -80,7 +80,7 @@ A kit is optional and imported per game. `lion-hawk/kits/<kit>` is the sim half 
 | Mud, dirt and snow that builds up and washes off | `lion-hawk/kits/coverage` | `coverageKit` | [defs-and-kits: Coverage kit](specs/as-built/defs-and-kits.md#coverage-kit) |
 | Draw coverage on meshes | `lion-hawk/kits/coverage/view` | `coverageView` | [defs-and-kits: Coverage kit](specs/as-built/defs-and-kits.md#coverage-kit) |
 | Particles and tyre marks | `lion-hawk/kits/fx/view` | `createParticles`, `createMarks` | [defs-and-kits: Fx kit](specs/as-built/defs-and-kits.md#fx-kit) |
-| An engine and gearbox that drive the wheels and feed the engine sound | `lion-hawk/kits/vehicle` | `createPowertrain`, `ENGINE_PRESETS` | [spec §5.6](spec.md#56-audio), [research: engine sound](research-engine-sound.md) |
+| An engine and gearbox that drive the wheels and feed the engine sound | `lion-hawk/kits/vehicle` | `createPowertrain`, `ENGINE_PRESETS` | [spec §5.6](spec.md#56-audio) |
 | A procedural engine sound for a powertrain | `lion-hawk/kits/vehicle/view` | `createEngineSound` | [spec §5.6](spec.md#56-audio) |
 
 ## Rendering and presentation
