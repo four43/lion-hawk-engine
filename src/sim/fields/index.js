@@ -136,18 +136,18 @@ export function createFields(world, opts = {}) {
   // [M-18] magnets: colliders whose material has magnet.strength act on every collider with magnet data (strength or
   // ferrous) within the radius: induced (ferrous, 1/r^4) and dipole-dipole forces, r clamped and the force capped. The
   // candidates come from the World's entities in id order (deterministic, and independent of Rapier's query state).
-  const moment = (col, s, o) => rot(col.rotation(), [0, s, 0], o); // a magnet's dipole along its collider's +y
-  const ma = { x: 0, y: 0, z: 0 }, mb = { x: 0, y: 0, z: 0 }, cands = [];
+  const moment = (col, s, o) => { MV[1] = s; return rot(col.rotation(), MV, o); }; // a magnet's dipole along its collider's +y
+  const ma = { x: 0, y: 0, z: 0 }, mb = { x: 0, y: 0, z: 0 }, cands = [], MV = [0, 0, 0], NONE = []; let nc = 0; // reused: no allocation per step
   function magnets() {
-    cands.length = 0;
-    for (const e of world.with()) for (const ce of e.colliders ?? []) {
+    nc = 0;
+    for (const e of world.with()) for (const ce of e.colliders ?? NONE) {
       const m = reg.get(world.materialOf(ce.collider.handle))?.magnet;
-      if (m && ((m.strength ?? 0) > 0 || (m.ferrous ?? 0) > 0)) cands.push({ col: ce.collider, s: m.strength ?? 0, f: m.ferrous ?? 0 });
+      if (m && ((m.strength ?? 0) > 0 || (m.ferrous ?? 0) > 0)) { const k = cands[nc] ?? (cands[nc] = { col: null, s: 0, f: 0 }); k.col = ce.collider; k.s = m.strength ?? 0; k.f = m.ferrous ?? 0; nc++; }
     }
-    for (let i = 0; i < cands.length; i++) {
+    for (let i = 0; i < nc; i++) {
       const A = cands[i]; if (!(A.s > 0)) continue;
       const pa = A.col.translation(), ba = A.col.parent();
-      for (let j = 0; j < cands.length; j++) {
+      for (let j = 0; j < nc; j++) {
         const B = cands[j]; if (j === i || (B.s > 0 && j < i)) continue; // a magnet pair once
         const bb = B.col.parent(); if (bb && ba && bb.handle === ba.handle) continue;
         if (!(B.s > 0) && !(B.f > 0)) continue;

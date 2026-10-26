@@ -309,6 +309,7 @@ Buoyancy reuses the same data. Sample each panel's depth below the fluid surface
 - **Magnet ↔ magnet:** dipole-dipole force, which depends on the orientation of both magnets.
 - **Stability:** clamp `r` to a minimum and cap the force, so things don't explode on contact. Apply the force at the collider's centroid. It is deterministic and runs inside the fixed step.
 - **Example use:** a magnet crane on the tractor, or magnetic pickups in Skerry Island missions.
+- *As built (phase 8):* the field reads the candidates from the World's entities instead of a Rapier sphere query (deterministic, and right on the step a collider is added), and applies the force at each collider's position. See `docs/spec.md` [M-18].
 
 ### 6.5 Hooking materials to meshes
 
