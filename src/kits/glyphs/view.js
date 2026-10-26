@@ -1,10 +1,10 @@
 // U-10: input prompt glyphs. A prompt names a role, not a button: <img data-lh-glyph="confirm" alt=""> shows the icon
 // for whichever input was used last, read from <html data-lh-input> and data-lh-pad (kept by the menu navigator, U-7).
-// Roles: confirm, back, menu, move, prev, next. Families: xbox, ps, deck, generic (pads), keys, pointer, touch. A role the
+// Roles: confirm, back, menu (Start), move, prev, next (LB/RB), view (View / Create / Select). Families: xbox, ps, deck, generic (pads), keys, pointer, touch. A role the
 // current family has no input for hides its element. Icons: Kenney Input Prompts 1.5A, CC0 (icons.js, LICENSE.txt).
 import { ICONS } from './icons.js';
 
-export const GLYPH_ROLES = Object.freeze(['confirm', 'back', 'menu', 'move', 'prev', 'next']);
+export const GLYPH_ROLES = Object.freeze(['confirm', 'back', 'menu', 'move', 'prev', 'next', 'view']);
 export const GLYPH_FAMILIES = Object.freeze(Object.keys(ICONS));
 const uris = {};
 for (const f of GLYPH_FAMILIES) { uris[f] = {}; for (const r of GLYPH_ROLES) uris[f][r] = ICONS[f][r] ? `data:image/svg+xml,${encodeURIComponent(ICONS[f][r])}` : null; }

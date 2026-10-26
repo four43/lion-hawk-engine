@@ -6,10 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const SOURCES = {
-  xbox:    ['Xbox Series', { confirm: 'xbox_button_a', back: 'xbox_button_b', menu: 'xbox_button_menu', move: 'xbox_dpad', prev: 'xbox_lb', next: 'xbox_rb' }],
-  ps:      ['PlayStation Series', { confirm: 'playstation_button_cross', back: 'playstation_button_circle', menu: 'playstation5_button_options', move: 'playstation_dpad', prev: 'playstation_trigger_l1', next: 'playstation_trigger_r1' }],
-  deck:    ['Steam Deck', { confirm: 'steamdeck_button_a', back: 'steamdeck_button_b', menu: 'steamdeck_button_options', move: 'steamdeck_dpad', prev: 'steamdeck_button_l1', next: 'steamdeck_button_r1' }],
-  generic: ['Generic', { confirm: 'generic_button', back: 'generic_button_circle', menu: 'generic_button_square', move: 'generic_stick', prev: 'generic_button_trigger_a', next: 'generic_button_trigger_b' }],
+  xbox:    ['Xbox Series', { confirm: 'xbox_button_a', back: 'xbox_button_b', menu: 'xbox_button_menu', move: 'xbox_dpad', prev: 'xbox_lb', next: 'xbox_rb', view: 'xbox_button_view' }],
+  ps:      ['PlayStation Series', { confirm: 'playstation_button_cross', back: 'playstation_button_circle', menu: 'playstation5_button_options', move: 'playstation_dpad', prev: 'playstation_trigger_l1', next: 'playstation_trigger_r1', view: 'playstation5_button_create' }],
+  deck:    ['Steam Deck', { confirm: 'steamdeck_button_a', back: 'steamdeck_button_b', menu: 'steamdeck_button_options', move: 'steamdeck_dpad', prev: 'steamdeck_button_l1', next: 'steamdeck_button_r1', view: 'steamdeck_button_view' }],
+  generic: ['Generic', { confirm: 'generic_button', back: 'generic_button_circle', menu: 'generic_button_square', move: 'generic_stick', prev: 'generic_button_trigger_a', next: 'generic_button_trigger_b', view: 'generic_button_square_outline' }],
   keys:    ['Keyboard & Mouse', { confirm: 'keyboard_enter', back: 'keyboard_escape', menu: 'keyboard_escape', move: 'keyboard_arrows_all' }],
   pointer: ['Keyboard & Mouse', { confirm: 'mouse_left' }],
   touch:   ['Touch', { confirm: 'touch_tap' }],

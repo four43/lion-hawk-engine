@@ -1,6 +1,7 @@
 // U-7: the menu navigator, a view device. While a scene with `nav` (U-9) is the topmost menu, the D-pad, the left stick
 // and the arrow keys move real DOM focus among that menu's controls, A/Enter activates, B/Esc/Start go Back, LB/RB step
-// a choice row. In gameplay it watches the menus' nav.open triggers (a tap or a hold) and asks the sim to open them.
+// a choice row (the menu's nav.shoulders row, if it names one: that row is then left out of pad focus), and X, Y, View
+// and Start run the menu's nav.buttons (Start goes Back when it has none). In gameplay it watches the menus' nav.open triggers (a tap or a hold) and asks the sim to open them.
 // Focus is presentation (view-only, not recorded); activation goes through the control (a click -> engine.ui.tap, or
 // engine.ui.press/release for a hold), Back and Open through the lh.back / lh.open commands, so both are recorded.
 // It also keeps <html data-lh-input="pad|keys|pointer|touch"> and data-lh-pad="<family>" current (U-10).
@@ -33,7 +34,8 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
     const r = rectOf(el); return r.width > 0 && r.height > 0;
   };
   const collect = (scene, out) => {
-    for (const el of doc.querySelectorAll(`[data-testid^="${esc(scene)}."]`)) if ((el.tagName === 'BUTTON' || el.hasAttribute('data-lh-nav')) && !out.includes(el) && usable(el)) out.push(el);
+    const sh = st.last === 'pad' ? game.scenes[scene]?.nav?.shoulders : undefined, skip = sh === undefined ? null : `${scene}.${sh}.`; // the shoulders own that row
+    for (const el of doc.querySelectorAll(`[data-testid^="${esc(scene)}."]`)) if ((el.tagName === 'BUTTON' || el.hasAttribute('data-lh-nav')) && !out.includes(el) && usable(el) && !(skip && el.getAttribute('data-testid').startsWith(skip))) out.push(el);
     for (const el of doc.querySelectorAll(`[data-lh-nav-scope~="${esc(scene)}"] button, [data-lh-nav-scope~="${esc(scene)}"] [data-lh-nav]`)) if (!out.includes(el) && usable(el)) out.push(el);
     return out;
   };
@@ -98,9 +100,9 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
     el.click?.();
   };
   const lift = () => { if (holding !== null) { const id = holding; holding = null; engine.ui.release(id); } };
-  const cycle = step => { // LB/RB: the focused choice row, else the menu's first; no wrap
-    const menu = st.menu, v = engine.ui.view(), el = doc.activeElement, mine = controlOf(el);
-    let group = mine?.role === 'choice' ? mine.group : undefined;
+  const cycle = step => { // LB/RB: the menu's shoulders row, else the focused choice row, else the menu's first; no wrap
+    const menu = st.menu, v = engine.ui.view(), el = doc.activeElement, mine = controlOf(el), sh = game.scenes[menu].nav.shoulders;
+    let group = sh !== undefined ? `${menu}.${sh}` : mine?.role === 'choice' ? mine.group : undefined;
     if (!group) for (let i = 0; i < v.length; i++) if (v[i].role === 'choice' && v[i].scene === menu && v[i].enabled) { group = v[i].group; break; }
     if (!group) return;
     const opts = []; for (let i = 0; i < v.length; i++) if (v[i].group === group && v[i].enabled) opts.push(v[i].id);
@@ -111,6 +113,14 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
     if (mine?.group === group) focusEl(menu, t);
   };
   const back = () => { engine.command('lh.back'); };
+  const PRESS = ['x', 'y', 'select', 'start'];
+  const pressNav = (menu, pad) => { // nav.buttons: the menu's own X, Y, View and Start; Start without one is Back
+    const bs = game.scenes[menu].nav.buttons;
+    for (let i = 0; i < PRESS.length; i++) {
+      const b = PRESS[i]; if (!pad.pressed[b]) continue;
+      if (bs?.[b] !== undefined) engine.command('lh.press', { button: b }); else if (b === 'start') back();
+    }
+  };
 
   // ---- open triggers (U-9 nav.open): per source (a pad button or a key), the tap and hold menus it opens
   const triggers = new Map(); // 'pad:start' | 'key:escape' -> { opens: [{ name, seconds }], down, t, fired, armed }
@@ -189,7 +199,8 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
       if (dir) move(dir);
       if (pad.pressed.a) activate();
       if (pad.released.a) lift();
-      if (pad.pressed.b || pad.pressed.start) back();
+      if (pad.pressed.b) back();
+      pressNav(menu, pad);
       if (pad.pressed.lb) cycle(-1); else if (pad.pressed.rb) cycle(1);
     }
     for (let i = 0; i < keyTriggers.length; i++) tick(keyTriggers[i], raw);

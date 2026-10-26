@@ -11,7 +11,7 @@ import { createControllers } from './controllers.js';
 import { createRoster, PLAYER_BASE, PLAYER_RESERVED, SEATS, stateKinds, PLAYER_CODE, GAME_CODE } from './players.js';
 import { F } from '../defs/fields.js';
 import { createUi } from './ui.js';
-import { checkNav, topNav, menuOwnsInput } from './nav.js';
+import { checkNav, topNav, menuOwnsInput, NAV_PRESS_BUTTONS } from './nav.js';
 import { checkFields, checkSchema, wireCodec } from '../sim/schema.js';
 import { createRegistry } from '../sim/replica.js';
 import { installWorld, checkPhysics } from '../sim/world/install.js';
@@ -60,6 +60,7 @@ export function defineGame(spec) {
     for (const h of HOOKS) if (h in s && typeof s[h] !== 'function') fail(`scene '${name}'.${h} must be a function`);
     checkNav(name, s.nav, fail); // U-9
     if (typeof s.nav?.back === 'string' && !(s.nav.back in (spec.actions ?? {}))) fail(`scene '${name}'.nav.back: no action '${s.nav.back}'`);
+    for (const [b, v] of Object.entries(s.nav?.buttons ?? {})) if (typeof v === 'string' && !(v in (spec.actions ?? {}))) fail(`scene '${name}'.nav.buttons.${b}: no action '${v}'`);
   }
   for (const t of JOIN_TYPES) if (Object.hasOwn(schemas, t)) fail(`commands.${t} is the engine's (N-19): handle it with a plain function, which runs after the engine's`);
   const net = spec.net === undefined ? undefined : netConfig(spec.net, schemas, fail, { player, gameState });
@@ -502,11 +503,14 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
   schedule.add('lh.input', () => { controllers.applyInputs(); if (rec) recordInput(); }, { stage: 'input.apply' });
   // U-9: Back runs the topmost menu's nav.back (an action pressed next step, or a function); none is a no-op. Open
   // summons an overlay whose nav.open its `when` allows, unless a menu that owns input is already on top.
-  engine.builtin('lh.back', e => {
+  // Press runs the topmost menu's nav.buttons[button] the same way.
+  const runNav = (e, pick) => {
     const t = topNav(game, sceneView.overlays); if (t === undefined) return;
-    const b = game.scenes[t].nav.back; if (b === undefined) return;
+    const b = pick(game.scenes[t].nav); if (b === undefined) return;
     if (typeof b === 'function') { let ctx; for (let i = 1; i < stack.length; i++) if (stack[i].ctx.name === t) ctx = stack[i].ctx; b(e, ctx); } else input.set({ [b]: true });
-  });
+  };
+  engine.builtin('lh.back', e => runNav(e, nav => nav.back));
+  engine.builtin('lh.press', (e, data) => runNav(e, nav => (NAV_PRESS_BUTTONS.includes(data?.button) ? nav.buttons?.[data.button] : undefined)));
   engine.builtin('lh.open', (e, data) => {
     const name = data?.name, o = typeof name === 'string' ? game.scenes[name]?.nav?.open : undefined;
     if (!o || menuOwnsInput(game, sceneView.overlays) || isOpen(name)) return;
