@@ -490,7 +490,7 @@ Where state goes:
 |---|---|
 | `lion-hawk dev` | esbuild watch + live reload server; rebakes changed models |
 | `lion-hawk bake` | §6 |
-| `lion-hawk build [--mode single\|shared]` | bundles the game, writes `site/exp/<game>/`, stamps the PWA |
+| `lion-hawk build [--mode single\|shared]` | bundles the game, writes `--out` (else `$<outEnv>`; with `--site`, the default `site/exp/<site>/`), stamps the PWA |
 | `lion-hawk test [--visual]` | `node --test` for the game + engine checks; `--visual` adds `@visual` Playwright tests |
 | `lion-hawk release` | bump version → bake → build → test → commit; push stays manual |
 
@@ -499,7 +499,7 @@ Where state goes:
 - **[B-2]** Game-specific build steps (for example Tractor Pickup's voice and animal audio embedding) are hooks declared in `game.config.js`.
 - **[B-3] Single mode** (the default) produces one HTML file plus `assets/models/*.glb` and `*.anim.json` beside it. The service worker precaches all of them. Sidecars and code stay inside the page: the build writes the bundle at the template's bare `<!--APP-->` marker as an inline `<script type="module">` (D1).
 - **[B-4] Shared mode** (phase 9) serves the engine, three.js, Rapier and shared models from `/exp/lion-hawk/<version>/`.
-  - *Clarification (built, post-0.13: the engine side):* `lion-hawk build --mode shared` keeps `lion-hawk/*`, `three`, `three/*` and `@dimforge/rapier3d-compat` out of the game's bundle and writes a `<script type="importmap">` into `<head>` that maps each one the game (or the engine) imports to the pack. The pack, by default `<out>/../lion-hawk/<engine version>/` served at `/exp/lion-hawk/<version>/` (`build.shared: { dir, base }`; a dir under `site/exp/` needs `--site`), holds every lion-hawk browser entry (`sim`, `view`, `net`, each kit's sim and view) built in one call with code splitting, so they share one engine core, plus three, each three subpath and Rapier, one file each. File names carry content hashes, so a second game reuses the same files and adds none. Each game's own service worker precaches the pack files it uses. Not built yet: one service worker across `/exp/` and a shared model pack.
+  - *Clarification (built, post-0.13: the engine side):* `lion-hawk build --mode shared` keeps `lion-hawk/*`, `three`, `three/*` and `@dimforge/rapier3d-compat` out of the game's bundle and writes a `<script type="importmap">` into `<head>` that maps each one the game (or the engine) imports to the pack. The pack, by default `<out>/../lion-hawk/<engine version>/` served at `/exp/lion-hawk/<version>/` (`build.shared: { dir, base }`; a dir under `site/exp/` needs `--site`), holds every lion-hawk browser entry (`sim`, `view`, `net`, each kit's sim and view) built in one call with code splitting, so they share one engine core, plus three, each three subpath and Rapier, one file each. File names carry content hashes, so a second game reuses the same files and adds none. Each game's own service worker precaches every pack file its build wrote or reused (the lion-hawk entries and chunks, and the three and Rapier files it needs), and `build()` returns them as `shared: { dir, base, files, imports }`. Not built yet: one service worker across `/exp/` and a shared model pack.
 - **[B-5]** Every build stamps the game version, the engine version and a content hash into the page and the service worker.
   - *Clarification (phase 3, 0.8.0; 3d C8):* the page gets a `lion-hawk-build` meta; the service worker's `__VERSION__` becomes `<gameVersion>+lh<engine>-<hash>` and its `__PRECACHE__` the file list. `--e2e` builds are unminified and write no `sw.js`. `build({ game, out, e2e })` from `lion-hawk/build` returns `{ out, version, hash, files, sizes }`. `lion-hawk dev` also takes `--host` (default `0.0.0.0`).
 
@@ -703,7 +703,7 @@ export default defineView({ scenes: { title, farm, show, reward } }); // view ha
 ### 8.3 Packaging
 
 - **[G-2]** Packaging rules:
-  - The engine package exposes `lion-hawk/sim`, `lion-hawk/view`, `lion-hawk/kits/*`, `lion-hawk/test`, `lion-hawk/playwright` and `lion-hawk/build` through `exports`.
+  - The engine package exposes `lion-hawk/sim`, `lion-hawk/view`, `lion-hawk/net`, `lion-hawk/kits/*` (and `kits/*/view`), `lion-hawk/test`, `lion-hawk/playwright`, `lion-hawk/bake`, `lion-hawk/build` and `lion-hawk/package.json` through `exports`.
   - three.js and Rapier are peer dependencies, and the esbuild config forces one copy of each. `lion-hawk/build` exports `dedupe({ root, packages = ['three', '@dimforge/rapier3d-compat'] })`, an esbuild plugin that re-resolves those packages (and their subpaths) from the game's `root`, so the engine and the game share one copy (#11). It lives in `tools/`, not `src/`: engine sim source imports neither three nor Rapier, and engine view source imports three directly (D9). `lion-hawk build` calls the esbuild API with this plugin.
   - Each game build bundles a snapshot of the engine.
 - **[G-3]** The engine has its own semver version (0.x until migration ends) and a `CHANGELOG.md`.
