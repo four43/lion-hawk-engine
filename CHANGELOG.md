@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.1 — 2026-10-26
+
+Powertrain fixes found moving Rally onto it ([H-6]).
+
 - Kits: `createPowertrain({ blip: true })` rev-matches a shift: while the clutch is open the throttle brings the engine to the new gear's road rpm, and a blip still short of it holds the clutch open for up to another `shiftTime`, so a downshift no longer re-engages onto a slow engine and locks the driven wheels ([H-6]; Rally's sequential box). Off by default.
 - Kits: `createPowertrain({ bite })`: the launch clutch starts to grip at `bite` × idle (default 0.9, as before); above 1 an idling engine in gear no longer creeps the car ([H-6]).
 - Kits: with a turbo, the powertrain's clutch holds 1.6 × peak torque on full boost (`1 + maxBoost` times the old capacity), so it no longer slips under boost ([H-6]).
