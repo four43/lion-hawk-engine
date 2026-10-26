@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-10-26
+
+Audio and engine sound (spec §5.6 [H-1]–[H-7]): mixer buses, voices, cues, contact sounds and a DSP host in `lion-hawk/view`; a powertrain in `lion-hawk/kits/vehicle` and a procedural engine sound in `lion-hawk/kits/vehicle/view`. Also menu shoulders and buttons, as-built specs, `docs/agents.md`, and a build that writes to `<game>/build` by default (**breaking** for `--site`).
+
 - Menus: `nav.shoulders: '<choice id>'` makes LB/RB step that choice row from anywhere in the menu, and keeps the pad's focus off it (keys and pointers still reach it) ([U-7], [U-9]).
 - Menus: `nav.buttons: { x, y, select, start }` gives a menu its own handler per pad button (an action name or a function, like `back`), run through the recorded built-in `lh.press { button }`; Start without one is still Back ([U-7], [U-9]).
 - Glyphs: a `view` role (Xbox View, PlayStation Create, Steam Deck View, a generic square) for the Select button ([U-10]).

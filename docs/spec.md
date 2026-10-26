@@ -5,6 +5,7 @@ Amended 2026-10-13: phase 3 deltas D1–D9 and the 0.7.3 carry-overs.
 Amended 2026-10-14: 0.7.4 clarifications from phase 3b (materials registry and sidecar schema).
 Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3d (bake and CLI).
 Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25]. Released in 0.13.0.
+Amended 2026-10-26: §5.6 Audio, [H-1]–[H-7] (buses, voices, cues, contact sounds, the DSP host, the powertrain and the engine sound), with clarifications under [U-6] and [R-8]. Built in 0.14.0.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games.
 
