@@ -49,3 +49,8 @@ test('H-2: stop disconnects a voice once; dispose stops every voice; frame after
   s.audio.dispose(); assert.equal(b.stopped, true);
   s.audio.frame();
 });
+test('H-2: a voice can be made while the context is suspended (an interruption, a hidden tab); it is null only before the first unlock', async () => {
+  const s = audioPage(); s.fire(); await flush();
+  s.fa.made[0].state = 'suspended';
+  const v = s.audio.voice(); assert.ok(v, 'nodes may be built on a suspended context'); assert.equal(v.input.out[0].out[0].out[0], s.audio.bus('sfx'));
+});

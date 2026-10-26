@@ -127,7 +127,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
   }
   function voice({ bus = 'sfx', gain = 1, follow = null } = {}) { // H-2: connect sources to voice.input
     needBus(bus, 'voice');
-    if (!ctx || ctx.state !== 'running') return null;
+    if (!ctx || ctx.state === 'closed') return null; // a suspended context (an interruption, a hidden tab) still takes nodes
     const input = ctx.createGain(), place = ctx.createGain(), pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     input.gain.value = gain; input.connect(place);
     if (pn) { place.connect(pn); pn.connect(busNode.get(bus)); } else place.connect(busNode.get(bus));
