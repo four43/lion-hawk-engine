@@ -23,10 +23,10 @@ test('H-4: below min, without a cue, or with no materials nothing plays; one nul
   s.hit({ materials: [null, 'gravel'], a: 7 });
   assert.deepEqual(s.played.map(p => p.id), ['crunch']);
 });
-test('H-4: a pair plays at most once per gap of engine time; other pairs are independent; off() stops it', () => {
+test('H-4: a pair plays again only after gap of engine time without contact; other pairs are independent; off() stops it', () => {
   const s = setup(), off = bindContactSounds(s.engine, s.cues, { gap: 0.1 });
   s.hit(); s.engine.time.sim = 0.05; s.hit(); s.hit({ a: 9 });
-  s.engine.time.sim = 0.1; s.hit();
+  s.engine.time.sim = 0.16; s.hit();
   assert.equal(s.played.length, 3);
   off(); s.engine.time.sim = 5; s.hit(); assert.equal(s.played.length, 3);
 });
@@ -35,4 +35,10 @@ test('H-4: options and arguments are checked', () => {
   assert.throws(() => bindContactSounds({}, s.cues), /^Error: bindContactSounds: engine with events required$/);
   assert.throws(() => bindContactSounds(s.engine, {}), /bindContactSounds: cues from createCues required/);
   assert.throws(() => bindContactSounds(s.engine, s.cues, { min: 5, full: 5 }), /bindContactSounds: need 0 <= min < full/);
+});
+test('H-4: a body resting on the ground (a contact every step) plays once, then is silent until the pair is quiet for gap', () => {
+  const s = setup(); bindContactSounds(s.engine, s.cues, { gap: 0.12 });
+  for (let i = 0; i < 120; i++) { s.engine.time.sim = i / 60; s.hit(); }
+  assert.equal(s.played.length, 1, 'a resting crate is silent after its landing');
+  s.engine.time.sim = 2 + 0.13; s.hit(); assert.equal(s.played.length, 2, 'a new impact after a quiet gap plays');
 });
