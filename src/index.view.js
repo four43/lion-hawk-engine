@@ -29,3 +29,6 @@ export { makeProject } from './view/camera/project.js';
 export { createInstances } from './view/instancing/instances.js';
 export { createCrowd } from './view/instancing/crowd.js';
 export { createAudio } from './view/audio/index.js';
+export { createCues } from './view/audio/cues.js';
+export { bindContactSounds } from './view/audio/contacts.js';
+export { createDsp, workletSource } from './view/audio/dsp.js';

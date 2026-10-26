@@ -5,6 +5,10 @@
 - Menus: `nav.shoulders: '<choice id>'` makes LB/RB step that choice row from anywhere in the menu, and keeps the pad's focus off it (keys and pointers still reach it) ([U-7], [U-9]).
 - Menus: `nav.buttons: { x, y, select, start }` gives a menu its own handler per pad button (an action name or a function, like `back`), run through the recorded built-in `lh.press { button }`; Start without one is still Back ([U-7], [U-9]).
 - Glyphs: a `view` role (Xbox View, PlayStation Create, Steam Deck View, a generic square) for the Select button ([U-10]).
+- Audio: mixer buses (`sfx`, `music`, `ui`, `voice`, `ambience`) with `audio.volume` and `audio.duck`; `play({ bus })` ([H-1]). `play()` now connects to the `sfx` bus instead of `master`, which sounds the same at the default levels.
+- Audio: `audio.voice({ bus, gain, follow })`, long-lived emitters placed against the listener by `audio.frame()`, which the render pipeline calls every frame; `positional.cull` ([H-2]).
+- Audio: `createCues` (clip, gain and rate variations from `engine.rng('fx')`, cooldowns, voice limits) ([H-3]) and `bindContactSounds`, which plays the material registry's `sound` cues on contacts ([H-4]).
+- Audio: `createDsp` runs a self-contained synth class in an AudioWorklet loaded from a Blob URL, falling back to a ScriptProcessor ([H-5]).
 - Haptics: a stop now sends a zero `trigger-rumble` (with `leftTrigger` and `rightTrigger` at 0) to a pad whose `effects` lists it, and a zero `dual-rumble` to other pads, so a trigger effect sent a frame earlier does not outlive the stop ([C-14]). The pad bench's own stops use the same zero effect.
 - Test: `mp()` steps a peer added by a `beforeStep` from the next step, as documented.
 - Test: `expectEvents(h, since)` ([T-4]); `fixtures.define` and `h.use` with `warm:N` ([T-6]); `h.spy`, and warnings captured per handle: under `node --test` an unexpected `console.warn` / `console.error` during a handle call fails the test unless it calls `h.expectWarning(re)` ([T-8]). **Breaking for suites with silent warnings:** a test that warned through a handle and passed now fails until it expects the warning.

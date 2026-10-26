@@ -96,6 +96,10 @@ A kit is optional and imported per game. `lion-hawk/kits/<kit>` is the sim half 
 | Project a world point to the screen | `lion-hawk/view` | `makeProject` | [view-presentation: Projection](specs/as-built/view-presentation.md#projection) |
 | Draw many copies, or a crowd of animals | `lion-hawk/view` | `createInstances`, `createCrowd` | [Instances](specs/as-built/view-presentation.md#instances), [Crowd](specs/as-built/view-presentation.md#crowd) |
 | Play sound | `lion-hawk/view` | `view.audio`, `createAudio` | [view-presentation: Audio](specs/as-built/view-presentation.md#audio) |
+| Mix sound in buses, duck music, place looping sounds on objects | `lion-hawk/view` | `view.audio` | [view-presentation: Audio](specs/as-built/view-presentation.md#audio), [spec §5.6](spec.md#56-audio) |
+| Name sounds with variations and voice limits | `lion-hawk/view` | `createCues` | [spec §5.6](spec.md#56-audio) |
+| Play impact sounds from materials | `lion-hawk/view` | `bindContactSounds` | [spec §5.6](spec.md#56-audio), [spec §3.4](spec.md#34-pairs) |
+| Run a synth on the audio thread | `lion-hawk/view` | `createDsp`, `workletSource` | [spec §5.6](spec.md#56-audio) |
 | Keep frame time steady (warm shaders, free GPU memory) | `lion-hawk/view` | `warm`, `disposeTree`, `programCount` | [view-render: GPU hygiene](specs/as-built/view-render.md#gpu-hygiene) |
 
 ## Online multiplayer
