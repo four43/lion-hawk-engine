@@ -25,6 +25,15 @@ const game = defineGame({
     settings: { nav: { modal: true, back: e => e.close('settings') }, ui(u) { u.button({ id: 'done', label: 'Done', action: e => e.close('settings') }); } },
     pause: { pauses: true, nav: { modal: true, initial: 'pause.resume', back: e => e.close('pause'), open: { button: 'start', key: 'escape' } }, ui(u) { u.button({ id: 'resume', label: 'Resume', action: e => e.close('pause') }); u.hold({ id: 'quit', label: 'Quit', seconds: 1, action: e => { e.scene.state.quit = true; e.close('pause'); } }); } },
     parent: { nav: { modal: true, back: e => e.close('parent'), open: { button: 'start', seconds: 2 } } },
+    lobby: {
+      nav: { modal: true, shoulders: 'mode', buttons: { start: e => { e.scene.state.started = true; }, select: e => e.overlay('settings') } },
+      enter(e, ctx) { ctx.state.mode = 'b'; ctx.state.car = 'awd'; },
+      ui(u) {
+        u.choice({ id: 'mode', label: 'Mode', options: ['a', 'b', 'c'].map(v => ({ value: v, label: v })), get: (e, c) => c.state.mode, set: (v, e, c) => { c.state.mode = v; } });
+        u.choice({ id: 'car', label: 'Car', options: ['awd', 'rwd'].map(v => ({ value: v, label: v })), get: (e, c) => c.state.car, set: (v, e, c) => { c.state.car = v; } });
+        u.button({ id: 'go', label: 'Go', action: () => {} });
+      },
+    },
     picker: { nav: { input: 'shared' }, ui(u) { u.button({ id: 'one', label: '1', action: () => {} }); } },
   },
 });
@@ -37,6 +46,8 @@ const MARKUP = `
   <div id="settings"><button data-lh-slot="settings.done" data-r="0 0 100 40">Done</button></div>
   <div id="pause"><button data-lh-slot="pause.resume" data-r="0 0 100 40">Resume</button><button data-lh-slot="pause.quit" data-r="0 50 100 40">Quit</button></div>
   <div id="parent" data-lh-nav-scope="parent"><button id="red" data-r="0 0 50 50">red</button><button id="blue" data-r="60 0 50 50">blue</button><button id="gone" data-r="120 0 50 50" hidden>x</button></div>
+  <div id="lobby"><button data-lh-slot="lobby.mode.a" data-r="0 0 50 30">a</button><button data-lh-slot="lobby.mode.b" data-r="60 0 50 30">b</button><button data-lh-slot="lobby.mode.c" data-r="120 0 50 30">c</button>
+    <button data-lh-slot="lobby.car.awd" data-r="0 50 50 30">awd</button><button data-lh-slot="lobby.car.rwd" data-r="60 50 50 30">rwd</button><button data-lh-slot="lobby.go" data-r="0 100 50 30">go</button></div>
   <div id="picker"><button data-lh-slot="picker.one" data-r="0 0 50 50">1</button></div>
   <button data-lh-slot="drive.chip" data-r="400 0 60 40">Pause</button>`;
 
@@ -89,6 +100,27 @@ test('B, Esc and Start go Back through lh.back; a menu without back stays', () =
   assert.equal(t.focused(), 'title.settings', 'focus comes back to where it was');
   t.tap('a'); t.frame(); t.key('Escape'); t.frame(); t.frame(); assert.deepEqual(t.e.scene.overlays, ['title']);
   t.tap('a'); t.frame(); t.tap('start'); t.frame(); assert.deepEqual(t.e.scene.overlays, ['title']);
+  t.app.dispose();
+});
+
+test('nav.shoulders: LB/RB step that row wherever focus is, and the pad cannot focus it; keys still can', () => {
+  const t = setup(); t.e.overlay('lobby'); t.frame(); t.frame();
+  const pick = g => t.e.ui.tree().find(c => c.group === `lobby.${g}` && c.pressed)?.id;
+  t.tap('down'); assert.equal(t.focused(), 'lobby.car.awd', 'the pad lands below the shoulders row');
+  t.tap('up'); assert.equal(t.focused(), 'lobby.car.awd', 'nothing above it for the pad');
+  t.tap('rb'); assert.equal(pick('mode'), 'lobby.mode.c'); assert.equal(pick('car'), 'lobby.car.awd', 'not the focused row');
+  t.tap('rb'); assert.equal(pick('mode'), 'lobby.mode.c', 'no wrap');
+  t.tap('lb'); t.tap('lb'); assert.equal(pick('mode'), 'lobby.mode.a');
+  assert.equal(t.focused(), 'lobby.car.awd', 'focus stays put');
+  t.key('ArrowUp'); assert.equal(t.focused(), 'lobby.mode.a', 'the keyboard reaches the row');
+  t.app.dispose();
+});
+
+test('nav.buttons: Start and View run the menu\'s handlers (lh.press); Start without one is Back', () => {
+  const t = setup(); t.e.overlay('lobby'); t.frame(); t.frame();
+  t.tap('start'); t.frame(); assert.equal(t.e.scene.state.started, true); assert.deepEqual(t.e.scene.overlays, ['lobby']);
+  t.tap('select'); t.frame(); assert.deepEqual(t.e.scene.overlays, ['lobby', 'settings']);
+  t.tap('start'); t.frame(); assert.deepEqual(t.e.scene.overlays, ['lobby'], 'settings has no buttons: Start is its Back');
   t.app.dispose();
 });
 

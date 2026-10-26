@@ -31,6 +31,11 @@ test('defineGame checks nav options', () => {
   bad({ open: { key: 'escape', seconds: -1 } }, /nav.open.seconds must be a finite number >= 0/);
   bad({ open: { key: 'escape', when: true } }, /nav.open.when must be a function/);
   bad({ open: { key: 'escape', hold: 1 } }, /nav.open: unknown option 'hold'/);
+  bad({ shoulders: '' }, /nav.shoulders must be a choice id/);
+  bad({ buttons: [] }, /nav.buttons must be an object/);
+  bad({ buttons: { a: () => {} } }, /nav.buttons: 'a' must be one of x, y, select, start/);
+  bad({ buttons: { start: 3 } }, /nav.buttons.start must be an action name or a function/);
+  bad({ buttons: { select: 'nope' } }, /nav.buttons.select: no action 'nope'/);
 });
 
 test('topNav and menuOwnsInput look at the topmost overlay that declares nav', () => {
@@ -50,6 +55,15 @@ test('lh.back runs the top menu\'s back: a function, or an action pressed next s
   e.command('lh.back'); e.stepN(1); assert.deepEqual(e.scene.overlays, ['parent']); // pause (on top, pausing) closes; parent stays
   e.command('lh.back'); e.stepN(2); assert.deepEqual(e.scene.overlays, []);         // parent's back is the 'leave' action
   e.overlay('toast'); e.command('lh.back'); e.stepN(1); assert.deepEqual(e.scene.overlays, ['toast']); // no nav: untouched
+});
+
+test('lh.press runs the top menu\'s nav.buttons handler: a function, or an action; others and unknown buttons are no-ops', () => {
+  const e = createEngine(make({ lobby: { nav: { modal: true, buttons: { start: e => { e.scene.state.started = true; }, select: 'leave' } }, step(e) { if (e.input.snapshot.leave.pressed) e.close('lobby'); } } }));
+  e.overlay('lobby'); e.stepN(1);
+  e.command('lh.press', { button: 'y' }); e.command('lh.press', { button: 'a' }); e.stepN(1);
+  assert.equal(e.scene.state.started, undefined); assert.deepEqual(e.scene.overlays, ['lobby']);
+  e.command('lh.press', { button: 'start' }); e.stepN(1); assert.equal(e.scene.state.started, true);
+  e.command('lh.press', { button: 'select' }); e.stepN(2); assert.deepEqual(e.scene.overlays, []);
 });
 
 test('lh.open: the when gate, once, and no opening over a menu that owns input', () => {
