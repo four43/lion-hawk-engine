@@ -85,17 +85,21 @@ export function createPowertrain({ engine = 'i4', gears = [3.5, 2.1, 1.45, 1.1, 
       if (g !== st.gear) { st.gear = g; st.shiftT = shiftTime; }
       return pt;
     },
-    // dt: the sim step; wheelOmega: the driven wheels' mean spin (rad/s, + forward). Returns the drive torque (N m) for the
-    // driven wheels together. A shift opens the clutch and cuts the throttle for shiftTime.
-    step(dt, wheelOmega = 0) {
+    // dt: the sim step; wheelOmega: the driven wheels' mean spin (rad/s, + forward); roadTorque: the torque the road put
+    // back on the driven wheels last step (N m, + against forward drive; the tire backend's sum of fx × radius). Returns the
+    // drive torque (N m) for the driven wheels together. A shift opens the clutch and cuts the throttle for shiftTime.
+    step(dt, wheelOmega = 0, roadTorque = 0) {
       if (!(dt > 0)) fail(`dt must be a number > 0 (got ${dt})`);
       if (!Number.isFinite(wheelOmega)) fail(`wheelOmega must be a finite number (got ${wheelOmega})`);
+      if (!Number.isFinite(roadTorque)) fail(`roadTorque must be a finite number (got ${roadTorque})`);
       const g = st.gear, G = st.shiftT > 0 || g === 0 ? 0 : g < 0 ? -reverse * final : gears[g - 1] * final;
       let Tc = 0;
       if (G !== 0) { // launch slips at 0.6 N m per rpm engaging from 0.9 idle, else 8; capped by capacity and by one step's transfer
         const fromWheel = wheelOmega * G * RPM_PER_RAD, slip = st.rpm - fromWheel, launch = fromWheel < E.idle;
         const engage = launch ? clamp((st.rpm - E.idle * 0.9) / 600, 0, 1) : 1;
-        const cap = Math.min(E.torque * 1.6, Math.abs(slip) / (RPM_PER_RAD * dt * (G * G / wheelInertia + 1 / E.inertia)));
+        // the step's transfer: what closes the slip without reversing it, counting what the road takes off the wheels
+        const sg = slip < 0 ? -1 : 1, room = Math.abs(slip) / (RPM_PER_RAD * dt) + sg * G * roadTorque / wheelInertia;
+        const cap = Math.min(E.torque * 1.6, Math.max(0, room) / (G * G / wheelInertia + 1 / E.inertia));
         Tc = clamp(slip * (launch ? 0.6 : 8), -cap, cap) * engage;
       }
       const n = Math.max(1, Math.ceil(dt / H - 1e-9));

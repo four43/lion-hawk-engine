@@ -102,3 +102,23 @@ test('H-6: a non-finite wheel spin, a turbo without boost, and a custom engine w
   assert.throws(() => createPowertrain({ engine: { ...ENGINE_PRESETS.i4, banks: [0, 1] } }), /powertrain: engine\.angles, banks and header must be lists of one number per cylinder/);
   assert.throws(() => createPowertrain({ engine: { ...ENGINE_PRESETS.i4, stereo: 2 } }), /powertrain: engine\.stereo must be 0 or 1 \(got 2\)/);
 });
+test('H-6: on the tire backend, given the road torque, the clutch closes: engine rpm tracks the wheels in 1st and 2nd without the torque flipping sign', () => {
+  const h = headless(kitGame()); h.terrain = flatTerrain(h.world, { at: () => 'asphalt' });
+  const e = h.world.spawn({ tags: ['car'], body: { type: 'dynamic', canSleep: false, mass: 1200 }, colliders: [{ shape: 'box', half: [1.2, 0.3, 0.7], material: 'steel' }],
+    groups: { member: ['vehicle'], filter: ['ground', 'static', 'prop'] }, at: [0, 0.8, 0] });
+  const car = createVehicle(h.world, e, { backend: 'tire', wheels: carWheels('x').map(w => ({ at: w.at, radius: w.radius, front: w.front })), forward: 'x', terrain: h.terrain });
+  h.step(60);
+  const pt = createPowertrain(), RATIO = [3.5, 2.1, 1.45, 1.1, 0.88, 0.72];
+  const drive = (steps, each) => { for (let i = 0; i < steps; i++) {
+    const w2 = car.wheels[2], w3 = car.wheels[3], omega = (w2.omega + w3.omega) / 2;
+    const T = pt.step(DT, omega, w2.fx * w2.radius + w3.fx * w3.radius); car.set(2, { engine: T / 2 }).set(3, { engine: T / 2 }); h.step(1); each?.(omega, T);
+  } };
+  const slipOf = omega => Math.abs(pt.state.rpm - omega * RATIO[pt.state.gear - 1] * 3.9 * 60 / (2 * Math.PI));
+  pt.shift(1); pt.throttle = 1; drive(90);
+  let worst = 0; drive(30, o => { worst = Math.max(worst, slipOf(o)); });
+  assert.ok(worst < 300, `1st, full throttle: slip up to ${worst.toFixed(0)} rpm`);
+  pt.shift(2); pt.throttle = 0.3; drive(60);
+  let flips = 0, last = 0; worst = 0;
+  drive(60, (o, T) => { worst = Math.max(worst, slipOf(o)); if (last && Math.sign(T) !== Math.sign(last)) flips++; last = T; });
+  assert.ok(worst < 200, `2nd, part throttle: slip up to ${worst.toFixed(0)} rpm`); // about RPM_PER_RAD × dt × Tc / inertia (H-6) assert.equal(flips, 0, 'the drive torque does not flip sign');
+});
