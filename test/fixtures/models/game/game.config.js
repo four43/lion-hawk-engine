@@ -1,6 +1,6 @@
 // Fixture game for the lion-hawk CLI tests (3d): every bake convention and the build steps on five small models.
 export default {
-  id: 'fixture', site: 'fixture', outEnv: 'LH_FIXTURE_OUT',
+  id: 'fixture', outEnv: 'LH_FIXTURE_OUT',
   bake: {
     materials: './materials.js', palette: 'vertex', paint: { base: 'steel' },
     rename: { materials: { colormap: 'flesh' }, nodes: { hat: 'sock-hat' } },

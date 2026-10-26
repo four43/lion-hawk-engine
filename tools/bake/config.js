@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 export const importFresh = file => import(`${pathToFileURL(file).href}?v=${createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12)}`);
 
 const KEYS = {
-  '': ['id', 'site', 'outEnv', 'bake', 'build', 'test'],
+  '': ['id', 'outEnv', 'bake', 'build', 'test'],
   bake: ['src', 'out', 'materials', 'rename', 'palette', 'paint', 'models', 'optimise', 'textures'],
   'bake.textures': ['format', 'quality', 'resize', 'mode'],
   'bake.rename': ['materials', 'nodes'],
@@ -19,7 +19,7 @@ const KEYS = {
   'bake.models.*': ['static', 'rename', 'keepTextures', 'animTable', 'sockets', 'file', 'colliders', 'aero'],
   'bake.models.*.rename': ['materials', 'nodes'],
   'bake.models.*.animTable': ['fps', 'clips'],
-  build: ['entry', 'template', 'pwa', 'hooks', 'manifest', 'shared'],
+  build: ['entry', 'template', 'pwa', 'hooks', 'manifest', 'shared', 'out'],
   'build.shared': ['dir', 'base'],
   test: ['dir', 'game', 'roots', 'zeroAlloc'],
   'build.manifest': ['name', 'shortName', 'themeColor', 'backgroundColor', 'icon', 'display', 'orientation'],
@@ -70,6 +70,7 @@ export async function loadConfig(dir = '.') {
     if (man.display !== undefined && !DISPLAYS.includes(man.display)) throw new Error(`config: 'build.manifest.display' must be one of ${DISPLAYS.join(', ')}`);
     for (const k of ['shortName', 'themeColor', 'backgroundColor', 'icon', 'orientation']) if (man[k] !== undefined && typeof man[k] !== 'string') throw new Error(`config: 'build.manifest.${k}' must be a string`);
   }
+  if (raw.build?.out !== undefined && (typeof raw.build.out !== 'string' || !raw.build.out)) throw new Error(`config: 'build.out' must be a path`);
   const t = raw.test ?? {}; // lion-hawk test
   if (t.roots !== undefined && (!Array.isArray(t.roots) || !t.roots.every(r => typeof r === 'string'))) throw new Error(`config: 'test.roots' must be an array of paths`);
   if (t.game !== undefined && typeof t.game !== 'string') throw new Error(`config: 'test.game' must be a path`);
@@ -82,7 +83,7 @@ export async function loadConfig(dir = '.') {
     if (m.aero !== undefined && typeof m.aero !== 'boolean') throw new Error(`config: 'bake.models.${id}.aero' must be true or false`);
   }
   return {
-    dir: gameDir, version, id: raw.id, site: raw.site ?? raw.id, outEnv: raw.outEnv ?? null,
+    dir: gameDir, version, id: raw.id, outEnv: raw.outEnv ?? null,
     bake: {
       src: b.src ?? 'assets/models', out: b.out ?? 'baked', materials: b.materials ?? null, palette: b.palette ?? null,
       paint: { base: b.paint?.base ?? 'steel' },

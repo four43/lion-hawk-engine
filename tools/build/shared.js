@@ -1,6 +1,6 @@
 // lion-hawk build --mode shared (B-4, phase 9; the engine side): the game's bundle keeps lion-hawk, three and Rapier
 // external, and an import map in the page points them at one shared pack, so a second game loads only its own files.
-// The pack (default <out>/../lion-hawk/<engine version>/, served at /exp/lion-hawk/<version>/):
+// The pack (default <out>/../lion-hawk/<engine version>/, and build.shared.base, default ../lion-hawk/<version>/ from the page):
 //   - every browser entry of lion-hawk (sim, view, net, each kit's sim and view) in ONE esbuild call with code
 //     splitting, so the entries share one copy of the engine core (a second copy would split module state);
 //   - three, each three/* subpath and Rapier, one file each.

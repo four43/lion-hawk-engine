@@ -2,10 +2,10 @@
 // baked/, the PWA files, sw.js stamped with the version and the precache list, then a size report.
 //
 // Public API (`import { build } from 'lion-hawk/build'`, 3l CI-7):
-//   build({ game = '.', out, env = process.env, site = false, mode = 'single', e2e = false, entry, log = console.log })
+//   build({ game = '.', out, env = process.env, mode = 'single', e2e = false, entry, log = console.log })
 //     → Promise<{ out, version, hash, files, sizes: { html, assets, total: { bytes, gzip } }, shared? }>
 //   mode 'shared' (B-4): see ./shared.js; shared = { dir, base, files, imports }
-//   game: a game directory (or a loadConfig() result); out: the output dir (else $<outEnv>); e2e: unminified, inline
+//   game: a game directory (or a loadConfig() result); out: the output dir (else $<outEnv>, else build.out, default 'build'); e2e: unminified, inline
 //   sourcemap, no sw.js, ctx.e2e for hooks; entry: overrides build.entry (an e2e entry); log: the size report sink.
 // Also exported: bundle, bakedAssets, ENGINE_VERSION, dedupe, UsageError.
 import { build as esbuild } from 'esbuild';
@@ -16,7 +16,7 @@ import { gzipSync } from 'node:zlib';
 import { dedupe } from '../dedupe.js';
 import { loadConfig, importFresh } from '../bake/config.js';
 import { readBaked, sha256 } from '../bake/write.js';
-import { resolveOut, guardSite, UsageError } from './out.js';
+import { resolveOut, UsageError } from './out.js';
 import { bundleGame, buildPack, addImportMap } from './shared.js';
 import { fillTemplate, stampPage, stampWorker, makeManifest, linkManifest } from './page.js';
 export { dedupe, UsageError };
@@ -45,13 +45,13 @@ export function bakedAssets(cfg) {
   return files;
 }
 
-export async function build({ game = '.', out, env = process.env, site = false, mode = 'single', e2e = false, entry, log = console.log } = {}) {
+export async function build({ game = '.', out, env = process.env, mode = 'single', e2e = false, entry, log = console.log } = {}) {
   if (mode !== 'single' && mode !== 'shared') throw new UsageError(`build: mode must be 'single' or 'shared' (got '${mode}')`);
   const cfg = typeof game === 'string' ? await loadConfig(game) : game;
-  const dir = resolveOut({ cfg, out, env, site });
-  const sh = cfg.build.shared ?? {}, base = sh.base ?? `/exp/lion-hawk/${ENGINE_VERSION}/`;
+  const dir = resolveOut({ cfg, out, env });
+  const sh = cfg.build.shared ?? {}, base = sh.base ?? `../lion-hawk/${ENGINE_VERSION}/`; // relative to the page: the default pack dir is a sibling of out
   if (mode === 'shared' && !base.endsWith('/')) throw new UsageError(`build: build.shared.base must end with '/' (got '${base}')`);
-  const packDir = mode === 'shared' ? guardSite(sh.dir ? resolve(cfg.dir, sh.dir) : resolve(dir, '..', 'lion-hawk', ENGINE_VERSION), site) : null;
+  const packDir = mode === 'shared' ? (sh.dir ? resolve(cfg.dir, sh.dir) : resolve(dir, '..', 'lion-hawk', ENGINE_VERSION)) : null;
   const hooks = cfg.build.hooks ? (await importFresh(resolve(cfg.dir, cfg.build.hooks))).default ?? {} : {};
   const ctx = { config: cfg, game: cfg.dir, out: dir, e2e, version: cfg.version, engine: ENGINE_VERSION, log };
   let js, pack = null;

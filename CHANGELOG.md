@@ -17,6 +17,7 @@
 - Build: `--mode shared` ([B-4], phase 9's engine side): the game bundle imports lion-hawk, three and Rapier through an import map from one content-hashed pack at `/exp/lion-hawk/<version>/`, which a second game reuses (`build.shared: { dir, base }`).
 - Fields (phase 8, [M-14]–[M-18]): `createWind` and `createFields(world, { wind, aero, buoyancy, magnet })` in `lion-hawk/sim`: flat-plate and airfoil aero on baked panels, buoyancy from the panel integral with heave damping, induced and dipole magnetism, in one `pre`-stage system.
 - Playwright: iPhone 15 Pro Max (portrait, landscape) and iPad Mini landscape presets ([T-16]).
+- **Breaking, build:** `--site`, the `site` key of `game.config.js` and the refusal to write under a `site/exp/` directory are gone. The output dir is `--out`, then `$<outEnv>`, then the new `build.out` (relative to the game dir), which defaults to `build`, so a build with no output setting writes `<game>/build/` instead of failing. Shared mode's `build.shared.base` now defaults to `../lion-hawk/<version>/`, relative to the page, which matches the default pack dir beside the game's output.
 - Package: `playwright-core` is an optional peer dependency (needed only by `lion-hawk/playwright`).
 - Docs: as-built specs for every core feature in `docs/specs/as-built/`, and `docs/spec.md` brought in line with the code where they disagreed.
 

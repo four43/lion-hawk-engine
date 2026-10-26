@@ -9,18 +9,18 @@ import { release } from './release/index.js';
 
 export const USAGE = `usage:
   lion-hawk bake  [--game <dir>] [--check] [ids...]
-  lion-hawk build [--game <dir>] (--out <dir> | $<outEnv>) [--site] [--mode single|shared] [--e2e]
+  lion-hawk build [--game <dir>] [--out <dir>] [--mode single|shared] [--e2e]
   lion-hawk dev   [--game <dir>] [--port 8740] [--host 0.0.0.0]
   lion-hawk test  [--game <dir>] [--visual]
-  lion-hawk release [--game <dir>] [--bump patch|minor|major] (--out <dir> | $<outEnv>) [--site]`;
+  lion-hawk release [--game <dir>] [--bump patch|minor|major] [--out <dir>]`;
 
 const OPTIONS = {
   bake: { game: { type: 'string', default: '.' }, check: { type: 'boolean', default: false } },
-  build: { game: { type: 'string', default: '.' }, out: { type: 'string' }, site: { type: 'boolean', default: false },
+  build: { game: { type: 'string', default: '.' }, out: { type: 'string' },
     mode: { type: 'string', default: 'single' }, e2e: { type: 'boolean', default: false } },
   dev: { game: { type: 'string', default: '.' }, port: { type: 'string', default: '8740' }, host: { type: 'string', default: '0.0.0.0' } },
   test: { game: { type: 'string', default: '.' }, visual: { type: 'boolean', default: false } },
-  release: { game: { type: 'string', default: '.' }, bump: { type: 'string', default: 'patch' }, out: { type: 'string' }, site: { type: 'boolean', default: false } },
+  release: { game: { type: 'string', default: '.' }, bump: { type: 'string', default: 'patch' }, out: { type: 'string' } },
 };
 
 export async function main(argv, { env = process.env, log = console.log, error = console.error } = {}) {
@@ -32,9 +32,9 @@ export async function main(argv, { env = process.env, log = console.log, error =
   catch (e) { error(`lion-hawk ${cmd}: ${e.message}\n${USAGE}`); return 2; }
   try {
     if (cmd === 'bake') { const r = await bake({ game: values.game, ids: positionals, check: values.check, log }); return r.ok ? 0 : 1; }
-    if (cmd === 'build') { await build({ game: values.game, out: values.out, env, site: values.site, mode: values.mode, e2e: values.e2e, log }); return 0; }
+    if (cmd === 'build') { await build({ game: values.game, out: values.out, env, mode: values.mode, e2e: values.e2e, log }); return 0; }
     if (cmd === 'test') return (await runTests({ game: values.game, visual: values.visual, log })) === 0 ? 0 : 1;
-    if (cmd === 'release') return await release({ game: values.game, bump: values.bump, out: values.out, site: values.site, env, log });
+    if (cmd === 'release') return await release({ game: values.game, bump: values.bump, out: values.out, env, log });
     const port = Number(values.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) { error(`lion-hawk dev: --port must be 0..65535 (got ${values.port})`); return 2; }
     await dev({ game: values.game, port, host: values.host, log });

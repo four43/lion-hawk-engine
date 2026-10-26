@@ -57,7 +57,7 @@ test('3d: an e2e build over an earlier normal build drops the stale sw.js (C8); 
   await build({ game, out: fresh, env: {}, log: quiet });
   assert.equal(runPage(readFileSync(join(fresh, 'index.html'), 'utf8')).window.__HOOK__.out, 'set');   // out existed when beforePage ran
 });
-test('3d: --e2e skips minify and the service worker and tells the hooks; an unknown mode and site/exp are refused', async () => {
+test('3d: --e2e skips minify and the service worker and tells the hooks; an unknown mode is refused', async () => {
   const game = copyFixture(), out = scratch();
   await build({ game, out, env: {}, e2e: true, log: quiet });
   assert.ok(!existsSync(join(out, 'sw.js')));
@@ -65,6 +65,5 @@ test('3d: --e2e skips minify and the service worker and tells the hooks; an unkn
   assert.match(html, /sourceMappingURL=data:/);
   assert.equal(runPage(html).window.__HOOK__.e2e, true);
   await assert.rejects(build({ game, out, env: {}, mode: 'frob', log: quiet }), /build: mode must be 'single' or 'shared' \(got 'frob'\)/);
-  await assert.rejects(build({ game, out: join(scratch(), 'site/exp/fixture'), env: {}, log: quiet }), /under site\/exp\//);
-  await assert.rejects(build({ game, env: {}, log: quiet }), /build: pass --out or set \$LH_FIXTURE_OUT/);
+  assert.equal((await build({ game, env: {}, e2e: true, log: quiet })).out, join(game, 'build'));   // no --out, $<outEnv> or build.out
 });

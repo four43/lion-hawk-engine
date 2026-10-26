@@ -22,13 +22,10 @@ test('3d: the bin is executable and usage errors exit 2', async () => {
   r = await run(['dev', '--port', 'x']); assert.equal(r.code, 2);
   r = await run(['--help']); assert.equal(r.code, 0); assert.match(r.stdout, /lion-hawk build \[--game <dir>\]/);
 });
-test('3d: build with no --out and no $<outEnv> exits 2 with the contract message; site/exp exits 2 and writes nothing', async () => {
+test('3d: build with no --out and no $<outEnv> writes <game>/build; $<outEnv> moves it', async () => {
   const game = copyFixture();
   let r = await run(['build', '--game', game]);
-  assert.equal(r.code, 2); assert.match(r.stderr, /build: pass --out or set \$LH_FIXTURE_OUT/);
-  const site = join(tmp('lh-site-'), 'site/exp/fixture');
-  r = await run(['build', '--game', game, '--out', site]);
-  assert.equal(r.code, 2); assert.ok(!existsSync(site));
+  assert.equal(r.code, 0, r.stderr); assert.ok(existsSync(join(game, 'build/index.html')));
   r = await run(['build', '--game', game, '--mode', 'frob', '--out', tmp('lh-out-')]);
   assert.equal(r.code, 2);
   const out = tmp('lh-out-');

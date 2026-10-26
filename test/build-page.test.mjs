@@ -1,23 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { join, resolve } from 'node:path';
-import { resolveOut, UsageError } from '../tools/build/out.js';
+import { resolve } from 'node:path';
+import { resolveOut } from '../tools/build/out.js';
 import { fillTemplate, stampPage, stampWorker } from '../tools/build/page.js';
 
-const cfg = { dir: '/w/four43/games/tractor-pickup', outEnv: 'TRACTOR_OUT', site: 'tractor-pickup' };
+const cfg = { dir: '/w/games/kart', outEnv: 'KART_OUT', build: {} };
 
-test('3d: --out wins over $<outEnv>; neither is a usage error naming the variable', () => {
-  assert.equal(resolveOut({ cfg, out: '/scratch/a', env: { TRACTOR_OUT: '/scratch/b' } }), '/scratch/a');
-  assert.equal(resolveOut({ cfg, env: { TRACTOR_OUT: '/scratch/b' } }), '/scratch/b');
+test('3d: --out wins over $<outEnv>, which wins over build.out; with none of them the build goes to <game>/build', () => {
+  const withOut = { ...cfg, build: { out: '../web/kart' } };
+  assert.equal(resolveOut({ cfg: withOut, out: '/scratch/a', env: { KART_OUT: '/scratch/b' } }), '/scratch/a');
+  assert.equal(resolveOut({ cfg: withOut, env: { KART_OUT: '/scratch/b' } }), '/scratch/b');
+  assert.equal(resolveOut({ cfg: withOut, env: {} }), '/w/games/web/kart');   // build.out is relative to the game dir
   assert.equal(resolveOut({ cfg, out: 'rel', env: {} }), resolve('rel'));
-  assert.throws(() => resolveOut({ cfg, env: {} }), e => e instanceof UsageError && e.message === 'build: pass --out or set $TRACTOR_OUT');
-});
-test('3d: any path under site/exp/ is refused without --site (constraint 8); --site alone means the default site dir', () => {
-  for (const out of ['/w/four43/site/exp/tractor-pickup', '/w/four43/site/exp', '/tmp/x/site/exp/a/b'])
-    assert.throws(() => resolveOut({ cfg, out, env: {} }), e => e instanceof UsageError && /under site\/exp\/; only a deploy passes --site/.test(e.message), out);
-  assert.throws(() => resolveOut({ cfg, env: { TRACTOR_OUT: '/w/four43/site/exp/tractor-pickup' } }), UsageError);
-  assert.equal(resolveOut({ cfg, out: '/w/four43/site/expo/x', env: {} }), '/w/four43/site/expo/x');
-  assert.equal(resolveOut({ cfg, env: {}, site: true }), join('/w/four43/site/exp', 'tractor-pickup'));   // path only; nothing is written
+  assert.equal(resolveOut({ cfg, env: {} }), '/w/games/kart/build');
 });
 test('3d: <!--APP--> becomes an inline module script with </script escaped (D1); no marker, or one inside a <script>, fails', () => {
   assert.equal(fillTemplate('<body><!--APP--></body>', 'a("</script>");$&'), '<body><script type="module">a("<\\/script>");$&</script></body>');

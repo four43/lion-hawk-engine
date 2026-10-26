@@ -11,7 +11,7 @@ import { launch, openGame } from 'lion-hawk/playwright';
 import { tmp } from './helpers/tmp.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)), quiet = () => {};
-const BASE = `/exp/lion-hawk/${ENGINE_VERSION}/`;
+const BASE = `../lion-hawk/${ENGINE_VERSION}/`;
 // a game under <web>/src/<id> that imports lion-hawk and three by package name (node_modules links to this repo)
 function makeGame(web, id, label) {
   const dir = join(web, 'src', id);
@@ -32,7 +32,7 @@ boot(game, defineView({ scenes: {} }));
   return dir;
 }
 const site = () => { const web = tmp('lh-web-'); return { web, a: makeGame(web, 'a', 'A'), b: makeGame(web, 'b', 'B') }; };
-const out = (web, id) => join(web, 'exp', id);
+const out = (web, id) => join(web, 'games', id);
 
 test('B-4: shared mode leaves the shared imports bare, writes the pack beside the game and maps it in the page', async () => {
   const { web, a } = site();
@@ -43,14 +43,14 @@ test('B-4: shared mode leaves the shared imports bare, writes the pack beside th
   assert.ok(html.indexOf('type="importmap"') < html.indexOf('type="module"'), 'the map comes before the module');
   assert.match(html, /from"lion-hawk\/view"|from "lion-hawk\/view"/, 'the bundle imports lion-hawk/view bare');
   assert.ok(!html.includes('function createEngine'), 'no engine copy in the page');
-  assert.equal(r.shared.dir, join(web, 'exp/lion-hawk', ENGINE_VERSION));
+  assert.equal(r.shared.dir, join(web, 'games/lion-hawk', ENGINE_VERSION));
   for (const f of r.shared.files) assert.ok(existsSync(join(r.shared.dir, f)), f);
   for (const url of Object.values(map.imports)) assert.ok(r.shared.files.includes(url.slice(BASE.length)), url);
   const sw = readFileSync(join(out(web, 'a'), 'sw.js'), 'utf8');
   for (const f of r.shared.files) assert.ok(sw.includes(JSON.stringify(BASE + f)), `precache ${f}`);
   assert.ok(statSync(join(out(web, 'a'), 'index.html')).size < 20000, 'the page is the game alone');
 });
-test('B-4: a second game reuses the same pack files; the base and dir are configurable and guarded', async () => {
+test('B-4: a second game reuses the same pack files; the base and dir are configurable', async () => {
   const { web, a, b } = site();
   const ra = await build({ game: a, out: out(web, 'a'), env: {}, mode: 'shared', log: quiet });
   const before = readdirSync(ra.shared.dir).sort();
@@ -63,9 +63,6 @@ test('B-4: a second game reuses the same pack files; the base and dir are config
   assert.equal(rc.shared.dir, join(web, 'cdn')); assert.ok(rc.shared.imports['lion-hawk/view'].startsWith('/cdn/lh/'));
   writeFileSync(cfg, readFileSync(cfg, 'utf8').replace("base: '/cdn/lh/'", "base: '/cdn/lh'"));
   await assert.rejects(build({ game: b, out: out(web, 'b'), env: {}, mode: 'shared', log: quiet }), /build\.shared\.base must end with '\/'/);
-  const guarded = makeGame(tmp('lh-web-'), 'g', 'G'), gcfg = join(guarded, 'game.config.js');
-  writeFileSync(gcfg, readFileSync(gcfg, 'utf8').replace("pwa: 'pwa' }", "pwa: 'pwa', shared: { dir: '../../site/exp/lion-hawk' } }"));
-  await assert.rejects(build({ game: guarded, out: tmp('lh-out-'), env: {}, mode: 'shared', log: quiet }), /is under site\/exp\/; only a deploy passes --site/);
 });
 
 let chrome, server, base, skip = false, web;
@@ -90,7 +87,7 @@ test('B-4: a shared-mode page boots in Chromium from the pack, and two games loa
   if (skip) return t.skip(skip);
   const seen = {};
   for (const id of ['a', 'b']) {
-    const game = await openGame(chrome.browser, `${base}/exp/${id}/`, { preset: 'desktop' });
+    const game = await openGame(chrome.browser, `${base}/games/${id}/`, { preset: 'desktop' });
     try {
       seen[id] = await game.page.evaluate(() => performance.getEntriesByType('resource').map(e => new URL(e.name).pathname).filter(p => p.includes('/lion-hawk/')).sort());
       assert.equal((await game.control('t.go')).label, id.toUpperCase());

@@ -15,7 +15,7 @@ const game = (config, pkg) => {
 test('3d: loadConfig fills the engine defaults and reads the game version', async () => {
   const dir = game({ id: 'g', bake: { materials: './m.js', models: { pig: { animTable: true, sockets: ['hat'] } } } }, { version: '2.3.4' });
   const c = await loadConfig(dir);
-  assert.equal(c.dir, dir); assert.equal(c.version, '2.3.4'); assert.equal(c.site, 'g'); assert.equal(c.outEnv, null);
+  assert.equal(c.dir, dir); assert.equal(c.version, '2.3.4'); assert.equal(c.outEnv, null);
   assert.deepEqual(c.bake.optimise, { meshopt: true, quantize: true, weld: true, prune: true, dedupe: true });
   assert.deepEqual(c.bake.paint, { base: 'steel' });
   assert.equal(c.bake.src, 'assets/models'); assert.equal(c.bake.out, 'baked'); assert.equal(c.bake.palette, null);
@@ -34,6 +34,8 @@ test('3d: bad values and a missing config are reported', async () => {
   await assert.rejects(loadConfig(game({ id: 'g', bake: { palette: 'texture' } })), /'bake\.palette' must be 'vertex' or absent/);
   await assert.rejects(loadConfig(game({ id: 'g', bake: { rename: 'x' } })), /'bake\.rename' must be an object/);
   await assert.rejects(loadConfig(tmp('lh-cfg-')), /config: no game\.config\.js in /);
+  await assert.rejects(loadConfig(game({ id: 'g', build: { out: 3 } })), /'build\.out' must be a path/);
+  await assert.rejects(loadConfig(game({ id: 'g', site: 'g' })), /unknown key 'site'/);
 });
 test('3d: animTable false and a partial optimise block are accepted', async () => {
   const c = await loadConfig(game({ id: 'g', bake: { optimise: { meshopt: false }, models: { a: { animTable: false, colliders: false } } } }));
