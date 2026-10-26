@@ -7,6 +7,7 @@
 // Sim-pure (L-3): Rapier is world.rapier, never an import.
 
 import { tireStep, surfaceOf, DEFAULT_SURFACE } from './tire.js';
+export { createPowertrain, ENGINE_PRESETS } from './powertrain.js';
 
 export const VEHICLE_SYSTEM = 'lh.kit.vehicle';
 const CARS = new WeakMap();    // World → its vehicles, updated in creation order
