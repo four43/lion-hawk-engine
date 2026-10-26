@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { EngineDSP, engineConfig } from '../../src/kits/vehicle/engineDsp.js';
 import { ENGINE_PRESETS } from '../../src/kits/vehicle/powertrain.js';
 import { workletSource } from '../../src/view/audio/dsp.js';
@@ -58,4 +59,15 @@ test('H-7: the class runs from its own source as a worklet processor, and uses n
 });
 test('H-7: engineConfig carries a preset\'s firing layout', () => {
   assert.deepEqual(engineConfig(ENGINE_PRESETS.flat4), { type: 'engine', angles: [0, 180, 360, 540], banks: [0, 1, 0, 1], header: [0, 2.6, 0, 2.6], pulseDeg: 240, gain: 1.05, stereo: 0 });
+});
+test('H-7: bundled for an ES2020 target (static fields lowered out of the class), EngineDSP still runs from its own source', async () => {
+  const { build } = await import('esbuild');
+  const out = await build({ entryPoints: [fileURLToPath(new URL('../../src/kits/vehicle/engineDsp.js', import.meta.url))], bundle: true, format: 'iife', globalName: 'M',
+    target: 'es2020', minify: true, write: false, logLevel: 'silent' });
+  const M = new Function(`${out.outputFiles[0].text};return M;`)(), reg = {};
+  new Function('registerProcessor', 'AudioWorkletProcessor', 'sampleRate', workletSource('lh-engine', M.EngineDSP))((n, P) => { reg[n] = P; }, class { constructor() { this.port = {}; } }, SR);
+  const p = new reg['lh-engine']({ processorOptions: {} }), L = new Float32Array(128), R = new Float32Array(128);
+  p.port.onmessage({ data: M.engineConfig(ENGINE_PRESETS.i4) }); p.port.onmessage({ data: { ...FLAT, ...WOT4K } });
+  for (let k = 0; k < 20; k++) p.process([], [[L, R]]);
+  assert.ok(L.some(v => v !== 0) && L.every(Number.isFinite));
 });

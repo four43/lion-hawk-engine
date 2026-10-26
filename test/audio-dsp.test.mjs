@@ -57,3 +57,10 @@ test('H-5: arguments are checked; a name already used by another class throws', 
   class Other extends Tone {}
   await assert.rejects(createDsp(s.audio, { name: 'one', Class: Other, AudioWorkletNode: s.fa.AudioWorkletNode }), /createDsp: 'one' is already registered with another class/);
 });
+test('H-5: a processor that throws on the audio thread is reported once, not left silent', async t => {
+  const warns = []; t.mock.method(console, 'warn', (...a) => warns.push(a[0]));
+  const s = await unlocked(), d = await createDsp(s.audio, { name: 'tone', Class: Tone, AudioWorkletNode: s.fa.AudioWorkletNode });
+  assert.equal(typeof d.node.onprocessorerror, 'function');
+  d.node.onprocessorerror(new Event('processorerror')); d.node.onprocessorerror(new Event('processorerror'));
+  assert.deepEqual(warns, ["audio: the 'tone' processor threw on the audio thread and is now silent"]);
+});

@@ -1,14 +1,9 @@
 // The engine synthesizer (H-7): engine-sound spec §4 / Appendix A (docs/research-engine-sound.md), ported with three
-// changes: noise comes from a per-instance mulberry32 PRNG seeded by options.seed (U-6 clarification, H-5); the per-block
-// muffler tables are static; and with `on` 0 and the output gate closed, a block renders zeros without running the model.
-// The class names nothing outside itself: createDsp runs it from its own source text in an AudioWorklet (H-5).
+// changes: noise comes from a per-instance mulberry32 PRNG seeded by options.seed (U-6 clarification, H-5); the MIC and
+// muffler tables are instance fields, not static ones; and with `on` 0 and the output gate closed, a block renders zeros
+// without running the model. The class names nothing outside itself: createDsp runs it from its own source text in an
+// AudioWorklet (H-5).
 export class EngineDSP {
-  static MIC = [
-    {exh:1.0, int:0.22, tur:0.5,  mech:0.3,  st:0.45, exLP:16000, cab:0},
-    {exh:0.32,int:1.0,  tur:1.15, mech:0.75, st:1.0,  exLP:1700,  cab:0},
-    {exh:0.8, int:0.5,  tur:0.35, mech:0.3,  st:0.5,  exLP:16000, cab:1}
-  ];
-  static MUF=[1300,3200,7000]; static BRIGHT=[0.15,0.5,1.0]; static BODY_DB=[5,3.5,2];
   static bq(){ return {b0:1,b1:0,b2:0,a1:0,a2:0,x1:0,x2:0,y1:0,y2:0}; }
   static set(f,type,freq,Q,sr,gainDb){
     const w=2*Math.PI*Math.min(Math.max(freq,10),sr*0.45)/sr, c=Math.cos(w), s=Math.sin(w), al=s/(2*Q);
@@ -22,6 +17,14 @@ export class EngineDSP {
 
   constructor(sr,{seed=1}={}){
     this.sr=sr; this.seed=(seed>>>0)||1;
+    // tables live on the instance, not as static fields: a bundler targeting ES2020 moves static fields out of the class,
+    // and the worklet runs this class from its own source text (H-5)
+    this.MIC=[
+    {exh:1.0, int:0.22, tur:0.5,  mech:0.3,  st:0.45, exLP:16000, cab:0},
+    {exh:0.32,int:1.0,  tur:1.15, mech:0.75, st:1.0,  exLP:1700,  cab:0},
+    {exh:0.8, int:0.5,  tur:0.35, mech:0.3,  st:0.5,  exLP:16000, cab:1}
+  ];
+    this.MUF=[1300,3200,7000]; this.BRIGHT=[0.15,0.5,1.0]; this.BODY_DB=[5,3.5,2];
     this.t={rpm:0,charge:0.3,throttle:0,fuelCut:1,limiter:0,popWin:0,pops:1,turbo:0,shaft:0,boostN:0,wg:0,
             bovId:0,bovAmp:0,bovMode:1,mic:0,vol:0.6,pipe:2.1,muffler:1,on:0,starter:0,
             mixEx:1,mixOv:1,mixIn:1,mixTu:1,mixMe:1,mixSt:1};
@@ -87,12 +90,12 @@ export class EngineDSP {
       const m=Math.min(64,n-off), E=this.engine;
       if(!T.on && this.onG<1e-4){ this.onG=0; for(let i=0;i<m;i++){ L[off+i]=0; if(R) R[off+i]=0; } continue; } // H-7: silent: skip the model
       const turb=T.turbo?1:0, mi=T.muffler|0;
-      const mufCut=EngineDSP.MUF[mi]*(1-0.35*turb);
-      const bright=EngineDSP.BRIGHT[mi]*(1-0.4*turb);
+      const mufCut=this.MUF[mi]*(1-0.35*turb);
+      const bright=this.BRIGHT[mi]*(1-0.4*turb);
       for(let b=0;b<2;b++){
         set(this.muf[b],0,mufCut,0.65,sr);
         set(this.muf2[b],0,mufCut*1.6,0.6,sr);
-        set(this.body[b],2,210/Math.max(0.6,T.pipe)*(b?0.96:1),1.4,sr,EngineDSP.BODY_DB[mi]);
+        set(this.body[b],2,210/Math.max(0.6,T.pipe)*(b?0.96:1),1.4,sr,this.BODY_DB[mi]);
       }
       set(this.inRes,1,120+this.rpm*0.025,2.5,sr);
       set(this.inNz,1,650+this.rpm*0.08,1.1,sr);
@@ -100,7 +103,7 @@ export class EngineDSP {
       set(this.wgF,1,2600,0.7,sr);
       if(this.bovMode) set(this.bovF,1,900+3000*Math.exp(-this.bovT*5),1.2,sr);
       else set(this.bovF,1,1250+300*Math.exp(-this.bovT*3),1.4,sr);
-      const mic=EngineDSP.MIC[T.mic|0]||EngineDSP.MIC[0];
+      const mic=this.MIC[T.mic|0]||this.MIC[0];
       const exA=1-Math.exp(-2*Math.PI*mic.exLP/sr);
       if(mic.cab){ set(this.cab[0],0,750,0.75,sr); set(this.cab[1],0,750,0.75,sr); }
       const nT0=2*T.pipe/480*sr, nT1=2*T.pipe*1.035/480*sr;

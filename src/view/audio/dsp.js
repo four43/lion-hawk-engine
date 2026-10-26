@@ -33,6 +33,8 @@ export async function createDsp(audio, { name, Class, channels = 2, options = {}
   if (!m) { m = { Class, loaded: loadModule(ctx, name, Class, AWN) }; mods.set(name, m); }
   if (await m.loaded) {
     const node = new AWN(ctx, name, { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [channels], processorOptions: options });
+    let told = false; // a processor that throws goes silent for good: say so once
+    node.onprocessorerror = () => { if (!told) { told = true; console.warn(`audio: the '${name}' processor threw on the audio thread and is now silent`); } };
     return { node, mode: 'worklet', send: msg => node.port.postMessage(msg), dispose() { node.port.postMessage({ type: 'dispose' }); node.disconnect(); } };
   }
   const dsp = new Class(ctx.sampleRate, options), node = ctx.createScriptProcessor(1024, 1, channels);
