@@ -59,7 +59,7 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
   if (!gfx) {
     view.gfx = view.materials = view.assets = view.sync = null; engine.assets = undefined;
     let gone = false;
-    return { frame() {}, draw() {}, dispose() { if (gone) return; gone = true; view.audio.dispose(); } };
+    return { frame() { if (!gone) view.audio.frame(); }, draw() {}, dispose() { if (gone) return; gone = true; view.audio.dispose(); } };
   }
   let materials = null;
   const abort = err => { // a failed build frees what it made: the renderer's page claim, its listeners, the audio
@@ -84,7 +84,7 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
   } catch (err) { abort(err); }
   let disposed = false;
   return {
-    frame(alpha) { if (!disposed) view.sync.frame(alpha); },
+    frame(alpha) { if (!disposed) { view.sync.frame(alpha); view.audio.frame(); } }, // H-2: voices follow the synced objects
     draw() { if (!disposed) gfx.render(); },
     dispose() {
       if (disposed) return; disposed = true;

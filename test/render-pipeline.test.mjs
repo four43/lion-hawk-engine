@@ -137,3 +137,9 @@ test('a lost WebGL context is reported and nothing draws until it is restored; t
   pipe.draw(); assert.equal(s.renderer.info.render.calls, calls + 1);
   pipe.dispose(); ev('webglcontextlost'); assert.equal(s.errors.length, 1, 'listeners removed on dispose');
 });
+test('frame ticks the audio after the sync (H-2), with and without WebGL', () => {
+  const s = setup(), pipe = s.make(); let n = 0; s.view.audio.frame = () => n++;
+  pipe.frame(0); pipe.frame(0.5); assert.equal(n, 2); pipe.dispose(); pipe.frame(0); assert.equal(n, 2);
+  const g = setup({}, { renderer: null }), p2 = g.make(); let m = 0; g.view.audio.frame = () => m++; // no WebGL (RF1)
+  assert.equal(g.view.gfx, null); p2.frame(0); assert.equal(m, 1); p2.dispose(); p2.frame(0); assert.equal(m, 1);
+});

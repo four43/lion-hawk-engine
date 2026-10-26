@@ -6,7 +6,7 @@
 // volume). ctx and master stay null until the first gesture. View-only: sim code never imports this.
 const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']; // iOS activates on pointerup/touchend/click, not a touch pointerdown
 const LIMITER = Object.freeze({ threshold: -14, knee: 24, ratio: 4, attack: 0.005, release: 0.2 });
-const POSITIONAL = Object.freeze({ ref: 18, near: 10, min: 0.05, max: 0.6, pan: 0 });
+const POSITIONAL = Object.freeze({ ref: 18, near: 10, min: 0.05, max: 0.6, pan: 0, cull: Infinity });
 const BUSES = Object.freeze(['sfx', 'music', 'ui', 'voice', 'ambience']); // H-1: master -> each bus -> sources
 const short = url => { const s = String(url); return s.length > 48 ? `${s.slice(0, 45)}...` : s; };
 
@@ -19,6 +19,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
   if (!Array.isArray(buses) || buses.some(b => typeof b !== 'string' || !b || b === 'master') || new Set(buses).size !== buses.length) throw new Error("createAudio: buses must be distinct names other than 'master'");
   const level = new Map(), ducks = new Map(), busNode = new Map(); // H-1: per-bus level, active duck factors, gain nodes
   for (const b of buses) { level.set(b, 1); ducks.set(b, []); }
+  const voices = []; // H-2: live voices, placed by frame()
   let masterLevel = volume;
   const unlockFns = [], gestureFns = [], clips = new Map(), warned = new Set();
   let ctx = null, muteGain = null, muted = !!flags.mute, everUnlocked = false, armed = false, disposed = false, failed = false, listener = null;
@@ -81,9 +82,9 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
   }
   function distanceGain(x, y, z) { // planar distance to the listener; y is ignored (ground games)
     if (!listener) return pos.max;
-    const lp = listener.position, d = Math.hypot(x - lp.x, z - lp.z);
-    return Math.max(pos.min, Math.min(pos.max, pos.ref / (d + pos.near)));
+    return Math.max(pos.min, Math.min(pos.max, pos.ref / (dist(x, z) + pos.near)));
   }
+  function dist(x, z) { return Math.hypot(x - listener.position.x, z - listener.position.z); }
   function panOf(x, z) { // -1 left .. 1 right of the listener (its world x axis)
     const lp = listener.position, e = listener.matrixWorld.elements, dx = x - lp.x, dz = z - lp.z, d = Math.hypot(dx, dz);
     return d < 1e-6 ? 0 : (dx * e[0] + dz * e[2]) / d;
@@ -110,6 +111,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     let g = gain, p = pan;
     if (at) {
       const x = Array.isArray(at) ? at[0] : at.x, z = Array.isArray(at) ? at[2] : at.z;
+      if (listener && dist(x, z) > pos.cull) return null; // H-2: beyond cull
       g *= distanceGain(x, 0, z);
       if (pos.pan && listener) p += panOf(x, z) * pos.pan;
     }
@@ -122,6 +124,33 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     src.onended = () => { src.disconnect(); gn.disconnect(); pn?.disconnect(); };
     src.start(ctx.currentTime + when, offset);
     return { source: src, gain: gn, stop(t = 0) { try { src.stop(ctx.currentTime + t); } catch { /* stopping a stopped source throws; nothing to do */ } } };
+  }
+  function voice({ bus = 'sfx', gain = 1, follow = null } = {}) { // H-2: connect sources to voice.input
+    needBus(bus, 'voice');
+    if (!ctx || ctx.state !== 'running') return null;
+    const input = ctx.createGain(), place = ctx.createGain(), pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    input.gain.value = gain; input.connect(place);
+    if (pn) { place.connect(pn); pn.connect(busNode.get(bus)); } else place.connect(busNode.get(bus));
+    const v = { input, follow, audible: true, stopped: false, place, pn,
+      stop() {
+        if (v.stopped) return; v.stopped = true;
+        input.disconnect(); place.disconnect(); pn?.disconnect();
+        const i = voices.indexOf(v); if (i >= 0) voices.splice(i, 1);
+      } };
+    voices.push(v); placeVoice(v, 0);
+    return v;
+  }
+  function placeVoice(v, tc) { // tc 0: set at once (a new voice); else glide (frame)
+    const f = v.follow; if (!f || !listener) return;
+    const p = f.position ?? f, d = dist(p.x, p.z);
+    v.audible = d <= pos.cull;
+    const g = v.audible ? distanceGain(p.x, 0, p.z) : 0, t = ctx.currentTime;
+    if (tc) v.place.gain.setTargetAtTime(g, t, tc); else v.place.gain.value = g;
+    if (v.pn && pos.pan) { const pan = Math.max(-1, Math.min(1, panOf(p.x, p.z) * pos.pan)); if (tc) v.pn.pan.setTargetAtTime(pan, t, tc); else v.pn.pan.value = pan; }
+  }
+  function frame() { // H-2: once per rendered frame (the pipeline calls it); allocates nothing (R-8)
+    if (disposed || !ctx) return;
+    for (let i = 0; i < voices.length; i++) placeVoice(voices[i], 0.05);
   }
   function load(url) {
     const have = clips.get(url); if (have) return have;
@@ -144,6 +173,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     if (disposed) return;
     disposed = true; disarm();
     doc.removeEventListener('visibilitychange', onVisibility); win?.removeEventListener?.('pageshow', back);
+    for (let i = voices.length - 1; i >= 0; i--) voices[i].stop();
     unlockFns.length = 0; gestureFns.length = 0; listener = null;
     if (ctx) {
       ctx.onstatechange = null;
@@ -164,7 +194,7 @@ export function createAudio({ doc = globalThis.document, flags = {}, AudioContex
     onGesture(fn) { if (typeof fn !== 'function') throw new Error('audio.onGesture: function required'); gestureFns.push(fn); return remover(gestureFns, fn); },
     bus(name) { needBus(name, 'bus'); return busNode.get(name) ?? null; },
     volume: setVolume, duck,
-    load, play, mute, distanceGain, dispose,
+    load, play, voice, frame, mute, distanceGain, dispose,
     listen(obj) { listener = obj ?? null; },
   };
   doc.addEventListener('visibilitychange', onVisibility); win?.addEventListener?.('pageshow', back);
