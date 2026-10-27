@@ -7,7 +7,7 @@ import * as THREE from 'three';
 
 export const LIGHT_DEFAULTS = Object.freeze({
   sky: '#bfe6f5', hemiSky: '#eef7ff', ground: '#b9a27c', hemi: 1.3,
-  sun: Object.freeze({ color: '#fff3dc', intensity: 2.1, map: 2048, box: 30, offset: Object.freeze([-26, 46, 22]), near: 5, far: 120, bias: -0.0006, normalBias: 0.03 }),
+  sun: Object.freeze({ color: '#fff3dc', intensity: 2.1, map: 2048, box: 30, offset: Object.freeze([-26, 46, 22]), near: 5, far: 120, bias: -0.0003, normalBias: 0 }),
   fog: Object.freeze([90, 220]),
 });
 export const DEFAULT_PRESETS = Object.freeze({ // E-5: k 0.5 = sunset, 1 = night (hemi 1.3 - k, sun 2.1 - 1.95 k)

@@ -15,7 +15,7 @@ test('the defaults', () => {
   assert.equal(hex(rig.sun.color), '#fff3dc'); assert.equal(rig.sun.intensity, 2.1); assert.equal(rig.sun.castShadow, true);
   assert.deepEqual([rig.sun.shadow.mapSize.x, rig.sun.shadow.mapSize.y], [2048, 2048]);
   const c = rig.sun.shadow.camera; assert.deepEqual([c.left, c.right, c.top, c.bottom, c.near, c.far], [-30, 30, 30, -30, 5, 120]);
-  assert.deepEqual([rig.sun.shadow.bias, rig.sun.shadow.normalBias], [-0.0006, 0.03]);
+  assert.deepEqual([rig.sun.shadow.bias, rig.sun.shadow.normalBias], [-0.0003, 0]);
   assert.ok(scene.children.includes(rig.hemi) && scene.children.includes(rig.sun) && scene.children.includes(rig.sun.target));
 });
 const TEXEL = 60 / 2048; // the default box (±30) over the default map
