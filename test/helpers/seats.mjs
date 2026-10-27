@@ -25,7 +25,7 @@ export const actuator = (effects = ['dual-rumble', 'trigger-rumble']) => {
   };
   return a;
 };
-export const memory = () => { const m = new Map(); return { m, getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); } }; };
+export const memory = () => { const m = new Map(); return { m, getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: k => { m.delete(k); } }; };
 export function setup(opts = {}) {
   const { window, document } = dom(), e = createEngine(game), slots = [], ev = [];
   const seats = createSeats(e, { getGamepads: () => slots, target: window, doc: document, storage: null, ...opts });

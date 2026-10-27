@@ -10,8 +10,9 @@ import { createPipeline, checkRender } from './render/pipeline.js';
 import { bindMenuNav } from './menuNav.js';
 import { createSeats } from './seats.js';
 import { createHaptics } from './haptics.js';
+import { createDebugRegistry, checkPanel } from './debug/registry.js';
 
-export function defineView({ scenes, render, haptics } = {}) {
+export function defineView({ scenes, render, haptics, debug, debugKey } = {}) {
   if (!scenes || typeof scenes !== 'object') throw new Error('defineView: scenes required');
   for (const [n, s] of Object.entries(scenes)) for (const h of ['enter', 'exit', 'frame', 'built']) if (s[h] !== undefined && typeof s[h] !== 'function') throw new Error(`defineView: scene '${n}'.${h} must be a function`);
   checkRender(render); // overview §4.6: with render, boot builds the renderer, lights, compiler, assets, sync and audio
@@ -19,9 +20,18 @@ export function defineView({ scenes, render, haptics } = {}) {
   if (haptics !== undefined && (haptics === null || typeof haptics !== 'object' || Object.keys(haptics).some(k => k !== 'autoStop') || (haptics.autoStop !== undefined && typeof haptics.autoStop !== 'boolean'))) {
     throw new Error('defineView: haptics must be { autoStop: boolean }');
   }
+  // [D-9] debug: panels listed for the whole page; [D-8] debugKey: the hotkey's KeyboardEvent.code, or false for none
+  if (debug !== undefined) {
+    if (!Array.isArray(debug)) throw new Error('defineView: debug must be an array of panels');
+    const ids = new Set();
+    for (const p of debug) { checkPanel(p); if (ids.has(p.id)) throw new Error(`debug: panel '${p.id}' is already registered`); ids.add(p.id); }
+  }
+  if (debugKey !== undefined && debugKey !== false && !(typeof debugKey === 'string' && debugKey)) throw new Error(`defineView: debugKey must be a KeyboardEvent.code or false (got ${JSON.stringify(debugKey)})`);
   const out = { scenes: Object.freeze({ ...scenes }) };
   if (render !== undefined) out.render = Object.freeze({ ...render });
   if (haptics !== undefined) out.haptics = Object.freeze({ ...haptics });
+  if (debug !== undefined) out.debug = Object.freeze([...debug]);
+  if (debugKey !== undefined) out.debugKey = debugKey;
   return Object.freeze(out);
 }
 
@@ -51,22 +61,25 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const seats = createSeats(engine, { getGamepads, target, doc, storage, onError: report });
   // [C-14] the haptics lifecycle: stops the rumble a hide, blur or pausing overlay would leave running; after the seats
   const haptics = halves.haptics?.autoStop === false ? null : createHaptics(engine, { seats, target, doc });
-  // [D-7] ?debug=pads: the pad bench. Only behind the flag: a slot device and a dynamic import (inlined by the build, never
-  // evaluated without the flag), so a page without it pays nothing. The bench gets a read-only view of the seats.
   // view.haptics: the game's handle on the lifecycle (null with autoStop false); it sends no rumble of its own
   const hapticsView = haptics ? Object.freeze({ stop: reason => haptics.stop(reason), get stopping() { return haptics.stopping > 0; }, get paused() { return haptics.paused; } }) : null;
-  const benchOn = flags.debugs?.includes('pads') === true;
-  let bench = null;
-  const benchSlot = benchOn ? { update() { bench?.update(); }, dispose() { bench?.dispose(); bench = null; } } : null;
+  // [D-8] ?debug or ?fps: the debug panel host. Only behind a flag: a slot device and a dynamic import (inlined by the build,
+  // never evaluated without a flag), so a page without one pays nothing. view.debug is always there: without the host,
+  // panel() checks its definition and lists it for nobody ([D-9]). The pads panel gets a read-only view of the seats.
+  const debugOn = flags.debug === true || flags.fps === true;
+  const debugs = createDebugRegistry({ on: debugOn });
+  for (const p of halves.debug ?? []) debugs.api.panel(p);
+  let host = null;
+  const hostSlot = debugOn ? { update(dt, raw) { host?.update(dt, raw); }, dispose() { host?.dispose(); host = null; } } : null;
   const view = { root: root ?? doc.body, doc, ui: null, driver: null, dt: 0, rawDt: 0, wait: p => wait(p), focus: id => focus(id), // #19: dt is the driver frame time (capped), rawDt uncapped (#56); both 0 for renders the driver didn't start
-    haptics: hapticsView,
+    haptics: hapticsView, debug: debugs.api,
     seats: o => { seats.enable(o); return seats.list; }, context: (name, def) => seats.context(name, def), device: (kind, spec) => seats.kind(kind, spec),
     onSeat: fn => seats.on(fn), unpaired: () => seats.unpaired(), gamepad: dev => seats.gamepad(dev), get localPlayers() { return seats.list; } };
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
   // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
   const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);
   view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads }) : null;
-  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : []), ...(benchSlot ? [benchSlot] : [])], onError: report });
+  const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : []), ...(hostSlot ? [hostSlot] : [])], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
   (doc.head ?? doc.documentElement).appendChild(sa);
@@ -170,10 +183,11 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
     const st = doc.createElement('style'); st.textContent = '*{transition:none!important;animation:none!important}';
     (doc.head ?? doc.documentElement).appendChild(st);
   }
-  if (benchOn) {
-    import('./bench/pads.js').then(m => {
+  if (debugOn) {
+    import('./debug/host.js').then(m => {
       if (disposed) return;
-      bench = m.openPadBench({ get localPlayers() { return seats.list; }, unpaired: () => seats.unpaired(), gamepad: d => seats.gamepad(d), onSeat: fn => seats.on(fn) }, { doc, haptics });
+      const bench = { view: { get localPlayers() { return seats.list; }, unpaired: () => seats.unpaired(), gamepad: d => seats.gamepad(d), onSeat: fn => seats.on(fn) }, haptics };
+      host = m.openDebugHost({ registry: debugs, engine, view, doc, target, flags, storage, key: halves.debugKey ?? 'Backquote', report, bench });
     }).catch(report);
   }
   if (snap) { // [D-4] replay the restored snapshot before the first frame; a mismatch lands in errors

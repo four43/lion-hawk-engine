@@ -51,6 +51,7 @@ The split is the rule everything else follows ([L-3]):
 | Let several people play on one device | — | `view.seats`, `engine.controllers`, `controller.possess` | [view-input: Seats, pairing and loss](specs/as-built/view-input.md#seats-pairing-and-loss), [core: Controllers and seats](specs/as-built/core.md#controllers-and-seats) |
 | Remappable bindings and per-player profiles | — | `view.context`, `lp.bindings` | [view-input: Mapping contexts](specs/as-built/view-input.md#mapping-contexts), [Profiles](specs/as-built/view-input.md#profiles) |
 | Rumble, and stop it when the game pauses | — | `view.haptics` | [view-input: Haptics](specs/as-built/view-input.md#haptics) |
+| Debug panels: windows a developer opens, moves and resizes under `?debug` (pads, perf, and the game's own) | — | `defineView({ debug, debugKey })`, `view.debug.panel(def)`, `view.debug.on` | [view-input: Debug panels](specs/as-built/view-input.md#debug-panels) |
 | Build menus and HUD buttons | `lion-hawk/view` | `engine.ui`, `createUiDom` | [core: UI registry](specs/as-built/core.md#ui-registry), [view-input: DOM UI](specs/as-built/view-input.md#dom-ui) |
 | Navigate menus with a pad or arrow keys | `lion-hawk/view` | `bindMenuNav`, `checkNav` | [core: Menu navigation](specs/as-built/core.md#menu-navigation), [view-input: Menu navigator](specs/as-built/view-input.md#menu-navigator) |
 | Show the right button icons for the device | `lion-hawk/kits/glyphs/view` | `bindGlyphs`, `glyphFor` | [defs-and-kits: Glyphs kit](specs/as-built/defs-and-kits.md#glyphs-kit) |

@@ -117,7 +117,7 @@ test('the bench never changes seats or bindings, whatever is clicked (D-7, revie
   assert.equal(e.commands.pending, cmds, 'no lh.seat command');
 });
 
-test('?debug=pads loads the bench through boot; without it boot adds no device, no element and imports no bench code (D-7, review focus)', async () => {
+test('?debug=pads opens the bench in the pads panel through boot; without a flag boot adds no device, no element and imports no debug code (D-7, D-8)', async () => {
   const run = query => {
     const { window, document } = dom(), slots = [];
     const app = boot(game, defineView({ scenes: {} }), { doc: document, target: window, raf: () => 0, caf() {}, flags: parseFlags(query), getGamepads: () => slots, storage: null });
@@ -128,15 +128,16 @@ test('?debug=pads loads the bench through boot; without it boot adds no device, 
   try {
     for (let i = 0; i < 50 && !on.document.querySelector('[data-lh-bench]'); i++) await flush();
     assert.ok(on.document.querySelector('[data-lh-bench]') !== null, 'the bench opened');
+    assert.ok(on.document.querySelector('[data-lh-debug-panel="pads"] [data-lh-debug-body] [data-lh-bench]') !== null, 'in the pads window');
     on.slots[0] = pad(0); on.frame();
     assert.ok(on.document.querySelector('[data-lh-bench] [data-bench="seats"]').textContent.includes(`pad 0 "${XBOX}"`));
     assert.equal(on.app.driver.devices.length, off.app.driver.devices.length + 1, 'one slot device, only with the flag');
-    assert.ok(off.document.querySelector('[data-lh-bench]') === null, 'no bench without the flag');
+    assert.ok(off.document.querySelector('[data-lh-bench], [data-lh-debug]') === null, 'no bench and no debug layer without the flag');
   } finally { on.app.dispose(); off.app.dispose(); }
-  assert.ok(on.document.querySelector('[data-lh-bench]') === null, 'dispose removes it');
+  assert.ok(on.document.querySelector('[data-lh-bench], [data-lh-debug]') === null, 'dispose removes it');
   const src = fs.readFileSync(new URL('../src/view/boot.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(src, /^import .*bench/m, 'boot never imports the bench statically');
-  assert.match(src, /import\('\.\/bench\/pads\.js'\)/);
+  assert.doesNotMatch(src, /^import .*(bench|debug\/host)/m, 'boot never imports the bench or the debug host statically');
+  assert.match(src, /import\('\.\/debug\/host\.js'\)/);
   assert.doesNotMatch(fs.readFileSync(new URL('../src/index.view.js', import.meta.url), 'utf8'), /bench/);
 });
 

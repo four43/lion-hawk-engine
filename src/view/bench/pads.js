@@ -1,13 +1,14 @@
 // src/view/bench/pads.js
-// [D-7] ?debug=pads: the pad bench, the Gamepad Bench artifact as an engine overlay. boot loads it only behind the flag.
+// [D-7] ?debug=pads: the pad bench, the Gamepad Bench artifact as an engine overlay; the debug host's `pads` panel ([D-12])
+// mounts it in its window (root), which places it. The debug host is loaded only behind the flag.
 // It reads view state only (localPlayers, unpaired(), gamepad(dev), onSeat) and the engine's haptics stops for its log; it
 // never changes seats or bindings. Its haptics tests drive the selected pad's vibrationActuator, as a game does.
-// Cost: the dynamic import() in boot is inlined by the build, so this file and padStats.js ship inside every bundle, but
-// nothing here is evaluated, and no listener or device exists, unless ?debug=pads is on.
+// Cost: boot's dynamic import() of the debug host is inlined by the build, so this file and padStats.js ship inside every
+// bundle, but nothing here is evaluated without ?debug or ?fps, and no listener exists until the pads panel opens.
 import { zeroEffect } from '../haptics.js';
 import { STD_BUTTONS, STD_AXES, SECTORS, PATTERNS, createPadStats, updateStats, rate, stickEdge, liveState, liveEffect, play, selfTest, supports, describe } from './padStats.js';
 
-const CSS = `[data-lh-bench]{position:fixed;top:calc(var(--lh-sa-top,0px) + 8px);right:calc(var(--lh-sa-right,0px) + 8px);z-index:2147483000;width:min(440px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;box-sizing:border-box;padding:8px 10px;border-radius:8px;background:#0d1117f0;color:#e6edf3;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;pointer-events:auto}
+const CSS = `[data-lh-bench]{box-sizing:border-box;color:#e6edf3;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
 [data-lh-bench] h3{margin:10px 0 4px;font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.05em}
 [data-lh-bench] button{font:inherit;color:inherit;background:#21262d;border:1px solid #30363d;border-radius:4px;padding:3px 6px;margin:2px;cursor:pointer}
 [data-lh-bench] button[aria-pressed=true]{border-color:#2f81f7}
@@ -28,7 +29,7 @@ const SLIDERS = [
 const slider = id => { const [, label, min, max, step, value] = SLIDERS.find(s => s[0] === id); return `<label>${label}<input type="range" data-bench="${id}" min="${min}" max="${max}" step="${step}" value="${value}"><output data-out="${id}">${value}</output></label>`; };
 const check = (id, label) => `<label><input type="checkbox" data-bench="${id}">${label}</label>`;
 const hap = (id, label) => `<button type="button" data-hap="${id}">${label}</button>`;
-const HTML = `<header><b>Pad bench</b> <span data-bench="fps"></span> <button type="button" data-bench="fold">hide</button></header>
+const HTML = `<header><span data-bench="fps"></span></header>
 <div data-bench="body">
 <h3>Seats</h3><div data-bench="seats"></div>
 <h3>Pads</h3><nav data-bench="tabs"></nav><dl data-bench="info"></dl>
@@ -70,11 +71,11 @@ function drawStick(cv, x, y, s, k, dz) {
   ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(c + x * R, c + y * R, 5, 0, 2 * Math.PI); ctx.fill();
 }
 
-export function openPadBench(view, { doc = globalThis.document, haptics = null, now = () => globalThis.performance.now(), timer = globalThis, env = {} } = {}) {
+export function openPadBench(view, { doc = globalThis.document, root: parent = doc.body, haptics = null, now = () => globalThis.performance.now(), timer = globalThis, env = {} } = {}) {
   const style = doc.createElement('style'); style.setAttribute('data-lh-bench-style', ''); style.textContent = CSS;
   (doc.head ?? doc.documentElement).appendChild(style);
   const root = doc.createElement('section'); root.setAttribute('data-lh-bench', 'pads'); root.innerHTML = HTML; // static markup: every live value goes in through textContent
-  doc.body.appendChild(root);
+  parent.appendChild(root);
   const q = id => root.querySelector(`[data-bench="${id}"]`);
   const num = id => +q(id).value, on = id => q(id).checked === true;
   const T0 = now(), stamp = () => ((now() - T0) / 1000).toFixed(3).padStart(8, ' ');
@@ -136,7 +137,6 @@ export function openPadBench(view, { doc = globalThis.document, haptics = null, 
     lst = liveState(); reset('Stop all');
   });
   q('trace-clear').addEventListener('click', () => { for (const s of stats.values()) { s.trace = [[], []]; s.bins = [new Float32Array(SECTORS), new Float32Array(SECTORS)]; } });
-  q('fold').addEventListener('click', () => { const b = q('body'); b.hidden = !b.hidden; q('fold').textContent = b.hidden ? 'show' : 'hide'; });
   const live = t => {
     const tg = on('live-trig'), body = on('live-body'), stick = on('live-stick');
     if (!(tg || body || stick) || !act()) { if (lst.active) { lst = liveState(); reset('live off'); } return; }
