@@ -119,7 +119,7 @@ One term for each concept in all specs. Writers use the **term** exactly and do 
 - **material pair** — the ordered contact resolution between two materials (friction, restitution, tyre, sound, fx). Not: surface pair, contact pair. [src/defs/materials.js:176]
 - **registry hash** — the 8-hex hash of physics-relevant material values. Baked sidecars must match it. Not: materials hash, material checksum. [src/defs/materials.js:198]
 - **paint slot** — a `paint-<slot>` material id. Colliders take the paint base material, and the view colours it per entity or per instance. Not: paint material, color slot. [src/defs/materials.js:77]
-- **coverage** — per-entity dirt, rust, snow and mud levels 0..1. Not: wear, grime, weathering. [src/view/materials/chunks.js:29]
+- **coverage** — per-entity dirt, rust, snow, mud and wet levels 0..1. Not: wear, grime, weathering. [src/view/materials/chunks.js:29]
 - **sidecar** — the baked physics data for one model: parts, colliders, mass, sockets, bounds. Not: physics metadata, phys entry. [src/defs/sidecar.js:75]
 - **phys.json** — the baked file with every sidecar, the engine version and the registry hash. [src/defs/sidecar.js:120]
 - **manifest** — the baked `manifest.json` that maps model keys to GLB and anim table paths, sizes and hashes. Not: asset index. [tools/bake/write.js:33]

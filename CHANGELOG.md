@@ -9,8 +9,8 @@ Wet and glossy coverage, and coats that mat ([M-11]).
 - Materials: a coverage block takes `wet` (0..1). The compiler gives such a material `COVERAGE_WET`: a wet level (`uWet.x` per entity, plus the per-instance `instanceWet` when instanced) that darkens the albedo a little, shines, and mats fur. `coverage()` returns the clone's `uWet` vector and `apply({ coverage: true })` returns them as `uWet` ([M-11]).
 - Materials: mud and wet are glossy: `COVERAGE` adds a Blinn-Phong highlight per directional light where the mud blotches lie and, with `COVERAGE_WET`, everywhere by the wet level. It works in every tier, lambert included. Muddy surfaces drawn before this release now have a highlight ([M-11]).
 - Materials: on a `FUR` material with a coverage block, mud (and wet, with `COVERAGE_WET`) shortens the strands by up to 90%, so the coat lies flat and fluffs up again as it dries ([M-11]).
-- Instancing: `createInstances({ coverage: true })` also makes `instanceWet`; `cover(i, d, r, s, m, w)`, `crowd.cover(…, w)` and view sync write it from `e.coverage.wet`.
-- Kits: `coverageKit({ dryTime })` (default 30 s): a wash soaks an entity's `wet` layer at `1 / washTime` per second and it dries at `1 / dryTime` per second elsewhere; `coverageView` writes it to each clone's `uWet.x`.
+- Instancing: `createInstances({ coverage: true })` also makes `instanceWet`; `cover(i, d, r, s, m, w)`, `crowd.cover(…, w)` and view sync write it from `e.coverage.wet` ([M-11]).
+- Kits: `coverageKit({ dryTime })` (default 30 s): a wash soaks an entity's `wet` layer at `1 / washTime` per second and it dries at `1 / dryTime` per second elsewhere; `coverageView` writes it to each clone's `uWet.x` ([M-11]).
 
 ## 0.14.1 — 2026-10-26
 
