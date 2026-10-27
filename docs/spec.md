@@ -7,6 +7,7 @@ Amended 2026-10-14: 0.8.0 clarifications from phase 3c (World and physics) and 3
 Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-18]–[N-25], §5.5 [C-1]–[C-14], [I-4] rewritten, [D-7], [T-22]–[T-25]. Built in 0.13 (plan 1): [C-1]–[C-4], [I-4], [T-23]; (plan 2): [C-5]–[C-13]; (plan 3): [N-18]–[N-25], [T-22], [C-5]'s online `lh.seat` route; (plan 4): [C-14], [D-7], [T-24]; (plan 5): [T-25]. Released in 0.13.0.
 Amended 2026-10-26: §5.6 Audio, [H-1]–[H-7] (buses, voices, cues, contact sounds, the DSP host, the powertrain and the engine sound), with clarifications under [U-6] and [R-8]. Built in 0.14.0.
 Amended 2026-10-26: [H-6] clarification (powertrain `blip`, `bite`, turbo clutch capacity). Built in 0.14.1. [M-11] clarification (wet coverage, mud and wet gloss, matted fur). Built in 0.15.0.
+Amended 2026-10-26: debug panels, §7.3 [D-8]–[D-12], with clarifications under [D-1], [D-3] and [D-7]. Draft.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games.
 
@@ -537,6 +538,7 @@ The audio service is view-only ([L-3]). The sim decides what happened and emits 
 ### 7.3 Debug
 
 - **[D-1]** `flags` parses the URL once into a frozen object. Recognised flags: `?debug` (`?debug=<topics>`, comma-separated, lists its topics in `flags.debugs`; `?debug=pads` opens the pad bench, [D-7]), `?tune`, `?fps`, `?seed=`, `?replay=` (`?replay=session`, [D-4]), `?lh-record` (with `?lh-test`: record the tape), `?slow=`, `?nosw`, `?mute`, `?lh-test`. `?lh-test=render` (`flags.lhRender`) additionally boots in full-manual mode: nothing renders until a test calls `render()` (#47).
+  - *Clarification (draft 2026-10-26):* `?debug` (and `?fps`) also loads the debug panel host ([D-8]); `?debug=<topics>` opens the panels the topics name ([D-10]).
 - **[D-2]** `?tune` lazy-loads lil-gui. Kits and games register tunables with `engine.tune(group, obj, spec)`.
 - **[D-3]** `?fps` shows:
   - frame ms;
@@ -544,6 +546,7 @@ The audio service is view-only ([L-3]). The sim decides what happened and emits 
   - clamped frames;
   - draw calls;
   - shader programs.
+  - *Clarification (draft 2026-10-26):* these are the `perf` debug panel ([D-12]); `?fps` loads the debug host and opens it.
 - **[D-4] `window.engine`** is always present and exposes:
   - **lifecycle:** `ready`, `version`, `seed`, `errors`;
   - **loop:** `manual`, `hz`, `stepN`, `advance`, `render`, `time`;
@@ -565,6 +568,33 @@ The audio service is view-only ([L-3]). The sim decides what happened and emits 
 
   `?lh-test` turns off CSS transitions and starts in manual mode.
 - **[D-7] Pad bench.** (built, plan 4) `?debug=pads` opens an overlay showing each seat (player number, profile, devices with `id`, `mapping` and lost state, active contexts), each pad's live buttons and axes with peaks and press counts, stick range and drift, update rate and `effects`, haptics tests (trigger and body effects, patterns, live trigger-pull taps, a self-test that reports a `playEffect` that never settles) and a log of seat events and haptics calls. It reads view state only and never changes seats or bindings. Rulings (plan 4): with `'pads'` in `flags.debugs`, boot adds one driver device after the menu navigator (which follows the game's devices) and loads `src/view/bench/pads.js` with a dynamic `import()` (bundled inline, evaluated only behind the flag); without it nothing is added. The bench gets a read-only view (`localPlayers`, `unpaired()`, `gamepad(dev)`, `onSeat`) and the engine's haptics stops for its log; it never calls a seat's `claim`, `release`, `leave`, `contexts` or `bindings` methods, and issues no command. Seat lines read `P<player> · seat <n> · profile "<name>" · contexts [<names>]`, with `pending`, `leaving` and `a device is lost` when they apply. Presses count down edges; peaks and axis min/max (from 0) are for the page's life; the update rate counts `timestamp` changes in the last second; rest drift is the stick's radius after 30 polls without a move over 0.01, while under 0.3; the stick outline keeps the furthest reach over 0.3 in each of 36 sectors. Live trigger taps last at least 50 ms, come every max(interval, length + 20) ms, scale by `v^curve` and are full strength past 95% pull; body coupling refreshes a 120 ms `dual-rumble` every 50 ms. The watchdog reports a `playEffect` unanswered after duration + delay + 1500 ms. The bench code ships inline in every bundle (the build inlines the `import()`), but is evaluated only behind the flag: no listener, device or element exists without it, though the bytes are not free. Starting a pattern cancels the pending steps of the one running; a `play()` watchdog that fires after the bench closes logs nothing.
+  - *Clarification (draft 2026-10-26):* the bench is the engine's `pads` debug panel ([D-12]). `?debug=pads` still opens it, but it sits in a debug window ([D-10]) that can be moved, resized, collapsed and closed, not pinned to the top-right. Its contents and rules above are unchanged; it polls every frame while its panel is open and not collapsed.
+- **[D-8] Debug panel host.** (draft 2026-10-26) With `?debug` or `?fps` on, boot loads `src/view/debug/host.js` with a dynamic `import()` (bundled inline, evaluated only behind a flag, as [D-7]) and adds one driver device after the menu navigator. Without either flag nothing from it runs: no element, listener or device exists.
+  - The host draws one layer, `[data-lh-debug]`, fixed over the page above the game UI (`z-index` 2147483000). Only the dock and the panels take pointer events; the rest of the screen still goes to the game.
+  - **Dock:** a button in a corner (default top-left, inside the safe area, `--lh-sa-*`) opens a list of every registered panel with a checkbox to open or close it, and a "reset layout" entry. Dragging the button moves it; on release it snaps to the nearest corner.
+  - **Hotkey:** `Backquote` by default (`defineView({ debugKey })`: a `KeyboardEvent.code`, or `false` for none) hides or shows the whole layer, dock and panels together; showing it again restores it as it was. The host listens for `keydown` in the capture phase and stops the event, so the game's input never sees it. The key is ignored while a text field has focus.
+  - Debug controls carry `data-lh-debug-*` attributes and no `data-testid`, so the menu navigator ([U-7]) never focuses them.
+- **[D-9] Panel API.** (draft 2026-10-26) A panel is `{ id, title, mount(el, ui, view), update?(view), unmount?(), rate?, width?, height? }`.
+  - `defineView({ debug: [panels] })` lists panels for the whole page. `view.debug.panel(def)` lists one until the returned `off()` is called (a scene half calls it in `enter` and `off()` in `exit`).
+  - The definition is checked when it is given, with or without the flags: `id` and `title` non-empty strings, `mount` a function, `update` and `unmount` functions when given, `rate` a number > 0 or `'frame'`, `width` and `height` numbers > 0, no other keys. A bad one throws `debug: <message>`. An `id` already listed throws `debug: panel '<id>' is already registered`.
+  - Without the host, `view.debug.panel()` checks its definition and returns a no-op `off()`, and `view.debug.on` is false. A game writes no `if (flags.debug)`.
+  - `mount` runs the first time the panel opens: `el` is the panel body, `ui` holds the control helpers for it ([D-11]). `update(view)` runs while the panel is open and not collapsed, `rate` times a second (default 10; `'frame'`: every driver frame). `unmount` runs when the panel is unlisted or the host is disposed.
+  - A `mount` or `update` that throws reports the error to `engine.errors`, shows its message in the panel body and stops that panel's updates. The game and the other panels run on.
+- **[D-10] Debug windows and layout.** (draft 2026-10-26)
+  - A panel window has a title bar (title, collapse, close) and a resize grip. It is dragged by the title bar and resized by the grip with pointer events and pointer capture, so mouse, pen and touch behave the same; the bar and grip have `touch-action: none`. A window is at least 160 by 60 px; its body scrolls.
+  - A window stays inside the viewport: it is clamped when it opens, while it is dragged or resized, and when the viewport changes size. A pointer down on a window brings it to the front. A window with no saved place opens in a cascade from the top-right.
+  - The layout is kept in `localStorage` under `lh.debug.<game id>`: `{ v: 1, dock, hidden, panels: { <id>: { open, collapsed, ax, x, ay, y, w, h } } }`. `ax` is `'l'` or `'r'` and `x` the window's distance from that edge; `ay` is `'t'` or `'b'` and `y` its distance from that edge. A window is kept against its nearest edges, so a layout made in landscape still fits in portrait. Every read and write is in a `try`; without storage the panels work and nothing is kept. "Reset layout" clears the key and closes every panel.
+  - At start, `?debug=<topics>` opens the panels named in `flags.debugs`; a bare `?debug` reopens the panels the layout has open. `?fps` opens `perf`. A panel listed later (a scene's) opens when it is listed if its id is a topic or the layout has it open. Topics that name no panel are left alone (they stay the game's to read).
+  - A panel that is unlisted keeps its saved place, so it reopens there when it is listed again.
+- **[D-11] Control helpers.** (draft 2026-10-26) `ui` in `mount` adds rows to the panel body and returns a handle for each:
+  - `ui.value(label, get, { digits, unit })`: a live readout of `get()`.
+  - `ui.slider(label, obj, key, { min, max, step })` and `ui.check(label, obj, key)`: write `obj[key]` on input and re-read it on every update, so a change made elsewhere shows.
+  - `ui.button(label, fn)`.
+  - `ui.table(get, columns)`: `get()` returns rows (objects); `columns` names the fields shown.
+  - `ui.group(title)`: a heading that folds; it returns a `ui` whose rows go under it.
+  - Rows refresh on the panel's update. A value that has not changed since the last write does not touch the DOM. `el` stays free for anything custom (a canvas, the pad bench).
+  - A control that changes sim state does what a console helper ([D-5]) does: replay and determinism are the game's to keep. The host adds no sim state.
+- **[D-12] Engine panels.** (draft 2026-10-26) `pads`: the pad bench ([D-7]). `perf`: frame ms (the driver's raw frame time, smoothed), steps in the last frame and clamped frames (`engine.loop.stats`), and, when `view.gfx` exists, draw calls, triangles, programs, geometries and textures (`gfx.info()`).
 
 ### 7.4 Headless helpers: `lion-hawk/test`
 
