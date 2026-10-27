@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.16.0 — 2026-10-26
+
+Debug panels: windows you open, move, resize and collapse under `?debug` ([D-8]–[D-12]).
+
 - Debug panels: under `?debug` (or `?fps`) a dock in a corner lists debug panels, and each opens in a window you drag by its title bar, resize by its grip, collapse and close, with mouse or touch. The layout is kept per game in `localStorage`; the backquote key (`defineView({ debugKey })`) hides and shows it all. `?debug=<ids>` opens those panels ([D-8]–[D-10]).
 - Debug panels: a game lists its own with `defineView({ debug: [panel] })` or, for one scene, `view.debug.panel(panel)` (returns `off()`). A panel is `{ id, title, mount(el, ui, view), update?(view, dt), unmount?, rate?, width?, height? }`; `ui` adds readouts, sliders, checkboxes, buttons, tables and groups that refresh only what changed. Without the flags nothing loads and `view.debug.panel()` only checks the definition ([D-9], [D-11]).
 - Debug panels: the engine lists `perf` (frame ms, steps, clamped frames, draw calls, triangles, programs; `?fps` opens it, [D-3]) and `pads`, the pad bench, which now opens in a window instead of being pinned to the top-right and loses its own fold button ([D-12], [D-7]).
