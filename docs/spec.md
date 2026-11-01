@@ -8,6 +8,7 @@ Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-
 Amended 2026-10-26: §5.6 Audio, [H-1]–[H-7] (buses, voices, cues, contact sounds, the DSP host, the powertrain and the engine sound), with clarifications under [U-6] and [R-8]. Built in 0.14.0.
 Amended 2026-10-26: [H-6] clarification (powertrain `blip`, `bite`, turbo clutch capacity). Built in 0.14.1. [M-11] clarification (wet coverage, mud and wet gloss, matted fur). Built in 0.15.0.
 Amended 2026-10-26: debug panels, §7.3 [D-8]–[D-12], with clarifications under [D-1], [D-3] and [D-7]. Built in 0.16.0.
+Amended 2026-11-01: distance level of detail, §6.4 [A-12]–[A-18], and the `LOD_FADE` feature under [M-11] (draft; from Rally R19).
 
 Lion Hawk is an opinionated 3D web physics engine for browser games.
 
@@ -175,8 +176,12 @@ Every block is optional.
 
 ### 3.6 View: material compiler
 
-- **[M-11]** `look` compiles to one base material per shading tier. The game sets `shading: 'physical' | 'standard' | 'lambert'` (default `physical`), which gives `MeshPhysicalMaterial`, `MeshStandardMaterial` or `MeshLambertMaterial`. Optional features are compile-time defines (`COVERAGE`, `COVERAGE_INSTANCED`, `COVERAGE_WET`, `FUR`, `SUBSURFACE`, `WIND`, `PAINT`), which keeps the number of shader programs small. Lambert and standard honour `COVERAGE` and `FUR`. `SUBSURFACE` is physical and standard only. Physical-only `look` fields are ignored below `physical`. Vertex colours, when a mesh has them, replace `look.color` (D5).
+- **[M-11]** `look` compiles to one base material per shading tier. The game sets `shading: 'physical' | 'standard' | 'lambert'` (default `physical`), which gives `MeshPhysicalMaterial`, `MeshStandardMaterial` or `MeshLambertMaterial`. Optional features are compile-time defines (`COVERAGE`, `COVERAGE_INSTANCED`, `COVERAGE_WET`, `FUR`, `SUBSURFACE`, `WIND`, `PAINT`, `LOD_FADE`), which keeps the number of shader programs small. Lambert and standard honour `COVERAGE` and `FUR`. `SUBSURFACE` is physical and standard only. Physical-only `look` fields are ignored below `physical`. Vertex colours, when a mesh has them, replace `look.color` (D5).
   - *Clarification (built, 0.15.0):* mud and wet are glossy and mat fur. `COVERAGE` adds a Blinn-Phong highlight per directional light where mud blotches lie (0.55) and, with `COVERAGE_WET`, everywhere by the wet level, in every tier (lambert adds it to the diffuse light, as it has no specular term). With `COVERAGE` on a `FUR` material, the strands shorten by up to 90% with the mud or wet level, so a coat lies flat when muddy or wet and fluffs up as it dries. The wet level rides beside `uCoverage` as `uWet.x` (plain) or `instanceWet` (instanced); `kit-coverage` soaks it in a wash and dries it at `1 / dryTime`.
+  - *Clarification (draft 2026-11-01):* `LOD_FADE` (`get(id, { lodFade: true })`) is §6.4's dithered cross-fade: the vertex
+    stage reads `lhLod` and the eye ([A-16]) and the fragment stage discards the pixels its level does not own ([A-13]).
+    It works with or without instancing and with the other features; the material's depth twin runs it too. One more
+    program per material that uses it, and one for its twin.
 - **[M-12]** All materials in use are compiled while loading (`warm`).
 - **[M-13]** Instanced users and plain users get separate material clones (`matSplit`). Both are always on.
 
@@ -501,6 +506,59 @@ The audio service is view-only ([L-3]). The sim decides what happened and emits 
 - **[A-10]** `engine.assets.preload(keys)` loads the models, compiles their materials and ends by warming them ([M-12]). It does not touch a scene: a loading scene ([S-6]) awaits it.
   - *Clarification (0.11.2):* `preload(keys, { instanced: [keys] })` names the models drawn `instanced` (or by `createCrowd`). Their instanced variants are made before warm, painted parts as instance-colour users, so the first spawn compiles nothing. With shadows on, warm also compiles the shadow pass's depth programs.
 - **[A-11]** Animation uses `AnimationMixer`. A model may opt into baked animation tables (`bake: { animTable: true }`) for large instanced crowds.
+
+### 6.4 Level of detail (draft 2026-11-01)
+
+From Rally R19, where 15k scattered trees, rocks and fences needed distance LODs, and a hard swap read as pop-in. These
+requirements lift that game code into the engine.
+
+- **[A-12] LOD nodes.** A model may hold its levels as top-level nodes `lod0` … `lodN` (N ≤ 3) under its root, all at the
+  model's origin; `lod0` is full detail. A model without them is one level (today's behaviour).
+  - The bake checks them ([A-2]): the names run from `lod0` without gaps, every level has a mesh, and a level's bounds lie
+    within 25% of `lod0`'s on each axis. A level with more triangles than the one before it is a warning.
+  - Only `lod0` feeds the sidecar ([A-5]): its parts give the default hulls and the mass; `col-*` and `sock-*` nodes under
+    another level are an error. The sim never sees the other levels ([A-8]).
+  - `manifest.json` records each model's levels as triangle counts, `lods: [t0, t1, …]` (absent for one level).
+  - Generating lower levels in the bake (meshopt simplify) is deferred: faceted low-poly models simplify badly, and
+    hand-made levels are the case this serves.
+- **[A-13] Fade bands.** A game gives a model's switch distances `d = [d0, …, dN]`: level k shows from d[k−1] (0 for
+  `lod0`) to d[k], and nothing shows past dN. Around each switch distance is a band of ±`band` m where both levels draw.
+  At any pixel exactly one of them does: each fragment compares a screen-space dither (interleaved gradient noise on
+  `gl_FragCoord`) with `t = smoothstep(D − band, D + band, dist)`, the outgoing level keeping the pixel when the noise
+  is ≥ t and the incoming one when it is < t. Past dN the last level dithers away the same way. `dist` is the instance
+  origin's straight-line (3D) distance to the eye times the eye's LOD scale ([A-16]), worked out per frame on the GPU
+  ([M-11] `LOD_FADE`), so a level's pixels change smoothly as the camera moves or zooms while the CPU only decides which
+  meshes an instance is in. `band: 0` is a hard swap.
+- **[A-14] `createLodInstances({ asset, distances, band, material?, max, shadowLevels = 1, receiveShadow = true })`**
+  (`lion-hawk/view`): one `createInstances` mesh per level, each level's parts merged into one geometry in the model's
+  frame (vertex colours kept) and given its window as the `lhLod` attribute `(in, out, band)`. Levels below
+  `shadowLevels` cast shadows, through the material's `LOD_FADE` depth twin, so a shadow fades with its model. Per frame:
+  `begin(eye)`, `add(p, q, s)` for each instance (posed, e.g. from `e.xf`) puts it in every level whose window widened by
+  the band holds its distance, then `commit()`. For dynamic props.
+- **[A-15] `createScatter({ asset, items, distances, band, cell = 16, refill = 8, … })`** (`lion-hawk/view`): the same
+  levels for static instances. `items` is a Float32Array of 4×4 matrices (or `{ p, yaw, s }` objects), bucketed once into
+  `cell` m cells with prebuilt matrices. `update(eye)` refills the levels only when the eye has moved into a new `refill`
+  m step, the LOD scale has changed by more than 10%, or the view has turned past the cone's margin ([A-18]): each cell
+  goes into every level whose widened window it can reach before the next refill (slack = the cell's half-diagonal + the
+  refill step's diagonal, in scaled distance, and the 10% scale step), by copying its matrices. `stats` gives the last
+  refill's ms and the instance count per level.
+- **[A-16] The eye.** The compiler holds one shared `eye` uniform (`mc.eye.value`, a Vector4), as it does the `WIND`
+  clock: xyz the render camera's position, w the LOD scale. View sync sets it each frame, before drawing. It is read on
+  the shadow pass too, where three's `cameraPosition` is the light's. A game drawing with its own camera sets it itself.
+  - The LOD scale is `bias × tan(fov / 2) / tan(refFov / 2)` for a perspective camera (`1 / zoom` for an orthographic
+    one), so levels follow how large a thing looks, not how far it is: through binoculars or a scope at 4× (fov a
+    quarter of refFov's tangent), a tree 400 m away measures 100 m and shows its near level. `refFov` (default: the
+    camera's fov when the view starts) and `bias` (default 1; under 1 keeps detail farther, over 1 drops it sooner, e.g.
+    a low-end device) are `render.lod: { refFov, bias }`, and `view.lod.bias` changes the bias live.
+- **[A-17] Warm and budget.** `preload(keys, { lod: [keys] })` compiles the `LOD_FADE` variants of those models'
+  materials and their depth twins before the first frame ([A-10], [M-12]). Neither helper allocates per frame ([R-8]).
+- **[A-18] View cone.** `createScatter` skips cells outside the camera's view cone: half-angle the frustum's diagonal
+  half-angle plus `coneMargin` (default 20°), the cell's radius added and the cells within `nearAll` (default 30 m,
+  for shadows cast into view) always kept. The cone is what keeps zoom affordable: at 4× the levels reach four times as
+  far, but only through the narrow field of view. It refills when the view direction has turned more than half the
+  margin since the last refill. `cone: false` turns it off (a game whose camera spins faster than refills can follow).
+- *Deferred:* LOD for entities drawn by view sync (`draw: 'instanced'` and object-drawn models), so a `model:<key>`
+  entity with levels fades without game code; and bake-generated levels ([A-12]).
 
 ---
 
