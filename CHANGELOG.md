@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.0 — 2026-11-01
+
 Distance level of detail that fades instead of popping, from Rally's scenery ([A-12]–[A-18]).
 
 - The bake reads distance levels: top-level `lod0`…`lod3` nodes under a model's root are checked (no gaps, a mesh in each, bounds within 25% of lod0's per axis with a 5 cm minimum, a warning when a level has more triangles than the one before). Only lod0 feeds the sidecar, `col-*`/`sock-*` under lod1+ is an error, and `manifest.json` records `lods: [triangles per level]`. Models without levels bake byte-identically. [A-12]

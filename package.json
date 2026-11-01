@@ -1,6 +1,6 @@
 {
   "name": "lion-hawk",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Opinionated 3D web physics engine: three.js, Rapier, glTF, physical materials and netcode.",
   "type": "module",
   "private": true,
