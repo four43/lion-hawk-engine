@@ -14,6 +14,7 @@ import { animTable } from './animTable.js';
 import { optimise } from './optimise.js';
 import { compressTextures } from './textures.js';
 import { aeroOf } from './aero.js';
+import { checkLodBounds, lodTris } from './lods.js';
 import { readBaked, writeBaked, sha256 } from './write.js';
 export { loadConfig };
 
@@ -58,6 +59,7 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
   applyRenames(doc, { materials: { ...cfg.bake.rename.materials, ...m.rename.materials }, nodes: { ...cfg.bake.rename.nodes, ...m.rename.nodes } });
   if (cfg.bake.palette === 'vertex' && !m.keepTextures) paletteToVertex(doc, id);
   const cls = classify(doc, id, { registry, sockets: m.sockets });
+  if (cls.lods) checkLodBounds(cls.lods, id); // [A-12] cls.parts is lod0's alone, so the sidecar below never sees lod1+
   const colliders = m.colliders ? collidersOf(cls, { model: id, static: m.static, paintBase: cfg.bake.paint.base, warn: log }) : [];
   const mp = massOf(colliders, mat => registry.density(mat));
   const round = v => Math.round(v * 1e6) / 1e6 + 0;
@@ -74,7 +76,8 @@ export async function bakeModel(cfg, registry, id, { file, rel, opts }, log = ()
   }
   await optimise(doc, { ...cfg.bake.optimise, keepAttributes: m.keepTextures }, { encoder: MeshoptEncoder }); // a textured model keeps every attribute
   await compressTextures(doc, cfg.bake.textures); // [A-3] after prune, so only the textures that ship are encoded
-  return { id, sidecar, glb: await io.writeBinary(doc), anim, options: optionsHash(cfg, opts) };
+  const lods = cls.lods ? lodTris(cls.lods, id, log) : null; // [A-12] after optimise: the triangles that ship
+  return { id, sidecar, glb: await io.writeBinary(doc), anim, options: optionsHash(cfg, opts), ...(lods ? { lods } : {}) };
 }
 
 export async function bake({ game = '.', ids = [], check = false, log = console.log } = {}) {
@@ -102,7 +105,7 @@ export async function bake({ game = '.', ids = [], check = false, log = console.
   for (const id of todo) {
     const r = await bakeModel(cfg, registry, id, src.get(id), log);
     results.push(r);
-    log(`baked ${id}: ${r.sidecar.parts.length} parts, ${r.sidecar.colliders.length} colliders, ${r.glb.byteLength} bytes${r.anim ? `, ${Object.keys(r.anim.clips).length} clips` : ''}`);
+    log(`baked ${id}: ${r.sidecar.parts.length} parts, ${r.sidecar.colliders.length} colliders, ${r.glb.byteLength} bytes${r.anim ? `, ${Object.keys(r.anim.clips).length} clips` : ''}${r.lods ? `, lods ${r.lods.join('/')} tris` : ''}`);
   }
   const keep = [...src.keys()].filter(id => !todo.includes(id));
   writeBaked(outDir, { results, engine: ENGINE_VERSION, materials: registry.hash, prev, keep, full });

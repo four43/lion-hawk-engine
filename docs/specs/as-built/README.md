@@ -4,7 +4,7 @@ These specs describe what the Lion Hawk engine code does at the source commit, n
 
 Written in STE style (ASD-STE100-inspired). Not certified compliant.
 
-Source commit: `7224d6b`; F02 and F07 were rerun at `4cd5a94`.
+Source commit: `7224d6b`; F02 and F07 were rerun at `4cd5a94`. F09 gained "Bake: levels of detail" (B-239 to B-246, [A-12]), view-presentation "Level of detail" (B-215 to B-221) and view-render B-245 to B-248 (`LOD_FADE`, the eye) by hand on the `lod` branch.
 
 | ID | Feature | Summary | Spec |
 | --- | --- | --- | --- |

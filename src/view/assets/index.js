@@ -79,12 +79,14 @@ export function createAssets({ manifest, base = './assets/', compiler = null, re
 
   // A-10: resolves once every key is loaded and compiled, then after gfx.warm() (M-12). instanced: the keys view sync will
   // draw 'instanced' (or createCrowd): their instanced variants are made now, so warm compiles them (painted parts with
-  // instance colours) instead of the first spawn
-  async function preload(keys, { instanced = [] } = {}) {
+  // instance colours) instead of the first spawn. lod (A-17): the keys drawn by createLodInstances / createScatter: their
+  // LOD_FADE instanced variants and depth twins are made now too.
+  async function preload(keys, { instanced = [], lod = [] } = {}) {
     if (disposed) throw new Error('assets: preload after dispose');
     const list = [...new Set(keys)];
     for (const k of list) entry(k);
     for (const k of instanced) if (!list.includes(k)) throw new Error(`assets: preload { instanced } names '${k}', which is not in keys`);
+    for (const k of lod) if (!list.includes(k)) throw new Error(`assets: preload { lod } names '${k}', which is not in keys`);
     await Promise.all(list.map(track));
     const materials = [], depth = [];
     if (compiler) for (const k of new Set(instanced)) ready.get(k).scene.traverse(o => {
@@ -92,6 +94,14 @@ export function createAssets({ manifest, base = './assets/', compiler = null, re
       const { holder, paint } = instancedPart(o, compiler), use = paint ? 'instancedColor' : 'instanced';
       materials.push({ material: holder.material, use });
       if (holder.customDepthMaterial) depth.push({ material: holder.customDepthMaterial, use, side: holder.material.side });
+    });
+    if (compiler) for (const k of new Set(lod)) ready.get(k).scene.traverse(o => {
+      if (!o.isMesh || o.isSkinnedMesh || Array.isArray(o.material)) return;
+      const name = o.userData.lhMat?.[0] ?? o.material?.name ?? '';
+      if (name.startsWith('paint-')) return;
+      const material = compiler.get(name, { instanced: true, vertexColors: !!o.geometry.attributes.color, receiveShadow: true, lodFade: true });
+      materials.push({ material, use: 'instanced' });
+      depth.push({ material: compiler.depth(material), use: 'instanced', side: material.side });
     });
     if (gfx?.warm) await gfx.warm(materials.length ? { materials, depth } : undefined);
   }

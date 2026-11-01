@@ -28,6 +28,7 @@ export { createMountRig } from './view/camera/mount.js';
 export { makeProject } from './view/camera/project.js';
 export { createInstances } from './view/instancing/instances.js';
 export { createCrowd } from './view/instancing/crowd.js';
+export { createLodInstances, createScatter, lodLevels, lodWindows } from './view/instancing/lod.js';
 export { createAudio } from './view/audio/index.js';
 export { createCues } from './view/audio/cues.js';
 export { bindContactSounds } from './view/audio/contacts.js';

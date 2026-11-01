@@ -11,6 +11,7 @@ export const CHUNKS = Object.freeze({
   SUBSURFACE: { vertex: [], fragment: ['common', 'lights_fragment_end'] },
   WIND: { vertex: ['common', 'begin_vertex'], fragment: ['normal_fragment_begin'] },
   PAINT: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'color_fragment'] },
+  LOD_FADE: { vertex: ['common', 'begin_vertex'], fragment: ['common', 'clipping_planes_fragment'] },
 });
 
 export function inject(src, chunk, text, where = 'after') {
@@ -232,15 +233,43 @@ if ( uPaintMode.x > 1.5 ) vLhPaint = lhHsl( fract( dot( lhPaint.xyz, uPaintAxis.
 else if ( uPaintMode.x > 0.5 ) diffuseColor.rgb = diffuse * vLhPaint;`);
 }
 
-const PATCH = { COVERAGE: coverage, FUR: fur, SUBSURFACE: subsurface, WIND: wind, PAINT: paint };
+// LOD_FADE (A-13, A-16): a level's dithered window. lhLod = (in, out, band) m, in scaled distance: the instance origin's
+// distance to the eye uLhEye.xyz times its LOD scale uLhEye.w. Each edge is t = smoothstep(edge - band, edge + band, d)
+// (a step at band 0); the level keeps a pixel when the noise is under t_in and not under t_out, so the outgoing and incoming
+// levels of an edge split every pixel between them. in <= 0: no in edge (lod0); out <= 0: no out edge (a mesh without
+// lhLod draws whole). The noise is interleaved gradient noise on gl_FragCoord, the same for every mesh at a pixel.
+function lodFade(sh) {
+  sh.vertexShader = inject(sh.vertexShader, 'common', 'attribute vec3 lhLod; uniform vec4 uLhEye; varying vec2 vLhLodT;');
+  sh.vertexShader = inject(sh.vertexShader, 'begin_vertex', `{
+#ifdef USE_INSTANCING
+  vec3 lhLodO = ( modelMatrix * instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+#else
+  vec3 lhLodO = ( modelMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+#endif
+  float lhLodD = distance( lhLodO, uLhEye.xyz ) * uLhEye.w, lhLodB = max( lhLod.z, 1e-4 );
+  vLhLodT.x = lhLod.x <= 0.0 ? 1.0 : smoothstep( lhLod.x - lhLodB, lhLod.x + lhLodB, lhLodD );
+  vLhLodT.y = lhLod.y <= 0.0 ? 0.0 : smoothstep( lhLod.y - lhLodB, lhLod.y + lhLodB, lhLodD );
+}`);
+  sh.fragmentShader = inject(sh.fragmentShader, 'common', 'varying vec2 vLhLodT;');
+  sh.fragmentShader = inject(sh.fragmentShader, 'clipping_planes_fragment', `{
+  float lhLodN = fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( 0.06711056, 0.00583715 ) ) ) );
+  if ( lhLodN >= vLhLodT.x || lhLodN < vLhLodT.y ) discard;
+}`);
+}
+
+const PATCH = { COVERAGE: coverage, FUR: fur, SUBSURFACE: subsurface, WIND: wind, PAINT: paint, LOD_FADE: lodFade };
 
 // Applies the features in a fixed order (CHUNKS order), whatever order they are listed in.
 // The features that move vertices, and so must move them in the shadow pass too (mc.depth). Only their vertex stage is patched:
 // the depth fragment shader has none of the colour chunks, so each patch runs against a stand-in fragment that has them.
-export const DEPTH_FEATURES = Object.freeze(['FUR', 'WIND']);
+// LOD_FADE also discards in the shadow pass (a shadow fades with its level), so its fragment stage patches the depth
+// shader's own fragment (which has common and clipping_planes_fragment).
+export const DEPTH_FEATURES = Object.freeze(['FUR', 'WIND', 'LOD_FADE']);
+const DEPTH_FRAGMENT = new Set(['LOD_FADE']);
 const FRAG_TAGS = [...new Set(Object.values(CHUNKS).flatMap(c => c.fragment))].map(c => `#include <${c}>`).join('\n');
 export function patchDepth(sh, features) {
   for (const f of DEPTH_FEATURES) if (features.includes(f)) {
+    if (DEPTH_FRAGMENT.has(f)) { PATCH[f](sh); continue; }
     const t = { vertexShader: sh.vertexShader, fragmentShader: FRAG_TAGS, uniforms: sh.uniforms };
     PATCH[f](t); sh.vertexShader = t.vertexShader;
   }

@@ -98,6 +98,7 @@ A kit is optional and imported per game. `lion-hawk/kits/<kit>` is the sim half 
 | Follow, orbit or mount a camera | `lion-hawk/view` | `createChaseRig`, `createOrbitRig`, `createMountRig` | [Chase rig](specs/as-built/view-presentation.md#chase-rig), [Orbit rig](specs/as-built/view-presentation.md#orbit-rig), [Mount rig](specs/as-built/view-presentation.md#mount-rig) |
 | Project a world point to the screen | `lion-hawk/view` | `makeProject` | [view-presentation: Projection](specs/as-built/view-presentation.md#projection) |
 | Draw many copies, or a crowd of animals | `lion-hawk/view` | `createInstances`, `createCrowd` | [Instances](specs/as-built/view-presentation.md#instances), [Crowd](specs/as-built/view-presentation.md#crowd) |
+| Draw models with distance levels that fade instead of pop (scattered trees, props), zoom-aware | `lion-hawk/view` | `createScatter`, `createLodInstances`, `lodLevels`, `lodWindows`, `view.lod` | [Level of detail](specs/as-built/view-presentation.md#level-of-detail), [spec §6.4](spec.md#64-level-of-detail) |
 | Play sound | `lion-hawk/view` | `view.audio`, `createAudio` | [view-presentation: Audio](specs/as-built/view-presentation.md#audio) |
 | Mix sound in buses, duck music, place looping sounds on objects | `lion-hawk/view` | `view.audio` | [view-presentation: Audio](specs/as-built/view-presentation.md#audio), [spec §5.6](spec.md#56-audio) |
 | Name sounds with variations and voice limits | `lion-hawk/view` | `createCues` | [spec §5.6](spec.md#56-audio) |

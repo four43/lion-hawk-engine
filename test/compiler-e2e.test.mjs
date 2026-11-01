@@ -34,6 +34,17 @@ before(async () => {
 after(async () => { await chrome?.close(); await new Promise(r => (server ? server.close(r) : r())); });
 
 for (const tier of ['physical', 'standard', 'lambert']) {
+  test(`${tier}: LOD_FADE splits the pixels between levels mid-band, with no holes, and fades the last level out (A-13)`, async t => {
+    if (skip) return t.skip('no Chromium');
+    const r = await page.evaluate(tr => window.lhLod(tr), tier);
+    assert.deepEqual(r.errors, []);
+    assert.ok(r.near.red > 200 && r.near.green === 0, `near ${JSON.stringify(r.near)}`);
+    const all = r.near.red, mid = r.mid.red + r.mid.green;
+    assert.ok(r.mid.red > all * 0.3 && r.mid.green > all * 0.3, `mid-band both levels draw ${JSON.stringify(r.mid)}`);
+    assert.ok(Math.abs(mid - all) < all * 0.08, `no holes and no double cover mid-band (${mid} vs ${all})`);
+    assert.ok(r.far.green > all * 0.9 && r.far.red === 0, `far ${JSON.stringify(r.far)}`);
+    assert.equal(r.gone.red + r.gone.green, 0);
+  });
   test(`${tier}: every feature compiles; more paint and coverage users add no programs (M-11, M-13)`, async t => {
     if (skip) return t.skip(skip);
     const r = await page.evaluate(tr => window.lhCompileAll(tr), tier);

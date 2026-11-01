@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Distance level of detail that fades instead of popping, from Rally's scenery ([A-12]–[A-18]).
+
+- The bake reads distance levels: top-level `lod0`…`lod3` nodes under a model's root are checked (no gaps, a mesh in each, bounds within 25% of lod0's per axis with a 5 cm minimum, a warning when a level has more triangles than the one before). Only lod0 feeds the sidecar, `col-*`/`sock-*` under lod1+ is an error, and `manifest.json` records `lods: [triangles per level]`. Models without levels bake byte-identically. [A-12]
+- `LOD_FADE` material feature (`mc.get(id, { lodFade: true })`): a level's window rides on the `lhLod` attribute and the GPU splits each switch band's pixels between the two levels with a screen-space dither, per instance per frame; the depth twin fades shadows too. [M-11], [A-13]
+- The compiler's shared `eye` (`mc.eye`, `mc.setEye(camera)`, `mc.lod`) with a LOD scale that follows the field of view and zoom, so a scope or binoculars show near levels far away; `render.lod: { refFov, bias }` and `view.lod.bias` (a quality knob). The pipeline sets it before each draw. [A-16]
+- `createLodInstances` (moving props: `begin` / `add` / `commit`) and `createScatter` (static instances in cells, refilled per step, zoom or turn, culled to the view cone) in `lion-hawk/view`, plus `lodLevels` and `lodWindows`. [A-14], [A-15], [A-18]
+- `assets.preload(keys, { lod })` compiles the `LOD_FADE` variants and their shadow twins before the first frame. [A-17]
+
 ## 0.16.0 — 2026-10-26
 
 Debug panels: windows you open, move, resize and collapse under `?debug` ([D-8]–[D-12]).

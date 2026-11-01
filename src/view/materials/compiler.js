@@ -3,7 +3,7 @@
 // material with the same feature set shares one shader program (customProgramCacheKey). Instanced and plain users,
 // skinned users and shadow receivers get separate materials by construction (matSplit, M-13).
 import { MeshPhysicalMaterial, MeshStandardMaterial, MeshLambertMaterial, MeshDepthMaterial, RGBADepthPacking, Color, Vector2, Vector3, Vector4, Matrix4, BufferAttribute, DoubleSide, FrontSide } from 'three';
-import { patchShader, patchDepth, inject } from './chunks.js';
+import { patchShader, patchDepth, inject, DEPTH_FEATURES } from './chunks.js';
 import { furGeometry } from './fur.js';
 import { defineMaterials } from '../../defs/materials.js';
 
@@ -54,10 +54,12 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
   if (!registry.has(paintBase)) throw new Error(`compiler: paint base '${paintBase}' is not in the registry`);
   if (!Array.isArray(shade) || shade.length !== 3 || !shade.every(Number.isFinite)) throw new Error(`compiler: paint.shade must be [floor, gain, max] numbers (got ${JSON.stringify(shade)})`);
   const Base = TIERS[shading], params = PARAMS[shading], cache = new Map(), time = { value: 0 }, uPaintShade = { value: new Vector3(shade[0], shade[1], shade[2]) };
+  // A-16: the eye every LOD_FADE material measures from (xyz) and its LOD scale (w); lod.refFov / lod.bias set the scale.
+  const eye = { value: new Vector4(0, 0, 0, 1) }, lod = { refFov: null, bias: 1 };
 
   const norm = (o = {}) => ({
     instanced: !!o.instanced, vertexColors: !!o.vertexColors, skinned: !!o.skinned, receiveShadow: o.receiveShadow !== false,
-    map: o.map ?? null, fur: o.fur !== false, paint: !!o.paint,
+    map: o.map ?? null, fur: o.fur !== false, paint: !!o.paint, lodFade: !!o.lodFade,
     wind: o.wind ? { fade: [...(o.wind.fade ?? [0, 0])], amp: [...(o.wind.amp ?? WIND_AMP)] } : null,
   });
 
@@ -69,6 +71,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     if (look.subsurface && look.subsurface.strength > 0 && shading !== 'lambert') f.push('SUBSURFACE'); // D5: physical and standard only; off at strength 0
     if (o.wind) f.push('WIND');
     if (o.paint) f.push('PAINT'); // Task 8b: shading-preserving paint slot
+    if (o.lodFade) f.push('LOD_FADE'); // A-13: dithered LOD windows
     return f;
   }
 
@@ -92,6 +95,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
       u.uLhTime = time; // one clock for every windy material: mc.time.value = seconds
       u.uWindFade = { value: new Vector2(o.wind.fade[0], o.wind.fade[1]) }; u.uWindAmp = { value: new Vector2(o.wind.amp[0], o.wind.amp[1]) };
     }
+    if (features.includes('LOD_FADE')) u.uLhEye = eye; // one eye for every LOD material, the shadow pass's included
     if (features.includes('PAINT')) {
       const c = coat ?? (o.instanced ? SOLID : KEEP);
       u.uPaintMode = { value: new Vector3(c.mode, c.s, c.l) }; u.uPaintAxis = { value: new Vector4(c.axis[0], c.axis[1], c.axis[2], c.axis[3]) };
@@ -267,7 +271,7 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     const m = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
     m.name = `${material.name}:depth`;
     m.side = material.side;
-    const moved = s.features.filter(f => f === 'FUR' || f === 'WIND');
+    const moved = s.features.filter(f => DEPTH_FEATURES.includes(f));
     if (moved.length || s.extras.length) {
       const key = `lhd:${moved.join('+')}${s.extras.map(x => `|x:${x.name}`).join('')}`;
       m.defines = { ...(m.defines ?? {}) }; for (const f of moved) m.defines[f] = '';
@@ -283,11 +287,25 @@ export function createMaterialCompiler(registry = defineMaterials({}), { shading
     return m;
   }
 
+  // A-16: the eye from a camera, once a frame before drawing. The scale is bias × tan(fov/2) / tan(refFov/2) (three's zoom
+  // narrows the view too), refFov the first perspective camera's fov unless set; an orthographic camera's is bias / zoom.
+  function setEye(camera) {
+    camera.updateWorldMatrix(true, false); // the frame may have moved it since the last render
+    const e = camera.matrixWorld.elements, v = eye.value;
+    let k = 1;
+    if (camera.isPerspectiveCamera) {
+      lod.refFov ??= camera.fov;
+      k = Math.tan(camera.fov * Math.PI / 360) / (camera.zoom || 1) / Math.tan(lod.refFov * Math.PI / 360);
+    } else if (camera.isOrthographicCamera) k = 1 / (camera.zoom || 1);
+    v.set(e[12], e[13], e[14], lod.bias * k);
+    return v;
+  }
+
   function dispose() { for (const m of cache.values()) m.dispose(); cache.clear(); for (const m of depths.values()) m.dispose(); depths.clear(); }
 
   // not frozen: 3e's render-pipeline test assigns onto mc.made / mc.dispose
   return {
-    shading, time, get, paint, coverage, extend, apply, repaint, depth,
+    shading, time, eye, lod, setEye, get, paint, coverage, extend, apply, repaint, depth,
     furGeometry: (geometry, mask, opts) => furGeometry(geometry, mask, opts),
     keys: () => [...cache.keys()], made: () => [...cache.values()].map(material => ({ material, use: material.userData.lhUse })), dispose,
     twins: () => [...depths.values()].map(material => ({ material, use: material.userData.lhUse, side: material.userData.lhSide })), // depth twins and their casters' side, for warm's shadow pass

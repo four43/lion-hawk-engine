@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { defineMaterials } from '../src/defs/materials.js';
 import { createMaterialCompiler } from '../src/view/materials/compiler.js';
 import { furGeometry } from '../src/view/materials/fur.js';
+import { createLodInstances } from '../src/view/instancing/lod.js';
 
 const REG = defineMaterials({
   testMud: { look: { color: '#ffffff', roughness: 1 }, coverage: { dirt: 1, rust: 1, snow: 1, mud: 1 } },
@@ -161,6 +162,29 @@ window.lhDepth = tier => {
   const sm = new THREE.Mesh(box, snow); sm.position.x = 1.2; sm.castShadow = true; sm.customDepthMaterial = mc.depth(snow); scene.add(sm);
   const t0 = r.shot(); mc.time.value = 0.9; const t1 = r.shot();
   const out = { errors: r.errors, moved: diff(t0, t1) };
+  r.done();
+  return out;
+};
+
+// LOD_FADE on the GPU (A-13): lod0 red, lod1 green, one box. Inside lod0 all red; mid-band about half each and no holes
+// (the two levels split the pixels); in lod1 all green; past the last band nothing. Shadows through the depth twins.
+window.lhLod = tier => {
+  const r = rig(tier), { mc, scene } = r, root = new THREE.Group();
+  for (const [l, rgb] of [[0, [1, 0, 0]], [1, [0, 1, 0]]]) {
+    const lod = new THREE.Group(); lod.name = `lod${l}`; root.add(lod);
+    const g = new THREE.BoxGeometry(1.2, 1.2, 1.2), c = new Float32Array(g.attributes.position.count * 3);
+    for (let i = 0; i < c.length; i += 3) c.set(rgb, i);
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial()); m.material.name = 'testBare'; lod.add(m);
+  }
+  const L = createLodInstances({ asset: { scene: root }, distances: [4, 20], band: 1, compiler: mc, max: 1 });
+  scene.add(L.object);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), mc.get('testBare', { receiveShadow: true }));
+  floor.position.z = -1.5; floor.receiveShadow = true; scene.add(floor);
+  const q = new THREE.Quaternion(), at = new THREE.Vector3();
+  const count = px => { let red = 0, green = 0; for (let i = 0; i < px.length; i += 4) { if (px[i] > 60 && px[i + 1] < 40) red++; else if (px[i + 1] > 60 && px[i] < 40) green++; } return { red, green }; };
+  const at4 = scale => { mc.eye.value.set(0, 0, 4, scale); L.begin(); L.add(at, q, 1); L.commit(); return count(r.shot()); };
+  const out = { near: at4(0.5), mid: at4(1), far: at4(2), gone: at4(10), errors: r.errors };
   r.done();
   return out;
 };

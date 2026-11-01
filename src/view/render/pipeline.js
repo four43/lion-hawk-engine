@@ -6,7 +6,7 @@
 // Each render slot runs reconcile (boot) → frame(alpha): sync.frame → the halves' frames (boot) → draw(): gfx.render.
 // Without WebGL the renderer's error is reported once as 'render: …' and the page runs on with view.gfx = null; the sim,
 // the UI and audio keep working (RF1).
-import { createRenderer, checkShadows, checkToneMapping } from './renderer.js';
+import { createRenderer, checkShadows, checkToneMapping, DEFAULT_CAMERA } from './renderer.js';
 import { createLightRig, checkLights } from './lights.js';
 import { warm } from './hygiene.js';
 import { createAssets } from '../assets/index.js';
@@ -14,9 +14,9 @@ import { createViewSync } from '../sync/index.js';
 import { createAudio } from '../audio/index.js';
 import { createMaterialCompiler } from '../materials/compiler.js';
 
-export const RENDER_KEYS = Object.freeze(['shading', 'dpr', 'antialias', 'shadows', 'toneMapping', 'exposure', 'camera', 'lights', 'assets', 'paint']);
+export const RENDER_KEYS = Object.freeze(['shading', 'dpr', 'antialias', 'shadows', 'toneMapping', 'exposure', 'camera', 'lights', 'assets', 'paint', 'lod']);
 export const SHADING = Object.freeze(['physical', 'standard', 'lambert']);
-const CAMERA_KEYS = ['fov', 'fovPortrait', 'near', 'far'], ASSET_KEYS = ['manifest', 'base', 'decoders'], DPR_KEYS = ['touch', 'desktop'], PAINT_KEYS = ['base', 'shade'];
+const CAMERA_KEYS = ['fov', 'fovPortrait', 'near', 'far'], LOD_KEYS = ['refFov', 'bias'], ASSET_KEYS = ['manifest', 'base', 'decoders'], DPR_KEYS = ['touch', 'desktop'], PAINT_KEYS = ['base', 'shade'];
 const known = (o, keys, where) => { for (const k of Object.keys(o)) if (!keys.includes(k)) throw new Error(`defineView: render.${where}${k} is unknown (known: ${keys.join(', ')})`); };
 
 export function checkRender(render) {
@@ -40,6 +40,13 @@ export function checkRender(render) {
     known(p, PAINT_KEYS, 'paint.');
     if (p.base !== undefined && !(typeof p.base === 'string' && p.base)) throw new Error(`defineView: render.paint.base must be a material id (got ${JSON.stringify(p.base)})`);
     if (p.shade !== undefined && !(Array.isArray(p.shade) && p.shade.length === 3 && p.shade.every(Number.isFinite))) throw new Error(`defineView: render.paint.shade must be [floor, gain, max] numbers (got ${JSON.stringify(p.shade)})`);
+  }
+  if (render.lod !== undefined) { // A-16: the LOD scale's reference fov and bias
+    const l = render.lod;
+    if (!l || typeof l !== 'object' || Array.isArray(l)) throw new Error('defineView: render.lod must be { refFov, bias }');
+    known(l, LOD_KEYS, 'lod.');
+    if (l.refFov !== undefined && !(Number.isFinite(l.refFov) && l.refFov > 0 && l.refFov < 180)) throw new Error(`defineView: render.lod.refFov must be degrees between 0 and 180 (got ${JSON.stringify(l.refFov)})`);
+    if (l.bias !== undefined && !(Number.isFinite(l.bias) && l.bias > 0)) throw new Error(`defineView: render.lod.bias must be a number above 0 (got ${JSON.stringify(l.bias)})`);
   }
   if (render.lights !== undefined && render.lights !== false) checkLights(render.lights);
 }
@@ -76,7 +83,9 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
       for (const e of materials.made?.() ?? []) list.push(e?.isMaterial ? e : e.material);
       return warm(gfx.renderer, gfx.scene, gfx.camera, { materials: list.concat(opts.materials ?? []), depth: (materials.twins?.() ?? []).concat(opts.depth ?? []) });
     };
-    view.gfx = gfx; view.materials = materials;
+    // A-16: scale 1 at the configured (landscape) fov, so a page opened in portrait doesn't set the reference
+    materials.lod.refFov = render.lod?.refFov ?? render.camera?.fov ?? DEFAULT_CAMERA.fov; materials.lod.bias = render.lod?.bias ?? 1;
+    view.gfx = gfx; view.materials = materials; view.lod = materials.lod; // A-16: view.lod.bias changes the bias live
     const a = render.assets; // without it, no createAssets: 3f's throws on a missing manifest
     view.assets = a ? createAssets({ manifest: a.manifest, base: a.base ?? './assets/', decoders: a.decoders, compiler: materials, renderer: gfx.renderer, gfx }) : null;
     engine.assets = view.assets ?? undefined;
@@ -85,7 +94,7 @@ export function createPipeline(engine, view, render, { doc, target, canvas, rend
   let disposed = false;
   return {
     frame(alpha) { if (!disposed) { view.sync.frame(alpha); view.audio.frame(); } }, // H-2: voices follow the synced objects
-    draw() { if (!disposed) gfx.render(); },
+    draw() { if (!disposed) { materials.setEye(gfx.camera); gfx.render(); } }, // A-16: the eye after the frame moved the camera
     dispose() {
       if (disposed) return; disposed = true;
       if (view.assets && engine.assets === view.assets) engine.assets = undefined;

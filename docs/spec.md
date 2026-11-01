@@ -8,7 +8,7 @@ Amended 2026-10-21: local players, controllers, player and game state: §4.6 [N-
 Amended 2026-10-26: §5.6 Audio, [H-1]–[H-7] (buses, voices, cues, contact sounds, the DSP host, the powertrain and the engine sound), with clarifications under [U-6] and [R-8]. Built in 0.14.0.
 Amended 2026-10-26: [H-6] clarification (powertrain `blip`, `bite`, turbo clutch capacity). Built in 0.14.1. [M-11] clarification (wet coverage, mud and wet gloss, matted fur). Built in 0.15.0.
 Amended 2026-10-26: debug panels, §7.3 [D-8]–[D-12], with clarifications under [D-1], [D-3] and [D-7]. Built in 0.16.0.
-Amended 2026-11-01: distance level of detail, §6.4 [A-12]–[A-18], and the `LOD_FADE` feature under [M-11] (draft; from Rally R19).
+Amended 2026-11-01: distance level of detail, §6.4 [A-12]–[A-18], and the `LOD_FADE` feature under [M-11] (from Rally R19). Built in 0.17.0.
 
 Lion Hawk is an opinionated 3D web physics engine for browser games.
 
@@ -178,7 +178,7 @@ Every block is optional.
 
 - **[M-11]** `look` compiles to one base material per shading tier. The game sets `shading: 'physical' | 'standard' | 'lambert'` (default `physical`), which gives `MeshPhysicalMaterial`, `MeshStandardMaterial` or `MeshLambertMaterial`. Optional features are compile-time defines (`COVERAGE`, `COVERAGE_INSTANCED`, `COVERAGE_WET`, `FUR`, `SUBSURFACE`, `WIND`, `PAINT`, `LOD_FADE`), which keeps the number of shader programs small. Lambert and standard honour `COVERAGE` and `FUR`. `SUBSURFACE` is physical and standard only. Physical-only `look` fields are ignored below `physical`. Vertex colours, when a mesh has them, replace `look.color` (D5).
   - *Clarification (built, 0.15.0):* mud and wet are glossy and mat fur. `COVERAGE` adds a Blinn-Phong highlight per directional light where mud blotches lie (0.55) and, with `COVERAGE_WET`, everywhere by the wet level, in every tier (lambert adds it to the diffuse light, as it has no specular term). With `COVERAGE` on a `FUR` material, the strands shorten by up to 90% with the mud or wet level, so a coat lies flat when muddy or wet and fluffs up as it dries. The wet level rides beside `uCoverage` as `uWet.x` (plain) or `instanceWet` (instanced); `kit-coverage` soaks it in a wash and dries it at `1 / dryTime`.
-  - *Clarification (draft 2026-11-01):* `LOD_FADE` (`get(id, { lodFade: true })`) is §6.4's dithered cross-fade: the vertex
+  - *Clarification (built, 0.17.0):* `LOD_FADE` (`get(id, { lodFade: true })`) is §6.4's dithered cross-fade: the vertex
     stage reads `lhLod` and the eye ([A-16]) and the fragment stage discards the pixels its level does not own ([A-13]).
     It works with or without instancing and with the other features; the material's depth twin runs it too. One more
     program per material that uses it, and one for its twin.
@@ -507,7 +507,7 @@ The audio service is view-only ([L-3]). The sim decides what happened and emits 
   - *Clarification (0.11.2):* `preload(keys, { instanced: [keys] })` names the models drawn `instanced` (or by `createCrowd`). Their instanced variants are made before warm, painted parts as instance-colour users, so the first spawn compiles nothing. With shadows on, warm also compiles the shadow pass's depth programs.
 - **[A-11]** Animation uses `AnimationMixer`. A model may opt into baked animation tables (`bake: { animTable: true }`) for large instanced crowds.
 
-### 6.4 Level of detail (draft 2026-11-01)
+### 6.4 Level of detail 
 
 From Rally R19, where 15k scattered trees, rocks and fences needed distance LODs, and a hard swap read as pop-in. These
 requirements lift that game code into the engine.
@@ -550,6 +550,12 @@ requirements lift that game code into the engine.
     quarter of refFov's tangent), a tree 400 m away measures 100 m and shows its near level. `refFov` (default: the
     camera's fov when the view starts) and `bias` (default 1; under 1 keeps detail farther, over 1 drops it sooner, e.g.
     a low-end device) are `render.lod: { refFov, bias }`, and `view.lod.bias` changes the bias live.
+  - *Clarification (built, 0.17.0):* the pipeline sets the eye in `draw()`, after the halves' frames have placed the
+    camera, not in view sync. `refFov` defaults to `render.camera.fov` (else 60), not the first frame's fov, so a page
+    opened in portrait does not set the reference. `createLodInstances.begin(camera)` and `createScatter.update(camera)`
+    take the render camera (the scatter needs its direction and fov for [A-18]) and set the eye through
+    `compiler.setEye`; `begin()` with no argument uses the compiler's eye. The CPU windows are widened by 1 m more than
+    the band, as the GPU's eye may be a frame ahead.
 - **[A-17] Warm and budget.** `preload(keys, { lod: [keys] })` compiles the `LOD_FADE` variants of those models'
   materials and their depth twins before the first frame ([A-10], [M-12]). Neither helper allocates per frame ([R-8]).
 - **[A-18] View cone.** `createScatter` skips cells outside the camera's view cone: half-angle the frustum's diagonal
