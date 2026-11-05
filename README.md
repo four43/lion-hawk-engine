@@ -22,7 +22,7 @@ Plain JavaScript ES modules. No TypeScript, no framework, no build step for the 
 Games install the engine at a release tag:
 
 ```sh
-npm install git+ssh://git@github.com/four43/lion-hawk-engine.git#v0.14.0
+npm install github:four43/lion-hawk-engine#v0.17.0
 npm install three@^0.186.0 @dimforge/rapier3d-compat@^0.21.0
 ```
 
@@ -181,4 +181,4 @@ Browser tests start Chromium through `testing/playwright.js` and skip when none 
 
 ## License
 
-Private. Not licensed for use outside the project.
+MIT. See [LICENSE](LICENSE). The glyph icons in `src/kits/glyphs` are by Kenney, CC0 (see their `LICENSE.txt`).

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The engine is open source under the MIT license: `LICENSE` at the root and `"license": "MIT"` in `package.json`. The README installs from the public `github:` URL instead of SSH.
+
 ## 0.17.0 — 2026-11-01
 
 Distance level of detail that fades instead of popping, from Rally's scenery ([A-12]–[A-18]).
