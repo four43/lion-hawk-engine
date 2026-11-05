@@ -4,6 +4,7 @@
 
 - The engine is open source under the MIT license: `LICENSE` at the root and `"license": "MIT"` in `package.json`. The README installs from the public `github:` URL instead of SSH.
 - **The engine needs Node 26 or later** (`engines` in `package.json`). The allocation budgets fail on Node 22 and 24, whose V8 counts more bytes for the same code. CI runs the suite with Chromium on Node 26 for pushes and pull requests.
+- A `ui.hold({ wall: true })` starts counting at the press instead of at the last step, so on slow frames it no longer fires up to a frame early. `engine.ui.press(id, at)` takes the press time in ms; the DOM UI, menu navigation and the page hook pass `driver.now()`, new on the driver. (#83)
 
 ## 0.17.0 — 2026-11-01
 

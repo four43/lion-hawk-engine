@@ -123,6 +123,18 @@ test('2f: ui.hold({ wall: true }) counts wall time between steps, not capped eng
   assert.equal(fired, 0); assert.ok(e.ui.tree()[0].progress > 0.9);
   e.frame(0.7, 6600); assert.equal(fired, 1);
 });
+test('a wall hold pressed with its time counts from the press, not the last step, so a slow frame does not fire it early (#83)', () => {
+  const g = defineGame({ id: 'wake3', start: 's', scenes: { s: { ui(u) { u.hold({ id: 'wake', label: 'Wake', seconds: 1, wall: true, action: e => e.emit('woke') }); } } } });
+  const e = createEngine(g, { acks: 'frames' }); let fired = 0; e.events.on(x => { if (x.type === 'woke') fired++; });
+  e.frame(1 / 60, 1000); e.ui.press('s.wake', 1150); // pressed 150 ms after the last step
+  // 0.2 s frames run 3 capped steps; the last is stamped 150 ms before the frame (the dropped time), so wall = frame - 150
+  for (const now of [1200, 1400, 1600, 1800, 2000, 2200]) e.frame(0.2, now);
+  assert.equal(fired, 0, 'wall 2050: 900 ms after the press (counted from the step before it, 1050 ms: fired)');
+  e.frame(0.2, 2400); assert.equal(fired, 1, 'wall 2250: 1100 ms after the press');
+  e.ui.release('s.wake'); e.ui.press('s.wake', 0); e.stepN(1);
+  assert.ok(Math.abs(e.ui.tree()[0].progress - 1 / 60) < 1e-9, 'a time before the last step counts from that step');
+  e.ui.release('s.wake'); assert.throws(() => e.ui.press('s.wake', NaN), /ui: press time must be a finite number of ms \(got NaN\)/);
+});
 test('2f: a wall hold is virtual and exact headless, restarts on a new press, and an engine-time hold is unchanged (#83)', () => {
   const g = defineGame({ id: 'wake2', start: 's', scenes: { s: { ui(u) {
     u.hold({ id: 'w', label: 'W', seconds: 0.5, wall: true, action: e => e.emit('w') }); u.hold({ id: 'e', label: 'E', seconds: 0.5, action: e => e.emit('e') }); } } } });

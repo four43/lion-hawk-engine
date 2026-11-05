@@ -66,11 +66,14 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
       const c = controls.get(id);
       return !!c && !coveredBy(c.scene) && !(c.when && !c.when(ctx, ctxOf(c.scene)));
     },
-    press(id, ctx) {
+    // `at` (ms, the wall clock's timeline) is when the press happened; without it a wall hold starts at the last step's
+    // wall, which on a slow frame is up to a frame early (#83). Never before that step: the press came after it.
+    press(id, ctx, at) {
       const c = usable(id, ctx);
       if (c.role !== 'hold') throw new Error(`ui: control '${id}' is not a hold`);
+      if (at !== undefined && !Number.isFinite(at)) throw new Error(`ui: press time must be a finite number of ms (got ${at})`);
       if (c.pressed) return;
-      c.pressed = true; c.held = 0; c.fired = false; if (c.wall) c.t0 = ctx.time.wall; active.push(c);
+      c.pressed = true; c.held = 0; c.fired = false; if (c.wall) c.t0 = at === undefined ? ctx.time.wall : Math.max(at, ctx.time.wall); active.push(c);
     },
     release(id) {
       const c = controls.get(id); if (!c?.pressed) return;
@@ -83,7 +86,7 @@ export function createUi({ onAction, coveredBy = () => undefined, isAction = () 
       for (let i = snap.length - 1; i >= 0; i--) {
         const c = snap[i]; if (!c.pressed) continue;
         if (controls.get(c.id) !== c || coveredBy(c.scene) || (c.when && !c.when(ctx, ctxOf(c.scene)))) { c.pressed = false; c.held = 0; c.fired = false; const k = active.indexOf(c); if (k >= 0) active.splice(k, 1); continue; }
-        if (c.wall) c.held = (ctx.time.wall - c.t0) / 1000; else c.held += dt;
+        if (c.wall) c.held = Math.max(0, (ctx.time.wall - c.t0) / 1000); else c.held += dt; // a step stamped before `at` holds 0
         if (!c.fired && c.held >= c.seconds - 1e-9) { c.fired = true; if (typeof c.action === 'function') c.action(ctx, ctxOf(c.scene)); else onAction(c.action); }
       }
     },

@@ -1,6 +1,6 @@
 // Browser rAF driver (R-5): feeds wall-clock dt to the engine loop, pauses while the tab is hidden and drops the
 // accumulated gap on return. Manual mode stops stepping but keeps rendering; manual('all') (#47) also stops rendering (devices still update). Globals are resolved lazily.
-export function createDriver(engine, { raf, caf, doc, devices = [], onError } = {}) {
+export function createDriver(engine, { raf, caf, doc, devices = [], onError, clock } = {}) {
   const _raf = f => (raf ?? globalThis.requestAnimationFrame)(f);
   const _caf = h => (caf ?? globalThis.cancelAnimationFrame)?.(h);
   const document = () => doc ?? globalThis.document;
@@ -40,6 +40,9 @@ export function createDriver(engine, { raf, caf, doc, devices = [], onError } = 
       if (listening) { document()?.removeEventListener('visibilitychange', onVisibility); listening = false; }
     },
     manual(on) { if (on !== undefined) manual = on === 'all' ? 'all' : !!on; return manual; },
+    // #83: the time now on the clock that stamps the steps (rAF's), while frames step the sim; undefined in manual
+    // mode or stopped, when the wall is virtual. A press passes it so a wall hold starts at the press, not the last step.
+    now() { return running && !manual ? (clock ?? (() => globalThis.performance.now()))() : undefined; },
     get running() { return running; },
     devices,
   };

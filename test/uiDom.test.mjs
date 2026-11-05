@@ -96,6 +96,14 @@ test('2d: a hold presses on pointerdown, shows --lh-progress and data-lh-down, r
   assert.equal(b.style.getPropertyValue('--lh-progress'), '0'); assert.equal(b.hasAttribute('data-lh-down'), false);
   b.click(); assert.deepEqual(errors, []); assert.equal(engine.scene.state.fired, 0);
 });
+test('a pointerdown on a wall hold presses at now(), so the hold counts from the press (#83)', () => {
+  const g = defineGame({ id: 'wallHold', start: 's', scenes: { s: { ui(u) { u.hold({ id: 'wake', label: 'Wake', seconds: 0.5, wall: true, action: e => e.emit('woke') }); } } } });
+  const { window, document } = dom(), engine = createEngine(g, { wall0: 1000 });
+  const ui = createUiDom(engine, { root: document.body, doc: document, now: () => 1100 }); ui.sync();
+  document.querySelector('[data-testid="s.wake"]').dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 1, bubbles: true }));
+  engine.stepN(30); ui.sync(); // wall 1500: 400 ms after the press, 500 ms after the last step
+  assert.equal(engine.ui.tree()[0].progress, 0.8);
+});
 test('2d: Space on a focused hold presses and releases', () => {
   const { window, document } = dom(), engine = createEngine(hg), ui = createUiDom(engine, { root: document.body, doc: document }); ui.sync();
   const b = document.querySelector('[data-testid="s.gear"]');

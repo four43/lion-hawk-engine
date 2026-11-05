@@ -480,7 +480,7 @@ export function createEngine(game, { seed = 1, scene = game.start, args, acks = 
       view: () => ui.view(engine), // tree() into reused objects, valid until the next view() (R-8: the DOM UI's per-frame read)
       enabled: id => ui.enabled(id, engine), // #45
       tryTap(id) { if (!ui.enabled(id, engine)) return false; engine.ui.tap(id); return true; },
-      press: id => rec ? recorded(o => o.push('press', id), () => ui.press(id, engine)) : ui.press(id, engine), // #9
+      press: (id, at) => rec ? recorded(o => o.push('press', id), () => ui.press(id, engine, at)) : ui.press(id, engine, at), // #9; #83: `at` is not taped, a replay's wall is virtual
       release: id => rec ? recorded(o => o.push('release', id), () => ui.release(id)) : ui.release(id),
       tap: id => rec ? recorded(o => o.push('tap', id), () => ui.tap(id, engine)) : ui.tap(id, engine),
       fill: (id, t) => rec ? recorded(o => o.push('fill', id, String(t)), () => ui.fill(id, t, engine)) : ui.fill(id, t, engine),

@@ -114,3 +114,11 @@ test('2f: the driver gives devices (capped, raw) frame time (#56)', () => {
   const { tick, driver } = setup({ devices: [device] }); driver.start(); tick(0); tick(400);
   assert.deepEqual(seen[1].map(x => +x.toFixed(3)), [0.25, 0.4]); // countdown's maxFrame is the default 0.25
 });
+
+test('now() reads the clock while frames step the sim, and is undefined in manual mode or stopped (#83)', () => {
+  let t = 5000; const { driver } = setup({ clock: () => t });
+  assert.equal(driver.now(), undefined, 'stopped');
+  driver.start(); assert.equal(driver.now(), 5000); t = 5016; assert.equal(driver.now(), 5016);
+  driver.manual(true); assert.equal(driver.now(), undefined, 'manual: the wall is virtual');
+  driver.manual(false); driver.stop(); assert.equal(driver.now(), undefined);
+});

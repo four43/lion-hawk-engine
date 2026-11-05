@@ -1,6 +1,6 @@
 // U-1/U-3: renders the engine's UI registry as real <button>s. Reconciles by test id; a sync() with nothing changed
 // performs no DOM writes (every written value is cached and compared first).
-export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
+export function createUiDom(engine, { root, doc, onTap, errors, now } = {}) {
   const document = doc ?? root?.ownerDocument ?? globalThis.document;
   const host = root ?? document.body;
   const root_ = document.createElement('div'); root_.setAttribute('data-lh-ui-root', ''); host.appendChild(root_);
@@ -28,7 +28,7 @@ export function createUiDom(engine, { root, doc, onTap, errors } = {}) {
   // #9: holds press on pointerdown (captured) or Space/Enter and release when that pointer/key lifts
   const downs = new Map(); let keyId, keyKey; // pointerId -> control id; the control and key a Space/Enter press holds
   const holding = id => { for (const v of downs.values()) if (v === id) return true; return keyId === id; };
-  const press = id => { try { engine.ui.press(id); } catch (err) { fail(err); } sync(); onTap?.(); };
+  const press = id => { try { engine.ui.press(id, now?.()); } catch (err) { fail(err); } sync(); onTap?.(); };
   const lift = id => { engine.ui.release(id); sync(); onTap?.(); };
   const onDown = e => {
     if (e.button) return; // only the primary button (or a touch/pen contact) presses

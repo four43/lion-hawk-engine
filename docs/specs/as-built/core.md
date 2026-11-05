@@ -62,7 +62,7 @@ See the [glossary](_meta/glossary.md). Four more terms apply to this feature.
 | `engine.net.send(to, data, reliable = false)` | in | queues `{ to, data, reliable }` in the outbox | [src/core/engine.js:341-346] <!-- C-128 --> |
 | `engine.net.leave()` | in | queues `{ leave: true }` | [src/core/engine.js:347] <!-- C-130 --> |
 | `engine.net.receive(type, data)`, `engine.net.drain(fn)`, `engine.net.pending` | in, out | port seam | [src/core/engine.js:350-358] <!-- C-131 C-132 C-134 --> |
-| `engine.ui` | in, out | `tree()`, `view()`, `enabled(id)`, `tryTap(id)`, `press(id)`, `release(id)`, `tap(id)`, `fill(id, text)` | [src/core/engine.js:477-486] <!-- C-170 --> |
+| `engine.ui` | in, out | `tree()`, `view()`, `enabled(id)`, `tryTap(id)`, `press(id, at)`, `release(id)`, `tap(id)`, `fill(id, text)` | [src/core/engine.js:477-486] <!-- C-170 --> |
 | `engine.controllers`, `engine.controllerOf(seat)` | out | live controller list, controller or `undefined` | [src/core/engine.js:420-421] <!-- C-215 --> |
 | `engine.controller({ bot })` | in | makes a bot with seat null and player 0, gated if gating is on | [src/core/engine.js:424-427] <!-- C-218 --> |
 | `engine.players`, `engine.gameState` | out | live roster list, live game-state object | [src/core/engine.js:422-423] <!-- C-239 --> |
@@ -83,7 +83,7 @@ See the [glossary](_meta/glossary.md). Four more terms apply to this feature.
 | `rng(seed)` | in | returns `{ seed, next, range, int, pick, chance, shuffle, fork }` | [src/core/rng.js:10-27] <!-- C-12 --> |
 | `createEvents({ logSize = 256, now = () => 0 } = {})` | in | returns `{ emit, adopt, flush, on, since, seq, pending }` | [src/core/events.js:6; src/core/events.js:10-36] <!-- C-140 --> |
 | `events.seq`, `events.pending` | out | last event number, count of queued events | [src/core/events.js:34-35] <!-- C-148 --> |
-| `createUi({ onAction, coveredBy, isAction, ctxOf })` | in | returns `{ builder, clear, view, tree, fill, enabled, press, release, advance, tap }` | [src/core/ui.js:3; src/core/ui.js:28-99] <!-- C-174 --> |
+| `createUi({ onAction, coveredBy, isAction, ctxOf })` | in | returns `{ builder, clear, view, tree, fill, enabled, press, release, advance, tap }` | [src/core/ui.js:3; src/core/ui.js:28-102] <!-- C-174 --> |
 | `axis({ pair } = {})`, `button()` | in | frozen action descriptors | [src/core/actions.js:4-5] <!-- C-193 --> |
 | `createInput(schema)` | in | returns `{ snapshot, kinds, device, clearDevice, gate, gated, set, hold, release, apply, values }` | [src/core/actions.js:19; src/core/actions.js:56-108] <!-- C-192 --> |
 | `input.gated`, `input.kinds`, `input.values()` | out | gating flag, map of action kinds, plain value copy | [src/core/actions.js:55; src/core/actions.js:83; src/core/actions.js:107] <!-- C-213 --> |
@@ -261,22 +261,23 @@ See the [glossary](_meta/glossary.md). Four more terms apply to this feature.
 ### UI registry
 - **B-127** The control builder registers `button`, `toggle`, `field` and `hold` controls under the id `<scene>.<id>`. The roles are button, switch, textbox and hold. [src/core/ui.js:15-17; src/core/ui.js:29-40] <!-- C-175 -->
 - **B-128** A `choice` registers one control per option with the role choice. The option gets the id `<scene>.<id>.<value>` and the group `<scene>.<id>`. [src/core/ui.js:32; test/ui.test.mjs:35] <!-- C-175 C-176 -->
-- **B-129** Tapping a choice option calls `set(value)` with the original value of the option. [src/core/ui.js:94] <!-- C-176 -->
-- **B-130** A tap on a switch calls `set(!get())`. A tap on a button with a function action calls `action(engine, sceneCtx)`. A tap on a button with an action name calls `onAction(name)`. [src/core/ui.js:94-97] <!-- C-181 -->
-- **B-131** The callbacks `when`, `get`, `set` and `action` get the engine and the ctx of the control's own scene. [src/core/ui.js:94-97; test/ui.test.mjs:101] <!-- C-181 -->
-- **B-132** A control whose action is an action name sets that action for one step on `engine.input`. [src/core/engine.js:150; src/core/ui.js:97] <!-- C-172 -->
+- **B-129** Tapping a choice option calls `set(value)` with the original value of the option. [src/core/ui.js:97] <!-- C-176 -->
+- **B-130** A tap on a switch calls `set(!get())`. A tap on a button with a function action calls `action(engine, sceneCtx)`. A tap on a button with an action name calls `onAction(name)`. [src/core/ui.js:97-100] <!-- C-181 -->
+- **B-131** The callbacks `when`, `get`, `set` and `action` get the engine and the ctx of the control's own scene. [src/core/ui.js:97-100; test/ui.test.mjs:101] <!-- C-181 -->
+- **B-132** A control whose action is an action name sets that action for one step on `engine.input`. [src/core/engine.js:150; src/core/ui.js:100] <!-- C-172 -->
 - **B-133** `fill(id, text)` calls `set(String(text), engine, sceneCtx)` on a textbox. [src/core/ui.js:60-64] <!-- C-182 -->
 - **B-134** `engine.ui.tryTap(id)` returns false if the control is not enabled. Otherwise it taps the control and returns true. [src/core/engine.js:481] <!-- C-171 -->
 - **B-135** `ui.enabled(id)` never throws. It returns false for a missing control, a covered control or a control whose `when` returns false. [src/core/ui.js:65-68] <!-- C-183 -->
 - **B-136** The UI registry gets the covered state from the engine. A control of a scene below the topmost pausing overlay is covered. [src/core/engine.js:150; test/engine.test.mjs:255] <!-- C-173 -->
-- **B-137** `press(id)` on a hold control does nothing if the control is already pressed. Otherwise it sets `pressed`, resets `held` to 0 and, with `wall: true`, records `time.wall` as the start. [src/core/ui.js:69-74] <!-- C-184 -->
-- **B-138** `release(id)` cancels a pressed hold and does nothing otherwise. [src/core/ui.js:75-78] <!-- C-184 -->
-- **B-139** Each step, `advance(dt)` adds `dt` to the held time of each pressed hold. For a hold with `wall: true`, `advance` sets the held time to `(time.wall - start) / 1000`. [src/core/ui.js:86] <!-- C-185 -->
-- **B-140** A hold fires once, when `held` reaches `seconds - 1e-9`. [src/core/ui.js:87] <!-- C-185 -->
-- **B-141** A firing hold calls its function action as `action(engine, sceneCtx)`, or calls `onAction(name)` for an action name. [src/core/ui.js:87] <!-- C-186 -->
-- **B-142** `advance` cancels a hold that is no longer registered, is covered, or whose `when` returns false. [src/core/ui.js:85] <!-- C-187 -->
-- **B-143** `advance` iterates a snapshot of the pressed holds from last to first. An action that releases or clears other holds does not make `advance` skip a hold or advance a hold twice. [src/core/ui.js:79-83; test/ui.test.mjs:87] <!-- C-188 -->
-- **B-144** In a headless run, the wall time of a hold control is virtual and exact, because `time.wall` is virtual when steps have no stamps. (inferred) [src/core/ui.js:73; src/core/ui.js:86; test/ui.test.mjs:126] <!-- C-315 -->
+- **B-137** `press(id, at)` on a hold control does nothing if the control is already pressed. Otherwise it sets `pressed`, resets `held` to 0 and, with `wall: true`, records the start: `at` when given, but not earlier than `time.wall`, else `time.wall`. `at` is the press time in milliseconds on the wall clock's timeline. A tape records the press without `at`. [src/core/ui.js:69-77; src/core/engine.js:483; test/ui.test.mjs:126] <!-- C-184 -->
+- **B-138** `release(id)` cancels a pressed hold and does nothing otherwise. [src/core/ui.js:78-81] <!-- C-184 -->
+- **B-252** `press(id, at)` throws `ui: press time must be a finite number of ms (got <at>)` when `at` is given and is not a finite number. [src/core/ui.js:74; test/ui.test.mjs:126]
+- **B-139** Each step, `advance(dt)` adds `dt` to the held time of each pressed hold. For a hold with `wall: true`, `advance` sets the held time to `(time.wall - start) / 1000`, and to 0 while `time.wall` is before the start. [src/core/ui.js:89] <!-- C-185 -->
+- **B-140** A hold fires once, when `held` reaches `seconds - 1e-9`. [src/core/ui.js:90] <!-- C-185 -->
+- **B-141** A firing hold calls its function action as `action(engine, sceneCtx)`, or calls `onAction(name)` for an action name. [src/core/ui.js:90] <!-- C-186 -->
+- **B-142** `advance` cancels a hold that is no longer registered, is covered, or whose `when` returns false. [src/core/ui.js:88] <!-- C-187 -->
+- **B-143** `advance` iterates a snapshot of the pressed holds from last to first. An action that releases or clears other holds does not make `advance` skip a hold or advance a hold twice. [src/core/ui.js:82-86; test/ui.test.mjs:87] <!-- C-188 -->
+- **B-144** In a headless run, the wall time of a hold control is virtual and exact, because `time.wall` is virtual when steps have no stamps. (inferred) [src/core/ui.js:76; src/core/ui.js:89; test/ui.test.mjs:126] <!-- C-315 -->
 - **B-145** `clear(scene)` removes the controls of that scene and cancels their pressed holds. It leaves the controls of other scenes. [src/core/ui.js:42-44] <!-- C-189 -->
 - **B-146** `view()` fills the same data as `tree()` into one reused object per control and one reused array. The result is valid until the next `view()` call. [src/core/ui.js:5-13; src/core/ui.js:45-51] <!-- C-191 -->
 
@@ -557,8 +558,8 @@ Evidence: [src/core/players.js:16-28] <!-- C-244 -->
 - A hold control throws "ui: hold '<id>' action must be a function or a known action name" for another action. [src/core/ui.js:38] <!-- C-178 -->
 - `tap`, `press` and `fill` throw "ui: no control '<id>'" for an unknown id. They throw "ui: control '<id>' is covered by '<scene>'" for a covered control. [src/core/ui.js:21-24] <!-- C-179 -->
 - `tap`, `press` and `fill` throw "ui: control '<id>' is disabled" when the `when` of the control returns false. [src/core/ui.js:25] <!-- C-179 -->
-- `tap` throws "ui: control '<id>' is a field: use fill" for a textbox. It throws "ui: control '<id>' is a hold: use press" for a hold. [src/core/ui.js:92-93] <!-- C-180 -->
-- `fill` throws "ui: control '<id>' is not a field" for another role. `press` throws "ui: control '<id>' is not a hold" for another role. [src/core/ui.js:62; src/core/ui.js:71] <!-- C-180 -->
+- `tap` throws "ui: control '<id>' is a field: use fill" for a textbox. It throws "ui: control '<id>' is a hold: use press" for a hold. [src/core/ui.js:95-96] <!-- C-180 -->
+- `fill` throws "ui: control '<id>' is not a field" for another role. `press` throws "ui: control '<id>' is not a hold" for another role. [src/core/ui.js:62; src/core/ui.js:73] <!-- C-180 -->
 
 ### Actions, controllers and roster
 - `actions(map)` throws "actions: '<k>' must be axis() or button()" for another value. [src/core/actions.js:7] <!-- C-194 -->

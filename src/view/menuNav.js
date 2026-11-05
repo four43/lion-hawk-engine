@@ -14,7 +14,7 @@ const TEXT = 'input, textarea, select, [contenteditable]';
 const esc = s => String(s).replace(/["\\]/g, '\\$&');
 const defaultRect = el => el.getBoundingClientRect();
 
-export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = defaultRect, focusTries = 10 } = {}) {
+export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = defaultRect, focusTries = 10, now } = {}) {
   target = target ?? globalThis.window; doc = doc ?? target?.document ?? globalThis.document;
   const game = engine.game, html = doc.documentElement, pe = createPadEdges({ getGamepads });
   const st = { last: 'pointer', family: 'xbox', menu: undefined }; // read by tests and window.engine.view.nav
@@ -96,7 +96,7 @@ export function bindMenuNav(engine, { doc, target, getGamepads, rectOf = default
     const menu = st.menu, el = doc.activeElement;
     if (!inScope(menu, el)) { const e = entry(menu); if (e) focusEl(menu, e); return; }
     const c = controlOf(el);
-    if (c?.role === 'hold') { if (c.enabled) { holding = c.id; try { engine.ui.press(c.id); } catch { holding = null; } } return; }
+    if (c?.role === 'hold') { if (c.enabled) { holding = c.id; try { engine.ui.press(c.id, now?.()); } catch { holding = null; } } return; }
     el.click?.();
   };
   const lift = () => { if (holding !== null) { const id = holding; holding = null; engine.ui.release(id); } };

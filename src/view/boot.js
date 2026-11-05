@@ -78,12 +78,12 @@ export function boot(game, halves = { scenes: {} }, { root, doc, target = global
   const frameDt = { update(dt, raw = dt) { view.dt = dt; view.rawDt = raw; } }; // first device: later devices and the frame see this frame's dt
   // U-7: the menu navigator, when any scene declares nav (opt out with nav: false); after the game's devices
   const navOn = nav !== false && Object.values(game.scenes).some(s => s.nav);
-  view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads }) : null;
+  view.nav = navOn ? bindMenuNav(engine, { doc, target, getGamepads, now: () => driver.now() }) : null; // #83: driver is set before any press
   const driver = createDriver(engine, { raf, caf, doc, devices: [frameDt, seats, ...(haptics ? [haptics] : []), ...devices.map(f => f(engine)), ...(view.nav ? [view.nav] : []), ...(hostSlot ? [hostSlot] : [])], onError: report });
   const sa = doc.createElement('style'); // safe-area vars, low specificity: inline/injected --lh-sa-* still win
   sa.textContent = ':root{--lh-sa-top:env(safe-area-inset-top,0px);--lh-sa-right:env(safe-area-inset-right,0px);--lh-sa-bottom:env(safe-area-inset-bottom,0px);--lh-sa-left:env(safe-area-inset-left,0px)}';
   (doc.head ?? doc.documentElement).appendChild(sa);
-  const ui = createUiDom(engine, { root: root ?? doc.body, doc, errors, onTap: () => refresh() });
+  const ui = createUiDom(engine, { root: root ?? doc.body, doc, errors, onTap: () => refresh(), now: () => driver.now() });
   view.ui = ui; view.driver = driver;
   const caught = fn => { try { fn(); } catch (err) { report(err); } };
   // overview §4.6: with defineView({ render }) the gfx, compiler, assets, sync and audio exist before any half enters
