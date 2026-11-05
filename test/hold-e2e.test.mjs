@@ -39,15 +39,19 @@ test('2f: a ui.hold({ wall: true }) button fires after its seconds of real time,
     const woke = () => page.evaluate(() => window.engine.events.since(0).filter(e => e.type === 'woke').length);
     const progress = () => page.evaluate(() => document.querySelector('[data-testid="s.wake"]').style.getPropertyValue('--lh-progress'));
     const time = () => page.evaluate(() => ({ sim: window.engine.time.sim, wall: window.engine.time.wall }));
-    await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up();
-    assert.equal(await woke(), 0); assert.equal(Number(await progress() || 0), 0);
+    // A loaded machine (CI, the parallel suite) can stretch a wait past the hold's second. Each "not yet" check runs
+    // only when Node's clock shows under a second really passed, which bounds the press the page saw.
+    const press = async ms => { const d0 = Date.now(); await page.mouse.down(); await page.waitForTimeout(ms); return () => Date.now() - d0 < 1000; };
+    await page.mouse.move(x, y);
+    let short = await press(400); await page.mouse.up();
+    const w0 = await woke();
+    if (short()) { assert.equal(w0, 0, 'a 400 ms press does not fire'); assert.equal(Number(await progress() || 0), 0); }
     const t0 = await time();
-    const d0 = Date.now(); await page.mouse.down(); await page.waitForTimeout(600);
-    // a loaded machine can stretch the wait past the second; check "not early" only when it really was early
-    const early = await woke(); if (Date.now() - d0 < 1000) assert.equal(early, 0, 'not before its second of wall time');
+    short = await press(600);
+    const early = await woke(); if (short()) assert.equal(early, w0, 'not before its second of wall time');
     await page.waitForTimeout(900); await page.mouse.up();
     const t1 = await time();
-    assert.equal(await woke(), 1, 'fired within ~1.5 s of wall time');
+    assert.equal(await woke(), w0 + 1, 'fired within ~1.5 s of wall time');
     assert.ok(t1.wall - t0.wall >= 1000, `wall advanced ${t1.wall - t0.wall} ms`);
     assert.ok(t1.sim - t0.sim < 0.6, `engine time advanced only ${t1.sim - t0.sim} s: an engine-time hold could not have fired`);
   } finally { await ctx.close(); }
