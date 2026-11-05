@@ -1,10 +1,10 @@
 # As-built specifications
 
-These specs describe what the Lion Hawk engine code does at the source commit, not what anyone intended. Each behavior statement (`B-n`) carries `path:line` evidence from the code or its tests. A change spec cites the `B-n` it changes. The specs come from the code, tests and docs only. This repo has no Jira project.
+These specs describe what the Lion Hawk engine code does at the source commit, not what anyone intended. Each behavior statement (`B-n`) carries `path:line` evidence from the code or its tests. A change spec cites the `B-n` it changes. The specs come from the code, tests and docs only.
 
 Written in STE style (ASD-STE100-inspired). Not certified compliant.
 
-Source commit: `7224d6b`; F02 and F07 were rerun at `4cd5a94`. F09 gained "Bake: levels of detail" (B-239 to B-246, [A-12]), view-presentation "Level of detail" (B-215 to B-221) and view-render B-245 to B-248 (`LOD_FADE`, the eye) by hand on the `lod` branch.
+Source commit: `7224d6b`; F02 and F07 were rerun at `4cd5a94`. F09 gained "Bake: levels of detail" (B-239 to B-246, [A-12]), view-presentation "Level of detail" (B-215 to B-221) and view-render B-245 to B-248 (`LOD_FADE`, the eye) by hand.
 
 | ID | Feature | Summary | Spec |
 | --- | --- | --- | --- |
@@ -69,6 +69,12 @@ Write order (dependencies first): F02 → F01 → F03 → F04 → F05 → F07 �
 - [Coverage](_meta/coverage.md): files per feature, exclusions, remaining issues and open questions.
 - [Feature map](_meta/features.json) and [inventory](_meta/inventory.json).
 
-## Reruns
+## Updating
 
-Each spec front matter holds `source_commit`. To refresh after code changes, run `inventory.py changed --since <source_commit> --features _meta/features.json` and rerun the listed features.
+When a change alters behavior, update the specs in the same commit:
+
+- Edit the `B-n` statements that no longer hold. Add a statement with the next free number in that spec for a new behavior, and delete a statement for a removed one. Don't renumber the others: change specs and commits cite them.
+- Give every statement `path:line` evidence from the code or a test, in brackets at its end. When your change moves lines in a file that a spec cites, fix those references too: `git grep -n '<file>:'` over `docs/specs/as-built/` finds them.
+- Use the terms in the [glossary](_meta/glossary.md), and write short, plain sentences, one fact each, like the statements around yours.
+
+The maintainers regenerate whole specs now and then with private tooling, which updates `source_commit` in each spec's front matter. Contributors don't need to.

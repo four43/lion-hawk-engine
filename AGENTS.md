@@ -8,8 +8,10 @@ For the public surface (which export does what, and where its spec is) read [`do
 
 - `docs/specs/as-built/`: what the code does now, one `B-n` statement per behavior with `path:line` evidence. Check here first.
 - `docs/spec.md`: the decisions and requirement IDs (`[L-3]`, `[M-14]`, …). Code comments, commits and the changelog cite these IDs. A behavior change built after a requirement was written is recorded as a `*Clarification (built, …)*` under that requirement.
-- `docs/field-notes.md`: numbered lessons from the games. The numbering and fields are checked by `test/field-notes.test.mjs`.
+- `docs/field-notes.md`: numbered lessons from the games. The numbering and fields are checked by `test/field-notes.test.mjs`. Entries with status `open` are engine work nobody has planned yet, a good place to look for something to do.
 - `docs/design.md`, `docs/research*.md`: background reasoning.
+
+The field notes, the changelog and the design docs name the games that drove each change. Those games are not public. Each note says what the game hit and what the engine changed, so it stands without the game's code: don't go looking for it, and reproduce a problem with a fixture game in `test/fixtures/` instead.
 
 ## Rules the tests enforce
 
@@ -22,13 +24,17 @@ Plain JavaScript ES modules, no TypeScript and no build step for the engine itse
 
 ## Testing
 
-`npm test` runs the whole suite. Run one file with `node --test test/<name>.test.mjs`. Browser tests start Chromium through `launch()` in `testing/playwright.js` and skip when none is found. `pads-e2e.test.mjs` fails now and then under the parallel suite; rerun it alone before treating it as a regression.
+Node 26 or later (`engines` in `package.json`). The allocation budgets (`test/*alloc*.test.mjs`) are measured on Node 26's V8 and fail on Node 22 and 24, which count more bytes for the same code.
+
+`npm test` runs the whole suite in about half a minute. Run one file with `node --test test/<name>.test.mjs`. Browser tests start Chromium through `launch()` in `testing/playwright.js` and skip when none is found, so install it once with `npx playwright-core install chromium` (add `--with-deps` on a bare Linux machine). CI (`.github/workflows/test.yml`) runs the suite with Chromium on Node 26 for every push to `main` and every pull request. `pads-e2e.test.mjs` fails now and then under the parallel suite; rerun it alone before treating it as a regression.
 
 ## When you change behavior
 
 1. Add a line under `## Unreleased` in `CHANGELOG.md`, citing the requirement ID. Mark changes that break games in bold.
 2. If the change departs from `docs/spec.md`, add the clarification there.
 3. Update `docs/agents.md` if the change adds, renames or removes something a game calls.
-4. Refresh the affected as-built specs (see "Reruns" in `docs/specs/as-built/README.md`).
+4. Update the affected as-built specs by hand: edit, add or remove the `B-n` statements whose behavior changed, and fix any `path:line` evidence your change moved (see "Updating" in `docs/specs/as-built/README.md`).
 
-Commits use conventional types with a scope, and the subject states the behavior as a sentence: `fix(sim): the magnet field reuses its candidates and moment vector (M-14: …)`. A release is a `chore(release): lion-hawk X.Y.Z` commit and an annotated tag `vX.Y.Z` with the message `lion-hawk X.Y.Z: <summary>`.
+Commits use conventional types with a scope, and the subject states the behavior as a sentence: `fix(sim): the magnet field reuses its candidates and moment vector (M-14: …)`.
+
+**Maintainers only:** releases. A release is a `chore(release): lion-hawk X.Y.Z` commit and an annotated tag `vX.Y.Z` with the message `lion-hawk X.Y.Z: <summary>`. Contributors leave versions, tags and the `## Unreleased` heading alone.

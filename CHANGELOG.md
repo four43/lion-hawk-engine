@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The engine is open source under the MIT license: `LICENSE` at the root and `"license": "MIT"` in `package.json`. The README installs from the public `github:` URL instead of SSH.
+- **The engine needs Node 26 or later** (`engines` in `package.json`). The allocation budgets fail on Node 22 and 24, whose V8 counts more bytes for the same code. CI runs the suite with Chromium on Node 26 for pushes and pull requests.
 
 ## 0.17.0 — 2026-11-01
 
