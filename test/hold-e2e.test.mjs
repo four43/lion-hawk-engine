@@ -42,8 +42,9 @@ test('2f: a ui.hold({ wall: true }) button fires after its seconds of real time,
     await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up();
     assert.equal(await woke(), 0); assert.equal(Number(await progress() || 0), 0);
     const t0 = await time();
-    await page.mouse.down(); await page.waitForTimeout(600);
-    assert.equal(await woke(), 0, 'not before its second of wall time');
+    const d0 = Date.now(); await page.mouse.down(); await page.waitForTimeout(600);
+    // a loaded machine can stretch the wait past the second; check "not early" only when it really was early
+    const early = await woke(); if (Date.now() - d0 < 1000) assert.equal(early, 0, 'not before its second of wall time');
     await page.waitForTimeout(900); await page.mouse.up();
     const t1 = await time();
     assert.equal(await woke(), 1, 'fired within ~1.5 s of wall time');
